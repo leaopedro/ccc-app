@@ -1,0 +1,21 @@
+{
+  "extends": "@jdm/tsconfig/react-native.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["src/*"],
+      "@jdm/shared/legal": ["../../packages/shared/src/legal.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": [
+    "app/**/*",
+    "src/**/*",
+    "app.config.ts",
+    "vitest.config.ts",
+    "test-stubs/**/*",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
+}

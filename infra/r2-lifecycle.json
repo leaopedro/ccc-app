@@ -1,0 +1,32 @@
+{
+  "Rules": [
+    {
+      "ID": "purge-orphan-uploads-24h",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "orphan/"
+      },
+      "Expiration": {
+        "Days": 1
+      }
+    },
+    {
+      "ID": "purge-deletion-tagged-objects-30d",
+      "Status": "Enabled",
+      "Filter": {
+        "And": {
+          "Prefix": "",
+          "Tags": [
+            {
+              "Key": "deletion-tag",
+              "Value": "true"
+            }
+          ]
+        }
+      },
+      "Expiration": {
+        "Days": 30
+      }
+    }
+  ]
+}

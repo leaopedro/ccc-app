@@ -1,0 +1,2 @@
+ALTER TABLE "StoreSettings"
+ADD COLUMN "storeEnabled" BOOLEAN NOT NULL DEFAULT true;

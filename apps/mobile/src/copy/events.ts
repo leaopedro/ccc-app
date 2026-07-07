@@ -1,0 +1,58 @@
+export const eventsCopy = {
+  header: {
+    eyebrow: 'Calendário',
+    title: 'Eventos',
+  },
+  tabs: {
+    upcoming: 'Próximos',
+    past: 'Anteriores',
+    nearby: 'Perto de mim',
+  },
+  filters: {
+    title: 'Filtros',
+    stateAll: 'Todos os estados',
+    typeAll: 'Todos os tipos',
+    typeMeeting: 'Encontro',
+    typeDrift: 'Drift',
+    typeOther: 'Outro',
+    apply: 'Aplicar',
+    clear: 'Limpar',
+  },
+  list: {
+    empty: 'Nenhum encontro por aqui ainda.',
+    emptyHint: 'Volte em breve. O cenário não para.',
+    refreshing: 'Atualizando…',
+    noLocation: 'Defina seu estado no perfil pra ver o que rola perto.',
+    noLocationCta: 'Editar perfil',
+    errorTitle: 'Não rolou carregar.',
+    errorHint: 'Confere sua conexão e tenta de novo.',
+    retry: 'Tentar de novo',
+    loading: 'Carregando eventos',
+  },
+  badges: {
+    soon: 'EM BREVE',
+    soldOut: 'ESGOTADO',
+  },
+  detail: {
+    venue: 'Local',
+    openMaps: 'Abrir no mapa',
+    tiers: 'Ingressos',
+    remaining: 'disponíveis',
+    soldOut: 'Esgotado',
+    buy: 'Comprar',
+    back: 'Voltar',
+    viewMyTickets: 'Ver meus ingressos',
+  },
+  errors: {
+    load: 'Não foi possível carregar os eventos.',
+    network: 'Sem conexão. Tente novamente.',
+    notFound: 'Evento não encontrado.',
+  },
+  confirmedCars: {
+    sectionTitle: 'Carros Confirmados',
+    empty: 'Nenhum carro confirmado ainda.',
+    viewAll: 'Ver todos',
+    sheetTitle: 'Carros Confirmados',
+    loading: 'Carregando carros…',
+  },
+};

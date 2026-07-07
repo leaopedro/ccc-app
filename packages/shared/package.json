@@ -1,0 +1,157 @@
+{
+  "name": "@jdm/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./admin": {
+      "types": "./src/admin.ts",
+      "default": "./dist/admin.js"
+    },
+    "./admin-garage": {
+      "types": "./src/admin-garage.ts",
+      "default": "./dist/admin-garage.js"
+    },
+    "./admin-garage-xp": {
+      "types": "./src/admin-garage-xp.ts",
+      "default": "./dist/admin-garage-xp.js"
+    },
+    "./auth": {
+      "types": "./src/auth.ts",
+      "default": "./dist/auth.js"
+    },
+    "./badges": {
+      "types": "./src/badges.ts",
+      "default": "./dist/badges.js"
+    },
+    "./badges-copy": {
+      "types": "./src/badges-copy.ts",
+      "default": "./dist/badges-copy.js"
+    },
+    "./cars": {
+      "types": "./src/cars.ts",
+      "default": "./dist/cars.js"
+    },
+    "./check-in": {
+      "types": "./src/check-in.ts",
+      "default": "./dist/check-in.js"
+    },
+    "./events": {
+      "types": "./src/events.ts",
+      "default": "./dist/events.js"
+    },
+    "./garage": {
+      "types": "./src/garage.ts",
+      "default": "./dist/garage.js"
+    },
+    "./garage-public": {
+      "types": "./src/garage-public.ts",
+      "default": "./dist/garage-public.js"
+    },
+    "./garage-covers": {
+      "types": "./src/garage-covers.ts",
+      "default": "./dist/garage-covers.js"
+    },
+    "./garage-progress": {
+      "types": "./dist/garage-progress.d.ts",
+      "import": "./dist/garage-progress.js"
+    },
+    "./feed": {
+      "types": "./src/feed.ts",
+      "default": "./dist/feed.js"
+    },
+    "./mfa": {
+      "types": "./src/mfa.ts",
+      "default": "./dist/mfa.js"
+    },
+    "./general-settings": {
+      "types": "./src/general-settings.ts",
+      "default": "./dist/general-settings.js"
+    },
+    "./extras": {
+      "types": "./src/extras.ts",
+      "default": "./dist/extras.js"
+    },
+    "./health": {
+      "types": "./src/health.ts",
+      "default": "./dist/health.js"
+    },
+    "./ids": {
+      "types": "./src/ids.ts",
+      "default": "./dist/ids.js"
+    },
+    "./orders": {
+      "types": "./src/orders.ts",
+      "default": "./dist/orders.js"
+    },
+    "./cart": {
+      "types": "./src/cart.ts",
+      "default": "./dist/cart.js"
+    },
+    "./premium": {
+      "types": "./src/premium.ts",
+      "default": "./dist/premium.js"
+    },
+    "./profile": {
+      "types": "./src/profile.ts",
+      "default": "./dist/profile.js"
+    },
+    "./push": {
+      "types": "./src/push.ts",
+      "default": "./dist/push.js"
+    },
+    "./notifications": {
+      "types": "./src/notifications.ts",
+      "default": "./dist/notifications.js"
+    },
+    "./store": {
+      "types": "./src/store.ts",
+      "default": "./dist/store.js"
+    },
+    "./support": {
+      "types": "./src/support.ts",
+      "default": "./dist/support.js"
+    },
+    "./tickets": {
+      "types": "./src/tickets.ts",
+      "default": "./dist/tickets.js"
+    },
+    "./uploads": {
+      "types": "./src/uploads.ts",
+      "default": "./dist/uploads.js"
+    },
+    "./sentry-scrubber": {
+      "types": "./src/sentry-scrubber.ts",
+      "default": "./dist/sentry-scrubber.js"
+    },
+    "./legal": {
+      "types": "./src/legal.ts",
+      "default": "./dist/legal.js"
+    },
+    "./dsr": {
+      "types": "./src/dsr.ts",
+      "default": "./dist/dsr.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@jdm/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,1538 @@
+// Auth lands in F1 (roadmap 1.1). Subsequent features extend these models.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  organizer
+  admin
+  staff
+}
+
+enum AuthProviderKind {
+  google
+  apple
+}
+
+enum UserStatus {
+  partial
+  active
+  disabled
+  deleted
+  anonymized
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  email              String     @unique
+  passwordHash       String?
+  name               String
+  role               UserRole   @default(user)
+  status             UserStatus @default(active)
+  emailVerifiedAt    DateTime?
+  tokenInvalidatedAt DateTime?
+  deletedAt          DateTime?
+  anonymizedAt       DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // profile (F2)
+  bio             String? @db.VarChar(500)
+  city            String? @db.VarChar(100)
+  stateCode       String? @db.VarChar(2)
+  avatarObjectKey String? @db.VarChar(300)
+
+  // push preferences (F10)
+  pushPrefs Json @default("{\"transactional\":true,\"marketing\":false}")
+
+  authProviders       AuthProvider[]
+  refreshTokens       RefreshToken[]
+  verificationTokens  VerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  emailChangeTokens   EmailChangeToken[]
+  cars                Car[]
+  garage              Garage?
+  garageSpots         GarageSpot[]
+  orders              Order[]
+  tickets             Ticket[]
+  deviceTokens        DeviceToken[]
+  notifications       Notification[]
+  carts               Cart[]
+  shippingAddresses   ShippingAddress[]
+  broadcastDeliveries BroadcastDelivery[]
+  supportTickets      SupportTicket[]
+  feedPosts           FeedPost[]
+  feedComments        FeedComment[]
+  feedReactions       FeedReaction[]
+  reportsFiled        Report[]              @relation("ReportReporter")
+  reportsResolved     Report[]              @relation("ReportResolver")
+  feedBans            FeedBan[]             @relation("FeedBanUser")
+  feedBansIssued      FeedBan[]             @relation("FeedBanActor")
+  consents            Consent[]
+  dataExportJobs      DataExportJob[]
+  mfaSecret           MfaSecret?
+  mfaRecoveryCodes    MfaRecoveryCode[]
+  deletionLog         DeletionLog?
+  dsrRequests         DataSubjectRequest[]
+  dsrResolutions      DataSubjectRequest[]  @relation("DsrResolver")
+  groupMemberships    UserGroupMembership[]
+
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model AuthProvider {
+  id             String           @id @default(cuid())
+  userId         String
+  provider       AuthProviderKind
+  providerUserId String
+  createdAt      DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model VerificationToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model MfaSecret {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  encryptedSecret String
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MfaRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailChangeToken {
+  id           String    @id @default(cuid())
+  userId       String
+  pendingEmail String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum GarageSpotSource {
+  default_free
+  purchase
+  admin_grant
+  premium_membership
+}
+
+enum GaragePremiumTier {
+  bronze
+  silver
+  gold
+}
+
+enum PremiumProvider {
+  stripe
+  apple_revenuecat
+}
+
+enum PremiumCadence {
+  monthly
+  annual
+}
+
+enum PremiumMembershipStatus {
+  trialing
+  active
+  past_due
+  cancel_scheduled
+  expired
+  paused
+}
+
+model Garage {
+  id                  String             @id @default(cuid())
+  userId              String             @unique
+  name                String             @db.VarChar(50)
+  slug                String             @unique @db.VarChar(40)
+  description         String?            @db.VarChar(500)
+  coverPreset         String?            @db.VarChar(40)
+  coverImageObjectKey String?            @db.VarChar(300)
+  isPublic            Boolean            @default(false)
+  premiumTier         GaragePremiumTier?
+  premiumUntil        DateTime?
+  xp                  Int                @default(0)
+  likesReceived       Int                @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  user                       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  garageBadges               GarageBadge[]
+  xpEvents                   XpEvent[]
+  premiumMemberships         PremiumMembership[]
+  premiumTicketBackfillJobs  PremiumTicketBackfillJob[]
+
+  @@index([slug])
+  @@index([premiumTier, premiumUntil])
+}
+
+enum BadgeCategory {
+  eventos
+  carros
+  comunidade
+  jdm
+}
+
+enum BadgeRarity {
+  common
+  rare
+  legendary
+}
+
+model Badge {
+  id               String        @id @default(cuid())
+  code             String        @unique @db.VarChar(20)
+  category         BadgeCategory
+  rarity           BadgeRarity
+  premiumExclusive Boolean       @default(false)
+  icon             String        @db.VarChar(40)
+  createdAt        DateTime      @default(now())
+
+  garageBadges GarageBadge[]
+}
+
+model GarageBadge {
+  id        String    @id @default(cuid())
+  garageId  String
+  badgeCode String    @db.VarChar(20)
+  earnedAt  DateTime  @default(now())
+  pinned    Boolean   @default(false)
+  pinnedAt  DateTime?
+  sourceRef String?   @db.VarChar(120)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  garage Garage @relation(fields: [garageId], references: [id], onDelete: Cascade)
+  badge  Badge  @relation(fields: [badgeCode], references: [code], onDelete: Restrict)
+
+  @@unique([garageId, badgeCode])
+  @@index([garageId, pinned])
+  @@index([garageId, pinnedAt])
+}
+
+enum XpReason {
+  event_checkin
+  car_create
+  post_create
+  post_like
+  badge_award
+  premium_activation
+  admin_adjustment
+}
+
+model XpEvent {
+  id        String   @id @default(cuid())
+  garageId  String
+  delta     Int
+  reason    XpReason
+  sourceRef String?  @db.VarChar(120)
+  createdAt DateTime @default(now())
+
+  garage Garage @relation(fields: [garageId], references: [id], onDelete: Cascade)
+
+  @@unique([garageId, reason, sourceRef])
+  @@index([garageId, createdAt])
+}
+
+model PremiumMembership {
+  id                  String                  @id @default(cuid())
+  garageId            String
+  provider            PremiumProvider
+  providerCustomerRef String                  @db.VarChar(120)
+  providerSubRef      String                  @db.VarChar(120)
+  tier                GaragePremiumTier
+  cadence             PremiumCadence
+  status              PremiumMembershipStatus
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  cancelAtPeriodEnd   Boolean                 @default(false)
+  cancelledAt         DateTime?
+
+  // Pricing snapshot — refreshed on activation/renewal/tier_changed.
+  // Stripe: baseAmountCents + devFeePercent from Stripe.Price.metadata (canon §F8.1).
+  // Apple/RC: baseAmountCents = grossAmountCents, devFeePercent = 0, devFeeAmountCents = 0.
+  baseAmountCents   Int
+  devFeePercent     Int
+  devFeeAmountCents Int
+  grossAmountCents  Int
+  currency          String @db.VarChar(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  garage   Garage                     @relation(fields: [garageId], references: [id], onDelete: Cascade)
+  invoices PremiumMembershipInvoice[]
+
+  @@unique([provider, providerSubRef])
+  @@index([garageId, status])
+  @@index([currentPeriodEnd])
+}
+
+model PremiumMembershipInvoice {
+  id                     String          @id @default(cuid())
+  membershipId           String
+  provider               PremiumProvider
+  providerInvoiceRef     String          @db.VarChar(120)
+  providerTransactionRef String?         @db.VarChar(200)
+  periodStart            DateTime
+  periodEnd              DateTime
+  baseAmountCents        Int
+  devFeePercent          Int
+  devFeeAmountCents      Int
+  grossAmountCents       Int
+  currency               String          @db.VarChar(3)
+  paidAt                 DateTime
+  refundedAt             DateTime?
+  refundedAmountCents    Int?
+  status                 String          @db.VarChar(20)
+  createdAt              DateTime        @default(now())
+
+  membership PremiumMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerInvoiceRef])
+  @@index([membershipId, periodStart])
+  @@index([paidAt])
+}
+
+model SubscriptionWebhookEvent {
+  id              String          @id @default(cuid())
+  provider        PremiumProvider
+  providerEventId String          @db.VarChar(200)
+  type            String          @db.VarChar(80)
+  payload         Json
+  receivedAt      DateTime        @default(now())
+  processedAt     DateTime?
+
+  @@unique([provider, providerEventId])
+  @@index([receivedAt])
+}
+
+// F8.06: DB-backed job queue for post-commit premium ticket backfill.
+// Inserted post-commit by applyMembershipEvent callers on subscription.activated
+// (canon §F8.4). Polled every minute by startPremiumTicketBackfillWorker; rows
+// transition pending → processing → completed/failed. The Ticket insert step
+// relies on the canon §F8.8 partial unique for idempotency (P2002 swallowed per
+// insert). Indexed on (status, createdAt) for fast poll + (garageId) for history.
+enum PremiumTicketBackfillJobStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model PremiumTicketBackfillJob {
+  id           String                         @id @default(cuid())
+  garageId     String
+  status       PremiumTicketBackfillJobStatus @default(pending)
+  errorMessage String?                        @db.VarChar(500)
+  createdAt    DateTime                       @default(now())
+  updatedAt    DateTime                       @updatedAt
+
+  garage Garage @relation(fields: [garageId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([garageId])
+}
+
+model Car {
+  id            String   @id @default(cuid())
+  userId        String
+  make          String   @db.VarChar(60)
+  model         String   @db.VarChar(60)
+  // range enforced at the Zod boundary (carInputSchema)
+  year          Int
+  nickname      String   @db.VarChar(20)
+  modifications String[] @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos       CarPhoto[]
+  tickets      Ticket[]
+  feedPosts    FeedPost[]
+  feedComments FeedComment[]
+  spot         GarageSpot?   @relation("CarSpot")
+
+  @@unique([nickname])
+  @@index([userId])
+}
+
+model CarPhoto {
+  id        String   @id @default(cuid())
+  carId     String
+  objectKey String   @db.VarChar(300)
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  car Car @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  @@unique([carId])
+  @@index([carId, sortOrder])
+}
+
+model GarageSpot {
+  id                String           @id @default(cuid())
+  userId            String
+  source            GarageSpotSource
+  carId             String?          @unique
+  sourceOrderItemId String?          @unique
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  car  Car? @relation("CarSpot", fields: [carId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, carId])
+}
+
+enum EventType {
+  meeting
+  drift
+  other
+}
+
+enum EventStatus {
+  draft
+  published
+  cancelled
+}
+
+model Event {
+  id                String        @id @default(cuid())
+  slug              String        @unique @db.VarChar(140)
+  title             String        @db.VarChar(140)
+  description       String        @db.Text
+  coverObjectKey    String?       @db.VarChar(300)
+  startsAt          DateTime
+  endsAt            DateTime
+  venueName         String?       @db.VarChar(140)
+  venueAddress      String?       @db.VarChar(300)
+  city              String?       @db.VarChar(100)
+  stateCode         String?       @db.VarChar(2)
+  type              EventType
+  status            EventStatus   @default(draft)
+  capacity          Int
+  maxTicketsPerUser Int?
+  publishedAt       DateTime?
+  feedEnabled       Boolean       @default(true)
+  feedAccess        FeedAccess    @default(attendees)
+  postingAccess     PostingAccess @default(attendees)
+  maxPostsPerUser   Int?
+  maxPhotosPerUser  Int           @default(5)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tiers          TicketTier[]
+  extras         TicketExtra[]
+  orders         Order[]
+  tickets        Ticket[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  pickupVouchers PickupVoucher[]
+  feedPosts      FeedPost[]
+  feedBans       FeedBan[]
+
+  @@index([stateCode, city, startsAt])
+  @@index([status, startsAt])
+}
+
+model TicketTier {
+  id                 String    @id @default(cuid())
+  eventId            String
+  name               String    @db.VarChar(80)
+  priceCents         Int
+  currency           String    @default("BRL") @db.VarChar(3)
+  quantityTotal      Int
+  quantitySold       Int       @default(0)
+  salesOpenAt        DateTime?
+  salesCloseAt       DateTime?
+  sortOrder          Int       @default(0)
+  requiresCar        Boolean   @default(false)
+  isPremiumGrantable Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  tickets    Ticket[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([eventId, sortOrder])
+  @@index([eventId, isPremiumGrantable])
+}
+
+model TicketExtra {
+  id            String   @id @default(cuid())
+  eventId       String
+  name          String   @db.VarChar(140)
+  description   String?  @db.Text
+  priceCents    Int
+  currency      String   @default("BRL") @db.VarChar(3)
+  quantityTotal Int?
+  quantitySold  Int      @default(0)
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  event          Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderExtras    OrderExtra[]
+  ticketItems    TicketExtraItem[]
+  cartItemExtras CartItemExtra[]
+  orderItems     OrderItem[]
+
+  @@index([eventId, sortOrder])
+}
+
+model AdminAudit {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String   @db.VarChar(40)
+  entityType String   @db.VarChar(40)
+  entityId   String   @db.VarChar(40)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model DeletionLog {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  requestedAt DateTime  @default(now())
+  completedAt DateTime?
+  steps       Json      @default("[]")
+  error       String?   @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([completedAt])
+  @@index([requestedAt])
+}
+
+enum CartStatus {
+  open
+  checking_out
+  converted
+  abandoned
+}
+
+enum CartItemKind {
+  ticket
+  extras_only
+  product
+}
+
+enum PaymentMethod {
+  card
+  pix
+}
+
+enum PaymentProvider {
+  stripe
+  abacatepay
+}
+
+enum OrderKind {
+  ticket
+  extras_only
+  product
+  mixed
+}
+
+enum OrderStatus {
+  pending
+  paid
+  failed
+  refunded
+  expired
+  cancelled
+}
+
+enum TicketStatus {
+  valid
+  used
+  revoked
+}
+
+enum ProductStatus {
+  draft
+  active
+  archived
+}
+
+enum FulfillmentMethod {
+  ship
+  pickup
+  virtual
+}
+
+enum FulfillmentStatus {
+  unfulfilled
+  packed
+  shipped
+  delivered
+  pickup_ready
+  picked_up
+  cancelled
+  virtual_complete
+}
+
+enum OrderItemKind {
+  ticket
+  product
+  extras
+}
+
+model ProductType {
+  id        String   @id @default(cuid())
+  name      String   @unique @db.VarChar(80)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
+model Product {
+  id               String        @id @default(cuid())
+  slug             String        @unique @db.VarChar(140)
+  title            String        @db.VarChar(140)
+  description      String        @db.Text
+  productTypeId    String
+  basePriceCents   Int
+  currency         String        @default("BRL") @db.VarChar(3)
+  status           ProductStatus @default(draft)
+  allowPickup      Boolean       @default(false)
+  allowShip        Boolean       @default(false)
+  shippingFeeCents Int?
+  visibleInStore   Boolean       @default(true)
+  virtual          Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  productType ProductType         @relation(fields: [productTypeId], references: [id], onDelete: Restrict)
+  photos      ProductPhoto[]
+  variants    Variant[]
+  collections ProductCollection[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([productTypeId, status])
+  @@index([visibleInStore, status])
+}
+
+model ProductPhoto {
+  id        String @id @default(cuid())
+  productId String
+  objectKey String @db.VarChar(300)
+  sortOrder Int    @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, sortOrder])
+}
+
+model Variant {
+  id            String   @id @default(cuid())
+  productId     String
+  name          String   @db.VarChar(140)
+  sku           String?  @db.VarChar(80)
+  priceCents    Int
+  quantityTotal Int
+  quantitySold  Int      @default(0)
+  attributes    Json
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  pickupVouchers PickupVoucher[]
+
+  @@index([productId])
+  @@index([productId, active])
+}
+
+model Collection {
+  id          String   @id @default(cuid())
+  slug        String   @unique @db.VarChar(140)
+  name        String   @db.VarChar(140)
+  description String?  @db.Text
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products ProductCollection[]
+}
+
+model ProductCollection {
+  productId    String
+  collectionId String
+  sortOrder    Int    @default(0)
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([productId, collectionId])
+  @@index([collectionId])
+}
+
+model ShippingAddress {
+  id            String   @id @default(cuid())
+  userId        String
+  recipientName String   @db.VarChar(140)
+  line1         String   @db.VarChar(140)
+  line2         String?  @db.VarChar(140)
+  number        String   @db.VarChar(20)
+  district      String   @db.VarChar(100)
+  city          String   @db.VarChar(100)
+  stateCode     String   @db.VarChar(2)
+  postalCode    String   @db.VarChar(9)
+  phone         String?  @db.VarChar(20)
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId])
+}
+
+model StoreSettings {
+  id                      String   @id @default(cuid())
+  storeEnabled            Boolean  @default(true)
+  defaultShippingFeeCents Int      @default(0)
+  lowStockThreshold       Int      @default(5)
+  storeHeaderTitle        String?  @db.VarChar(140)
+  storeHeaderSubtitle     String?  @db.VarChar(240)
+  eventPickupEnabled      Boolean  @default(false)
+  pickupDisplayLabel      String?  @db.VarChar(140)
+  supportPhone            String?  @db.VarChar(20)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+enum CapacityDisplayMode {
+  absolute
+  percentage_threshold
+  hidden
+}
+
+model GeneralSettings {
+  id                              String              @id @default(cuid())
+  ticketCapacityMode              CapacityDisplayMode @default(absolute)
+  ticketCapacityThresholdPercent  Int                 @default(15)
+  extraCapacityMode               CapacityDisplayMode @default(absolute)
+  extraCapacityThresholdPercent   Int                 @default(15)
+  productCapacityMode             CapacityDisplayMode @default(absolute)
+  productCapacityThresholdPercent Int                 @default(15)
+  defaultFreeGarageSpots          Int?
+  gamificationEnabled             Boolean             @default(true)
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @updatedAt
+}
+
+enum TicketSource {
+  purchase
+  premium_grant
+  comp
+}
+
+model Order {
+  id                String            @id @default(cuid())
+  userId            String
+  eventId           String?
+  tierId            String?
+  cartId            String?
+  pickupEventId     String?
+  pickupTicketId    String?
+  kind              OrderKind         @default(ticket)
+  amountCents       Int
+  baseAmountCents   Int               @default(0)
+  devFeePercent     Int               @default(10)
+  devFeeAmountCents Int               @default(0)
+  currency          String            @default("BRL") @db.VarChar(3)
+  method            PaymentMethod
+  provider          PaymentProvider
+  providerRef       String?           @db.VarChar(200)
+  brCode            String?           @db.Text
+  quantity          Int               @default(1)
+  shippingAddressId String?
+  shippingCents     Int               @default(0)
+  fulfillmentStatus FulfillmentStatus @default(unfulfilled)
+  fulfillmentMethod FulfillmentMethod @default(pickup)
+  notes             String?           @db.Text
+  status            OrderStatus       @default(pending)
+  paidAt            DateTime?
+  failedAt          DateTime?
+  refundedAt        DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event           Event?           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  tier            TicketTier?      @relation(fields: [tierId], references: [id], onDelete: Restrict)
+  cart            Cart?            @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  shippingAddress ShippingAddress? @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  tickets         Ticket[]
+  orderExtras     OrderExtra[]
+  items           OrderItem[]
+  pickupVouchers  PickupVoucher[]
+
+  @@unique([provider, providerRef])
+  @@index([userId, createdAt])
+  @@index([eventId, status])
+  @@index([status, createdAt])
+  @@index([status, refundedAt])
+  @@index([tierId, status, expiresAt])
+  @@index([cartId])
+  @@index([fulfillmentStatus, paidAt])
+  @@index([shippingAddressId])
+  @@index([pickupEventId])
+  @@index([pickupTicketId])
+}
+
+model OrderExtra {
+  id        String   @id @default(cuid())
+  orderId   String
+  extraId   String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  order Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  extra TicketExtra @relation(fields: [extraId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, extraId])
+  @@index([orderId])
+}
+
+model Ticket {
+  id           String       @id @default(cuid())
+  orderId      String?
+  userId       String
+  eventId      String
+  tierId       String
+  carId        String?
+  licensePlate String?      @db.VarChar(20)
+  nickname     String?      @db.VarChar(60)
+  source       TicketSource @default(purchase)
+  status       TicketStatus @default(valid)
+  usedAt       DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  order          Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event          Event             @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  tier           TicketTier        @relation(fields: [tierId], references: [id], onDelete: Restrict)
+  car            Car?              @relation(fields: [carId], references: [id], onDelete: SetNull)
+  extraItems     TicketExtraItem[]
+  pickupVouchers PickupVoucher[]
+
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([eventId])
+  @@index([carId])
+}
+
+model OrderItem {
+  id             String        @id @default(cuid())
+  orderId        String
+  kind           OrderItemKind
+  variantId      String?
+  tierId         String?
+  extraId        String?
+  eventId        String?
+  quantity       Int
+  unitPriceCents Int
+  subtotalCents  Int
+  tickets        Json?
+  createdAt      DateTime      @default(now())
+
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant        Variant?        @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  tier           TicketTier?     @relation(fields: [tierId], references: [id], onDelete: Restrict)
+  extra          TicketExtra?    @relation(fields: [extraId], references: [id], onDelete: Restrict)
+  event          Event?          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  pickupVouchers PickupVoucher[]
+
+  @@index([orderId])
+  @@index([variantId])
+  @@index([eventId])
+}
+
+enum TicketExtraItemStatus {
+  valid
+  used
+  revoked
+}
+
+model TicketExtraItem {
+  id        String                @id @default(cuid())
+  ticketId  String
+  extraId   String
+  code      String                @unique @db.VarChar(300)
+  status    TicketExtraItemStatus @default(valid)
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  ticket Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  extra  TicketExtra @relation(fields: [extraId], references: [id], onDelete: Restrict)
+
+  @@unique([ticketId, extraId])
+  @@index([ticketId])
+}
+
+enum PickupVoucherStatus {
+  valid
+  used
+  revoked
+}
+
+model PickupVoucher {
+  id           String              @id @default(cuid())
+  orderId      String
+  orderItemId  String
+  unitIndex    Int
+  ticketId     String
+  eventId      String
+  variantId    String?
+  code         String              @unique @db.VarChar(300)
+  status       PickupVoucherStatus @default(valid)
+  usedAt       DateTime?
+  usedByUserId String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  variant   Variant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([orderItemId, unitIndex])
+  @@index([orderId])
+  @@index([ticketId])
+  @@index([eventId, status])
+}
+
+model PaymentWebhookEvent {
+  id                 String          @id @default(cuid())
+  provider           PaymentProvider
+  eventId            String          @db.VarChar(200)
+  payload            Json
+  retentionHoldUntil DateTime?
+  createdAt          DateTime        @default(now())
+
+  @@unique([provider, eventId])
+  @@index([createdAt])
+}
+
+enum DevicePlatform {
+  ios
+  android
+}
+
+model DeviceToken {
+  id            String         @id @default(cuid())
+  userId        String
+  expoPushToken String         @db.VarChar(200)
+  platform      DevicePlatform
+  lastSeenAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, expoPushToken])
+  @@index([userId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  kind        String    @db.VarChar(40)
+  title       String    @db.VarChar(200)
+  body        String    @db.VarChar(500)
+  data        Json
+  destination Json?
+  dedupeKey   String    @db.VarChar(80)
+  sentAt      DateTime?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, dedupeKey])
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String
+  status    CartStatus @default(open)
+  version   Int        @default(0)
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items  CartItem[]
+  orders Order[]
+
+  @@index([userId, status])
+}
+
+model CartItem {
+  id                   String       @id @default(cuid())
+  cartId               String
+  eventId              String?
+  tierId               String?
+  variantId            String?
+  source               String       @default("purchase") @db.VarChar(20)
+  kind                 CartItemKind @default(ticket)
+  quantity             Int          @default(1)
+  tickets              Json
+  metadata             Json?
+  amountCents          Int          @default(0)
+  currency             String       @default("BRL") @db.VarChar(3)
+  reservationExpiresAt DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  event   Event?          @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  tier    TicketTier?     @relation(fields: [tierId], references: [id], onDelete: Restrict)
+  variant Variant?        @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  extras  CartItemExtra[]
+
+  @@index([cartId])
+  @@index([eventId])
+  @@index([variantId])
+}
+
+model CartItemExtra {
+  id             String   @id @default(cuid())
+  cartItemId     String
+  extraId        String
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  subtotalCents  Int
+  createdAt      DateTime @default(now())
+
+  cartItem CartItem    @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  extra    TicketExtra @relation(fields: [extraId], references: [id], onDelete: Restrict)
+
+  @@unique([cartItemId, extraId])
+  @@index([cartItemId])
+}
+
+// F10 — marketing push broadcasts
+
+enum BroadcastStatus {
+  draft
+  scheduled
+  processing
+  sent
+  failed
+  cancelled
+}
+
+enum BroadcastTargetKind {
+  all
+  premium
+  attendees_of_event
+  city
+}
+
+enum BroadcastDeliveryStatus {
+  pending
+  sent
+  failed
+  skipped
+}
+
+enum NotificationDeliveryMode {
+  in_app_only
+  in_app_plus_push
+}
+
+model Broadcast {
+  id               String                   @id @default(cuid())
+  title            String                   @db.VarChar(200)
+  body             String                   @db.VarChar(500)
+  data             Json                     @default("{}")
+  targetKind       BroadcastTargetKind
+  targetValue      String?                  @db.VarChar(200)
+  deliveryMode     NotificationDeliveryMode @default(in_app_plus_push)
+  destination      Json?
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  status           BroadcastStatus          @default(draft)
+  createdByAdminId String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  deliveries BroadcastDelivery[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+}
+
+model BroadcastDelivery {
+  id             String                  @id @default(cuid())
+  broadcastId    String
+  userId         String
+  notificationId String?                 @db.VarChar(200)
+  status         BroadcastDeliveryStatus @default(pending)
+  attemptCount   Int                     @default(0)
+  lastAttemptAt  DateTime?
+  sentAt         DateTime?
+  failureCode    String?                 @db.VarChar(80)
+  failureMessage String?                 @db.VarChar(500)
+  createdAt      DateTime                @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId])
+  @@index([broadcastId, status])
+  @@index([userId])
+}
+
+enum SupportTicketStatus {
+  open
+  closed
+}
+
+enum SupportTicketInternalStatus {
+  unread
+  seen
+  in_progress
+  done
+}
+
+model SupportTicket {
+  id                  String                      @id @default(cuid())
+  userId              String
+  phone               String                      @db.VarChar(20)
+  message             String                      @db.Text
+  attachmentObjectKey String?                     @db.VarChar(500)
+  status              SupportTicketStatus         @default(open)
+  internalStatus      SupportTicketInternalStatus @default(unread)
+  closedAt            DateTime?
+  closedByAdminId     String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([internalStatus, createdAt])
+}
+
+model UploadDeletionQueue {
+  id          String   @id @default(cuid())
+  objectKey   String   @unique @db.VarChar(500)
+  reason      String?  @db.VarChar(80)
+  deleteAfter DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([deleteAfter])
+  @@index([createdAt])
+}
+
+enum FeedAccess {
+  public
+  attendees
+  members_only
+}
+
+enum PostingAccess {
+  attendees
+  members_only
+  organizers_only
+}
+
+enum FeedPostStatus {
+  visible
+  hidden
+  removed
+}
+
+enum FeedCommentStatus {
+  visible
+  hidden
+  removed
+}
+
+enum ReportStatus {
+  open
+  resolved
+  dismissed
+}
+
+enum ReportTargetKind {
+  post
+  comment
+}
+
+enum BanScope {
+  view
+  post
+}
+
+model FeedBan {
+  id         String   @id @default(cuid())
+  eventId    String
+  userId     String
+  scope      BanScope
+  reason     String?  @db.VarChar(300)
+  bannedById String
+  createdAt  DateTime @default(now())
+
+  event    Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User  @relation("FeedBanUser", fields: [userId], references: [id], onDelete: Cascade)
+  bannedBy User  @relation("FeedBanActor", fields: [bannedById], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, scope])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model FeedPost {
+  id           String         @id @default(cuid())
+  eventId      String
+  carId        String?
+  authorUserId String?
+  body         String         @db.VarChar(2000)
+  status       FeedPostStatus @default(visible)
+  hiddenAt     DateTime?
+  hiddenById   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  event     Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  car       Car?            @relation(fields: [carId], references: [id], onDelete: SetNull)
+  author    User?           @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  photos    FeedPostPhoto[]
+  comments  FeedComment[]
+  reactions FeedReaction[]
+  reports   Report[]
+
+  @@index([eventId, createdAt(sort: Desc)])
+  @@index([carId])
+  @@index([authorUserId])
+  @@index([status, createdAt])
+}
+
+model FeedPostPhoto {
+  id        String   @id @default(cuid())
+  postId    String
+  objectKey String   @db.VarChar(300)
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, sortOrder])
+}
+
+model FeedComment {
+  id           String            @id @default(cuid())
+  postId       String
+  authorUserId String?
+  carId        String?
+  body         String            @db.VarChar(1000)
+  status       FeedCommentStatus @default(visible)
+  hiddenAt     DateTime?
+  hiddenById   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  post    FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User?    @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  car     Car?     @relation(fields: [carId], references: [id], onDelete: SetNull)
+  reports Report[]
+
+  @@index([postId, createdAt])
+  @@index([authorUserId])
+  @@index([carId])
+  @@index([status, createdAt])
+}
+
+model FeedReaction {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  kind      String   @default("like") @db.VarChar(20)
+  createdAt DateTime @default(now())
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Report {
+  id             String           @id @default(cuid())
+  targetKind     ReportTargetKind
+  postId         String?
+  commentId      String?
+  reporterUserId String?
+  reason         String           @db.VarChar(300)
+  status         ReportStatus     @default(open)
+  resolverId     String?
+  resolution     String?          @db.VarChar(300)
+  resolvedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  post     FeedPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment  FeedComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter User?        @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolver User?        @relation("ReportResolver", fields: [resolverId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+  @@index([commentId])
+  @@index([reporterUserId])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+enum ConsentPurpose {
+  privacy_notice
+  cookies_analytics
+  cookies_marketing
+  push_marketing
+  email_marketing
+  newsletter
+}
+
+enum ConsentChannel {
+  web_admin
+  web_public
+  mobile
+  email
+}
+
+model Consent {
+  id          String         @id @default(cuid())
+  userId      String?
+  purpose     ConsentPurpose
+  version     String         @db.VarChar(100)
+  givenAt     DateTime       @default(now())
+  withdrawnAt DateTime?
+  channel     ConsentChannel
+  ipAddress   String?        @db.VarChar(45)
+  userAgent   String?        @db.VarChar(500)
+  evidence    Json
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, purpose, withdrawnAt])
+  @@index([userId, purpose])
+  @@index([purpose, version])
+}
+
+enum DataExportStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model DataExportJob {
+  id           String           @id @default(cuid())
+  userId       String
+  status       DataExportStatus @default(pending)
+  objectKey    String?          @db.VarChar(300)
+  errorMessage String?          @db.VarChar(500)
+  expiresAt    DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+// LGPD Data Subject Requests (L10)
+enum DsrType {
+  access
+  deletion
+  rectification
+  portability
+  objection
+}
+
+enum DsrStatus {
+  pending_identity
+  open
+  in_progress
+  completed
+  denied
+}
+
+enum DsrIdentityStatus {
+  not_requested
+  requested
+  verified
+  failed
+}
+
+model DataSubjectRequest {
+  id               String            @id @default(cuid())
+  userId           String
+  type             DsrType
+  status           DsrStatus         @default(pending_identity)
+  identityStatus   DsrIdentityStatus @default(not_requested)
+  description      String?           @db.Text
+  dueDate          DateTime
+  identityProofKey String?           @db.VarChar(300)
+  evidenceKey      String?           @db.VarChar(300)
+  resolverId       String?
+  resolvedAt       DateTime?
+  denialReason     String?           @db.Text
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resolver User?       @relation("DsrResolver", fields: [resolverId], references: [id], onDelete: SetNull)
+  actions  DsrAction[]
+
+  @@index([userId])
+  @@index([status, dueDate])
+  @@index([dueDate])
+}
+
+model DsrAction {
+  id        String   @id @default(cuid())
+  dsrId     String
+  actorId   String
+  action    String   @db.VarChar(60)
+  note      String?  @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  dsr DataSubjectRequest @relation(fields: [dsrId], references: [id], onDelete: Cascade)
+
+  @@index([dsrId, createdAt])
+}
+
+model UserGroup {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships UserGroupMembership[]
+
+  @@index([name])
+}
+
+model UserGroupMembership {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  group UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}

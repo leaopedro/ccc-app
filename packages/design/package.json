@@ -1,0 +1,35 @@
+{
+  "name": "@jdm/design",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens.d.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./tailwind-preset": "./tailwind-preset.cjs",
+    "./assets/*": "./assets/*"
+  },
+  "files": [
+    "dist",
+    "tailwind-preset.cjs",
+    "assets/*.webp",
+    "brand.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint'"
+  },
+  "devDependencies": {
+    "@jdm/tsconfig": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

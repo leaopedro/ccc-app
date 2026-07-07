@@ -1,0 +1,10 @@
+{
+  "extends": "@jdm/tsconfig/react-native.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*", "vitest.config.ts", "test-stubs/**/*", "nativewind-env.d.ts"]
+}

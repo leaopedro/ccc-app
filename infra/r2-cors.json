@@ -1,0 +1,26 @@
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "http://localhost:8081",
+      "http://localhost:19006",
+      "https://admin.jdmexperience.com.br",
+      "https://app.jdmexperience.com.br",
+      "https://jdm-admin.vercel.app",
+      "https://jdm-mobile-web.vercel.app",
+      "https://*.vercel.app"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": [
+      "content-type",
+      "content-disposition",
+      "cache-control",
+      "x-amz-content-sha256",
+      "x-amz-date",
+      "x-amz-meta-kind",
+      "authorization"
+    ],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

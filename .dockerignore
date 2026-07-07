@@ -1,0 +1,12 @@
+node_modules
+.git
+*.md
+!package.json
+!pnpm-workspace.yaml
+!pnpm-lock.yaml
+!.npmrc
+.env*
+.worktrees
+.turbo
+apps/mobile
+apps/admin

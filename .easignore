@@ -1,0 +1,45 @@
+# Match the baseline local ignores.
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+.expo/
+.turbo/
+*.tsbuildinfo
+packages/db/prisma/migrations/dev.db*
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+apps/mobile/ios/
+apps/mobile/android/
+.worktrees/
+
+# EAS only needs the mobile app and shared workspace packages.
+.agents/
+.claude/
+.git/
+.github/
+docs/
+infra/
+plans/
+scripts/
+apps/admin/
+apps/api/
+packages/db/
+BUSINESS_PLAN.md
+CLAUDE.md
+handoff.md
+
+# Shared package exports resolve to dist files at runtime in EAS builds.
+!packages/shared/dist/
+!packages/shared/dist/**

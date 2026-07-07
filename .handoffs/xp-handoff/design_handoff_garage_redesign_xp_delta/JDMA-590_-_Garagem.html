@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JDMA-590 · Garagem — Redesign per-user pivot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Inter', system-ui, sans-serif; }
+  #root { width: 100%; height: 100vh; }
+  .jdm-hscroll::-webkit-scrollbar { display: none; }
+  @keyframes jdmg-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50%      { opacity: 0.85; transform: scale(1.03); }
+  }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Starters -->
+<script type="text/babel" src="jdma-garage/design-canvas.jsx"></script>
+<script type="text/babel" src="jdma-garage/ios-frame.jsx"></script>
+<script type="text/babel" src="jdma-garage/tweaks-panel.jsx"></script>
+
+<!-- Components -->
+<script type="text/babel" src="jdma-garage/atoms.jsx"></script>
+<script type="text/babel" src="jdma-garage/badges.jsx"></script>
+<script type="text/babel" src="jdma-garage/progress.jsx"></script>
+<script type="text/babel" src="jdma-garage/screens.jsx"></script>
+
+<!-- App -->
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const TWEAKS_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "badgeVariant": "v2",
+  "nearExpiry": false,
+  "coverPreset": "tokyo-wangan"
+}/*EDITMODE-END*/;
+
+function Frame({ children }) {
+  return <IOSDevice width={392} height={848} dark>{children}</IOSDevice>;
+}
+
+function App() {
+  const t = useTweaks(TWEAKS_DEFAULTS);
+  const setTweak = t.setTweak;
+  const badgeVariant = t.badgeVariant;
+  const nearExpiry = t.nearExpiry;
+  const coverPreset = t.coverPreset;
+  const daysLeft = 5;
+
+  // base garage with current cover preset applied
+  const baseGarage = useMemo(() => ({ ...SAMPLE_GARAGE, coverPreset }), [coverPreset]);
+
+  return (
+    <>
+      <DesignCanvas>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 1 — OWNER /garage — all states                            */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="owner"
+          title="Owner · /garage"
+          subtitle="Mobile owner view · cover + identity card overlay · parking-stall card system · all states from spec §1"
+        >
+          {/* ── A · Fresh signup (UX-Audit A.1 + J seed) ── */}
+          <DCArtboard id="fresh-signup" label="A · Fresh signup · empty · 2 free slots" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, name: 'Garagem', slug: 'user-a4f2c19b', description: null, isPublic: false, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={[]} freeLimit={2}
+                state="fresh"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── B · Partial fill ── */}
+          <DCArtboard id="partial" label="B · 1 de 2 vagas livres" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 1)} freeLimit={2}
+                state="partial"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── C · At cap (free) + buy-spot CTA ── */}
+          <DCArtboard id="at-cap" label="C · No limite · buy-spot CTA" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 2)} freeLimit={2}
+                state="at-cap"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── D · Unlimited ── */}
+          <DCArtboard id="unlimited" label="D · Ilimitado · add-card sempre visível" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 3)} freeLimit={null}
+                state="unlimited"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── E · Mixed sources (free + admin + extra empty + buy) ── */}
+          <DCArtboard id="mixed" label="E · Misturado · grátis + admin + extra + buy" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 2)} freeLimit={2}
+                state="mixed"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── F · Premium owner (gold) ── */}
+          <DCArtboard id="premium-gold" label="F · Premium owner · gold · cover personalizada" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={baseGarage}
+                cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                state="partial"
+                earned={SAMPLE_EARNED}
+                progress={SAMPLE_PROGRESS} stats={SAMPLE_STATS}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── G · Premium silver ── */}
+          <DCArtboard id="premium-silver" label="G · Premium silver" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, premiumTier: 'silver', coverPreset: 'paddock' }}
+                cars={SAMPLE_CARS.slice(0, 2)} freeLimit={3}
+                state="partial"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── H · Premium bronze ── */}
+          <DCArtboard id="premium-bronze" label="H · Premium bronze" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, premiumTier: 'bronze', coverPreset: 'workshop' }}
+                cars={SAMPLE_CARS.slice(0, 2)} freeLimit={3}
+                state="partial"
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          {/* ── I · Expired premium ── */}
+          <DCArtboard id="expired" label="I · Premium expirado · fallback cover" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: 'gold', coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 2)} freeLimit={3}
+                state="expired"
+                badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+              />
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 2 — PUBLIC /g/:slug                                       */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="public"
+          title="Public · /g/:slug"
+          subtitle="Anon-safe payload · allowlist (name, slug, description, premiumTier, isPremiumActive, cars[]) · 404 indistinguível para slug privado vs desconhecido"
+        >
+          <DCArtboard id="public-populated" label="J · Populada · premium · share visível" width={392} height={848}>
+            <Frame>
+              <PublicGarage
+                garage={baseGarage}
+                cars={SAMPLE_CARS.slice(0, 4)}
+                earned={SAMPLE_EARNED}
+                progress={SAMPLE_PROGRESS} stats={SAMPLE_STATS}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="public-empty" label="K · Pública vazia · sem carros" width={392} height={848}>
+            <Frame>
+              <PublicGarage
+                garage={{ ...baseGarage, name: 'Garagem da Maria', slug: 'maria-r', description: 'Em construção. Em breve, fotos.', premiumTier: null, isPremiumActive: false, coverPreset: 'default-door' }}
+                cars={[]} empty
+                badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="public-404" label="L · 404 · anti-enumeration (slug privado = slug desconhecido)" width={392} height={848}>
+            <Frame>
+              <PublicGarage404 />
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 3 — SHEETS                                                */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="sheets"
+          title="Sheets · interações"
+          subtitle="PremiumBadge tappable · Cover picker (premium + bloqueado) · Buy-spot quick-confirm · Editar garagem"
+        >
+          <DCArtboard id="sheet-premium" label="M · Sheet · O que é Premium?" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                  state="partial"
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <PremiumSheet
+                  tier={baseGarage.premiumTier}
+                  isPremiumActive
+                  nearExpiry={nearExpiry} daysLeft={daysLeft}
+                  onClose={() => undefined}
+                />
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="sheet-cover-premium" label="N · Sheet · Cover picker (premium · escolha desbloqueada)" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 2)} freeLimit={3}
+                  state="partial"
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <CoverPickerSheet
+                  currentSlug={coverPreset} isPremium
+                  onSelect={(s) => setTweak('coverPreset', s)}
+                  onClose={() => undefined}
+                  onUpload={() => undefined}
+                />
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="sheet-cover-free" label="O · Sheet · Cover picker (free · upsell)" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                  cars={SAMPLE_CARS.slice(0, 1)} freeLimit={2}
+                  state="partial"
+                  badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+                />
+                <CoverPickerSheet
+                  currentSlug="default-door" isPremium={false}
+                  onSelect={() => undefined}
+                  onClose={() => undefined}
+                  onUpload={() => undefined}
+                />
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="sheet-buy" label="P · Sheet · Comprar vaga (Pix / Cartão)" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                  cars={SAMPLE_CARS.slice(0, 2)} freeLimit={2}
+                  state="at-cap"
+                  badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+                />
+                <BuySpotSheet onClose={() => undefined} onCheckout={() => undefined} />
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="sheet-edit" label="Q · Sheet · Editar garagem (afford. inline)" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 2)} freeLimit={3}
+                  state="partial"
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <EditGarageSheet
+                  garage={baseGarage}
+                  onClose={() => undefined}
+                  onSave={() => undefined}
+                />
+              </div>
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 4 — PREMIUM BADGE EXPLORATION                            */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="badge"
+          title="PremiumBadge · 3 direções lado a lado"
+          subtitle="V1 sparkle-chip · V2 tier micro-pill (bronze/silver/gold) · V3 holographic · com estados normal + near-expiry"
+        >
+          <DCArtboard id="badge-grid" label="R · Grid completa · 3 variantes × 3 tiers × 2 estados" width={760} height={520}>
+            <BadgeGrid />
+          </DCArtboard>
+
+          <DCArtboard id="badge-in-context" label="S · Badge em contexto · card de carro" width={392} height={420}>
+            <BadgeInContext />
+          </DCArtboard>
+        </DCSection>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 5 — CONQUISTAS / BADGES                                   */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="badges"
+          title="Conquistas · Gamificação"
+          subtitle="Badges hexagonais · 12 conquistas · 3 raridades (Comum/Raro/Lendário) · 4 categorias · placement em owner + public + drawer dedicado"
+        >
+          <DCArtboard id="badge-system" label="T · Sistema · catálogo + raridades + categorias" width={760} height={620}>
+            <BadgeSystemSheet />
+          </DCArtboard>
+
+          <DCArtboard id="badge-row-owner" label="U · Owner garage · linha de conquistas (4 fixadas/recentes)" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                state="partial"
+                earned={SAMPLE_EARNED}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="badge-row-public" label="V · Public profile · só conquistas fixadas (3 max)" width={392} height={848}>
+            <Frame>
+              <PublicGarage
+                garage={baseGarage} cars={SAMPLE_CARS.slice(0, 4)}
+                earned={SAMPLE_EARNED}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="badges-sheet" label="W · Drawer · 6 de 12 desbloqueadas · tabs" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                  state="partial" earned={SAMPLE_EARNED}
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <BadgesSheet earned={SAMPLE_EARNED} garageName={baseGarage.name} isOwner
+                  onClose={() => undefined} />
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="badge-detail-earned" label="X · Detalhe · conquista desbloqueada + pin toggle" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                  state="partial" earned={SAMPLE_EARNED}
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <SheetShell title="" onClose={() => undefined}>
+                  <BadgeDetail code="EVT-002"
+                    earnedEntry={SAMPLE_EARNED.find((e) => e.code === 'EVT-002')}
+                    isOwner onBack={() => undefined} />
+                </SheetShell>
+              </div>
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="badge-detail-locked" label="Y · Detalhe · conquista bloqueada · critério" width={392} height={848}>
+            <Frame>
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <OwnerGarage
+                  garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                  state="partial" earned={SAMPLE_EARNED}
+                  badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+                />
+                <SheetShell title="" onClose={() => undefined}>
+                  <BadgeDetail code="EVT-003" earnedEntry={undefined}
+                    isOwner onBack={() => undefined} />
+                </SheetShell>
+              </div>
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ═════════════════════════════════════════════════════════════ */}
+        {/* ROW 6 — XP + STATS                                            */}
+        {/* ═════════════════════════════════════════════════════════════ */}
+        <DCSection
+          id="xp"
+          title="XP · Ranking · Stats"
+          subtitle="XP em destaque · 5 tiers de rank (Iniciante → Hall of Fame) · tooltip explica como ganhar pontos · 4 stats agregadas abaixo"
+        >
+          <DCArtboard id="xp-scoreboard-system" label="Z · Sistema · 5 tiers + tabela de XP" width={760} height={620}>
+            <XPSystemSheet />
+          </DCArtboard>
+
+          <DCArtboard id="xp-owner" label="AA · Owner · XP em destaque no perfil" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                state="partial"
+                earned={SAMPLE_EARNED}
+                progress={SAMPLE_PROGRESS} stats={SAMPLE_STATS}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="xp-tooltip" label="BB · Tooltip aberto · regras de XP" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={baseGarage} cars={SAMPLE_CARS.slice(0, 3)} freeLimit={3}
+                state="partial"
+                earned={SAMPLE_EARNED}
+                progress={SAMPLE_PROGRESS} stats={SAMPLE_STATS}
+                forceXpTooltip
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="xp-public" label="CC · Public profile · XP + stats visíveis" width={392} height={848}>
+            <Frame>
+              <PublicGarage
+                garage={baseGarage} cars={SAMPLE_CARS.slice(0, 4)}
+                earned={SAMPLE_EARNED}
+                progress={SAMPLE_PROGRESS} stats={SAMPLE_STATS}
+                badgeVariant={badgeVariant} nearExpiry={nearExpiry} daysLeft={daysLeft}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="xp-newbie" label="DD · Iniciante · pouco XP, longe do próximo rank" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, isPremiumActive: false, premiumTier: null, coverPreset: 'default-door' }}
+                cars={SAMPLE_CARS.slice(0, 1)} freeLimit={2}
+                state="partial"
+                earned={SAMPLE_EARNED.slice(0, 2)}
+                progress={{ xp: 32, rank: 'Iniciante', nextRank: 'Pilotador', xpInTier: 32, xpToNextRank: 68, tierSpan: 100 }}
+                stats={{ events: 1, posts: 2, likesReceived: 4, joinedAt: '2026-05-15' }}
+                badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+              />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="xp-hof" label="EE · Hall of Fame · topo do ranking" width={392} height={848}>
+            <Frame>
+              <OwnerGarage
+                garage={{ ...baseGarage, name: 'Garagem do Rafa', slug: 'rafa-hof', premiumTier: 'gold', coverPreset: 'kanjo-loop' }}
+                cars={SAMPLE_CARS.slice(0, 4)} freeLimit={4}
+                state="partial"
+                earned={SAMPLE_EARNED}
+                progress={{ xp: 6420, rank: 'Hall of Fame', nextRank: null, xpInTier: 1420, xpToNextRank: 0, tierSpan: 1 }}
+                stats={{ events: 42, posts: 188, likesReceived: 2104, joinedAt: '2026-01-08' }}
+                badgeVariant={badgeVariant} nearExpiry={false} daysLeft={0}
+              />
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection title="Variante do PremiumBadge">
+          <TweakRadio
+            value={badgeVariant}
+            options={[
+              { value: 'v1', label: 'V1 sparkle' },
+              { value: 'v2', label: 'V2 tier-pill' },
+              { value: 'v3', label: 'V3 holo' },
+            ]}
+            onChange={(v) => setTweak('badgeVariant', v)}
+          />
+        </TweakSection>
+        <TweakSection title="Estado">
+          <TweakToggle
+            value={nearExpiry}
+            onChange={(v) => setTweak('nearExpiry', v)}
+            label="Premium expira em < 7 dias"
+          />
+        </TweakSection>
+        <TweakSection title="Capa premium">
+          <TweakSelect
+            value={coverPreset}
+            options={COVER_PRESETS.map((p) => ({ value: p.slug, label: p.label }))}
+            onChange={(v) => setTweak('coverPreset', v)}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+// ─── Helper artboards ────────────────────────────────────────
+
+function BadgeGrid() {
+  const tiers = ['gold', 'silver', 'bronze'];
+  const variants = ['v1', 'v2', 'v3'];
+  const cellPad = { padding: '14px 16px' };
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: JDM.bg, color: JDM.text,
+      fontFamily: JDM.fontSans, padding: 24, boxSizing: 'border-box',
+    }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '110px 1fr 1fr 1fr',
+        gap: 0, border: `1px solid ${JDM.border}`, borderRadius: 14, overflow: 'hidden',
+        background: JDM.surface,
+      }}>
+        {/* header row */}
+        <div style={{ ...cellPad, fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4, textTransform: 'uppercase', borderBottom: `1px solid ${JDM.border}` }}></div>
+        {variants.map((v) => (
+          <div key={v} style={{ ...cellPad, fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4, textTransform: 'uppercase', borderBottom: `1px solid ${JDM.border}`, borderLeft: `1px solid ${JDM.border}` }}>
+            {v.toUpperCase()} · {v === 'v1' ? 'sparkle' : v === 'v2' ? 'tier-pill' : 'holographic'}
+          </div>
+        ))}
+        {/* tier rows */}
+        {tiers.map((tier, ri) => (
+          <React.Fragment key={tier}>
+            <div style={{ ...cellPad, fontFamily: JDM.fontMono, fontSize: 11, color: JDM.text, letterSpacing: 1, textTransform: 'uppercase', borderBottom: ri < tiers.length - 1 ? `1px solid ${JDM.border}` : 'none', display: 'flex', alignItems: 'center' }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: 4, marginRight: 8,
+                background: tierColors(tier).main,
+              }} />
+              {tier}
+            </div>
+            {variants.map((v) => (
+              <div key={v} style={{
+                ...cellPad, borderBottom: ri < tiers.length - 1 ? `1px solid ${JDM.border}` : 'none',
+                borderLeft: `1px solid ${JDM.border}`,
+                display: 'flex', flexDirection: 'column', gap: 10,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PremiumBadge variant={v} tier={tier} size="md" />
+                  <span style={{ fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut }}>normal</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PremiumBadge variant={v} tier={tier} size="md" nearExpiry daysLeft={3} />
+                  <span style={{ fontFamily: JDM.fontMono, fontSize: 10, color: JDM.warning }}>expira em 3d</span>
+                </div>
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{
+        marginTop: 16, fontFamily: JDM.fontSans, fontSize: 12, color: JDM.textMut, lineHeight: 1.55, maxWidth: 620,
+      }}>
+        <strong style={{ color: JDM.textSec }}>Recomendação:</strong> V2 tier-pill. A diferenciação de tier (bronze/silver/gold) está visualmente codificada sem depender só de cor — o nome do tier vive dentro do badge, com chave + tipografia mono. O estado de expiração ganha um sub-bloco numérico em vez de "vibrar" o badge inteiro.
+      </div>
+    </div>
+  );
+}
+
+function BadgeInContext() {
+  const variants = ['v1', 'v2', 'v3'];
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: JDM.bg, padding: 16, boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      {variants.map((v) => (
+        <FilledStallCard
+          key={v} car={SAMPLE_CARS[1]} slotNumber={1} source="default_free"
+          premiumActive premiumTier="gold"
+          badgeVariant={v}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BadgeSystemSheet() {
+  const rarities = ['common', 'rare', 'legendary'];
+  const categories = ['eventos', 'carros', 'comunidade', 'jdm'];
+  const sampleByCat = {
+    eventos:    ['EVT-001', 'EVT-002', 'EVT-003'],
+    carros:     ['CAR-001', 'CAR-002', 'CAR-003'],
+    comunidade: ['COM-001', 'COM-002', 'COM-003'],
+    jdm:        ['JDM-001', 'JDM-002', 'JDM-003'],
+  };
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: JDM.bg, color: JDM.text,
+      fontFamily: JDM.fontSans, padding: 24, boxSizing: 'border-box', overflow: 'auto',
+    }}>
+      {/* Rarity legend */}
+      <div style={{
+        fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4,
+        textTransform: 'uppercase', marginBottom: 10,
+      }}>Sistema de raridade</div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24,
+      }}>
+        {rarities.map((rar, i) => {
+          const r = rarityColors(rar);
+          const code = ['EVT-001', 'EVT-002', 'EVT-003'][i];
+          return (
+            <div key={rar} style={{
+              padding: '14px 14px 12px', borderRadius: 12,
+              background: JDM.surface, border: `1px solid ${JDM.border}`,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <HexBadge code={code} earned size="md" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 6px', borderRadius: 3,
+                  background: r.tint, color: r.main, border: `1px solid ${r.main}55`,
+                  fontFamily: JDM.fontSans, fontWeight: 700, fontSize: 9,
+                  letterSpacing: 1.4, textTransform: 'uppercase',
+                }}>{r.label}</div>
+                <div style={{ fontFamily: JDM.fontSans, fontWeight: 700, fontSize: 13, color: JDM.text, marginTop: 4 }}>
+                  {rar === 'common' ? 'Frequente' : rar === 'rare' ? 'Reconhecimento' : 'Sinal de status'}
+                </div>
+                <div style={{ fontFamily: JDM.fontSans, fontSize: 11.5, color: JDM.textMut, marginTop: 2, lineHeight: 1.4 }}>
+                  {rar === 'common' ? 'Outline + glifo neutros.' : rar === 'rare' ? 'Outline gold + tint quente.' : 'Outline brand + ponto luminoso.'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Catalog grid by category */}
+      <div style={{
+        fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4,
+        textTransform: 'uppercase', marginBottom: 10,
+      }}>Catálogo · 12 conquistas · 4 categorias</div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12,
+      }}>
+        {categories.map((cat) => {
+          const meta = categoryMeta(cat);
+          return (
+            <div key={cat} style={{
+              padding: '12px 12px 14px', borderRadius: 12,
+              background: JDM.surface, border: `1px solid ${JDM.border}`,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: meta.accent }} />
+                <span style={{
+                  fontFamily: JDM.fontSans, fontWeight: 700, fontSize: 12, color: JDM.text,
+                  letterSpacing: 0.4,
+                }}>{meta.label}</span>
+              </div>
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center',
+              }}>
+                {sampleByCat[cat].map((code) => (
+                  <HexBadge key={code} code={code} earned size="md" showLabel />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        marginTop: 18, fontFamily: JDM.fontSans, fontSize: 12, color: JDM.textMut, lineHeight: 1.55, maxWidth: 640,
+      }}>
+        <strong style={{ color: JDM.textSec }}>Padrão visual:</strong> hexágono flat-top (clip-path), anel externo na cor da raridade, miolo na cor de superfície, glifo centralizado em <code style={{ fontFamily: JDM.fontMono, color: JDM.text }}>JDM.fontMono</code>. Lendárias ganham um ponto luminoso no canto superior-direito. Bloqueadas usam grayscale + glifo de cadeado.
+      </div>
+    </div>
+  );
+}
+
+function XPSystemSheet() {
+  const sampleXPs = [50, 320, 1247, 3200, 6420];
+  return (
+    <div style={{
+      width: '100%', height: '100%', background: JDM.bg, color: JDM.text,
+      fontFamily: JDM.fontSans, padding: 24, boxSizing: 'border-box', overflow: 'auto',
+    }}>
+      <div style={{
+        fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4,
+        textTransform: 'uppercase', marginBottom: 10,
+      }}>5 ranks · thresholds server-side</div>
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 24,
+      }}>
+        {RANK_TIERS.map((tier, i) => {
+          const exampleXp = sampleXPs[i];
+          const isTop = tier.next == null;
+          const inTier = isTop ? 1420 : exampleXp - tier.min;
+          const span = isTop ? 1 : tier.nextAt - tier.min;
+          return (
+            <div key={tier.name} style={{
+              padding: '12px 12px 14px', borderRadius: 12,
+              background: JDM.surface, border: `1px solid ${JDM.border}`,
+            }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 7px', borderRadius: 4,
+                background: JDM.brandTint, color: JDM.brandSoft,
+                border: `1px solid rgba(225,6,0,0.45)`,
+                fontFamily: JDM.fontSans, fontWeight: 700, fontSize: 9,
+                letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 8,
+              }}>{tier.name}</div>
+              <div style={{
+                fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, marginBottom: 6,
+              }}>{tier.min.toLocaleString('pt-BR')}{isTop ? '+' : `–${(tier.nextAt - 1).toLocaleString('pt-BR')}`} XP</div>
+              <XPScoreboardMini
+                xp={exampleXp} rank={tier.name} nextRank={tier.next}
+                inTier={inTier} span={span} isTop={isTop}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        fontFamily: JDM.fontMono, fontSize: 10, color: JDM.textMut, letterSpacing: 1.4,
+        textTransform: 'uppercase', marginBottom: 10,
+      }}>Tabela de pontos</div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
+      }}>
+        {XP_RULES.map((rule, i) => {
+          const tone = rule.tone === 'gold' ? JDM.gold
+                     : rule.tone === 'silver' ? JDM.silver
+                     : rule.tone === 'brand' ? JDM.brand
+                     : JDM.brandSoft;
+          const Glyph = (BadgeGlyph[rule.icon] || BadgeGlyph.medal);
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', borderRadius: 10,
+              background: JDM.surface, border: `1px solid ${JDM.border}`,
+            }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: 'rgba(255,255,255,0.04)', color: tone,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}><Glyph s={15} /></div>
+              <div style={{ flex: 1, minWidth: 0, fontFamily: JDM.fontSans, fontSize: 13, color: JDM.text }}>{rule.action}</div>
+              <div style={{ fontFamily: JDM.fontMono, fontWeight: 700, fontSize: 14, color: tone }}>+{rule.points}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function XPScoreboardMini({ xp, rank, nextRank, inTier, span, isTop }) {
+  const pct = isTop ? 100 : Math.min(100, Math.round((inTier / span) * 100));
+  return (
+    <div>
+      <div style={{
+        fontFamily: JDM.fontDisplay, fontSize: 26, lineHeight: 1, color: JDM.text, letterSpacing: -1,
+      }}>{xp.toLocaleString('pt-BR')}</div>
+      <div style={{
+        marginTop: 6, height: 5, borderRadius: 3, background: JDM.surfaceDeep, overflow: 'hidden',
+        border: `1px solid ${JDM.border}`,
+      }}>
+        <div style={{
+          width: `${pct}%`, height: '100%',
+          background: `linear-gradient(90deg, ${JDM.brandDeep}, ${JDM.brand})`,
+        }} />
+      </div>
+      <div style={{
+        marginTop: 4, fontFamily: JDM.fontMono, fontSize: 9, color: JDM.textMut, letterSpacing: 0.4,
+      }}>{isTop ? 'Topo' : `→ ${nextRank}`}</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>

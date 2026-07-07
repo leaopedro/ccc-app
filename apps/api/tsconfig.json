@@ -1,0 +1,7 @@
+{
+  "extends": "@jdm/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*", "test/**/*", "scripts/**/*", "vitest.config.ts"]
+}

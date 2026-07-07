@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jdm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jdm
+      POSTGRES_PASSWORD: jdm
+      POSTGRES_DB: jdm
+    ports:
+      - '5433:5432'
+    volumes:
+      - jdm_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U jdm -d jdm']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  jdm_pg_data:

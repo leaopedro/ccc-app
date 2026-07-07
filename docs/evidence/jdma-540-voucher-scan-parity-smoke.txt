@@ -1,0 +1,195 @@
+=== stage-1 /me/tickets — voucher render (both valid, QR codes signed) ===
+{
+  "ticketId": "cmp4cet6k000bs0klo85ekzk7",
+  "pickupVouchers": [
+    {
+      "id": "cmp4cet6y000gs0kl7557ygdy",
+      "status": "valid",
+      "code": "v.cmp4cet6m000fs0kl5ggk08jx-0.K2h8Qqv2VQAR0GrAx1ygBrV9jWA3h3bE-OqT_RPMU5w",
+      "productTitle": "Camiseta JDM",
+      "variantName": "Tamanho M / Preta",
+      "orderId": "cmp4cet6m000ds0klr5upycz5",
+      "orderShortId": "R5UPYCZ5"
+    },
+    {
+      "id": "cmp4cet6y000hs0klemmexkpn",
+      "status": "valid",
+      "code": "v.cmp4cet6m000fs0kl5ggk08jx-1.Z3H5DZJF4L4mSVpQzWSA1jE8FCMZqGgMAaJayNU-Blw",
+      "productTitle": "Camiseta JDM",
+      "variantName": "Tamanho M / Preta",
+      "orderId": "cmp4cet6m000ds0klr5upycz5",
+      "orderShortId": "R5UPYCZ5"
+    }
+  ]
+}
+
+=== stage-2 POST /admin/store/pickup/voucher/claim — voucher scan #1 ===
+{
+  "result": "claimed",
+  "voucher": {
+    "id": "cmp4cet6y000gs0kl7557ygdy",
+    "orderId": "cmp4cet6m000ds0klr5upycz5",
+    "orderShortId": "R5UPYCZ5",
+    "status": "used",
+    "usedAt": "2026-05-13T17:37:59.673Z",
+    "product": {
+      "title": "Camiseta JDM",
+      "variantName": "Tamanho M / Preta",
+      "variantSku": "SKU-6DMN",
+      "variantAttributes": {
+        "cor": "Preta",
+        "tamanho": "M"
+      }
+    },
+    "holder": {
+      "id": "cmp4ceswp0000s0klyddresn2",
+      "name": "Test User"
+    },
+    "ticket": {
+      "id": "cmp4cet6k000bs0klo85ekzk7",
+      "tier": {
+        "id": "cmp4cet6c0004s0klcqlwsey6",
+        "name": "Pista"
+      }
+    }
+  }
+}
+
+=== stage-2 parity check — ticket untouched after voucher #1 claim ===
+{
+  "ticket": {
+    "id": "cmp4cet6k000bs0klo85ekzk7",
+    "status": "valid"
+  },
+  "vouchers": [
+    {
+      "id": "cmp4cet6y000gs0kl7557ygdy",
+      "unitIndex": 0,
+      "status": "used"
+    },
+    {
+      "id": "cmp4cet6y000hs0klemmexkpn",
+      "unitIndex": 1,
+      "status": "valid"
+    }
+  ]
+}
+
+=== stage-3 POST /admin/tickets/check-in — ticket scan (parity) ===
+{
+  "result": "admitted",
+  "ticket": {
+    "id": "cmp4cet6k000bs0klo85ekzk7",
+    "status": "used",
+    "checkedInAt": "2026-05-13T17:37:59.682Z",
+    "tier": {
+      "id": "cmp4cet6c0004s0klcqlwsey6",
+      "name": "Pista"
+    },
+    "holder": {
+      "id": "cmp4ceswp0000s0klyddresn2",
+      "name": "Test User"
+    },
+    "car": null,
+    "licensePlate": null,
+    "extras": []
+  },
+  "storePickup": [
+    {
+      "orderId": "cmp4cet6m000ds0klr5upycz5",
+      "shortId": "R5UPYCZ5",
+      "fulfillmentStatus": "unfulfilled",
+      "items": [
+        {
+          "id": "cmp4cet6m000fs0kl5ggk08jx",
+          "productTitle": "Camiseta JDM",
+          "variantName": "Tamanho M / Preta",
+          "variantSku": "SKU-6DMN",
+          "variantAttributes": {
+            "cor": "Preta",
+            "tamanho": "M"
+          },
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}
+
+=== stage-3 parity check — vouchers untouched after ticket scan ===
+{
+  "vouchers": [
+    {
+      "id": "cmp4cet6y000gs0kl7557ygdy",
+      "unitIndex": 0,
+      "status": "used"
+    },
+    {
+      "id": "cmp4cet6y000hs0klemmexkpn",
+      "unitIndex": 1,
+      "status": "valid"
+    }
+  ]
+}
+
+=== stage-4 POST /admin/store/pickup/voucher/claim — voucher scan #2 (after ticket used) ===
+{
+  "result": "claimed",
+  "voucher": {
+    "id": "cmp4cet6y000hs0klemmexkpn",
+    "status": "used"
+  }
+}
+
+=== stage-5 /me/tickets — final state (ticket used, both vouchers used) ===
+{
+  "ticket": {
+    "id": "cmp4cet6k000bs0klo85ekzk7",
+    "status": "used"
+  },
+  "pickupVouchers": [
+    {
+      "id": "cmp4cet6y000gs0kl7557ygdy",
+      "status": "used",
+      "code": "v.cmp4cet6m000fs0kl5ggk08jx-0.K2h8Qqv2VQAR0GrAx1ygBrV9jWA3h3bE-OqT_RPMU5w"
+    },
+    {
+      "id": "cmp4cet6y000hs0klemmexkpn",
+      "status": "used",
+      "code": "v.cmp4cet6m000fs0kl5ggk08jx-1.Z3H5DZJF4L4mSVpQzWSA1jE8FCMZqGgMAaJayNU-Blw"
+    }
+  ]
+}
+
+=== stage-6 idempotent re-scan voucher #1 returns already_used ===
+{
+  "result": "already_used",
+  "voucher": {
+    "id": "cmp4cet6y000gs0kl7557ygdy",
+    "orderId": "cmp4cet6m000ds0klr5upycz5",
+    "orderShortId": "R5UPYCZ5",
+    "status": "used",
+    "usedAt": "2026-05-13T17:37:59.673Z",
+    "product": {
+      "title": "Camiseta JDM",
+      "variantName": "Tamanho M / Preta",
+      "variantSku": "SKU-6DMN",
+      "variantAttributes": {
+        "cor": "Preta",
+        "tamanho": "M"
+      }
+    },
+    "holder": {
+      "id": "cmp4ceswp0000s0klyddresn2",
+      "name": "Test User"
+    },
+    "ticket": {
+      "id": "cmp4cet6k000bs0klo85ekzk7",
+      "tier": {
+        "id": "cmp4cet6c0004s0klcqlwsey6",
+        "name": "Pista"
+      }
+    }
+  }
+}
+

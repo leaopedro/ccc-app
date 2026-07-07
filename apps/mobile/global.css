@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #0a0a0a;
+    color: #f5f5f5;
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root,
+  #__expo-root {
+    height: 100%;
+    overflow: hidden;
+    background-color: #0a0a0a;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (min-width: 480px) {
+    body {
+      background-color: #060606;
+    }
+    #root,
+    #__expo-root {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      box-shadow: 0 0 0 1px #1f1f1f;
+    }
+  }
+}

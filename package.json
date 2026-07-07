@@ -1,0 +1,43 @@
+{
+  "name": "jdm-experience",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.4.1",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10.4.1"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "if [ -f ./scripts/sync-git-hooks.sh ] && [ -d .git ]; then sh ./scripts/sync-git-hooks.sh; fi"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "./scripts/guard-branch-context.sh pre-commit && pnpm lint-staged"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eas-cli": "^14.7.1",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "simple-git-hooks": "^2.11.1",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.17.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "react-native-css-interop@0.2.3": "patches/react-native-css-interop@0.2.3.patch"
+    }
+  }
+}

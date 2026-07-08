@@ -35,7 +35,7 @@ describe('MFA service', () => {
     it('generates a valid otpauth URI', () => {
       const result = generateTotpSecret('user@test.com');
       expect(result.uri).toContain('otpauth://totp/');
-      expect(result.uri).toContain('JDM%20Experience');
+      expect(result.uri).toContain('Casa%20Car%20Club');
       expect(result.secret.length).toBeGreaterThan(10);
     });
 

@@ -20,9 +20,9 @@ export type BadgeCode = string;
  *                                       ticket set (no missed event between
  *                                       check-ins). See streak query below.
  *   - EVT-003 — "Lenda da Pista"      : count(used tickets for user) >= 10
- *   - JDM-001 — "Curitibano de Coração" : the just-checked-in event has
+ *   - CCC-001 — "Curitibano de Coração" : the just-checked-in event has
  *                                       `city === 'Curitiba'` (case-insensitive).
- *   - JDM-002 — "Drift King"          : the just-checked-in event has
+ *   - CCC-002 — "Drift King"          : the just-checked-in event has
  *                                       `type === 'drift'`.
  */
 export const checkEligibility = async (
@@ -32,7 +32,7 @@ export const checkEligibility = async (
 ): Promise<BadgeCode[]> => {
   const codes: BadgeCode[] = [];
 
-  // Hydrate the triggering ticket + event so we can score JDM-001 / JDM-002
+  // Hydrate the triggering ticket + event so we can score CCC-001 / CCC-002
   // without a second round-trip. The ticket must already be `used` here —
   // the caller has just flipped status — but we don't filter by status so a
   // stale call still yields the JDM-* codes (those are based on event
@@ -97,13 +97,13 @@ export const checkEligibility = async (
     }
   }
 
-  // JDM-001 — Curitiba check-in. Case-insensitive match against
+  // CCC-001 — Curitiba check-in. Case-insensitive match against
   // `Event.city`. Trim() handles seed/admin-data whitespace drift.
   const city = trigger.event.city?.trim().toLowerCase() ?? null;
-  if (city === 'curitiba') codes.push('JDM-001');
+  if (city === 'curitiba') codes.push('CCC-001');
 
-  // JDM-002 — drift-event check-in.
-  if (trigger.event.type === 'drift') codes.push('JDM-002');
+  // CCC-002 — drift-event check-in.
+  if (trigger.event.type === 'drift') codes.push('CCC-002');
 
   return codes;
 };

@@ -172,7 +172,7 @@ describe('HexBadge', () => {
     const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge
-        code="JDM-003"
+        code="CCC-003"
         variant="locked_premium"
         rarity="legendary"
         icon="founder"

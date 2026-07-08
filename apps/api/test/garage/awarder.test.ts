@@ -18,7 +18,7 @@ const seedBadge = async (
           ? 'carros'
           : code.startsWith('COM')
             ? 'comunidade'
-            : 'jdm',
+            : 'ccc',
       rarity: 'common',
       icon: 'flag',
       premiumExclusive: opts.premiumExclusive ?? false,
@@ -118,12 +118,12 @@ describe('awardBadge — core service', () => {
   });
 
   it('grants premium-exclusive on a free garage when allowAdminOverride is true', async () => {
-    await seedBadge('JDM-003', { premiumExclusive: true });
+    await seedBadge('CCC-003', { premiumExclusive: true });
     const { user } = await createUser({ email: 'a5@jdm.test', verified: true });
     const gid = await garageId(user.id);
 
     const outcome = await prisma.$transaction((tx) =>
-      awardBadge(tx, gid, 'JDM-003', 'admin:adm-1', {
+      awardBadge(tx, gid, 'CCC-003', 'admin:adm-1', {
         actorId: 'adm-1',
         allowAdminOverride: true,
       }),
@@ -131,7 +131,7 @@ describe('awardBadge — core service', () => {
     expect(outcome).toEqual({ awarded: true });
 
     const earned = await prisma.garageBadge.findFirstOrThrow({
-      where: { garageId: gid, badgeCode: 'JDM-003' },
+      where: { garageId: gid, badgeCode: 'CCC-003' },
     });
     expect(earned.sourceRef).toBe('admin:adm-1');
 

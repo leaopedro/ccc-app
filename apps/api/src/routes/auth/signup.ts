@@ -50,7 +50,7 @@ export const signupRoute: FastifyPluginAsync = async (app) => {
         },
       });
 
-      // Conquistas — JDM-003 (Fundador) is awarded inside the same tx as
+      // Conquistas — CCC-003 (Fundador) is awarded inside the same tx as
       // the user+garage create so the founder cohort is atomically defined.
       // The awarder applies the premium-exclusive gate; founders signing
       // up free will see `premium_required` and no row will land. If they

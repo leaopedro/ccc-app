@@ -16,10 +16,10 @@ const CATEGORY_LABEL: Record<BadgeCategory, string> = {
   eventos: 'Eventos',
   carros: 'Carros',
   comunidade: 'Comunidade',
-  jdm: 'CCC',
+  ccc: 'CCC',
 };
 
-const CATEGORY_ORDER: BadgeCategory[] = ['eventos', 'carros', 'comunidade', 'jdm'];
+const CATEGORY_ORDER: BadgeCategory[] = ['eventos', 'carros', 'comunidade', 'ccc'];
 
 type TabFilter = 'all' | BadgeCategory;
 const TABS: { id: TabFilter; label: string }[] = [
@@ -27,7 +27,7 @@ const TABS: { id: TabFilter; label: string }[] = [
   { id: 'eventos', label: 'Eventos' },
   { id: 'carros', label: 'Carros' },
   { id: 'comunidade', label: 'Comunidade' },
-  { id: 'jdm', label: 'CCC' },
+  { id: 'ccc', label: 'CCC' },
 ];
 
 export interface BadgesSheetCopy {

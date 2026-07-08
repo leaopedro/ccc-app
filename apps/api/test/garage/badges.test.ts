@@ -29,11 +29,11 @@ const seedCatalog = async () => {
       { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
       { code: 'COM-002', category: 'comunidade', rarity: 'rare', icon: 'chat' },
       { code: 'COM-003', category: 'comunidade', rarity: 'legendary', icon: 'fire' },
-      { code: 'JDM-001', category: 'jdm', rarity: 'common', icon: 'pin' },
-      { code: 'JDM-002', category: 'jdm', rarity: 'rare', icon: 'flagCheck' },
+      { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
+      { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
       {
-        code: 'JDM-003',
-        category: 'jdm',
+        code: 'CCC-003',
+        category: 'ccc',
         rarity: 'legendary',
         icon: 'founder',
         premiumExclusive: true,
@@ -137,7 +137,7 @@ describe('GET /me/garage/badges', () => {
     expect(body.badges).toHaveLength(12);
     const car003 = body.badges.find((b) => b.code === 'CAR-003');
     expect(car003?.state).toBe('locked_premium');
-    const jdm003 = body.badges.find((b) => b.code === 'JDM-003');
+    const jdm003 = body.badges.find((b) => b.code === 'CCC-003');
     expect(jdm003?.state).toBe('locked_premium');
     const evt001 = body.badges.find((b) => b.code === 'EVT-001');
     expect(evt001?.state).toBe('locked');

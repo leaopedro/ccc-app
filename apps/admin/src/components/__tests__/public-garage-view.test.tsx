@@ -147,8 +147,8 @@ describe('PublicGarageView — Conquistas (chunk 21)', () => {
       premiumExclusive: false,
     },
     {
-      code: 'JDM-003',
-      category: 'jdm',
+      code: 'CCC-003',
+      category: 'ccc',
       rarity: 'legendary',
       icon: 'founder',
       premiumExclusive: false,
@@ -159,13 +159,13 @@ describe('PublicGarageView — Conquistas (chunk 21)', () => {
   it('renders the Conquistas BadgeRow when the public payload has pinned badges + catalog is provided', () => {
     const garage: Garage = {
       ...baseGarage,
-      badges: [{ code: 'JDM-003', earnedAt }],
+      badges: [{ code: 'CCC-003', earnedAt }],
     };
     const html = renderToStaticMarkup(
       <PublicGarageView garage={garage} cars={[]} badgeCatalog={catalog} />,
     );
     expect(html).toContain('Conquistas');
-    expect(html).toContain('Conquista JDM-003');
+    expect(html).toContain('Conquista CCC-003');
   });
 
   it('omits the BadgeRow when the garage has no pinned badges', () => {
@@ -178,7 +178,7 @@ describe('PublicGarageView — Conquistas (chunk 21)', () => {
   it('omits the BadgeRow when the catalog fetch failed (empty catalog)', () => {
     const garage: Garage = {
       ...baseGarage,
-      badges: [{ code: 'JDM-003', earnedAt }],
+      badges: [{ code: 'CCC-003', earnedAt }],
     };
     const html = renderToStaticMarkup(
       <PublicGarageView garage={garage} cars={[]} badgeCatalog={[]} />,
@@ -190,7 +190,7 @@ describe('PublicGarageView — Conquistas (chunk 21)', () => {
     const garage: Garage = {
       ...baseGarage,
       gamification: { enabled: false },
-      badges: [{ code: 'JDM-003', earnedAt }],
+      badges: [{ code: 'CCC-003', earnedAt }],
     };
     const html = renderToStaticMarkup(
       <PublicGarageView garage={garage} cars={[]} badgeCatalog={catalog} />,
@@ -202,8 +202,8 @@ describe('PublicGarageView — Conquistas (chunk 21)', () => {
 describe('PublicGarageView — ProfileStats (chunk 41)', () => {
   const catalog: BadgeCatalogEntry[] = [
     {
-      code: 'JDM-003',
-      category: 'jdm',
+      code: 'CCC-003',
+      category: 'ccc',
       rarity: 'legendary',
       icon: 'founder',
       premiumExclusive: false,
@@ -274,7 +274,7 @@ describe('PublicGarageView — ProfileStats (chunk 41)', () => {
     const earnedAt = '2026-05-01T12:00:00.000Z';
     const garage: Garage = {
       ...baseGarage,
-      badges: [{ code: 'JDM-003', earnedAt }],
+      badges: [{ code: 'CCC-003', earnedAt }],
     };
     const html = renderToStaticMarkup(
       <PublicGarageView
@@ -288,7 +288,7 @@ describe('PublicGarageView — ProfileStats (chunk 41)', () => {
     );
     const idxSlug = html.indexOf(`casacarclub.com.br/g/${garage.slug}`);
     const idxScoreboard = html.indexOf('Veterano');
-    const idxBadgeRow = html.indexOf('Conquista JDM-003');
+    const idxBadgeRow = html.indexOf('Conquista CCC-003');
     expect(idxSlug).toBeGreaterThan(-1);
     expect(idxScoreboard).toBeGreaterThan(idxSlug);
     expect(idxBadgeRow).toBeGreaterThan(idxScoreboard);

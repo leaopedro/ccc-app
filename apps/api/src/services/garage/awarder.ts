@@ -107,7 +107,7 @@ export const awardBadge = async (
 
   // 3. Premium gate — single source of truth. Eligibility files don't reason
   // about premium; they just return codes. The gate fires here per-code so
-  // a mixed-premium batch (e.g. JDM-001 free + JDM-003 premium) lands the
+  // a mixed-premium batch (e.g. CCC-001 free + CCC-003 premium) lands the
   // free entries even when the premium ones are blocked.
   if (badge.premiumExclusive) {
     const isPremium = computeIsPremiumActive(garage.premiumTier, garage.premiumUntil);

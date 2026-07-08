@@ -27,10 +27,10 @@ const categoryLabel: Record<BadgeCatalogEntry['category'], string> = {
   eventos: 'Eventos',
   carros: 'Carros',
   comunidade: 'Comunidade',
-  jdm: 'CCC',
+  ccc: 'CCC',
 };
 
-const CATEGORY_ORDER: BadgeCatalogEntry['category'][] = ['eventos', 'carros', 'comunidade', 'jdm'];
+const CATEGORY_ORDER: BadgeCatalogEntry['category'][] = ['eventos', 'carros', 'comunidade', 'ccc'];
 
 type PendingConfirm = {
   code: string;
@@ -79,7 +79,7 @@ export function GarageBadgesPanel({ userId, catalog, earnedCodes, isPremiumActiv
   const handleGrantClick = useCallback(
     (entry: BadgeCatalogEntry, originBtn: HTMLButtonElement | null) => {
       // Admin-override path: warn before bypassing the premium gate so
-      // staff don't grant CAR-003/JDM-003/etc. to non-premium users by
+      // staff don't grant CAR-003/CCC-003/etc. to non-premium users by
       // accident. The server bypass still ships (chunk 18) — the dialog
       // exists to force a deliberate click.
       if (entry.premiumExclusive && !isPremiumActive) {

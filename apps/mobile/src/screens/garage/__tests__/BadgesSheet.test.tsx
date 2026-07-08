@@ -161,8 +161,8 @@ const baseData = {
       icon: 'curator',
     },
     {
-      code: 'JDM-003',
-      category: 'jdm' as const,
+      code: 'CCC-003',
+      category: 'ccc' as const,
       rarity: 'legendary' as const,
       premiumExclusive: true,
       icon: 'founder',
@@ -177,7 +177,7 @@ const baseData = {
       pinnedAt: null,
     },
     { code: 'CAR-003', state: 'locked' as const },
-    { code: 'JDM-003', state: 'locked_premium' as const },
+    { code: 'CCC-003', state: 'locked_premium' as const },
   ],
 };
 
@@ -336,7 +336,7 @@ describe('BadgesSheet', () => {
       'badges-tab-eventos',
       'badges-tab-carros',
       'badges-tab-comunidade',
-      'badges-tab-jdm',
+      'badges-tab-ccc',
     ]);
   });
   it('defaults to "all" — every catalog tile rendered', async () => {

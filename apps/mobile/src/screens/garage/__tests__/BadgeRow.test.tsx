@@ -152,10 +152,10 @@ const CATALOG: GarageBadgesOwnerResponse['catalog'] = [
     premiumExclusive: false,
     icon: 'post',
   },
-  { code: 'JDM-001', category: 'jdm', rarity: 'common', premiumExclusive: false, icon: 'pin' },
+  { code: 'CCC-001', category: 'ccc', rarity: 'common', premiumExclusive: false, icon: 'pin' },
   {
-    code: 'JDM-003',
-    category: 'jdm',
+    code: 'CCC-003',
+    category: 'ccc',
     rarity: 'legendary',
     premiumExclusive: true,
     icon: 'founder',
@@ -285,7 +285,7 @@ describe('BadgeRow', () => {
           pinnedAt: null,
         },
         {
-          code: 'JDM-001',
+          code: 'CCC-001',
           state: 'earned',
           earnedAt: '2026-02-15T00:00:00Z',
           pinned: false,
@@ -338,7 +338,7 @@ describe('BadgeRow', () => {
       catalog: CATALOG,
       badges: [
         { code: 'EVT-001', state: 'locked' },
-        { code: 'JDM-003', state: 'locked_premium' },
+        { code: 'CCC-003', state: 'locked_premium' },
       ],
     };
     await renderEl(<BadgeRow data={data} onOpenSheet={openSheet} onLockedPress={lockedPress} />);
@@ -360,13 +360,13 @@ describe('BadgeRow', () => {
     const data: GarageBadgesOwnerResponse = {
       enabled: true,
       catalog: CATALOG,
-      badges: [{ code: 'JDM-003', state: 'locked_premium' }],
+      badges: [{ code: 'CCC-003', state: 'locked_premium' }],
     };
     await renderEl(
       <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
     );
     const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      (b.getAttribute('aria-label') ?? '').startsWith('Conquista JDM-003'),
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista CCC-003'),
     );
     expect(lockedBtn).not.toBeUndefined();
     expect(lockedBtn?.getAttribute('aria-disabled')).not.toBe('true');

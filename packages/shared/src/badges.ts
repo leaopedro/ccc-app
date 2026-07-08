@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 // Wire-format regex for a badge code (3 uppercase letters + dash + 3 digits).
 // Source of truth for the catalog codes: EVT-001..EVT-003, CAR-001..CAR-003,
-// COM-001..COM-003, JDM-001..JDM-003. Codes travel verbatim over the API and
+// COM-001..COM-003, CCC-001..CCC-003. Codes travel verbatim over the API and
 // are referenced by GarageBadge.badgeCode (FK to Badge.code).
 export const BADGE_CODE_RE = /^[A-Z]{3}-\d{3}$/;
 export const badgeCodeSchema = z.string().regex(BADGE_CODE_RE);
 
-export const badgeCategorySchema = z.enum(['eventos', 'carros', 'comunidade', 'jdm']);
+export const badgeCategorySchema = z.enum(['eventos', 'carros', 'comunidade', 'ccc']);
 export type BadgeCategory = z.infer<typeof badgeCategorySchema>;
 
 export const badgeRaritySchema = z.enum(['common', 'rare', 'legendary']);

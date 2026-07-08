@@ -11,7 +11,7 @@ const CATEGORY_LABEL: Record<BadgeCategory, string> = {
   eventos: 'Eventos',
   carros: 'Carros',
   comunidade: 'Comunidade',
-  jdm: 'CCC',
+  ccc: 'CCC',
 };
 
 export interface BadgeDetailProps {

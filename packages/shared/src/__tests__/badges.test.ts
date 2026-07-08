@@ -12,7 +12,7 @@ import {
 
 describe('badgeCodeSchema', () => {
   it('accepts canonical catalog codes', () => {
-    for (const code of ['EVT-001', 'CAR-002', 'COM-003', 'JDM-001']) {
+    for (const code of ['EVT-001', 'CAR-002', 'COM-003', 'CCC-001']) {
       expect(badgeCodeSchema.parse(code)).toBe(code);
     }
   });
@@ -28,7 +28,7 @@ describe('badgeCodeSchema', () => {
 
 describe('badge category + rarity enums', () => {
   it('accepts every declared category', () => {
-    for (const c of ['eventos', 'carros', 'comunidade', 'jdm']) {
+    for (const c of ['eventos', 'carros', 'comunidade', 'ccc']) {
       expect(badgeCategorySchema.parse(c)).toBe(c);
     }
   });
@@ -87,10 +87,10 @@ describe('garageBadgeOwnerStateSchema', () => {
 describe('garageBadgePublicSchema', () => {
   it('accepts pinned earned public payload', () => {
     const parsed = garageBadgePublicSchema.parse({
-      code: 'JDM-003',
+      code: 'CCC-003',
       earnedAt: '2026-05-22T12:00:00.000Z',
     });
-    expect(parsed.code).toBe('JDM-003');
+    expect(parsed.code).toBe('CCC-003');
   });
 });
 
@@ -102,7 +102,7 @@ describe('garageBadgesPublicPayloadSchema', () => {
   it('parses a list of pinned earned entries', () => {
     const payload = [
       { code: 'EVT-001', earnedAt: '2026-05-22T12:00:00.000Z' },
-      { code: 'JDM-003', earnedAt: '2026-04-01T09:00:00.000Z' },
+      { code: 'CCC-003', earnedAt: '2026-04-01T09:00:00.000Z' },
     ];
     expect(garageBadgesPublicPayloadSchema.parse(payload)).toEqual(payload);
   });

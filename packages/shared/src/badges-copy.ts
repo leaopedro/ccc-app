@@ -19,9 +19,9 @@ export const BADGE_TITLES_PT_BR: Record<string, string> = {
   'COM-001': 'Primeira Postagem',
   'COM-002': 'Voz da Comunidade',
   'COM-003': 'Em Chamas',
-  'JDM-001': 'Marco Fixado',
-  'JDM-002': 'Itinerário CCC',
-  'JDM-003': 'Fundador',
+  'CCC-001': 'Marco Fixado',
+  'CCC-002': 'Itinerário CCC',
+  'CCC-003': 'Fundador',
 };
 
 /**

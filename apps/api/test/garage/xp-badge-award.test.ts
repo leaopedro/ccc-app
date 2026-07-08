@@ -15,7 +15,7 @@ const seedBadge = async (code: string, rarity: 'common' | 'rare' | 'legendary'):
           ? 'carros'
           : code.startsWith('COM')
             ? 'comunidade'
-            : 'jdm',
+            : 'ccc',
       rarity,
       icon: 'flag',
       premiumExclusive: false,

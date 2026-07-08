@@ -241,7 +241,7 @@ enum BadgeCategory {
   eventos
   carros
   comunidade
-  jdm
+  ccc
 }
 
 enum BadgeRarity {

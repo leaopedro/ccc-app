@@ -350,7 +350,7 @@ export const adminUserGarageRoutes: FastifyPluginAsync = async (app) => {
   // POST /admin/users/:id/garage/badges/:code/grant — admin manual badge
   // grant. The premium-exclusive gate is bypassable via
   // `awardBadge(..., { allowAdminOverride: true })`: kickoff decision lets
-  // an admin grant premium-exclusive specs (CAR-003, JDM-003, etc.) to
+  // an admin grant premium-exclusive specs (CAR-003, CCC-003, etc.) to
   // non-premium users for support cases. This intentionally deviates from
   // the reviewer's recommendation — documented in the chunk-18 PR §Deviations.
   //

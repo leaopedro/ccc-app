@@ -13,11 +13,11 @@ const seedCatalog = async () => {
       { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
       { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
       { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
-      { code: 'JDM-001', category: 'jdm', rarity: 'common', icon: 'pin' },
-      { code: 'JDM-002', category: 'jdm', rarity: 'rare', icon: 'flagCheck' },
+      { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
+      { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
       {
-        code: 'JDM-003',
-        category: 'jdm',
+        code: 'CCC-003',
+        category: 'ccc',
         rarity: 'legendary',
         icon: 'founder',
         premiumExclusive: true,
@@ -110,7 +110,7 @@ describe('write-path hooks — badges land atomically', () => {
     expect(earned.sourceRef).toMatch(/^feed_post:/);
   });
 
-  it('check-in awards EVT-001 + JDM-001 (Curitiba) + JDM-002 (drift) in the same tx', async () => {
+  it('check-in awards EVT-001 + CCC-001 (Curitiba) + CCC-002 (drift) in the same tx', async () => {
     await seedCatalog();
     const { user } = await createUser({ email: 'hook-checkin@jdm.test', verified: true });
     const event = await prisma.event.create({
@@ -145,11 +145,11 @@ describe('write-path hooks — badges land atomically', () => {
     });
     const codes = earned.map((r) => r.badgeCode).sort();
     expect(codes).toContain('EVT-001');
-    expect(codes).toContain('JDM-001');
-    expect(codes).toContain('JDM-002');
+    expect(codes).toContain('CCC-001');
+    expect(codes).toContain('CCC-002');
   });
 
-  it('POST /auth/signup awards JDM-003 when override is on (premium-only, fresh user is free) → no row', async () => {
+  it('POST /auth/signup awards CCC-003 when override is on (premium-only, fresh user is free) → no row', async () => {
     await seedCatalog();
     // Signup runs the awarder WITHOUT override, so a fresh free user
     // gets `premium_required` and NO row lands. Verifies the gate is
@@ -168,7 +168,7 @@ describe('write-path hooks — badges land atomically', () => {
 
     const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: body.user.id } });
     const earned = await prisma.garageBadge.findMany({
-      where: { garageId: garage.id, badgeCode: 'JDM-003' },
+      where: { garageId: garage.id, badgeCode: 'CCC-003' },
     });
     expect(earned).toHaveLength(0);
   });

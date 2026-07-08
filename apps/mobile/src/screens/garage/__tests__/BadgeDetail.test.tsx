@@ -172,13 +172,13 @@ describe('BadgeDetail', () => {
     expect(container.textContent ?? '').toContain('Raro · Carros');
   });
 
-  it('uses every category label (eventos / carros / comunidade / jdm)', async () => {
+  it('uses every category label (eventos / carros / comunidade / ccc)', async () => {
     const { BadgeDetail } = await import('@ccc/ui');
-    const cases: Array<['eventos' | 'carros' | 'comunidade' | 'jdm', string]> = [
+    const cases: Array<['eventos' | 'carros' | 'comunidade' | 'ccc', string]> = [
       ['eventos', 'Eventos'],
       ['carros', 'Carros'],
       ['comunidade', 'Comunidade'],
-      ['jdm', 'CCC'],
+      ['ccc', 'CCC'],
     ];
     for (const [cat, label] of cases) {
       await renderEl(

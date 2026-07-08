@@ -354,8 +354,8 @@ const CATALOG: GarageBadgesOwnerResponse['catalog'] = [
   { code: 'EVT-001', category: 'eventos', rarity: 'common', premiumExclusive: false, icon: 'flag' },
   { code: 'CAR-001', category: 'carros', rarity: 'common', premiumExclusive: false, icon: 'car' },
   {
-    code: 'JDM-003',
-    category: 'jdm',
+    code: 'CCC-003',
+    category: 'ccc',
     rarity: 'legendary',
     premiumExclusive: true,
     icon: 'founder',
@@ -516,17 +516,17 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
   });
 
   it('shows BadgeRow on fresh signup once at least one badge is earned', async () => {
-    // Fresh signup but JDM-003 was awarded by the founder cohort hook
+    // Fresh signup but CCC-003 was awarded by the founder cohort hook
     // (chunk 18). Row should now render even though cars=0.
     setApi({
       garage: makeGarage({
         garage: makeGarageOwner({
-          badges: [earnedBadge('JDM-003', true)],
+          badges: [earnedBadge('CCC-003', true)],
         }),
         cars: [],
       }),
       badges: makeBadgesAggregate({
-        badges: [earnedBadge('JDM-003', true)],
+        badges: [earnedBadge('CCC-003', true)],
       }),
     });
     await mount();
@@ -566,7 +566,7 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
         cars: [carCivic],
       }),
       badges: makeBadgesAggregate({
-        badges: [lockedBadge('EVT-001'), lockedBadge('CAR-001'), lockedBadge('JDM-003', true)],
+        badges: [lockedBadge('EVT-001'), lockedBadge('CAR-001'), lockedBadge('CCC-003', true)],
       }),
     });
     await mount();

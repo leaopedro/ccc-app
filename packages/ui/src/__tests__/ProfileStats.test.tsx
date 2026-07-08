@@ -7,7 +7,7 @@
 // deps), so we reuse the same harness chunk 38 established. Documented
 // as a deviation in the chunk PR body.
 
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

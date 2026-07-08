@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { BanScope } from '@jdm/shared/feed';
+import { prisma } from '@ccc/db';
+import type { BanScope } from '@ccc/shared/feed';
 
 export async function checkFeedBan(eventId: string, userId: string): Promise<BanScope | null> {
   const bans = await prisma.feedBan.findMany({

@@ -5,8 +5,8 @@ import {
   type AdminGaragePatchInput,
   type AdminGaragePremiumInput,
   type AdminGarageSpotRevokeBody,
-} from '@jdm/shared/admin-garage';
-import type { AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+} from '@ccc/shared/admin-garage';
+import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { z } from 'zod';
 
 import { apiFetch } from './api';

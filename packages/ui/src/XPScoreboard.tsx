@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import type { GarageProgress } from '@jdm/shared/garage-progress';
+import { brand } from '@ccc/design';
+import type { GarageProgress } from '@ccc/shared/garage-progress';
 import { useId } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from 'react-native-svg';
@@ -26,7 +26,7 @@ const TICKS = Array.from({ length: 11 }, (_, i) => i);
 /**
  * XPScoreboard — the chamativo XP card for the garage profile. Mobile RN
  * twin. Renders:
- * - Anton 46px XP number with brand-tinted textShadow glow.
+ * - Jost 46px XP number with brand-tinted textShadow glow.
  * - Rank pill (right-aligned, brand-tinted background + brand border).
  * - `?` hint button. OPTIONAL handler per canon §12: when defined renders a
  *   Pressable; when undefined renders a static non-interactive element so
@@ -138,7 +138,7 @@ export function XPScoreboard({ progress, onPressHint, testID }: XPScoreboardProp
       }}
     >
       {/* 135° brand-tint glow over the card surface. SVG instead of
-        expo-linear-gradient so `@jdm/ui` has no extra runtime dep — see
+        expo-linear-gradient so `@ccc/ui` has no extra runtime dep — see
         canon §15. */}
       <Svg
         pointerEvents="none"
@@ -217,7 +217,7 @@ export function XPScoreboard({ progress, onPressHint, testID }: XPScoreboardProp
         </View>
       </View>
 
-      {/* Row 2 — BIG Anton XP number + "pontos" caption. */}
+      {/* Row 2 — BIG Jost XP number + "pontos" caption. */}
       <View
         style={{
           marginTop: 6,

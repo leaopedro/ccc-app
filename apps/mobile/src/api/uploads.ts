@@ -5,7 +5,7 @@ import {
   presignResponseSchema,
   type PresignRequest,
   type PresignResponse,
-} from '@jdm/shared/uploads';
+} from '@ccc/shared/uploads';
 import { z } from 'zod';
 
 import { authedRequest } from './client';

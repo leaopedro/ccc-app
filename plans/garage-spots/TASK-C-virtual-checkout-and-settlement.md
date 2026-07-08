@@ -96,7 +96,7 @@ grep -n "virtual$" packages/db/prisma/schema.prisma  # FulfillmentMethod enum va
 Then run the typecheck as a single binary pass/fail gate:
 
 ```bash
-pnpm --filter @jdm/api tsc --noEmit
+pnpm --filter @ccc/api tsc --noEmit
 ```
 
 **If any grep returns 0 results, or if tsc reports errors for missing Prisma fields, STOP.** Do not continue to Task 2. Merge TASK-A first and re-run this preflight from Step 1.
@@ -109,7 +109,7 @@ grep -rn "garage_spot\|garage-spot" packages/db/prisma/seed*.ts packages/db/src/
 
 Expected: at least one match showing the seed registers a ProductType named `garage_spot` and a Product with `slug='garage-spot'`, `virtual: true`, `visibleInStore: false`. If missing, **STOP**.
 
-- [ ] **Step 4: Rebuild `@jdm/shared` and `@jdm/db` so downstream resolves the new types**
+- [ ] **Step 4: Rebuild `@ccc/shared` and `@ccc/db` so downstream resolves the new types**
 
 ```bash
 pnpm -C packages/db build
@@ -613,7 +613,7 @@ git commit -m "feat(api): treat virtual product lines as non-physical in cart fu
 Create `apps/api/test/admin/store-products-virtual-activate.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1134,7 +1134,7 @@ In the new test file, build a `seedGaragePaidOrder(userId)` factory that:
 - [ ] **Step 2: Write tests**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { fulfillGarageSpotsForOrder } from '../../src/services/orders/garage-fulfillment.js';
@@ -1387,7 +1387,7 @@ git commit -m "test(api): cover fulfillGarageSpotsForOrder helper (JDMA TASK-C)"
 - [ ] **Step 1: Replace the `it.todo` stubs with real assertions**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1598,7 +1598,7 @@ git commit -m "test(api): cover virtual-product checkout carve-outs (JDMA TASK-C
 - [ ] **Step 1: Build the test**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

@@ -6,7 +6,7 @@
 
 **Architecture:** A new `DeviceToken` model holds `(userId, expoPushToken, platform)`. A new `Notification` model is the system of record for what was sent and serves as the idempotency key. A `PushSender` service interface has two implementations: `ExpoPushSender` (production, posts to `https://exp.host/--/api/v2/push/send` via `expo-server-sdk`) and `DevPushSender` (captures in-memory for tests and dev), wired in `apps/api/src/services/push/index.ts` like the mailer. A high-level `sendTransactionalPush({ userId, kind, dedupeKey, title, body, data })` wraps insert-or-skip on `Notification` plus token fan-out plus invalid-token pruning. The Stripe webhook calls this from inside `stripe-webhook.ts` after `issueTicketForPaidOrder` succeeds. Event reminders live in `apps/api/src/workers/event-reminders.ts`, a `node-cron` job that ticks every minute, gated on `WORKER_ENABLED=true`. On mobile, `expo-notifications` registers a token after the user grants permission post-first-purchase; the auth context calls `POST /me/device-tokens` on every authenticated boot to keep `lastSeenAt` fresh.
 
-**Tech Stack:** Prisma, Fastify, Zod, `@jdm/shared`, `node-cron`, `expo-server-sdk`, Vitest + Testcontainers, Expo `expo-notifications` + `expo-device`.
+**Tech Stack:** Prisma, Fastify, Zod, `@ccc/shared`, `node-cron`, `expo-server-sdk`, Vitest + Testcontainers, Expo `expo-notifications` + `expo-device`.
 
 **Roadmap tasks covered:** 6.1 (DeviceToken + Notification schema), 6.2 (POST /me/device-tokens), 6.3 (push sender service), 6.4 (wire ticket-confirmed + event reminders cron), 6.5 (mobile permission UX + register).
 
@@ -88,7 +88,7 @@
 - **Permission UX timing:** the OS permission prompt is the most disruptive moment in the app. We do NOT ask at signup. We ask after the first successful ticket purchase, where the value proposition is obvious. Users who deny: no token registered, no push, no row. They can later flip the OS-level toggle and the next cold-start register call will succeed.
 - **Tests hit real Postgres** per CLAUDE.md.
 - **Dependent tasks:** T2 (schema) blocks everything else. T4 (push sender) blocks T6 (transactional helper). T6 blocks T7 (webhook hook) and T8 (reminders). T9 (mobile deps) blocks T10–T11.
-- **Prisma client re-gen:** after the migration in T2, run `pnpm --filter @jdm/db db:generate` before building or testing anything else.
+- **Prisma client re-gen:** after the migration in T2, run `pnpm --filter @ccc/db db:generate` before building or testing anything else.
 
 ---
 
@@ -192,7 +192,7 @@ model Notification {
 - [ ] **Step 2: Generate the migration**
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name device_tokens_notifications
+pnpm --filter @ccc/db prisma migrate dev --name device_tokens_notifications
 ```
 
 Expected: a new migration directory with SQL creating `DevicePlatform`, `DeviceToken`, `Notification`, and their indexes.
@@ -200,7 +200,7 @@ Expected: a new migration directory with SQL creating `DevicePlatform`, `DeviceT
 - [ ] **Step 3: Regenerate the Prisma client**
 
 ```bash
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:generate
 ```
 
 - [ ] **Step 4: Update test helper reset to include new tables**
@@ -223,7 +223,7 @@ export const resetDatabase = async (): Promise<void> => {
 pnpm -w typecheck
 ```
 
-Expected: 5/5 packages clean. Re-run `pnpm --filter @jdm/db db:generate` if Prisma client is stale.
+Expected: 5/5 packages clean. Re-run `pnpm --filter @ccc/db db:generate` if Prisma client is stale.
 
 - [ ] **Step 6: Commit**
 
@@ -295,8 +295,8 @@ Edit `packages/shared/package.json`. In `exports`, alongside the other entries, 
 - [ ] **Step 4: Typecheck**
 
 ```bash
-pnpm --filter @jdm/shared typecheck
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared typecheck
+pnpm --filter @ccc/shared test
 ```
 
 Expected: clean; existing 35 shared tests still pass.
@@ -325,7 +325,7 @@ git commit -m "feat(shared): add push notification schemas"
 - [ ] **Step 1: Add `expo-server-sdk` dependency**
 
 ```bash
-pnpm --filter @jdm/api add expo-server-sdk
+pnpm --filter @ccc/api add expo-server-sdk
 ```
 
 - [ ] **Step 2: Add env vars**
@@ -413,7 +413,7 @@ describe('DevPushSender', () => {
 - [ ] **Step 5: Run the test, expect failure**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/push/dev-sender.test.ts
+pnpm --filter @ccc/api vitest run test/push/dev-sender.test.ts
 ```
 
 Expected: FAIL ("cannot find module .../push/dev.js").
@@ -456,7 +456,7 @@ export class DevPushSender implements PushSender {
 - [ ] **Step 7: Run the test, expect pass**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/push/dev-sender.test.ts
+pnpm --filter @ccc/api vitest run test/push/dev-sender.test.ts
 ```
 
 Expected: PASS (3/3).
@@ -548,7 +548,7 @@ export const buildPushSender = (env: Env): PushSender => {
 
 ```bash
 pnpm -w typecheck
-pnpm --filter @jdm/api vitest run test/push
+pnpm --filter @ccc/api vitest run test/push
 ```
 
 Expected: typecheck clean; 3/3 push tests pass.
@@ -608,7 +608,7 @@ app.decorate('push', overrides.push ?? buildPushSender(env));
 - [ ] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -616,7 +616,7 @@ Expected: clean.
 - [ ] **Step 3: Run the existing API test suite to confirm no regression**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: 176/176 pass (the F5 baseline). The new decorator is wired but unused.
@@ -642,7 +642,7 @@ git commit -m "feat(api): decorate fastify with push sender"
 Create `apps/api/test/push/transactional.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { sendTransactionalPush } from '../../src/services/push/transactional.js';
@@ -744,7 +744,7 @@ describe('sendTransactionalPush', () => {
 - [ ] **Step 2: Run, expect failure**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/push/transactional.test.ts
+pnpm --filter @ccc/api vitest run test/push/transactional.test.ts
 ```
 
 Expected: FAIL (module not found).
@@ -754,8 +754,8 @@ Expected: FAIL (module not found).
 Create `apps/api/src/services/push/transactional.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import type { PushKind } from '@jdm/shared/push';
+import { prisma } from '@ccc/db';
+import type { PushKind } from '@ccc/shared/push';
 import { Prisma } from '@prisma/client';
 
 import type { PushSender } from './types.js';
@@ -840,7 +840,7 @@ export const sendTransactionalPush = async (
 - [ ] **Step 4: Run, expect pass**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/push/transactional.test.ts
+pnpm --filter @ccc/api vitest run test/push/transactional.test.ts
 ```
 
 Expected: 4/4 pass.
@@ -867,7 +867,7 @@ git commit -m "feat(api): sendTransactionalPush with insert-or-skip idempotency"
 Create `apps/api/test/me-device-tokens.route.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../src/env.js';
@@ -991,7 +991,7 @@ describe('DELETE /me/device-tokens/:token', () => {
 - [ ] **Step 2: Run, expect failure**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/me-device-tokens.route.test.ts
+pnpm --filter @ccc/api vitest run test/me-device-tokens.route.test.ts
 ```
 
 Expected: FAIL (route not registered).
@@ -1001,8 +1001,8 @@ Expected: FAIL (route not registered).
 Create `apps/api/src/routes/me-device-tokens.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { registerDeviceTokenRequestSchema } from '@jdm/shared/push';
+import { prisma } from '@ccc/db';
+import { registerDeviceTokenRequestSchema } from '@ccc/shared/push';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -1056,7 +1056,7 @@ await app.register(meDeviceTokenRoutes);
 - [ ] **Step 5: Run the tests**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/me-device-tokens.route.test.ts
+pnpm --filter @ccc/api vitest run test/me-device-tokens.route.test.ts
 ```
 
 Expected: 6/6 pass.
@@ -1130,7 +1130,7 @@ return {
 - [ ] **Step 2: Run the existing F4 webhook test to confirm no regression**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/stripe-webhook
+pnpm --filter @ccc/api vitest run test/stripe-webhook
 ```
 
 Expected: existing tests pass; the new return fields are additive.
@@ -1140,7 +1140,7 @@ Expected: existing tests pass; the new return fields are additive.
 Create `apps/api/test/stripe-webhook-push.test.ts`. Mirror the existing `apps/api/test/stripe-webhook.route.test.ts` setup style — read that file first to copy the FakeStripe wiring exactly. Then:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DevPushSender } from '../src/services/push/dev.js';
@@ -1289,7 +1289,7 @@ If `buildFakeStripe.makeWebhookEvent` does not exist with that exact shape, read
 - [ ] **Step 4: Run, expect failure**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/stripe-webhook-push.test.ts
+pnpm --filter @ccc/api vitest run test/stripe-webhook-push.test.ts
 ```
 
 Expected: FAIL (no push fired; no Notification row).
@@ -1346,7 +1346,7 @@ try {
 - [ ] **Step 6: Run, expect pass**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/stripe-webhook-push.test.ts
+pnpm --filter @ccc/api vitest run test/stripe-webhook-push.test.ts
 ```
 
 Expected: 3/3 pass.
@@ -1354,7 +1354,7 @@ Expected: 3/3 pass.
 - [ ] **Step 7: Run the full API test suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: 176 + new tests pass.
@@ -1380,8 +1380,8 @@ git commit -m "feat(api): emit ticket.confirmed push from Stripe webhook"
 - [ ] **Step 1: Add `node-cron`**
 
 ```bash
-pnpm --filter @jdm/api add node-cron
-pnpm --filter @jdm/api add -D @types/node-cron
+pnpm --filter @ccc/api add node-cron
+pnpm --filter @ccc/api add -D @types/node-cron
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -1389,7 +1389,7 @@ pnpm --filter @jdm/api add -D @types/node-cron
 Create `apps/api/test/workers/event-reminders.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { runEventRemindersTick } from '../../src/workers/event-reminders.js';
@@ -1527,7 +1527,7 @@ describe('runEventRemindersTick', () => {
 - [ ] **Step 3: Run, expect failure**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/workers/event-reminders.test.ts
+pnpm --filter @ccc/api vitest run test/workers/event-reminders.test.ts
 ```
 
 Expected: FAIL (module not found).
@@ -1537,7 +1537,7 @@ Expected: FAIL (module not found).
 Create `apps/api/src/workers/event-reminders.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -1622,7 +1622,7 @@ export const startEventRemindersWorker = (deps: {
 - [ ] **Step 5: Run, expect pass**
 
 ```bash
-pnpm --filter @jdm/api vitest run test/workers/event-reminders.test.ts
+pnpm --filter @ccc/api vitest run test/workers/event-reminders.test.ts
 ```
 
 Expected: 5/5 pass.
@@ -1649,7 +1649,7 @@ if (env.WORKER_ENABLED && env.NODE_ENV === 'production') {
 - [ ] **Step 7: Run the full suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: all green.
@@ -1673,7 +1673,7 @@ git commit -m "feat(api): event reminders worker with T-24h and T-1h pushes"
 - [ ] **Step 1: Add dependencies**
 
 ```bash
-pnpm --filter @jdm/mobile add expo-notifications expo-device
+pnpm --filter @ccc/mobile add expo-notifications expo-device
 ```
 
 - [ ] **Step 2: Configure plugin**
@@ -1705,7 +1705,7 @@ If `./assets/notification-icon.png` does not exist yet, copy `./assets/icon.png`
 - [ ] **Step 3: Typecheck and start metro to confirm config parses**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: clean. We do not boot metro here; the config loads at type-check time via the `ExpoConfig` import.
@@ -1788,7 +1788,7 @@ import {
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   type RegisterDeviceTokenRequest,
-} from '@jdm/shared/push';
+} from '@ccc/shared/push';
 
 import { authedRequest } from './client';
 
@@ -1802,7 +1802,7 @@ export const registerDeviceToken = (input: RegisterDeviceTokenRequest) =>
 - [ ] **Step 4: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: clean.
@@ -1898,7 +1898,7 @@ usePushRegistration({ isAuthenticated: state.status === 'authenticated' });
 - [ ] **Step 3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: clean.

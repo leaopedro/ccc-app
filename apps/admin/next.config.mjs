@@ -19,7 +19,7 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
-  transpilePackages: ['@jdm/shared', '@jdm/ui'],
+  transpilePackages: ['@ccc/shared', '@ccc/ui'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000',
   },

@@ -1,4 +1,4 @@
-import type { ShippingAddressRecord } from '@jdm/shared/store';
+import type { ShippingAddressRecord } from '@ccc/shared/store';
 
 export function formatShippingAddress(address: ShippingAddressRecord): string {
   const base = `${address.street}, ${address.number}`;

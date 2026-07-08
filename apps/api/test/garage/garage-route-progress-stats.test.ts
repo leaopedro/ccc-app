@@ -1,7 +1,7 @@
-import { prisma } from '@jdm/db';
-import { garageReadSchema } from '@jdm/shared/garage';
-import { garagePublicResponseSchema } from '@jdm/shared/garage-public';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { garageReadSchema } from '@ccc/shared/garage';
+import { garagePublicResponseSchema } from '@ccc/shared/garage-public';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

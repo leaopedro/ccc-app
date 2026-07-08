@@ -6,7 +6,7 @@
 
 **Architecture:** One POST endpoint `/admin/tickets/check-in` scoped per-event. Server verifies the HMAC ticket code (`verifyTicketCode`, from F4), then issues a single atomic `updateMany` with `WHERE status = 'valid' AND eventId = <target>` that guarantees exactly one scan wins under concurrency. A `staff` role is added to `UserRole` and wired through shared schemas, API middleware, and the admin Next.js middleware/layout. Staff log into the same admin web app but are routed to `/check-in` and blocked from `/events`. Scanner UI uses `@zxing/browser` for webcam QR decoding.
 
-**Tech Stack:** Prisma, Fastify, Zod, `@jdm/shared`, Next.js 16 App Router (webpack build), `@zxing/browser`, Vitest + Testcontainers.
+**Tech Stack:** Prisma, Fastify, Zod, `@ccc/shared`, Next.js 16 App Router (webpack build), `@zxing/browser`, Vitest + Testcontainers.
 
 **Roadmap tasks covered:** 5.1 (API check-in endpoint), 5.2 (Admin QR scanner page). Task 5.3 (mobile door-mode) is **explicitly out of scope** — the roadmap marks it optional.
 
@@ -80,7 +80,7 @@
 - **Staff account creation:** there is no UI for creating staff users in this plan. Staff rows are created via direct DB update (`UPDATE "User" SET role = 'staff' WHERE id = ...`) or psql seed. This is captured in the handoff as a deferred item. Rationale: organizer/admin accounts follow the same pattern today.
 - **Tests hit real Postgres** per CLAUDE.md.
 - **Dependent tasks:** T2 must land before T5/T6 (types flow through). T6 depends on T4 (shared schemas) and T5 (service). T8-T12 depend on T6/T7 (API endpoints live).
-- **Prisma client re-gen:** after the migration in T2, run `pnpm --filter @jdm/db db:generate` before building/testing anything else. Commit the generated client change **as part of T2**.
+- **Prisma client re-gen:** after the migration in T2, run `pnpm --filter @ccc/db db:generate` before building/testing anything else. Commit the generated client change **as part of T2**.
 
 ---
 
@@ -166,7 +166,7 @@ enum UserRole {
 Run (against the local dev DB):
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name user_role_staff
+pnpm --filter @ccc/db prisma migrate dev --name user_role_staff
 ```
 
 Expected: Prisma emits a migration dir `20260420<time>_user_role_staff/` with SQL like:
@@ -178,7 +178,7 @@ ALTER TYPE "UserRole" ADD VALUE 'staff';
 - [ ] **Step 3: Regenerate the Prisma client**
 
 ```bash
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:generate
 ```
 
 Expected: no errors.
@@ -231,7 +231,7 @@ export const bearer = (
 pnpm -w typecheck
 ```
 
-Expected: all 5 packages clean. If the generated Prisma client hasn't been picked up, re-run `pnpm --filter @jdm/db db:generate` and retry.
+Expected: all 5 packages clean. If the generated Prisma client hasn't been picked up, re-run `pnpm --filter @ccc/db db:generate` and retry.
 
 - [ ] **Step 7: Commit**
 
@@ -284,7 +284,7 @@ export type RecordAuditInput = {
 - [ ] **Step 3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck && pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/api typecheck && pnpm --filter @ccc/shared typecheck
 ```
 
 Expected: both clean.
@@ -395,8 +395,8 @@ Edit `packages/shared/package.json`. Replace the `exports` block:
 - [ ] **Step 4: Typecheck and run shared tests**
 
 ```bash
-pnpm --filter @jdm/shared typecheck
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared typecheck
+pnpm --filter @ccc/shared test
 ```
 
 Expected: both clean (shared typically has no tests, `--passWithNoTests` path).
@@ -424,7 +424,7 @@ git commit -m "feat(shared): add check-in request/response schemas"
 Create `apps/api/test/tickets/check-in.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -587,7 +587,7 @@ describe('checkInTicket', () => {
 - [x] **Step 2: Run the tests and confirm they fail**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/check-in.test.ts
+pnpm --filter @ccc/api test -- tickets/check-in.test.ts
 ```
 
 Expected: FAIL — module `../../src/services/tickets/check-in.js` does not exist.
@@ -597,7 +597,7 @@ Expected: FAIL — module `../../src/services/tickets/check-in.js` does not exis
 Create `apps/api/src/services/tickets/check-in.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Ticket, TicketTier, User } from '@prisma/client';
 
 import { verifyTicketCode } from './codes.js';
@@ -684,7 +684,7 @@ export const checkInTicket = async (
 - [x] **Step 4: Run the tests and confirm they pass**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/check-in.test.ts
+pnpm --filter @ccc/api test -- tickets/check-in.test.ts
 ```
 
 Expected: PASS, 8 tests (1 admit, 1 idempotent, 2 invalid-code, 1 not-found, 1 wrong-event, 1 revoked, 1 concurrency).
@@ -692,7 +692,7 @@ Expected: PASS, 8 tests (1 admit, 1 idempotent, 2 invalid-code, 1 not-found, 1 w
 - [x] **Step 5: Run the full API suite to confirm no regressions**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: 151 + 8 = 159 tests, all green.
@@ -777,7 +777,7 @@ describe('requireRole preHandler (staff-allowed probe)', () => {
 - [ ] **Step 2: Run tests to confirm they pass (requireRole already supports staff via schema)**
 
 ```bash
-pnpm --filter @jdm/api test -- admin/require-role.test.ts
+pnpm --filter @ccc/api test -- admin/require-role.test.ts
 ```
 
 Expected: PASS, all cases green (staff role is accepted by `requireRole` because `UserRoleName` now includes it).
@@ -827,7 +827,7 @@ export const adminCheckInRoutes: FastifyPluginAsync = async (_app) => {
 - [ ] **Step 5: Run the full API suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: all 159+ tests still green (refactor must not break existing admin routes).
@@ -855,7 +855,7 @@ git commit -m "refactor(api): split admin routes into staff-scoped and organizer
 Create `apps/api/test/admin/check-in.route.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1109,7 +1109,7 @@ describe('POST /admin/tickets/check-in', () => {
 - [x] **Step 2: Run tests to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- admin/check-in.route.test.ts
+pnpm --filter @ccc/api test -- admin/check-in.route.test.ts
 ```
 
 Expected: FAIL — route returns 404 because the placeholder plugin registers nothing.
@@ -1119,7 +1119,7 @@ Expected: FAIL — route returns 404 because the placeholder plugin registers no
 Replace `apps/api/src/routes/admin/check-in.ts`:
 
 ```ts
-import { ticketCheckInRequestSchema, ticketCheckInResponseSchema } from '@jdm/shared/check-in';
+import { ticketCheckInRequestSchema, ticketCheckInResponseSchema } from '@ccc/shared/check-in';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';
@@ -1196,7 +1196,7 @@ export const adminCheckInRoutes: FastifyPluginAsync = async (app) => {
 - [x] **Step 4: Run tests to confirm green**
 
 ```bash
-pnpm --filter @jdm/api test -- admin/check-in.route.test.ts
+pnpm --filter @ccc/api test -- admin/check-in.route.test.ts
 ```
 
 Expected: PASS.
@@ -1204,7 +1204,7 @@ Expected: PASS.
 - [x] **Step 5: Full suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: all tests green.
@@ -1230,7 +1230,7 @@ git commit -m "feat(api): POST /admin/tickets/check-in with idempotent admit + a
 Create `apps/api/test/admin/check-in-events.route.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1327,7 +1327,7 @@ describe('GET /admin/check-in/events', () => {
 - [x] **Step 2: Confirm they fail**
 
 ```bash
-pnpm --filter @jdm/api test -- admin/check-in-events.route.test.ts
+pnpm --filter @ccc/api test -- admin/check-in-events.route.test.ts
 ```
 
 Expected: FAIL — route returns 404.
@@ -1337,8 +1337,8 @@ Expected: FAIL — route returns 404.
 Edit `apps/api/src/routes/admin/check-in.ts`. Add the following imports at the top (alongside existing):
 
 ```ts
-import { prisma } from '@jdm/db';
-import { checkInEventsResponseSchema } from '@jdm/shared/check-in';
+import { prisma } from '@ccc/db';
+import { checkInEventsResponseSchema } from '@ccc/shared/check-in';
 ```
 
 Append the GET handler inside the plugin, before the closing brace:
@@ -1384,7 +1384,7 @@ app.get('/check-in/events', async (_request, reply) => {
 - [x] **Step 4: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- admin/check-in-events.route.test.ts
+pnpm --filter @ccc/api test -- admin/check-in-events.route.test.ts
 ```
 
 Expected: PASS.
@@ -1392,7 +1392,7 @@ Expected: PASS.
 - [x] **Step 5: Full suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: all tests green.
@@ -1461,7 +1461,7 @@ export const middleware = (req: NextRequest) => {
 - [ ] **Step 2: Typecheck the admin app**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1552,7 +1552,7 @@ export default async function EventsLayout({ children }: { children: React.React
 - [ ] **Step 4: Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1583,7 +1583,7 @@ import {
   ticketCheckInResponseSchema,
   type TicketCheckInRequest,
   type TicketCheckInResponse,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 ```
 
 Append the two functions at the bottom of the file:
@@ -1603,7 +1603,7 @@ export const checkInTicket = (input: TicketCheckInRequest): Promise<TicketCheckI
 - [ ] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1683,7 +1683,7 @@ export default async function CheckInIndexPage() {
 - [x] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1720,7 +1720,7 @@ Edit `apps/admin/package.json`. Add to `dependencies`:
 Then install:
 
 ```bash
-pnpm --filter @jdm/admin install
+pnpm --filter @ccc/admin install
 ```
 
 - [x] **Step 2: Server action wrapping the API call**
@@ -1964,8 +1964,8 @@ function friendlyError(code: string): { title: string; subtitle?: string } {
 - [x] **Step 5: Typecheck + lint**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/admin lint
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/admin lint
 ```
 
 Expected: both clean.
@@ -1973,7 +1973,7 @@ Expected: both clean.
 - [x] **Step 6: Build verification**
 
 ```bash
-pnpm --filter @jdm/admin build
+pnpm --filter @ccc/admin build
 ```
 
 Expected: build completes without errors (confirms the @zxing/browser import resolves under webpack).
@@ -2007,7 +2007,7 @@ Edit `plans/roadmap.md`: change the two `- [~]` lines for 5.1 and 5.2 to `- [x]`
 Replace `handoff.md` with a summary covering:
 
 - What shipped (new `staff` role, check-in endpoint, scanner UI).
-- Test status (`pnpm --filter @jdm/api test` green count, admin typecheck/lint clean, admin build clean).
+- Test status (`pnpm --filter @ccc/api test` green count, admin typecheck/lint clean, admin build clean).
 - Deploy checklist: run the `user_role_staff` migration on Railway; no new env vars.
 - Deferred items:
   - No UI to promote a user to `staff` — DBA/seed path only. Capture as "F7b admin user mgmt" follow-up.

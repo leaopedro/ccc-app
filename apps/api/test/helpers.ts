@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';

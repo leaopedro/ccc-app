@@ -1,5 +1,5 @@
-import { myTicketSchema, myTicketsResponseSchema } from '@jdm/shared/tickets';
-import type { MyTicket, MyTicketsResponse, UpdateTicketRequest } from '@jdm/shared/tickets';
+import { myTicketSchema, myTicketsResponseSchema } from '@ccc/shared/tickets';
+import type { MyTicket, MyTicketsResponse, UpdateTicketRequest } from '@ccc/shared/tickets';
 
 import { authedRequest } from './client';
 

@@ -8,7 +8,7 @@
 
 **Architecture:** All backend writes live on a new `/admin/*` route tree on the existing Fastify API, protected by a new role-guard preHandler built on top of the existing `app.authenticate`. A new `AdminAudit` Prisma model records `(actorId, action, entity, entityId, metadata, createdAt)` on every mutation. The admin Next.js 16 app acts as a thin BFF: a server action logs in against `/auth/login`, stashes the access + refresh tokens in httpOnly cookies, and every server component/action reads the access token from the cookie, refreshes on 401, and calls the API. Event covers use the existing pre-signed PUT flow with a new `event_cover` upload kind gated by role.
 
-**Tech Stack:** Fastify, Prisma, Zod, Next.js 16 App Router (server actions + RSC), Tailwind v4, `@jdm/shared` (Zod schemas).
+**Tech Stack:** Fastify, Prisma, Zod, Next.js 16 App Router (server actions + RSC), Tailwind v4, `@ccc/shared` (Zod schemas).
 
 **Roadmap tasks covered:** 7.1, 7.2, 7.3, 7.4.
 
@@ -73,7 +73,7 @@
 - **`apps/admin/app/(authed)/events/[id]/page.tsx`** (new) — edit form + tier editor + publish/cancel buttons.
 - **`apps/admin/app/page.tsx`** — redirect to `/events` when authed, `/login` otherwise.
 - **`apps/admin/src/components/cover-uploader.tsx`** (new) — a client component that calls `/uploads/presign` (via admin BFF action), PUTs the file, returns the object key to the parent form.
-- **`apps/admin/src/lib/admin-api.ts`** (new) — typed wrappers for `/admin/events`, `/admin/events/:id/tiers`, returning parsed Zod types from `@jdm/shared/admin`.
+- **`apps/admin/src/lib/admin-api.ts`** (new) — typed wrappers for `/admin/events`, `/admin/events/:id/tiers`, returning parsed Zod types from `@ccc/shared/admin`.
 
 ### Other
 
@@ -93,8 +93,8 @@
   - `draft|published → cancelled` via `POST /admin/events/:id/cancel` — sets `status='cancelled'`. `publishedAt` is preserved. Cancelled cannot be un-cancelled in this pass.
   - Other field edits use `PATCH /admin/events/:id`. Status is **not** editable via PATCH — only via the two action endpoints (keeps audit clean).
 - **Audit rows are write-side-effect-only.** A mutation must both (a) perform the mutation, and (b) write an `AdminAudit` row within the same request. If the mutation fails, no audit row is written. Do not wrap them in a single DB transaction in this pass — audit is advisory, not financial. Tests assert the audit row exists _after_ a successful mutation.
-- **Actions vocabulary** (stored as `AdminAudit.action`): `event.create`, `event.update`, `event.publish`, `event.cancel`, `tier.create`, `tier.update`, `tier.delete`. No free-form strings in code — use a literal union type in `@jdm/shared/admin`.
-- **Tiers in admin detail include `quantitySold`** (that field is organizer-confidential). Public detail still omits it (already excluded in `@jdm/shared/events`' `ticketTierSchema`).
+- **Actions vocabulary** (stored as `AdminAudit.action`): `event.create`, `event.update`, `event.publish`, `event.cancel`, `tier.create`, `tier.update`, `tier.delete`. No free-form strings in code — use a literal union type in `@ccc/shared/admin`.
+- **Tiers in admin detail include `quantitySold`** (that field is organizer-confidential). Public detail still omits it (already excluded in `@ccc/shared/events`' `ticketTierSchema`).
 - **Uploads:** `event_cover` presign requires `role in ('organizer','admin')`. Object keys still live under `event_cover/${userId}/` so the existing `isOwnedKey` helper works unchanged — only the uploader can later link their own key to an Event.
 - **Admin auth = cookies.** Server-side BFF: access token cookie is httpOnly, refresh token cookie is httpOnly, `session_role` is readable (non-sensitive, used only by middleware). Never expose the refresh token to the browser. Access token is also httpOnly — the admin UI never needs it directly; all API calls go through `apiFetch` which runs on the server.
 - **Tests:** every API test starts with `await resetDatabase(); app = await makeApp();` per `apps/api/test/helpers.ts`. Integration tests hit the real Postgres — no mocks (CLAUDE.md).
@@ -161,7 +161,7 @@ Note: `actorId` is **not** a foreign key. If a user is later deleted we still wa
 - [ ] **Step 2:** Generate the migration against a local Postgres.
 
 ```bash
-pnpm --filter @jdm/db exec prisma migrate dev --name admin_audit
+pnpm --filter @ccc/db exec prisma migrate dev --name admin_audit
 ```
 
 Expected: new folder `packages/db/prisma/migrations/<timestamp>_admin_audit/` with a `migration.sql` that creates the table and three indexes. `prisma generate` reruns.
@@ -194,7 +194,7 @@ git commit -m "feat(db): add AdminAudit model and migration"
 
 ---
 
-## Task 3: Shared admin schemas (`@jdm/shared/admin`)
+## Task 3: Shared admin schemas (`@ccc/shared/admin`)
 
 **Files:**
 
@@ -327,7 +327,7 @@ describe('adminAuditActionSchema', () => {
 - [ ] **Step 2:** Run the tests to confirm they fail (module not found).
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: FAIL — `Cannot find module '../admin.js'` (or equivalent).
@@ -506,7 +506,7 @@ export * from './admin';
 - [ ] **Step 6:** Run tests to confirm green.
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: all new admin tests pass.
@@ -514,7 +514,7 @@ Expected: all new admin tests pass.
 - [ ] **Step 7:** Typecheck workspace.
 
 ```bash
-pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/shared typecheck
 pnpm --filter api typecheck
 pnpm --filter admin typecheck
 ```
@@ -657,7 +657,7 @@ Update `apps/api/src/services/uploads/dev.ts` `isOwnedKey` param type the same w
 - [ ] **Step 5:** Gate `event_cover` in `apps/api/src/routes/uploads.ts`:
 
 ```ts
-import { presignRequestSchema } from '@jdm/shared/uploads';
+import { presignRequestSchema } from '@ccc/shared/uploads';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -794,7 +794,7 @@ Expected: FAIL — `app.requireRole is not a function`.
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import fp from 'fastify-plugin';
 
-import type { UserRoleName } from '@jdm/shared/auth';
+import type { UserRoleName } from '@ccc/shared/auth';
 import { verifyAccessToken, type AccessPayload } from '../services/auth/tokens.js';
 
 declare module 'fastify' {
@@ -878,7 +878,7 @@ git commit -m "feat(api): add requireRole preHandler"
 - [ ] **Step 1:** Write the failing test:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { recordAudit } from '../../src/services/admin-audit.js';
@@ -935,9 +935,9 @@ Expected: FAIL.
 - [ ] **Step 3:** Create `apps/api/src/services/admin-audit.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
-import type { AdminAuditAction } from '@jdm/shared/admin';
+import type { AdminAuditAction } from '@ccc/shared/admin';
 
 export type RecordAuditInput = {
   actorId: string;
@@ -989,7 +989,7 @@ git commit -m "feat(api): AdminAudit record helper"
 - [ ] **Step 1:** Write the failing test at `apps/api/test/admin/events/create.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1105,8 +1105,8 @@ Expected: FAIL (routes not yet mounted, so Fastify's notFoundHandler returns 404
 - [ ] **Step 3:** Create `apps/api/src/routes/admin/events.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminEventCreateSchema, adminEventDetailSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminEventCreateSchema, adminEventDetailSchema } from '@ccc/shared/admin';
 import type { Event as DbEvent, TicketTier as DbTier, Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -1257,8 +1257,8 @@ git commit -m "feat(api): POST /admin/events with role guard + audit"
 - [ ] **Step 1:** Write the failing test at `apps/api/test/admin/events/list.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminEventListResponseSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminEventListResponseSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1393,7 +1393,7 @@ git commit -m "feat(api): GET /admin/events — list all statuses"
 - [ ] **Step 1:** Write the failing test:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1538,7 +1538,7 @@ git commit -m "feat(api): GET /admin/events/:id — admin detail incl. quantityS
 - [ ] **Step 1:** Write the failing test:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1650,7 +1650,7 @@ import {
   adminEventCreateSchema,
   adminEventDetailSchema,
   adminEventUpdateSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 // … existing imports above
 
 app.patch('/events/:id', async (request, reply) => {
@@ -1722,7 +1722,7 @@ git commit -m "feat(api): PATCH /admin/events/:id"
 - [ ] **Step 1:** Write `apps/api/test/admin/events/publish.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1817,7 +1817,7 @@ describe('POST /admin/events/:id/publish', () => {
 - [ ] **Step 2:** Write `apps/api/test/admin/events/cancel.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -2005,7 +2005,7 @@ git commit -m "feat(api): admin publish/cancel event actions"
 - [ ] **Step 1:** Write `apps/api/test/admin/tiers/create.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -2089,7 +2089,7 @@ describe('POST /admin/events/:eventId/tiers', () => {
 - [ ] **Step 2:** Write `apps/api/test/admin/tiers/update.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -2181,7 +2181,7 @@ describe('PATCH /admin/events/:eventId/tiers/:tierId', () => {
 - [ ] **Step 3:** Write `apps/api/test/admin/tiers/delete.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -2276,8 +2276,8 @@ Expected: FAIL across all three.
 - [ ] **Step 5:** Create `apps/api/src/routes/admin/tiers.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminTierCreateSchema, adminTierUpdateSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminTierCreateSchema, adminTierUpdateSchema } from '@ccc/shared/admin';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -2448,7 +2448,7 @@ git commit -m "feat(api): admin tier CRUD nested under event"
 ```ts
 import { cookies } from 'next/headers';
 
-import { healthResponseSchema, type HealthResponse } from '@jdm/shared/health';
+import { healthResponseSchema, type HealthResponse } from '@ccc/shared/health';
 
 const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -2499,7 +2499,7 @@ export const fetchHealth = async (): Promise<HealthResponse> =>
 ```ts
 import { cookies } from 'next/headers';
 
-import type { AuthResponse } from '@jdm/shared/auth';
+import type { AuthResponse } from '@ccc/shared/auth';
 
 const ACCESS_COOKIE = 'session_access';
 const REFRESH_COOKIE = 'session_refresh';
@@ -2555,7 +2555,7 @@ import {
   type AdminTierCreate,
   type AdminTierUpdate,
   adminTicketTierSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 
 import { apiFetch } from './api.js';
 
@@ -2644,7 +2644,7 @@ git commit -m "feat(admin): API client + session cookie helpers"
 
 import { redirect } from 'next/navigation';
 
-import { authResponseSchema, loginSchema } from '@jdm/shared/auth';
+import { authResponseSchema, loginSchema } from '@ccc/shared/auth';
 
 import { apiFetch, ApiError } from './api.js';
 import { clearSession, writeSession } from './auth-session.js';
@@ -2770,7 +2770,7 @@ Expected: green.
 
 - [ ] **Step 5:** Manual smoke test (optional; `[-]` for autonomous sessions):
   1. `pnpm --filter api dev` in one shell, ensure `/auth/login` works against a seeded organizer.
-  2. Create an organizer user locally: `pnpm --filter @jdm/db exec prisma studio` → add a User with `role=organizer`, `emailVerifiedAt` set, a bcrypt hash you know the password for (or use signup + admin update).
+  2. Create an organizer user locally: `pnpm --filter @ccc/db exec prisma studio` → add a User with `role=organizer`, `emailVerifiedAt` set, a bcrypt hash you know the password for (or use signup + admin update).
   3. `pnpm --filter admin dev` → open `http://localhost:3000` → should redirect to `/login`.
   4. Log in → should redirect to `/events` (404 until Task 15).
 
@@ -2839,7 +2839,7 @@ export const LogoutButton = () => (
 - [ ] **Step 3:** Create `apps/admin/src/components/status-badge.tsx`:
 
 ```tsx
-import type { EventStatus } from '@jdm/shared/events';
+import type { EventStatus } from '@ccc/shared/events';
 
 const COPY: Record<EventStatus, string> = {
   draft: 'Rascunho',
@@ -2978,7 +2978,7 @@ git commit -m "feat(admin): events list page + middleware + logout"
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-import { adminEventCreateSchema, adminEventUpdateSchema } from '@jdm/shared/admin';
+import { adminEventCreateSchema, adminEventUpdateSchema } from '@ccc/shared/admin';
 
 import { ApiError } from './api.js';
 import {
@@ -3111,7 +3111,7 @@ export const cancelEventAction = async (id: string): Promise<EventFormState> => 
 
 import { useFormState, useFormStatus } from 'react-dom';
 
-import { BRAZIL_STATE_CODES } from '@jdm/shared/profile';
+import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
 
 import { createEventAction, type EventFormState } from '~/lib/event-actions';
 
@@ -3249,7 +3249,7 @@ git commit -m "feat(admin): create event form"
 ```ts
 'use server';
 
-import { presignRequestSchema, presignResponseSchema } from '@jdm/shared/uploads';
+import { presignRequestSchema, presignResponseSchema } from '@ccc/shared/uploads';
 
 import { apiFetch } from './api.js';
 
@@ -3272,7 +3272,7 @@ export const presignEventCoverAction = async (input: PresignInput) => {
 
 import { revalidatePath } from 'next/cache';
 
-import { adminTierCreateSchema, adminTierUpdateSchema } from '@jdm/shared/admin';
+import { adminTierCreateSchema, adminTierUpdateSchema } from '@ccc/shared/admin';
 
 import { ApiError } from './api.js';
 import { createTier, deleteTier, updateTier } from './admin-api.js';
@@ -3410,8 +3410,8 @@ export const CoverUploader = ({
 
 import { useFormState, useFormStatus } from 'react-dom';
 
-import { BRAZIL_STATE_CODES } from '@jdm/shared/profile';
-import type { AdminEventDetail } from '@jdm/shared/admin';
+import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
+import type { AdminEventDetail } from '@ccc/shared/admin';
 
 import { CoverUploader } from '~/components/cover-uploader';
 import {
@@ -3597,7 +3597,7 @@ export const EventForm = ({ event }: { event: AdminEventDetail }) => {
 
 import { useFormState, useFormStatus } from 'react-dom';
 
-import type { AdminTicketTier } from '@jdm/shared/admin';
+import type { AdminTicketTier } from '@ccc/shared/admin';
 
 import {
   createTierAction,
@@ -3888,5 +3888,5 @@ EOF
 - [ ] Every admin mutation writes exactly one `AdminAudit` row — `event.create/update/publish/cancel`, `tier.create/update/delete`.
 - [ ] No placeholders (no "TODO", "TBD", "similar to above", etc.).
 - [ ] Type names consistent (`AdminEventDetail`, `AdminTicketTier`, `AdminEventRow`).
-- [ ] Every client-side import of `@jdm/shared/admin` schemas is also used in the corresponding API route (so the contract is single-sourced).
+- [ ] Every client-side import of `@ccc/shared/admin` schemas is also used in the corresponding API route (so the contract is single-sourced).
 - [ ] Public `GET /events` still filters by `status='published'` — admin can see drafts, attendees cannot.

@@ -1,4 +1,4 @@
-import type { CartItemInput } from '@jdm/shared/cart';
+import type { CartItemInput } from '@ccc/shared/cart';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Platform } from 'react-native';

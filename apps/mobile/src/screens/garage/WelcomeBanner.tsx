@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { garageCopy } from '~/copy/garage';

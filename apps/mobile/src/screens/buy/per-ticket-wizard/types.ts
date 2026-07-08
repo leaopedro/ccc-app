@@ -1,4 +1,4 @@
-import type { TicketTier } from '@jdm/shared/events';
+import type { TicketTier } from '@ccc/shared/events';
 import type { ComponentType } from 'react';
 
 /**

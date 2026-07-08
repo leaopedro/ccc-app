@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminFinanceMembershipsQuerySchema,
   adminFinanceQuerySchema,
   type AdminFinanceQuery,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import {
   Prisma,
   type GaragePremiumTier,
@@ -1200,8 +1200,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
     const csv = [header, ...orderRows, ...membershipRowsCsv].join('\n');
     void reply.header('content-type', 'text/csv; charset=utf-8');
     void reply.header('content-disposition', 'attachment; filename="finance-export.csv"');
-    void reply.header('x-jdm-k-anonymity-min', String(MIN_FINANCE_EXPORT_COHORT_SIZE));
-    void reply.header('x-jdm-k-anonymity-suppressed-groups', String(suppressedGroups));
+    void reply.header('x-ccc-k-anonymity-min', String(MIN_FINANCE_EXPORT_COHORT_SIZE));
+    void reply.header('x-ccc-k-anonymity-suppressed-groups', String(suppressedGroups));
     return csv;
   });
 };

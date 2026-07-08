@@ -1,4 +1,4 @@
-import type { StoreProductVariant } from '@jdm/shared/store';
+import type { StoreProductVariant } from '@ccc/shared/store';
 
 export type AddToCartVariantSelection =
   | { kind: 'sold_out' }

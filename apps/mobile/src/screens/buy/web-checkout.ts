@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import type { CreateWebCheckoutRequest } from '@jdm/shared/orders';
+import { brand } from '@ccc/design';
+import type { CreateWebCheckoutRequest } from '@ccc/shared/orders';
 import { Platform } from 'react-native';
 
 import { createWebCheckout } from '~/api/orders';

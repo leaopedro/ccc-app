@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { STORE_SETTINGS_SINGLETON_ID } from '@jdm/shared/store';
+import { prisma } from '@ccc/db';
+import { STORE_SETTINGS_SINGLETON_ID } from '@ccc/shared/store';
 
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 

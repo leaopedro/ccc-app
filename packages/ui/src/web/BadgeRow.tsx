@@ -1,4 +1,4 @@
-import type { BadgeCatalogEntry, GarageBadgePublic } from '@jdm/shared/badges';
+import type { BadgeCatalogEntry, GarageBadgePublic } from '@ccc/shared/badges';
 
 import { garageTokens } from '../garage-tokens.js';
 

@@ -12,7 +12,7 @@ export interface PremiumSheetProps {
   copy: {
     title: string;
     tierLabel: string; // 'GOLD TIER'
-    heroTitle: string; // 'JDM Premium'
+    heroTitle: string; // 'CCC Gold'
     heroBody: string;
     nearExpiry: (n: number) => string; // 'Expira em 3 dias · Renove …'
     benefits: ReadonlyArray<{ title: string; sub: string }>;

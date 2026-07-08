@@ -1,10 +1,10 @@
 {
-  "extends": "@jdm/tsconfig/react-native.json",
+  "extends": "@ccc/tsconfig/react-native.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "~/*": ["src/*"],
-      "@jdm/shared/legal": ["../../packages/shared/src/legal.ts"]
+      "@ccc/shared/legal": ["../../packages/shared/src/legal.ts"]
     },
     "types": ["node"]
   },

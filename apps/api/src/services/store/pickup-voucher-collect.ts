@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { MyTicketPickupVoucher } from '@jdm/shared/tickets';
+import { prisma } from '@ccc/db';
+import type { MyTicketPickupVoucher } from '@ccc/shared/tickets';
 
 const mapAttributes = (raw: unknown): Record<string, string> | null => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;

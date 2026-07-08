@@ -1,4 +1,4 @@
-import { presignRequestSchema } from '@jdm/shared/uploads';
+import { presignRequestSchema } from '@ccc/shared/uploads';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';

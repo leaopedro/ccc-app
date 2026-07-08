@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // ParkingStallCard tests. The component lives in `packages/ui/src/`, but the
-// tests live here so the mobile workspace's vitest picks them up — `@jdm/ui`
+// tests live here so the mobile workspace's vitest picks them up — `@ccc/ui`
 // has no test runner of its own (verified via packages/ui/package.json).
 //
 // Pattern: stub `react-native` and `react-native-svg` to jsdom-friendly tags,
@@ -114,7 +114,7 @@ describe('ParkingStallCard', () => {
   const textOf = (): string => container.textContent ?? '';
 
   it('renders SLOT 01 plate for slotNumber=1', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="empty"
@@ -127,7 +127,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders RESERVADA tape for purchase source', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard state="empty" source="purchase" slotNumber={3} onPress={() => undefined} />,
     );
@@ -135,7 +135,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders RESERVADA tape for premium_membership source', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="empty"
@@ -148,7 +148,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders CORTESIA tape for admin_grant source', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="empty"
@@ -161,7 +161,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders no tape for default_free', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="empty"
@@ -176,7 +176,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders price label and À VENDA in buy state', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="buy"
@@ -192,7 +192,7 @@ describe('ParkingStallCard', () => {
   });
 
   it('renders year/make/model + Gold badge for filled state with premium', async () => {
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     const car = {
       id: 'c1',
       year: 1991,
@@ -218,7 +218,7 @@ describe('ParkingStallCard', () => {
 
   it('fires onPress once when the stall is tapped', async () => {
     const fn = vi.fn();
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard state="empty" source="default_free" slotNumber={1} onPress={fn} />,
     );
@@ -237,7 +237,7 @@ describe('ParkingStallCard', () => {
     // Behavioural proxy: both should render RESERVADA tape (already covered
     // above) AND neither should render CORTESIA. Concrete colour assertion is
     // unreachable in jsdom; the source-driven branch in paintFor is symmetric.
-    const { ParkingStallCard } = await import('@jdm/ui');
+    const { ParkingStallCard } = await import('@ccc/ui');
     await renderEl(
       <ParkingStallCard
         state="empty"

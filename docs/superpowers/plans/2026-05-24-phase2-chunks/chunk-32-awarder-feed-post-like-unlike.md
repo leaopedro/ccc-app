@@ -263,8 +263,8 @@ import { awardXp, revertLikeXp } from '../services/garage/xp-awarder.js';
 - [ ] **Step 1: Write the failing test (fixture + first spec)**
 
 ```ts
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -383,14 +383,14 @@ describe('awarder hook — feed post reactions', () => {
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-like.test.ts -t 'no → like'` — expect FAIL (`garage.xp === 0`, awarder not wired).
+- [ ] **Step 2: Run** `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-like.test.ts -t 'no → like'` — expect FAIL (`garage.xp === 0`, awarder not wired).
 - [ ] **Step 3: Wire awarder.** In `apps/api/src/routes/feed.ts` add `import { awardXp, revertLikeXp } from '../services/garage/xp-awarder.js';` next to line 19, then replace lines 594-653 with the full route shown in §"Code shape" above.
 - [ ] **Step 4: Run** same vitest command — expect PASS.
 - [ ] **Step 5: Commit** `feat(api): wire xp awarder into feed reaction no→like path`.
 
 ---
 
-**Tasks 2-11 share the same shape:** modify `apps/api/test/garage/xp-post-like.test.ts`, add the spec, run `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-like.test.ts -t '<title>'` to confirm PASS, then `git add` the test file + commit. The wiring from Task 1 covers every transition branch — no further edits to `feed.ts` are needed.
+**Tasks 2-11 share the same shape:** modify `apps/api/test/garage/xp-post-like.test.ts`, add the spec, run `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-like.test.ts -t '<title>'` to confirm PASS, then `git add` the test file + commit. The wiring from Task 1 covers every transition branch — no further edits to `feed.ts` are needed.
 
 ## Task 2: like → none (revert)
 
@@ -683,9 +683,9 @@ it('post with tombstoned author (authorUserId null): like succeeds, no XP moveme
 
 ## Verification (whole-chunk gate)
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-like.test.ts` — 11 pass.
-- [ ] `pnpm --filter @jdm/api typecheck` — 0 errors.
-- [ ] `pnpm --filter @jdm/api exec eslint src/routes/feed.ts test/garage/xp-post-like.test.ts` — 0 errors. (Canon §10: package-root-relative paths via `exec eslint`.)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-like.test.ts` — 11 pass.
+- [ ] `pnpm --filter @ccc/api typecheck` — 0 errors.
+- [ ] `pnpm --filter @ccc/api exec eslint src/routes/feed.ts test/garage/xp-post-like.test.ts` — 0 errors. (Canon §10: package-root-relative paths via `exec eslint`.)
 - [ ] `grep -n 'reaction:' apps/api/src/routes/feed.ts` — exactly one match (the sourceRef template literal). §C3 hand-confirm.
 - [ ] `grep -n 'likesReceived' apps/api/src/routes/feed.ts` — zero matches. Canon §6: route never touches `likesReceived`.
 
@@ -699,9 +699,9 @@ it('post with tombstoned author (authorUserId null): like succeeds, no XP moveme
 - **Fix-canon §4** — `awardXp(tx, garageId, reason, opts)` positional 4-arg signature used at the route call site (BLOCK fix; was previously assumed to match an options-object variant — chunks 27 + 29-35 align on the positional shape).
 - **Fix-canon §5** — Awarder error contract: route does NOT wrap awarder calls in `try/catch` inside the parent tx. Awarder swallows expected `P2002` + killswitch; any other error rethrows so the parent `$transaction` rolls back. Task 9 asserts the rollback path; Task 10 asserts the same via the revert branch.
 - **Fix-canon §6** — `Garage.likesReceived` ownership is the awarder, NOT the route. `awardXp('post_like')` increments both `xp` and `likesReceived` in one statement; `revertLikeXp` decrements both. The route never issues a `Garage.update` for `likesReceived`. Tasks 1-5 assert counter movement on the garage, proving ownership flows through the awarder; verification `grep` step asserts zero `likesReceived` mentions in the route source.
-- **Fix-canon §8** — `enableGamification` / `disableGamification` test helpers use `GENERAL_SETTINGS_SINGLETON_ID` string constant (imported from `@jdm/shared/general-settings`), never numeric `id: 1`.
+- **Fix-canon §8** — `enableGamification` / `disableGamification` test helpers use `GENERAL_SETTINGS_SINGLETON_ID` string constant (imported from `@ccc/shared/general-settings`), never numeric `id: 1`.
 - **Fix-canon §9** — `buildFixture` seeds `Event.type='meeting'`, `capacity=100`, `status='published'`, `feedAccess='public'`. Mirrors `apps/api/test/feed/crud.test.ts`. No ticket needed because feed is public.
-- **Fix-canon §10** — Filtered vitest + eslint commands use `pnpm --filter @jdm/api exec ...` with package-root-relative paths (`test/garage/xp-post-like.test.ts`, `src/routes/feed.ts`).
+- **Fix-canon §10** — Filtered vitest + eslint commands use `pnpm --filter @ccc/api exec ...` with package-root-relative paths (`test/garage/xp-post-like.test.ts`, `src/routes/feed.ts`).
 - **Fix-canon §11** — Test filename is `apps/api/test/garage/xp-post-like.test.ts` (skeleton-canonical), not `awarder-feed-post-like.test.ts`.
 
 ## Deviations
@@ -718,7 +718,7 @@ it('post with tombstoned author (authorUserId null): like succeeds, no XP moveme
 - [ ] Branch `feat/jdma-garage-phase2-32` from freshly pulled `main` (`git pull --ff-only origin main`).
 - [ ] Confirm `git branch --show-current` is NOT `production` before first edit (CLAUDE.md preflight).
 - [ ] All 11 specs pass against real Postgres (CLAUDE.md integration-test rule).
-- [ ] `pnpm --filter @jdm/api typecheck` clean.
+- [ ] `pnpm --filter @ccc/api typecheck` clean.
 - [ ] No edits outside `apps/api/src/routes/feed.ts` + the new test file.
 - [ ] PR body cites §C2, §C3, §C4, §C6, §437 + fix-canon §4/§5/§6/§8/§9/§10/§11.
 - [ ] PR body lists the 6 deviations so reviewer decides self-like policy + 500-on-awarder-failure observability explicitly.

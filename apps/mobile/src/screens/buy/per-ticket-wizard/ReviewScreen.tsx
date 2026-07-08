@@ -1,4 +1,4 @@
-import { Button } from '@jdm/ui';
+import { Button } from '@ccc/ui';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useState } from 'react';

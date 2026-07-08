@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { resetPasswordSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { resetPasswordSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { consumePasswordResetToken } from '../../services/auth/password-reset.js';

@@ -6,7 +6,7 @@
 
 **Architecture:** Server component `page.tsx` fetches `/admin/finance/memberships` with URL-driven query params; renders a table via a new `MembrosTable` client component. Filters reuse the chip/select pattern from `filter-bar.tsx`. `GarageMembershipHistory` is a server component that calls the same endpoint filtered by `garageId`; it is embedded on `apps/admin/app/(authed)/users/[id]/page.tsx` below `GarageBadgesPanel`. Both rely on `adminFinanceMembershipsQuerySchema` + `adminFinanceMembershipsResponseSchema` that land in F8.14. The page depends only on the API endpoint (F8.14) and the shared schemas (F8.14); it does NOT gate on the feature flag — the admin pages are internal surfaces.
 
-**Tech Stack:** Next.js App Router (server + client components), `@jdm/shared/admin` zod schemas (`adminFinanceMembershipsQuerySchema`, `adminFinanceMembershipsResponseSchema`), existing `apiFetch` helper in `apps/admin/src/lib/api.ts`, Vitest + RTL (`renderToStaticMarkup` for server-component-style assertions), branch `feat/jdma-f8-billing-16`.
+**Tech Stack:** Next.js App Router (server + client components), `@ccc/shared/admin` zod schemas (`adminFinanceMembershipsQuerySchema`, `adminFinanceMembershipsResponseSchema`), existing `apiFetch` helper in `apps/admin/src/lib/api.ts`, Vitest + RTL (`renderToStaticMarkup` for server-component-style assertions), branch `feat/jdma-f8-billing-16`.
 
 ---
 
@@ -15,7 +15,7 @@
 This chunk depends on **F8.14** for:
 
 - `GET /admin/finance/memberships` endpoint (API).
-- `adminFinanceMembershipsQuerySchema` and `adminFinanceMembershipsResponseSchema` from `@jdm/shared/admin`.
+- `adminFinanceMembershipsQuerySchema` and `adminFinanceMembershipsResponseSchema` from `@ccc/shared/admin`.
 - The `AdminFinanceMembershipsItem` type (single row shape).
 
 Do NOT start implementation until F8.14 is merged to `main`. Verify with:
@@ -193,7 +193,7 @@ import {
   adminFinanceMembershipsResponseSchema,
   type AdminFinanceMembershipsQuery,
   type AdminFinanceMembershipsResponse,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 
 export const getFinanceMemberships = (q?: AdminFinanceMembershipsQuery) => {
   const params = new URLSearchParams();
@@ -222,7 +222,7 @@ import { getFinanceMemberships } from './admin-api';
 import type {
   AdminFinanceMembershipsQuery,
   AdminFinanceMembershipsResponse,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 
 export async function fetchFinanceMemberships(
   q?: AdminFinanceMembershipsQuery,
@@ -298,7 +298,7 @@ export default async function FinanceiroMembrosPage({
 ```tsx
 'use client';
 
-import type { AdminFinanceMembershipsItem } from '@jdm/shared/admin';
+import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
@@ -559,7 +559,7 @@ export function MembrosTable({ items, page, pageSize, total, activeFilters }: Pr
 ### `apps/admin/src/components/garage-membership-history.tsx` (create)
 
 ```tsx
-import type { AdminFinanceMembershipsItem } from '@jdm/shared/admin';
+import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 
 import { fetchFinanceMemberships } from '~/lib/finance-actions';
@@ -749,7 +749,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { MembrosTable } from '../membros-table';
-import type { AdminFinanceMembershipsItem } from '@jdm/shared/admin';
+import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 
 const baseItem: AdminFinanceMembershipsItem = {
   membershipId: 'mem-1',
@@ -939,7 +939,7 @@ vi.mock('~/lib/finance-actions', () => ({
 
 import { fetchFinanceMemberships } from '~/lib/finance-actions';
 import { GarageMembershipHistory } from '../garage-membership-history';
-import type { AdminFinanceMembershipsItem } from '@jdm/shared/admin';
+import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 
 const memberships: AdminFinanceMembershipsItem[] = [
   {
@@ -1095,21 +1095,21 @@ grep -n "getFinanceMemberships\|fetchFinanceMemberships" \
 
 Expected: no matches (functions not yet defined). If they already exist (from a prior attempt), skip to Step 1.5.
 
-- [ ] **1.3 — Add `getFinanceMemberships` to `admin-api.ts`** per code shape above. Add import for `adminFinanceMembershipsResponseSchema`, `AdminFinanceMembershipsQuery` from `@jdm/shared/admin` to the existing import block at the top of the file.
+- [ ] **1.3 — Add `getFinanceMemberships` to `admin-api.ts`** per code shape above. Add import for `adminFinanceMembershipsResponseSchema`, `AdminFinanceMembershipsQuery` from `@ccc/shared/admin` to the existing import block at the top of the file.
 
 - [ ] **1.4 — Add `fetchFinanceMemberships` to `finance-actions.ts`** per code shape above.
 
 - [ ] **1.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
-Expected: clean. If TypeScript errors on missing types from `@jdm/shared/admin`, confirm F8.14 is merged and `@jdm/shared` is rebuilt:
+Expected: clean. If TypeScript errors on missing types from `@ccc/shared/admin`, confirm F8.14 is merged and `@ccc/shared` is rebuilt:
 
 ```bash
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/admin typecheck
 ```
 
 - [ ] **1.6 — Commit**
@@ -1138,7 +1138,7 @@ mkdir -p apps/admin/app/\(authed\)/financeiro/membros/__tests__
 - [ ] **2.3 — Run, confirm failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/financeiro/membros/__tests__/page.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/financeiro/membros/__tests__/page.test.tsx"
 ```
 
 Expected: FAIL with "Cannot find module '../membros-table'" or similar. Confirms test reach.
@@ -1166,7 +1166,7 @@ git commit -m "test(admin): failing MembrosTable specs (chunk 16)"
 - [ ] **3.3 — Run, confirm all 9 tests PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/financeiro/membros/__tests__/page.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/financeiro/membros/__tests__/page.test.tsx"
 ```
 
 Expected: 9/9 PASS.
@@ -1174,7 +1174,7 @@ Expected: 9/9 PASS.
 - [ ] **3.4 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1201,7 +1201,7 @@ git commit -m "feat(admin): /financeiro/membros page + MembrosTable (chunk 16)"
 - [ ] **4.2 — Run, confirm failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "src/components/__tests__/garage-membership-history.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "src/components/__tests__/garage-membership-history.test.tsx"
 ```
 
 Expected: FAIL with "Cannot find module '../garage-membership-history'". Confirms test reach.
@@ -1218,7 +1218,7 @@ git commit -m "test(admin): failing GarageMembershipHistory specs (chunk 16)"
 - [ ] **4.5 — Run, confirm all 6 tests PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "src/components/__tests__/garage-membership-history.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "src/components/__tests__/garage-membership-history.test.tsx"
 ```
 
 Expected: 6/6 PASS.
@@ -1226,7 +1226,7 @@ Expected: 6/6 PASS.
 - [ ] **4.6 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1301,7 +1301,7 @@ import { GarageMembershipHistory } from '~/components/garage-membership-history'
 - [ ] **5.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: clean.
@@ -1309,7 +1309,7 @@ Expected: clean.
 - [ ] **5.6 — Run both test scopes to confirm nothing regressed**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/(authed)/financeiro/membros/__tests__/page.test.tsx" \
   "src/components/__tests__/garage-membership-history.test.tsx"
 ```
@@ -1319,7 +1319,7 @@ Expected: 15/15 PASS.
 - [ ] **5.7 — Lint touched files**
 
 ```bash
-pnpm --filter @jdm/admin lint -- \
+pnpm --filter @ccc/admin lint -- \
   apps/admin/app/\(authed\)/financeiro/membros/page.tsx \
   apps/admin/app/\(authed\)/financeiro/membros/membros-table.tsx \
   "apps/admin/app/(authed)/financeiro/membros/__tests__/page.test.tsx" \
@@ -1351,12 +1351,12 @@ git push -u origin feat/jdma-f8-billing-16
 
 ```bash
 # All tests for this chunk
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/(authed)/financeiro/membros/__tests__/page.test.tsx" \
   "src/components/__tests__/garage-membership-history.test.tsx"
 
 # Typecheck
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 ---
@@ -1381,7 +1381,7 @@ pnpm --filter @jdm/admin typecheck
 - [ ] F8.14 merged before this PR is raised.
 - [ ] All 9 `page.test.tsx` specs PASS.
 - [ ] All 6 `garage-membership-history.test.tsx` specs PASS.
-- [ ] `pnpm --filter @jdm/admin typecheck` clean.
+- [ ] `pnpm --filter @ccc/admin typecheck` clean.
 - [ ] Lint clean on all touched files.
 - [ ] `GarageMembershipHistory` visible on the existing user detail page (`/users/:id`).
 - [ ] PR title: `feat(admin): /financeiro/membros page + GarageMembershipHistory (chunk 16)`.

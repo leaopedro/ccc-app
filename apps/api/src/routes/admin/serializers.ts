@@ -1,7 +1,7 @@
 import {
   computeCapacityDisplay,
   defaultCapacityDisplaySurfaceSetting,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 import type {
   Collection as DbCollection,
   GeneralSettings as DbGeneralSettings,

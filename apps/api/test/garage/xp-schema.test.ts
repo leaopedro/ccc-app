@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { XpReason } from '@prisma/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 

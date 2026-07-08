@@ -6,7 +6,7 @@
 //   2. Happy path: worker runs after publish and grants the ticket.
 //   3. Feature-flag gate: worker is NOT called when the flag is off.
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

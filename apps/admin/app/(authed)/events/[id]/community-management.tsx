@@ -1,7 +1,7 @@
 'use client';
 
-import type { FeedBanResponse, ModerationQueueItem, ReportResponse } from '@jdm/shared/feed';
-import { PremiumBadge } from '@jdm/ui/web';
+import type { FeedBanResponse, ModerationQueueItem, ReportResponse } from '@ccc/shared/feed';
+import { PremiumBadge } from '@ccc/ui/web';
 import React from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';

@@ -60,11 +60,11 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
         : context.resolveRequest(fakeContext, moduleName, platform);
     }
   }
-  // @jdm/shared subpath exports point to dist/*.js, which is gitignored and
+  // @ccc/shared subpath exports point to dist/*.js, which is gitignored and
   // must be built before Metro starts. Fall back to the src TypeScript file
   // when the dist artifact is absent so local dev works without a pre-build.
-  if (moduleName.startsWith('@jdm/shared/')) {
-    const subpath = moduleName.slice('@jdm/shared/'.length);
+  if (moduleName.startsWith('@ccc/shared/')) {
+    const subpath = moduleName.slice('@ccc/shared/'.length);
     const distFile = path.join(workspaceRoot, 'packages/shared/dist', subpath + '.js');
     const srcFile = path.join(workspaceRoot, 'packages/shared/src', subpath + '.ts');
     if (!fs.existsSync(distFile) && fs.existsSync(srcFile)) {

@@ -1,10 +1,10 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   createSupportTicketBodySchema,
   supportTicketSchema,
   type SupportTicket,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import type { SupportTicket as DbTicket } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

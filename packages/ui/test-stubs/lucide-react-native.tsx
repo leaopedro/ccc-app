@@ -2,9 +2,9 @@
 //
 // Why: vitest can't transform the real package's ESM build under jsdom
 // ("Unexpected token 'typeof'" SyntaxError on transitive load). The
-// `@jdm/ui` barrel re-exports components (`BadgeGlyph`, `XPTooltip`)
+// `@ccc/ui` barrel re-exports components (`BadgeGlyph`, `XPTooltip`)
 // that pull lucide directly, so every test that touches the barrel
-// loads lucide transitively. Per canon §13, `@jdm/ui` ships its own
+// loads lucide transitively. Per canon §13, `@ccc/ui` ships its own
 // copy of the stub so tests in this package stand alone — they do not
 // reach into the mobile workspace for fixtures.
 //

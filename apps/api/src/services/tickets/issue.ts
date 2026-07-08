@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { signQrCode } from '../../lib/qr.js';
 import { fulfillGarageSpotsForOrder } from '../orders/garage-fulfillment.js';

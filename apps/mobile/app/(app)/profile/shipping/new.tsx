@@ -1,4 +1,4 @@
-import { Button } from '@jdm/ui';
+import { Button } from '@ccc/ui';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useForm } from 'react-hook-form';

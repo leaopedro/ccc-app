@@ -6,7 +6,7 @@
 
 **Architecture:** Four existing components under `apps/admin/app/(authed)/financeiro/components/` are each extended in isolation. `filter-bar.tsx` (`'use client'`) gains a `kind` dropdown that conditionally reveals `cadence`, `tier`, and `status` sub-filters. `kpi-row.tsx` (server-renderable) gets a new "Assinaturas" tile group. `payment-mix.tsx` (server-renderable) gains two new label mappings. `trend-chart.tsx` (`'use client'`, Recharts) adds a third `Area` series and gradient. Each component has its own test file — `renderToStaticMarkup` for the server-renderable ones; `@vitest-environment jsdom` + `createRoot` for client components. No new route, no new API call, no Testcontainers — pure UI.
 
-**Tech Stack:** Next.js App Router, Recharts (already in `trend-chart.tsx`), `@jdm/shared/admin` zod types (extended by F8.13), Vitest, `react-dom/server` (`renderToStaticMarkup`) + `react-dom/client` (`createRoot`) for tests, PT-BR locale formatting.
+**Tech Stack:** Next.js App Router, Recharts (already in `trend-chart.tsx`), `@ccc/shared/admin` zod types (extended by F8.13), Vitest, `react-dom/server` (`renderToStaticMarkup`) + `react-dom/client` (`createRoot`) for tests, PT-BR locale formatting.
 
 ---
 
@@ -56,10 +56,10 @@ grep -n "membershipRevenueCents" \
 
 Expected: at minimum `membershipNetRevenueCents`, `membershipMRRCents`, `activeMembershipsCount` in `adminFinanceSummarySchema` and `membershipRevenueCents` in `adminFinanceTrendPointSchema`. If absent, F8.13 has not merged — STOP and wait for that chunk.
 
-- [ ] **PF-4: Rebuild `@jdm/shared` to pick up F8.13 additions**
+- [ ] **PF-4: Rebuild `@ccc/shared` to pick up F8.13 additions**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: exits 0. If it fails, fix the shared build before continuing (canon §F8.13).
@@ -84,7 +84,7 @@ Expected: exits 0. If it fails, fix the shared build before continuing (canon §
 
 ---
 
-## Type contract (what this chunk adds to `@jdm/shared`)
+## Type contract (what this chunk adds to `@ccc/shared`)
 
 `adminFinanceQuerySchema` gains four new optional fields. Add them alongside the existing `provider` and `method` fields:
 
@@ -548,7 +548,7 @@ it('selecting "all" cadence calls onFilterChange with null', async () => {
 **File path:** `apps/admin/app/(authed)/financeiro/components/__tests__/kpi-row.test.tsx`
 
 ```tsx
-import type { AdminFinanceSummary } from '@jdm/shared/admin';
+import type { AdminFinanceSummary } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -642,7 +642,7 @@ it('renders correctly when membership fields are zero', () => {
 **File path:** `apps/admin/app/(authed)/financeiro/components/__tests__/payment-mix.test.tsx`
 
 ```tsx
-import type { AdminFinancePaymentMixItem } from '@jdm/shared/admin';
+import type { AdminFinancePaymentMixItem } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -775,7 +775,7 @@ import { TrendChart } from '../trend-chart';
 Fixtures:
 
 ```ts
-import type { AdminFinanceTrendPoint } from '@jdm/shared/admin';
+import type { AdminFinanceTrendPoint } from '@ccc/shared/admin';
 
 const pointWithMembership: AdminFinanceTrendPoint = {
   date: '2026-05-01',
@@ -850,7 +850,7 @@ Six TDD tasks, ~90 min total. Each ends with a commit.
 
 ---
 
-### Task 1 — Extend `@jdm/shared` query schema + verify F8.13 types
+### Task 1 — Extend `@ccc/shared` query schema + verify F8.13 types
 
 **Files:**
 
@@ -870,18 +870,18 @@ membershipStatus: z
   .optional(),
 ```
 
-- [ ] **1.2 — Rebuild `@jdm/shared`**
+- [ ] **1.2 — Rebuild `@ccc/shared`**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: exits 0.
 
-- [ ] **1.3 — Typecheck `@jdm/admin`**
+- [ ] **1.3 — Typecheck `@ccc/admin`**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: exits 0 (no errors from the new schema fields). If TypeScript complains about `membershipNetRevenueCents` not existing on `AdminFinanceSummary`, F8.13 has not merged — STOP and wait.
@@ -1192,7 +1192,7 @@ describe('FilterBar — kind dropdown + membership sub-filters (chunk 15)', () =
 - [ ] **2.3 — Run, confirm failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/financeiro/components/__tests__/filter-bar.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/financeiro/components/__tests__/filter-bar.test.tsx"
 ```
 
 Expected: 11 failures — `[aria-label="Tipo de receita"]` not found (dropdown not yet implemented). At least one failure confirms test reach.
@@ -1340,7 +1340,7 @@ In `filterContent`, after the `eventId` `<select>` closing `</select>` tag and b
 - [ ] **3.4 — Run, confirm all 11 tests PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/financeiro/components/__tests__/filter-bar.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/financeiro/components/__tests__/filter-bar.test.tsx"
 ```
 
 Expected: 11/11 PASS.
@@ -1348,7 +1348,7 @@ Expected: 11/11 PASS.
 - [ ] **3.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: exits 0.
@@ -1381,7 +1381,7 @@ EOF
 Create `apps/admin/app/(authed)/financeiro/components/__tests__/kpi-row.test.tsx`:
 
 ```tsx
-import type { AdminFinanceSummary } from '@jdm/shared/admin';
+import type { AdminFinanceSummary } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -1466,7 +1466,7 @@ describe('KpiRow — membership tiles (chunk 15)', () => {
 Create `apps/admin/app/(authed)/financeiro/components/__tests__/payment-mix.test.tsx`:
 
 ```tsx
-import type { AdminFinancePaymentMixItem } from '@jdm/shared/admin';
+import type { AdminFinancePaymentMixItem } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -1549,7 +1549,7 @@ describe('PaymentMix — F8 rows (chunk 15)', () => {
 - [ ] **4.3 — Run both test files, confirm failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/\(authed\)/financeiro/components/__tests__/kpi-row.test.tsx" \
   "app/\(authed\)/financeiro/components/__tests__/payment-mix.test.tsx"
 ```
@@ -1586,7 +1586,7 @@ No JSX changes needed.
 - [ ] **4.6 — Run both test files, confirm all PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/\(authed\)/financeiro/components/__tests__/kpi-row.test.tsx" \
   "app/\(authed\)/financeiro/components/__tests__/payment-mix.test.tsx"
 ```
@@ -1596,7 +1596,7 @@ Expected: 7/7 + 7/7 PASS.
 - [ ] **4.7 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: exits 0.
@@ -1631,7 +1631,7 @@ EOF
 Create `apps/admin/app/(authed)/financeiro/components/__tests__/trend-chart.test.tsx`:
 
 ```tsx
-import type { AdminFinanceTrendPoint } from '@jdm/shared/admin';
+import type { AdminFinanceTrendPoint } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -1722,7 +1722,7 @@ describe('TrendChart — membershipRevenueCents series (chunk 15)', () => {
 - [ ] **5.2 — Run, confirm failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/\(authed\)/financeiro/components/__tests__/trend-chart.test.tsx"
 ```
 
@@ -1742,7 +1742,7 @@ Apply all changes from §"Component final states" — `trend-chart.tsx`:
 - [ ] **5.4 — Run, confirm all 7 PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/\(authed\)/financeiro/components/__tests__/trend-chart.test.tsx"
 ```
 
@@ -1751,7 +1751,7 @@ Expected: 7/7 PASS.
 - [ ] **5.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: exits 0. If TypeScript complains about `membershipRevenueCents` not on `AdminFinanceTrendPoint`, F8.13 has not merged — STOP.
@@ -1777,7 +1777,7 @@ EOF
 - [ ] **6.1 — Run all four new test files in one command**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run \
+pnpm --filter @ccc/admin exec vitest run \
   "app/\(authed\)/financeiro/components/__tests__/filter-bar.test.tsx" \
   "app/\(authed\)/financeiro/components/__tests__/kpi-row.test.tsx" \
   "app/\(authed\)/financeiro/components/__tests__/payment-mix.test.tsx" \
@@ -1789,8 +1789,8 @@ Expected: 11 + 7 + 7 + 7 = 32 PASS.
 - [ ] **6.2 — Final typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/shared build
 ```
 
 Expected: both exit 0.
@@ -1798,7 +1798,7 @@ Expected: both exit 0.
 - [ ] **6.3 — Lint touched files (CLAUDE.md: touched-paths only)**
 
 ```bash
-pnpm --filter @jdm/admin lint -- \
+pnpm --filter @ccc/admin lint -- \
   "apps/admin/app/(authed)/financeiro/components/filter-bar.tsx" \
   "apps/admin/app/(authed)/financeiro/components/kpi-row.tsx" \
   "apps/admin/app/(authed)/financeiro/components/payment-mix.tsx" \
@@ -1831,8 +1831,8 @@ git push -u origin feat/jdma-f8-billing-15
 
 - [ ] Branch `feat/jdma-f8-billing-15` from fresh `main` (PF-1 + PF-2 verified).
 - [ ] All 32 tests PASS (11 filter-bar + 7 kpi-row + 7 payment-mix + 7 trend-chart).
-- [ ] `pnpm --filter @jdm/admin typecheck` clean.
-- [ ] `pnpm --filter @jdm/shared build` exits 0.
+- [ ] `pnpm --filter @ccc/admin typecheck` clean.
+- [ ] `pnpm --filter @ccc/shared build` exits 0.
 - [ ] Lint clean on touched files.
 - [ ] PR title: `feat(admin): membership filter/KPI/chart/mix UI (chunk 15)`.
 - [ ] PR target: `main`. No `production` touches.

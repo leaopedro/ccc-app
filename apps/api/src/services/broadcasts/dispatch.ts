@@ -1,8 +1,8 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   notificationDestinationSchema,
   type NotificationDestination,
-} from '@jdm/shared/notifications';
+} from '@ccc/shared/notifications';
 import { Prisma } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 

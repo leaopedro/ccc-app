@@ -1,5 +1,5 @@
 {
-  "name": "@jdm/db",
+  "name": "@ccc/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -31,7 +31,7 @@
     "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@types/node": "^22",
     "prisma": "^6.1.0",
     "tsx": "^4.19.0",

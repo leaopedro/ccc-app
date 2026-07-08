@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-import type { GeneralSettings } from '@jdm/shared/general-settings';
+import type { GeneralSettings } from '@ccc/shared/general-settings';
 import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';

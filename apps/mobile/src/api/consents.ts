@@ -6,7 +6,7 @@ import {
   type ConsentPurpose,
   type ConsentRecord,
   type GrantConsentBody,
-} from '@jdm/shared';
+} from '@ccc/shared';
 import { z } from 'zod';
 
 import { authedRequest } from './client';

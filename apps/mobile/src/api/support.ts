@@ -3,7 +3,7 @@ import {
   supportTicketSchema,
   type CreateSupportTicketBody,
   type SupportTicket,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import { z } from 'zod';
 
 import { authedRequest } from './client';

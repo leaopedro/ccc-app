@@ -12,7 +12,7 @@
 //   past_due                     → "Pagamento pendente"
 //   default / inactive           → "Inativo"
 
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';

@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type {
   Cart,
   CartItem,
@@ -7,7 +7,7 @@ import type {
   CartTotals,
   EvictedCartItem,
   FulfillmentMethod,
-} from '@jdm/shared/cart';
+} from '@ccc/shared/cart';
 import type { Prisma } from '@prisma/client';
 
 import { applyDevFee } from '../pricing/dev-fee.js';

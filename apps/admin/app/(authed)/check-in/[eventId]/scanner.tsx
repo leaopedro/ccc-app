@@ -1,7 +1,7 @@
 'use client';
 
-import type { CheckInExtraItem, StorePickupOrder } from '@jdm/shared/check-in';
-import { PremiumBadge } from '@jdm/ui/web';
+import type { CheckInExtraItem, StorePickupOrder } from '@ccc/shared/check-in';
+import { PremiumBadge } from '@ccc/ui/web';
 import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
 import React, { useEffect, useRef, useState } from 'react';
 

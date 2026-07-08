@@ -1,4 +1,4 @@
-const designPreset = require('@jdm/design/tailwind-preset');
+const designPreset = require('@ccc/design/tailwind-preset');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {

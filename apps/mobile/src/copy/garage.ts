@@ -2,7 +2,7 @@
 // migration to a shared locale package (CLAUDE.md mandates an i18n scaffold
 // from day one). Two-level shape so the eventual move is mechanical.
 
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 const ptBR = {
   garage: {

@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { BadgeCatalogEntry, GarageBadgeOwnerState } from '@jdm/shared/badges';
+import { prisma } from '@ccc/db';
+import type { BadgeCatalogEntry, GarageBadgeOwnerState } from '@ccc/shared/badges';
 import type { Garage } from '@prisma/client';
 
 import { computeIsPremiumActive } from './index.js';

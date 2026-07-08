@@ -1,4 +1,4 @@
-import { authResponseSchema } from '@jdm/shared/auth';
+import { authResponseSchema } from '@ccc/shared/auth';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 

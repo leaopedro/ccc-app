@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import type { ExpoConfig } from 'expo/config';
 
 type Variant = 'development' | 'preview' | 'production';

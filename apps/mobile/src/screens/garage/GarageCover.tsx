@@ -1,4 +1,4 @@
-import { GARAGE_COVER_PRESETS, resolveGarageCoverSlug } from '@jdm/shared/garage-covers';
+import { GARAGE_COVER_PRESETS, resolveGarageCoverSlug } from '@ccc/shared/garage-covers';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image, Text, View } from 'react-native';

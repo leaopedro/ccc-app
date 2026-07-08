@@ -1,12 +1,12 @@
-import { brand } from '@jdm/design';
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
+import { brand } from '@ccc/design';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import {
   GARAGE_COVER_PRESETS,
   resolveGarageCoverSlug,
   type GarageCoverPresetSlug,
-} from '@jdm/shared/garage-covers';
-import type { GaragePublicResponse } from '@jdm/shared/garage-public';
-import { BadgeRow, ProfileStatsWeb } from '@jdm/ui/web';
+} from '@ccc/shared/garage-covers';
+import type { GaragePublicResponse } from '@ccc/shared/garage-public';
+import { BadgeRow, ProfileStatsWeb } from '@ccc/ui/web';
 
 import { PremiumBadge } from '~/components/premium-badge';
 

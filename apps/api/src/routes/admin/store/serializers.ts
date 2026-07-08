@@ -5,7 +5,7 @@ import {
   type AdminStoreProductDetail,
   type AdminStoreProductPhoto,
   type AdminStoreVariant,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type {
   Product as DbProduct,
   ProductPhoto as DbProductPhoto,

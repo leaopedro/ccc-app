@@ -12,14 +12,14 @@
  *   §8.3 — status response shape (premiumStatusSchema)
  */
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRequestSchema,
   premiumCheckoutResponseSchema,
   premiumStatusSchema,
-} from '@jdm/shared/premium';
+} from '@ccc/shared/premium';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

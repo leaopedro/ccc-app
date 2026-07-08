@@ -1,5 +1,5 @@
-import type { CartItem, CartTotals } from '@jdm/shared/cart';
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { CartItem, CartTotals } from '@ccc/shared/cart';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { describe, expect, it } from 'vitest';
 
 import {

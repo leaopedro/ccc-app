@@ -149,7 +149,7 @@ Full file list with rationale lives in spec §6.3.
   - #360 (F): blank input guard, Int4 max cap, no-op audit-row skip, per-field capacity change detection (drop noisy audits).
 - **2026-05-21** — Merge sequence executed `#364 → #361 → #362 → #360 → #363`. Each rebased onto post-merge `main`; gates re-run; CI re-run; `gh pr merge --merge`. No actual conflicts (TASK-H's products.ts changes touched different lines than TASK-C's). Merged worktrees + local branches cleaned.
 - **2026-05-21** — TASK-E (sub-wave 3b) dispatched on fresh `feat/jdma-garage-task-e` worktree off `main`.
-- **2026-05-21** — TASK-E implementer DONE (~26 min, 6 commits). Threaded `isPremiumActive` through every car-bearing serializer (cars, feed, events confirmed-cars, tickets/check-in, admin moderation, scanner). New `PremiumBadge` in `@jdm/ui` + admin twin component. All gates green per implementer report.
+- **2026-05-21** — TASK-E implementer DONE (~26 min, 6 commits). Threaded `isPremiumActive` through every car-bearing serializer (cars, feed, events confirmed-cars, tickets/check-in, admin moderation, scanner). New `PremiumBadge` in `@ccc/ui` + admin twin component. All gates green per implementer report.
 - **2026-05-21** — TASK-E review round 1: spec reviewer flagged 1 "critical" claim — check-in uses `ticket.user.garage` instead of `ticket.car.user.garage`. **Pushback applied** (verified `validateTickets` line 64 forces `where: { id, userId }` on car → ticket holder owns the car; premium is owner-level, not car-level; admin scanner shows attendee premium status, which is correct). Reviewer-B (code quality): clean — no findings. PR #365 opened.
 - **2026-05-21** — PR #365 CI round 1 failed on `test/orders/car-plate.test.ts:443` (stale toEqual missing isPremiumActive on ticket.car). Fixed in `c41f692c`. CI round 2 green. PR #365 merged as `f5c7edb`.
 - **2026-05-21** — User-supplied post-merge finding: `GET /me/garage` loaded cars with only `{ photos: true }` → owner garage payload reported `isPremiumActive=true` but every `cars[].isPremiumActive` came back `false`, hiding the badge on the owner's own GarageListView. Verified by stashing the fix and confirming the new regression test fails. Fix on PR #366 added the same `user.garage { premiumTier, premiumUntil }` include used by GET /me/cars + GET /me/cars/:id, plus regression test. **Merged as `e1409489`.** **Garage per-user pivot feature SHIPPED.**
@@ -202,7 +202,7 @@ Operating rules that proved load-bearing this wave:
 
 - Caveman mode (full). PT-BR primary. Real Postgres tests via Testcontainers (no mocks).
 - Never run full pnpm test suite locally — touched files only; trust CI for the sweep.
-- Always rebuild `@jdm/shared` after schema or export changes — runtime resolves `dist/`.
-- Always regen prisma client (`pnpm --filter @jdm/db exec prisma generate`) after schema changes.
+- Always rebuild `@ccc/shared` after schema or export changes — runtime resolves `dist/`.
+- Always regen prisma client (`pnpm --filter @ccc/db exec prisma generate`) after schema changes.
 - Branch safety per CLAUDE.md. Never amend; always new commits. Don't push production. Never bypass hooks.
 - Hook blocks `git push` from main (incl. branch deletion) — work on feature branches; leave merged remote branches as archaeology.

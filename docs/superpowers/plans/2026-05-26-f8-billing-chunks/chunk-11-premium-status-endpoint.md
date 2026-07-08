@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Populate `packages/shared/src/premium.ts` with `premiumStatusSchema`, create `GET /api/me/premium/status` in `apps/api/src/routes/me-premium.ts`, and re-export from `@jdm/shared`.
+**Goal:** Populate `packages/shared/src/premium.ts` with `premiumStatusSchema`, create `GET /api/me/premium/status` in `apps/api/src/routes/me-premium.ts`, and re-export from `@ccc/shared`.
 
 **Architecture:** The endpoint queries the most-recent `PremiumMembership` row for the requesting user's garage, derives the `active` boolean, resolves `manageUrl` per provider, and falls back to the admin-grant snapshot on `Garage` when no membership row exists. All logic lives in the route handler (no separate service needed for this read-path). Feature flag gates the route per canon §F8.11 — disabled returns 503.
 
-**Tech Stack:** Fastify + Prisma, Zod in `@jdm/shared`, Vitest + Testcontainers Postgres (real DB via `makeApp` + `resetDatabase` helpers).
+**Tech Stack:** Fastify + Prisma, Zod in `@ccc/shared`, Vitest + Testcontainers Postgres (real DB via `makeApp` + `resetDatabase` helpers).
 
 ---
 
@@ -74,7 +74,7 @@ Expected: `PremiumMembership` appears in schema, `GROWTH_PREMIUM_BILLING_ENABLED
 
 ---
 
-## Task 1 — Populate `premiumStatusSchema` in `@jdm/shared`
+## Task 1 — Populate `premiumStatusSchema` in `@ccc/shared`
 
 **Files:**
 
@@ -87,7 +87,7 @@ Create `apps/api/test/billing/me-premium-status.test.ts` with just the schema-sh
 
 ```ts
 // apps/api/test/billing/me-premium-status.test.ts
-import { premiumStatusSchema } from '@jdm/shared';
+import { premiumStatusSchema } from '@ccc/shared';
 import { describe, expect, it } from 'vitest';
 
 describe('premiumStatusSchema shape', () => {
@@ -138,7 +138,7 @@ describe('premiumStatusSchema shape', () => {
 
 - [ ] **Step 2: Run and confirm FAIL**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts -t "premiumStatusSchema shape"`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts -t "premiumStatusSchema shape"`
 
 Expected: import error or zod validation failure — `premiumStatusSchema` not exported yet.
 
@@ -192,15 +192,15 @@ export type PremiumStatus = z.infer<typeof premiumStatusSchema>;
 
 Add `export * from './premium.js';` to the end of `packages/shared/src/index.ts`. Pattern matches all existing entries.
 
-- [ ] **Step 5: Build `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 5: Build `@ccc/shared` (canon §F8.13)**
 
-Run: `pnpm --filter @jdm/shared build`
+Run: `pnpm --filter @ccc/shared build`
 
 Expected: clean build, `dist/premium.js` + `dist/premium.d.ts` emitted.
 
 - [ ] **Step 6: Run schema shape tests — confirm PASS**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts -t "premiumStatusSchema shape"`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts -t "premiumStatusSchema shape"`
 
 Expected: 3 PASS.
 
@@ -226,8 +226,8 @@ Write the full test suite before writing the endpoint handler. All tests will fa
 Add the following `describe` block **after** the existing schema-shape describe block in `apps/api/test/billing/me-premium-status.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { premiumStatusSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { premiumStatusSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -442,7 +442,7 @@ describe('GET /api/me/premium/status', () => {
 
 - [ ] **Step 2: Run and confirm ALL endpoint tests FAIL**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts -t "GET /api/me/premium/status"`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts -t "GET /api/me/premium/status"`
 
 Expected: failures due to 404 (route not registered yet). The schema-shape tests from Task 1 still pass.
 
@@ -474,8 +474,8 @@ ls /Users/pedro/Projects/jdm-experience/apps/api/src/routes/me-premium.ts
 
 ```ts
 // apps/api/src/routes/me-premium.ts
-import { prisma } from '@jdm/db';
-import { premiumStatusSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { premiumStatusSchema } from '@ccc/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -641,7 +641,7 @@ await app.register(mePremiumRoutes, { env });
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 
 Expected: 0 errors. Common issues:
 
@@ -650,13 +650,13 @@ Expected: 0 errors. Common issues:
 
 - [ ] **Step 5: Run the endpoint integration tests**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts -t "GET /api/me/premium/status"`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts -t "GET /api/me/premium/status"`
 
 Expected: 8 tests PASS (7 scenarios + 1 unauthenticated).
 
 - [ ] **Step 6: Run all tests in the file (schema-shape + endpoint)**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts`
 
 Expected: 11 tests PASS (3 schema-shape + 8 endpoint).
 
@@ -706,7 +706,7 @@ describe('GET /api/me/premium/status — feature flag disabled', () => {
 
 - [ ] **Step 2: Run and confirm it FAILS (503 test fails because route currently ignores flag)**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts -t "feature flag disabled"`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts -t "feature flag disabled"`
 
 Expected: FAIL with status 200 instead of 503 (flag check not yet wired, or flag defaults to false but `makeApp` uses process.env which has no value set in the test runner).
 
@@ -718,7 +718,7 @@ Verify in `me-premium.ts` that the handler accesses `opts.env.GROWTH_PREMIUM_BIL
 
 - [ ] **Step 4: Run all tests in the file**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts`
 
 Expected: 12 tests PASS (3 schema-shape + 8 endpoint + 1 feature-flag).
 
@@ -731,23 +731,23 @@ git commit -m "test(api): add F8.11 feature-flag 503 test for premium status end
 
 ---
 
-## Task 5 — Rebuild `@jdm/shared` and full verification sweep (canon §F8.13)
+## Task 5 — Rebuild `@ccc/shared` and full verification sweep (canon §F8.13)
 
-- [ ] **Step 1: Rebuild `@jdm/shared`**
+- [ ] **Step 1: Rebuild `@ccc/shared`**
 
-Run: `pnpm --filter @jdm/shared build`
+Run: `pnpm --filter @ccc/shared build`
 
 Expected: clean build with no errors. `dist/premium.js` present.
 
-- [ ] **Step 2: Typecheck `@jdm/api`**
+- [ ] **Step 2: Typecheck `@ccc/api`**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 
 Expected: 0 errors.
 
 - [ ] **Step 3: Run the full test file**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts`
 
 Expected: 12 PASS.
 
@@ -783,9 +783,9 @@ gh pr create --base main \
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/shared build` (clean)
-- [ ] `pnpm --filter @jdm/api typecheck` (0 errors)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts` (12 pass: 3 schema-shape + 8 endpoint scenarios + 1 feature-flag)
+- [ ] `pnpm --filter @ccc/shared build` (clean)
+- [ ] `pnpm --filter @ccc/api typecheck` (0 errors)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts` (12 pass: 3 schema-shape + 8 endpoint scenarios + 1 feature-flag)
 - [ ] CI green
 
 ## Canon refs
@@ -812,7 +812,7 @@ EOF
 | ---------------------------------------------------------------- | ----------------------------------------- |
 | `premiumStatusSchema` exact shape from §8.3                      | Task 1                                    |
 | Re-export from `packages/shared/src/index.ts`                    | Task 1                                    |
-| Rebuild `@jdm/shared` (canon §F8.13)                             | Task 1 step 5 + Task 5 step 1             |
+| Rebuild `@ccc/shared` (canon §F8.13)                             | Task 1 step 5 + Task 5 step 1             |
 | `GET /api/me/premium/status`                                     | Task 3                                    |
 | Query: most-recent `PremiumMembership` row                       | Task 3 implementation                     |
 | `active = status IN ('active','past_due','cancel_scheduled')`    | Task 3 + test: past_due, cancel_scheduled |

@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 //
 // XPScoreboard tests. Component lives in `packages/ui/src/`; tests live
-// here because `@jdm/ui` has no test runner of its own. Mirrors
+// here because `@ccc/ui` has no test runner of its own. Mirrors
 // HexBadge.test.tsx / BadgeRow.test.tsx / BadgeDetail.test.tsx.
 //
 // react-native + react-native-svg + lucide-react-native are stubbed to inert
 // jsdom-friendly tags. The svg mock forwards `style` as
 // `data-style={JSON.stringify(style)}` so progress-bar specs can assert the
 // `width: "${pct}%"` inline style without a full RN renderer. The component
-// uses react-native-svg gradients (not expo-linear-gradient) so `@jdm/ui` has
+// uses react-native-svg gradients (not expo-linear-gradient) so `@ccc/ui` has
 // no extra runtime dep — canon §15.
 
 import { act } from 'react';
@@ -109,7 +109,7 @@ vi.mock('lucide-react-native', async () => {
       void strokeWidth;
       return ReactMod.createElement('i', { ref, 'data-icon': label, ...rest });
     });
-  // Mirrors the surface needed by `@jdm/ui` barrel imports (BadgeGlyph
+  // Mirrors the surface needed by `@ccc/ui` barrel imports (BadgeGlyph
   // ICON_MAP). Keep in sync with packages/ui/src/BadgeGlyph.tsx.
   return {
     Car: make('Car'),
@@ -178,14 +178,14 @@ describe('XPScoreboard', () => {
   };
 
   it('renders the XP number formatted pt-BR and the current rank pill', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={() => {}} />);
     expect(container.textContent ?? '').toContain('1.247');
     expect(container.textContent ?? '').toContain('Veterano');
   });
 
   it('renders the next-rank caption when not at the top tier', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={() => {}} />);
     expect(container.textContent ?? '').toContain('753');
     expect(container.textContent ?? '').toContain('Lendário');
@@ -193,14 +193,14 @@ describe('XPScoreboard', () => {
   });
 
   it('renders "Topo do ranking" caption when nextRank === null', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_TOP} onPressHint={() => {}} />);
     expect(container.textContent ?? '').toContain('Topo do ranking');
     expect(container.textContent ?? '').not.toContain(' → ');
   });
 
   it('progress bar width = round(xpInTier / tierSpan * 100) and clamps to 100 at top tier', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={() => {}} />);
     const midSvgs = Array.from(container.querySelectorAll('svg[data-style]'));
     const midFill = midSvgs
@@ -218,7 +218,7 @@ describe('XPScoreboard', () => {
 
   it('calls onPressHint when the `?` button is pressed', async () => {
     const fn = vi.fn();
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={fn} />);
     const btn = container.querySelector('button[data-testid="xp-scoreboard-hint"]');
     if (!(btn instanceof HTMLButtonElement)) throw new Error('hint button not rendered');
@@ -230,13 +230,13 @@ describe('XPScoreboard', () => {
   });
 
   it('does not crash when tierSpan === 1 and xpToNextRank === 0 (top-tier sentinel)', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_TOP} onPressHint={() => {}} />);
     expect(container.textContent ?? '').toContain('Hall of Fame');
   });
 
   it('applies textShadow* style props to the Anton 46px XP number', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={() => {}} />);
     const xpSpan = container.querySelector('span[aria-label="1.247 XP"]');
     if (!(xpSpan instanceof HTMLElement)) throw new Error('XP number text node not rendered');
@@ -248,7 +248,7 @@ describe('XPScoreboard', () => {
   });
 
   it('renders 11 ticker hatches with every 5th tall (8px) and others short (4px)', async () => {
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} onPressHint={() => {}} />);
     const allDivs = Array.from(container.querySelectorAll('div[data-style]'));
     const ticks = allDivs.filter((d) => {
@@ -267,7 +267,7 @@ describe('XPScoreboard', () => {
     // no `xp-scoreboard-hint` testID, the `?` glyph still renders, and the
     // wrapper carries the RN accessibility-hidden attributes so screen readers
     // do not announce a bare "?" with no associated action.
-    const { XPScoreboard } = await import('@jdm/ui');
+    const { XPScoreboard } = await import('@ccc/ui');
     await renderEl(<XPScoreboard progress={PROGRESS_MID} />);
     expect(container.textContent ?? '').toContain('?');
     expect(container.querySelector('button[data-testid="xp-scoreboard-hint"]')).toBeNull();

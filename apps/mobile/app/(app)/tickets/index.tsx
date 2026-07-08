@@ -1,4 +1,4 @@
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';

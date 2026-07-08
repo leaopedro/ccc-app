@@ -36,7 +36,7 @@ Important:
 Run from the repo root:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas whoami
+pnpm --filter @ccc/mobile exec eas whoami
 cat apps/mobile/eas.json
 ```
 
@@ -52,7 +52,7 @@ Sanity-check:
 Run the fastest build first:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile development --platform ios
+pnpm --filter @ccc/mobile exec eas build --profile development --platform ios
 ```
 
 What this proves:
@@ -77,7 +77,7 @@ get real Xcode / simulator logs instead of guessing from the remote summary.
 1. Regenerate the native iOS project for the correct variant:
 
 ```bash
-pnpm --filter @jdm/mobile run ios:preview:prebuild
+pnpm --filter @ccc/mobile run ios:preview:prebuild
 ```
 
 Important:
@@ -91,7 +91,7 @@ Important:
 2. Install CocoaPods before trusting any local Xcode result:
 
 ```bash
-pnpm --filter @jdm/mobile run ios:preview:pods
+pnpm --filter @ccc/mobile run ios:preview:pods
 ```
 
 Why:
@@ -104,7 +104,7 @@ Why:
 3. Compile the preview variant for the simulator:
 
 ```bash
-pnpm --filter @jdm/mobile run ios:preview:sim-build
+pnpm --filter @ccc/mobile run ios:preview:sim-build
 ```
 
 If you hit a Sentry failure here, you should see `An organization ID or slug is
@@ -121,7 +121,7 @@ What this proves:
 4. If compile succeeds, run the JS bundle in release-like mode:
 
 ```bash
-pnpm --filter @jdm/mobile run ios:preview:metro-localhost
+pnpm --filter @ccc/mobile run ios:preview:metro-localhost
 ```
 
 Then launch the preview dev client or simulator build against that bundle.
@@ -161,7 +161,7 @@ Concrete failure fingerprints already seen in this repo:
   the checked-in `expo-dev-launcher` `launchMode: 'launcher'` config and clean
   prebuild.
 - App reaches the bundle loader but red-screens on `http://192.168.x.x:8081/...bundle`:
-  rerun Metro with `pnpm --filter @jdm/mobile run ios:preview:metro-localhost`.
+  rerun Metro with `pnpm --filter @ccc/mobile run ios:preview:metro-localhost`.
 - Metro crashes with `RangeError: Invalid string length` from
   `metro-file-map/src/crawlers/node/index.js`:
   this repo previously watched the entire workspace root in
@@ -175,7 +175,7 @@ Concrete failure fingerprints already seen in this repo:
 Run the real preview build:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile preview --platform ios
+pnpm --filter @ccc/mobile exec eas build --profile preview --platform ios
 ```
 
 On the first run, accept the EAS prompts to:
@@ -205,7 +205,7 @@ Expected backend target:
 Run:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile preview --platform android
+pnpm --filter @ccc/mobile exec eas build --profile preview --platform android
 ```
 
 When it finishes:
@@ -270,13 +270,13 @@ Capture:
   `extra.eas.projectId` for the linked Expo project. Dynamic config will not be
   patched automatically by `eas build`.
 - Local preview repro still shows the dev app name or bundle id:
-  rerun `pnpm --filter @jdm/mobile run ios:preview:prebuild`; a stale `ios/`
+  rerun `pnpm --filter @ccc/mobile run ios:preview:prebuild`; a stale `ios/`
   directory can keep the wrong target.
 - Local `xcodebuild` fails on `Podfile.lock` or `[CP] Check Pods Manifest.lock`:
-  run `pnpm --filter @jdm/mobile run ios:preview:pods` first.
+  run `pnpm --filter @ccc/mobile run ios:preview:pods` first.
 - Local `xcodebuild` fails in `Bundle React Native code and images` with
   `An organization ID or slug is required`:
-  verify you are using `pnpm --filter @jdm/mobile run ios:preview:sim-build`
+  verify you are using `pnpm --filter @ccc/mobile run ios:preview:sim-build`
   (it now disables Sentry auto upload for local runs).
 - iPhone install fails after adding a new device:
   rebuild `preview` iOS so the new UDID is in the provisioning profile.

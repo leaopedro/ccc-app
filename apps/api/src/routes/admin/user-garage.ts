@@ -1,14 +1,14 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminGaragePatchSchema,
   adminGaragePremiumSchema,
   adminGarageReadSchema,
   adminGarageSpotRevokeBodySchema,
   adminGarageSummarySchema,
-} from '@jdm/shared/admin-garage';
-import { badgeCodeSchema } from '@jdm/shared/badges';
-import { GARAGE_RESERVED_SLUGS } from '@jdm/shared/garage';
+} from '@ccc/shared/admin-garage';
+import { badgeCodeSchema } from '@ccc/shared/badges';
+import { GARAGE_RESERVED_SLUGS } from '@ccc/shared/garage';
 import type { Garage, GarageSpot } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

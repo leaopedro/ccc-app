@@ -1,5 +1,5 @@
 {
-  "extends": "@jdm/tsconfig/react-native.json",
+  "extends": "@ccc/tsconfig/react-native.json",
   "compilerOptions": {
     "noEmit": true,
     "module": "ESNext",

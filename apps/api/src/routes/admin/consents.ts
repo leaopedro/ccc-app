@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminConsentListQuerySchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminConsentListQuerySchema } from '@ccc/shared';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

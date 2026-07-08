@@ -1,7 +1,7 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import type { StoreSettings } from '@jdm/shared/store';
+import { brand } from '@ccc/design';
+import type { StoreSettings } from '@ccc/shared/store';
 import { useState, useTransition } from 'react';
 
 import { updateAdminStoreSettingsAction } from '~/lib/store-settings-actions';

@@ -4,7 +4,7 @@ const { scrubSentryEvent } = vi.hoisted(() => ({
   scrubSentryEvent: vi.fn((e: unknown) => e),
 }));
 
-vi.mock('@jdm/shared/sentry-scrubber', () => ({ scrubSentryEvent }));
+vi.mock('@ccc/shared/sentry-scrubber', () => ({ scrubSentryEvent }));
 
 import { buildAdminSentryOptions } from '../sentry-config';
 

@@ -17,8 +17,8 @@ const hours = (n: number) => n * 3_600_000;
 
 const events = [
   {
-    slug: 'encontro-jdm-sp-2026-05',
-    title: 'Encontro JDM São Paulo: Maio',
+    slug: 'encontro-ccc-sp-2026-05',
+    title: 'Encontro CCC São Paulo: Maio',
     description: 'Domingo de exposição e rolê no autódromo. Traga seu carro e venha curtir.',
     startsAt: daysFromNow(14),
     endsAt: new Date(daysFromNow(14).getTime() + hours(8)),
@@ -50,8 +50,8 @@ const events = [
     tiers: [{ name: 'Piloto', priceCents: 35000, quantityTotal: 80, sortOrder: 0 }],
   },
   {
-    slug: 'encontro-jdm-rj-2026-03',
-    title: 'Encontro JDM Rio: Março (encerrado)',
+    slug: 'encontro-ccc-rj-2026-03',
+    title: 'Encontro CCC Rio: Março (encerrado)',
     description: 'Edição anterior.',
     startsAt: daysFromNow(-30),
     endsAt: new Date(daysFromNow(-30).getTime() + hours(6)),
@@ -84,9 +84,9 @@ const events = [
 const STORE_PRODUCT_TYPE_NAME = 'Vestuário e Acessórios';
 
 const STORE_COLLECTION = {
-  slug: 'colecao-jdm-2026',
-  name: 'Coleção JDM 2026',
-  description: 'Peças oficiais para os encontros JDM da temporada.',
+  slug: 'colecao-ccc-2026',
+  name: 'Coleção CCC 2026',
+  description: 'Peças oficiais para os encontros CCC da temporada.',
   sortOrder: 0,
 };
 
@@ -110,31 +110,31 @@ type SeedProduct = {
 
 const STORE_PRODUCTS: SeedProduct[] = [
   {
-    slug: 'camiseta-jdm-classic',
-    title: 'Camiseta JDM Classic',
+    slug: 'camiseta-ccc-classic',
+    title: 'Camiseta CCC Classic',
     description:
-      'Camiseta de algodão pesado com estampa JDM Classic nas costas. Caimento regular, gola reforçada.',
+      'Camiseta de algodão pesado com estampa CCC Classic nas costas. Caimento regular, gola reforçada.',
     basePriceCents: 12900,
     status: 'active',
     shippingFeeCents: null,
     variants: [
       {
         name: 'Tamanho P',
-        sku: 'JDM-TEE-CLS-P',
+        sku: 'CCC-TEE-CLS-P',
         priceCents: 12900,
         quantityTotal: 30,
         attributes: { size: 'P', color: 'Preto' },
       },
       {
         name: 'Tamanho M',
-        sku: 'JDM-TEE-CLS-M',
+        sku: 'CCC-TEE-CLS-M',
         priceCents: 12900,
         quantityTotal: 50,
         attributes: { size: 'M', color: 'Preto' },
       },
       {
         name: 'Tamanho G',
-        sku: 'JDM-TEE-CLS-G',
+        sku: 'CCC-TEE-CLS-G',
         priceCents: 12900,
         quantityTotal: 40,
         attributes: { size: 'G', color: 'Preto' },
@@ -142,8 +142,8 @@ const STORE_PRODUCTS: SeedProduct[] = [
     ],
   },
   {
-    slug: 'adesivo-jdm-logo',
-    title: 'Adesivo JDM Logo',
+    slug: 'adesivo-ccc-logo',
+    title: 'Adesivo CCC Logo',
     description: 'Adesivo recortado em vinil resistente, 12x6 cm. Aplicação interna ou externa.',
     basePriceCents: 1500,
     status: 'active',
@@ -151,7 +151,7 @@ const STORE_PRODUCTS: SeedProduct[] = [
     variants: [
       {
         name: 'Único',
-        sku: 'JDM-STK-LOGO',
+        sku: 'CCC-STK-LOGO',
         priceCents: 1500,
         quantityTotal: 200,
         attributes: { size: '12x6cm' },
@@ -258,7 +258,7 @@ const seedStore = async (): Promise<void> => {
       data: {
         defaultShippingFeeCents: 1990,
         lowStockThreshold: 5,
-        pickupDisplayLabel: 'Retirada nos encontros JDM',
+        pickupDisplayLabel: 'Retirada nos encontros CCC',
         supportPhone: '+5511999999999',
       },
     });
@@ -267,7 +267,7 @@ const seedStore = async (): Promise<void> => {
       data: {
         defaultShippingFeeCents: 1990,
         lowStockThreshold: 5,
-        pickupDisplayLabel: 'Retirada nos encontros JDM',
+        pickupDisplayLabel: 'Retirada nos encontros CCC',
         supportPhone: '+5511999999999',
       },
     });

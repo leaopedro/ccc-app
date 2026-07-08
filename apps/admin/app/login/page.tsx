@@ -1,6 +1,6 @@
 'use client';
 
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';

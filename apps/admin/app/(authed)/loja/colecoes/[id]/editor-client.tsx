@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminStoreCollectionDetail } from '@jdm/shared/admin';
+import type { AdminStoreCollectionDetail } from '@ccc/shared/admin';
 import { useActionState, useState, useTransition } from 'react';
 import { useFormStatus } from 'react-dom';
 

@@ -102,7 +102,7 @@ export const buildRevenueCatClient = (apiKey: string): RevenueCatClient => {
 };
 ```
 
-- [ ] **1.3:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS. This confirms the env addition compiles and the RC client types are sound.
+- [ ] **1.3:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS. This confirms the env addition compiles and the RC client types are sound.
 
 - [ ] **1.4:** Commit:
 
@@ -187,7 +187,7 @@ describe('StripeClient.retrieveSubscription', () => {
 });
 ```
 
-- [ ] **2.2:** Run `pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-subscription.test.ts`. Expected: FAIL — `client.retrieveSubscription is not a function` (method does not exist yet).
+- [ ] **2.2:** Run `pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-subscription.test.ts`. Expected: FAIL — `client.retrieveSubscription is not a function` (method does not exist yet).
 
 - [ ] **2.3:** Open `apps/api/src/services/stripe/index.ts`. Add to the `StripeClient` type (after `retrievePaymentIntent`):
 
@@ -205,9 +205,9 @@ Add the implementation at the end of the returned object in `buildStripe` (after
     },
 ```
 
-- [ ] **2.4:** Run `pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-subscription.test.ts`. Expected: PASS.
+- [ ] **2.4:** Run `pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-subscription.test.ts`. Expected: PASS.
 
-- [ ] **2.5:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS.
+- [ ] **2.5:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS.
 
 - [ ] **2.6:** Commit:
 
@@ -225,7 +225,7 @@ git commit -m "feat(api): add retrieveSubscription to StripeClient (chunk F8.12)
 - [ ] **3.1:** Create `apps/api/src/workers/billing-reconcile.ts` with a stub body:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
@@ -273,7 +273,7 @@ export const startReconcileWorker = (deps: {
 };
 ```
 
-- [ ] **3.2:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS.
+- [ ] **3.2:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS.
 
 - [ ] **3.3:** Commit:
 
@@ -296,7 +296,7 @@ The test file follows the same helper pattern as existing API integration tests:
 
 ```ts
 import { describe, it, expect, vi, beforeEach, afterAll, afterEach } from 'vitest';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { runReconcileTick, type ReconcileTickDeps } from './billing-reconcile.js';
 import { resetDatabase } from '../../test/helpers.js';
@@ -637,7 +637,7 @@ describe('runReconcileTick', () => {
 
 Note: the `flagEnabled` field on `ReconcileTickDeps` is not yet in the scaffold — it will be added with the implementation in Task 5.
 
-- [ ] **4.2:** Run `pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts`. Expected: all 6 tests FAIL with `Error: not implemented`. This confirms the test harness boots and the stubs are reached.
+- [ ] **4.2:** Run `pnpm --filter @ccc/api exec vitest run src/workers/billing-reconcile.test.ts`. Expected: all 6 tests FAIL with `Error: not implemented`. This confirms the test harness boots and the stubs are reached.
 
 - [ ] **4.3:** Commit:
 
@@ -670,7 +670,7 @@ export type ReconcileTickDeps = {
 - [ ] **5.2:** Replace the `runReconcileTick` stub with the full implementation. The full file after this step:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { PremiumMembership } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
@@ -923,9 +923,9 @@ export const startReconcileWorker = (deps: {
 };
 ```
 
-- [ ] **5.3:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS. Fix any type errors before proceeding.
+- [ ] **5.3:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS. Fix any type errors before proceeding.
 
-- [ ] **5.4:** Run `pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts`. Expected: all 6 tests PASS.
+- [ ] **5.4:** Run `pnpm --filter @ccc/api exec vitest run src/workers/billing-reconcile.test.ts`. Expected: all 6 tests PASS.
 
 If Test 2 or Test 4 fail because `applyMembershipEvent` expects a specific invoice shape (e.g., rejects `reconcile:` prefixed refs), add a `skipInvoiceInsert: true` flag to the event or handle `P2002` on the invoice insert gracefully inside `applyMembershipEvent`. The reconcile path must be idempotent across ticks — `reconcile:sub_x:timestamp` as `providerInvoiceRef` achieves this if the F8.03 invoice insert catches P2002 silently (same as the webhook idempotency model §F8.15).
 
@@ -973,7 +973,7 @@ if (env.GROWTH_PREMIUM_BILLING_ENABLED) {
 }
 ```
 
-- [ ] **6.3:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS.
+- [ ] **6.3:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS.
 
 - [ ] **6.4:** Commit:
 
@@ -986,17 +986,17 @@ git commit -m "feat(api): register billing-reconcile cron worker in app.ts (chun
 
 ## Task 7 — Final verification + branch hygiene
 
-- [ ] **7.1:** Run `pnpm --filter @jdm/api typecheck`. Expected: PASS.
+- [ ] **7.1:** Run `pnpm --filter @ccc/api typecheck`. Expected: PASS.
 
 - [ ] **7.2:** Run the full chunk test suite:
 
 ```
-pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts test/billing/stripe-retrieve-subscription.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/billing-reconcile.test.ts test/billing/stripe-retrieve-subscription.test.ts
 ```
 
 Expected: 7 tests PASS (6 reconcile + 1 Stripe retrieve).
 
-- [ ] **7.3:** Run `pnpm --filter @jdm/api exec eslint src/workers/billing-reconcile.ts src/services/revenuecat/client.ts src/services/stripe/index.ts`. Expected: PASS.
+- [ ] **7.3:** Run `pnpm --filter @ccc/api exec eslint src/workers/billing-reconcile.ts src/services/revenuecat/client.ts src/services/stripe/index.ts`. Expected: PASS.
 
 - [ ] **7.4:** `git status` — confirm only these files modified/created:
   - `apps/api/src/env.ts`
@@ -1034,7 +1034,7 @@ Expected: 7 tests PASS (6 reconcile + 1 Stripe retrieve).
 
 - [x] `billing-reconcile.test.ts` (6 tests) — Testcontainers Postgres + mocked Stripe + mocked RC: no-op when no stale rows; Stripe drift recovery (missed renewal); Stripe expiry (sub canceled); RC drift recovery; alert on queue depth threshold; flag-disabled no-op.
 - [x] `stripe-retrieve-subscription.test.ts` (1 test) — Stripe SDK mock; method resolves with id, status, current_period_end.
-- [x] `pnpm --filter @jdm/api typecheck` green.
+- [x] `pnpm --filter @ccc/api typecheck` green.
 - [x] No full-suite local run (per `feedback_no_full_test_suite_locally.md`).
 
 ### Canon conformance
@@ -1044,7 +1044,7 @@ Expected: 7 tests PASS (6 reconcile + 1 Stripe retrieve).
 | §F8.4 — activation tx atomicity | `applyMembershipEvent(tx, evt)` inside `prisma.$transaction`                                 |
 | §F8.11 — feature flag           | `flagEnabled` field on `ReconcileTickDeps`; `app.ts` checks `GROWTH_PREMIUM_BILLING_ENABLED` |
 | §F8.3 — max() snapshot rule     | Delegated to `applyMembershipEvent`; reconcile does not touch `Garage` directly              |
-| §F8.12 — filtered test cmd      | `pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts`               |
+| §F8.12 — filtered test cmd      | `pnpm --filter @ccc/api exec vitest run src/workers/billing-reconcile.test.ts`               |
 
 ### Deviations from skeleton
 

@@ -6,7 +6,7 @@
 
 **Architecture:** No new files in `src/`. The awarder splice is a 3-line addition inside the already-existing `prisma.$transaction` callback in `check-in.ts`. Per canon §5, `awardXp` silently no-ops on killswitch off and P2002 duplicates (returns `{ awarded: false, reason }`) but rethrows any other error. The call site does NOT wrap `awardXp` in a `try/catch` — unexpected errors must propagate so the parent transaction rolls back atomically with the ticket flip. This differs from the Phase 1 `awardBadge` swallow pattern: badges can fail open (the scan still admits), but XP atomicity is load-bearing for the same-tx contract in §288, so a thrown awarder error MUST abort the parent.
 
-**Tech Stack:** Fastify + Prisma 5 + Postgres 16. Vitest + testcontainers-Postgres (per `apps/api/test/global-setup.ts`). pnpm workspaces (`@jdm/api`, `@jdm/db`).
+**Tech Stack:** Fastify + Prisma 5 + Postgres 16. Vitest + testcontainers-Postgres (per `apps/api/test/global-setup.ts`). pnpm workspaces (`@ccc/api`, `@ccc/db`).
 
 ---
 
@@ -142,8 +142,8 @@ Every test that asserts the hook fired also spies on the awarder module so the t
 Mirror `apps/api/test/garage/badges-write-hooks.test.ts` lines 113–150 for setup (event + tier + ticket + `signTicketCode` + `checkInTicket`). The `seedTicket` helper from `apps/api/test/tickets/check-in.test.ts` lines 17–57 is reusable inline.
 
 ```ts
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -391,7 +391,7 @@ Engineer notes:
 - [ ] **Step 1.2: Run the tests to verify they fail**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-event-checkin.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-event-checkin.test.ts
 ```
 
 Expected before the splice lands (i.e., chunk 27 merged but the import + call in `check-in.ts` not yet added):
@@ -449,7 +449,7 @@ Idempotency triple: `(garage.id, 'event_checkin', 'event:<eventId>')` per §441.
 - [ ] **Step 2.3: Run the targeted tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-event-checkin.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-event-checkin.test.ts
 ```
 
 Expected: all five PASS.
@@ -457,7 +457,7 @@ Expected: all five PASS.
 - [ ] **Step 2.4: Run typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors. The new import resolves because chunk 27 already exports `awardXp` from `apps/api/src/services/garage/xp-awarder.ts`.
@@ -465,8 +465,8 @@ Expected: no errors. The new import resolves because chunk 27 already exports `a
 - [ ] **Step 2.5: Re-run the Phase 1 badge regression + check-in route tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts
-pnpm --filter @jdm/api exec vitest run test/tickets/check-in.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts
+pnpm --filter @ccc/api exec vitest run test/tickets/check-in.test.ts
 ```
 
 Expected: the existing "check-in awards EVT-001 + JDM-001 + JDM-002 in the same tx" test (lines 113–150 of `badges-write-hooks.test.ts`) still passes. The XP splice MUST NOT regress the badge loop. The check-in route tests still pass with the new throw-on-awarder-failure semantics — no existing test forces an awarder failure path.
@@ -497,11 +497,11 @@ contract), §11 (test filename)."
 ```bash
 # Touched-paths only per CLAUDE.md "never run full test suite locally".
 # Canon §10: package-root-relative paths via `exec vitest run`.
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/garage/xp-event-checkin.test.ts
-pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts
-pnpm --filter @jdm/api exec vitest run test/tickets/check-in.test.ts
-pnpm --filter @jdm/api exec eslint src/services/tickets/check-in.ts test/garage/xp-event-checkin.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/garage/xp-event-checkin.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts
+pnpm --filter @ccc/api exec vitest run test/tickets/check-in.test.ts
+pnpm --filter @ccc/api exec eslint src/services/tickets/check-in.ts test/garage/xp-event-checkin.test.ts
 ```
 
 Trust main CI + PR CI for the full sweep.
@@ -551,7 +551,7 @@ loop and the ticket status update.
 - [x] Parent tx rollback via real `checkInTicket` path: awardXp writes inside tx then we throw — row is gone
 - [x] Phase 1 `badges-write-hooks` "check-in awards EVT-001 + JDM-001 + JDM-002" regression still passes
 - [x] Existing `check-in.test.ts` route suite still passes
-- [x] `pnpm --filter @jdm/api typecheck` clean
+- [x] `pnpm --filter @ccc/api typecheck` clean
 
 ## Reviewer checklist
 

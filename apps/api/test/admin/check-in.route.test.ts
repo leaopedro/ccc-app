@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 

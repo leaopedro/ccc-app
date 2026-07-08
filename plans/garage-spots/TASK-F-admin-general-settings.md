@@ -156,11 +156,11 @@ export const serializeAdminGeneralSettings = (s: DbGeneralSettings) => ({
 Full replacement of the file's body (keep imports, add the reconcile import + Prisma transaction usage):
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   GENERAL_SETTINGS_SINGLETON_ID,
   generalSettingsUpdateSchema,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -632,17 +632,17 @@ No new tests required — `apps/admin` runs `vitest run --passWithNoTests` and t
 
 ### Commands
 
-- `pnpm --filter @jdm/shared test` — schema unit tests.
-- `pnpm --filter @jdm/api test test/admin/general-settings.test.ts` — route integration tests, zero mocks (Postgres via `apps/api/test/global-setup.ts`).
-- `pnpm --filter @jdm/api test test/admin/general-settings-fanout.test.ts` — fanout unit tests with mocked reconcile.
-- `pnpm --filter @jdm/shared build && pnpm --filter @jdm/api typecheck && pnpm --filter @jdm/admin typecheck` — after schema changes, rebuild shared so dist is fresh (see project rule).
-- `pnpm --filter @jdm/admin lint && pnpm --filter @jdm/admin typecheck` — admin form changes.
+- `pnpm --filter @ccc/shared test` — schema unit tests.
+- `pnpm --filter @ccc/api test test/admin/general-settings.test.ts` — route integration tests, zero mocks (Postgres via `apps/api/test/global-setup.ts`).
+- `pnpm --filter @ccc/api test test/admin/general-settings-fanout.test.ts` — fanout unit tests with mocked reconcile.
+- `pnpm --filter @ccc/shared build && pnpm --filter @ccc/api typecheck && pnpm --filter @ccc/admin typecheck` — after schema changes, rebuild shared so dist is fresh (see project rule).
+- `pnpm --filter @ccc/admin lint && pnpm --filter @ccc/admin typecheck` — admin form changes.
 
 ---
 
 ## Bite-sized task breakdown
 
-### Task F1: Extend Zod schemas in @jdm/shared
+### Task F1: Extend Zod schemas in @ccc/shared
 
 **Files:**
 
@@ -666,7 +666,7 @@ Append a new `describe('generalSettingsUpdateSchema — defaultFreeGarageSpots',
 - [ ] **Step 3: Run tests to verify failure**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: FAIL — `defaultFreeGarageSpots` is not yet recognised.
@@ -678,11 +678,11 @@ Add `defaultFreeGarageSpotsSchema` helper, update `generalSettingsSchema`, and r
 - [ ] **Step 5: Run tests and the build**
 
 ```bash
-pnpm --filter @jdm/shared test
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared test
+pnpm --filter @ccc/shared build
 ```
 
-Expected: tests PASS, build succeeds (per project rule "rebuild @jdm/shared after schema changes").
+Expected: tests PASS, build succeeds (per project rule "rebuild @ccc/shared after schema changes").
 
 - [ ] **Step 6: Commit**
 
@@ -719,7 +719,7 @@ Edit `serializeAdminGeneralSettings` to include `defaultFreeGarageSpots: s.defau
 - [ ] **Step 3: Verify the API typechecks**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: PASS (requires TASK-A column in generated client, verified in step 1).
@@ -731,8 +731,8 @@ Apply the full replacement of `apps/api/src/routes/admin/general-settings.ts` pe
 - [ ] **Step 5: Typecheck and lint**
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api lint
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api lint
 ```
 
 Expected: PASS.
@@ -781,8 +781,8 @@ Then add every case from the "Route-unit fanout tests" subsection.
 - [ ] **Step 3: Run both files**
 
 ```bash
-pnpm --filter @jdm/api test test/admin/general-settings.test.ts
-pnpm --filter @jdm/api test test/admin/general-settings-fanout.test.ts
+pnpm --filter @ccc/api test test/admin/general-settings.test.ts
+pnpm --filter @ccc/api test test/admin/general-settings-fanout.test.ts
 ```
 
 Expected: all new cases PASS, existing cases stay PASS.
@@ -813,8 +813,8 @@ Restructure local state to the `FormState` shape, add the two helpers, render th
 - [ ] **Step 3: Typecheck and lint**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/admin lint
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/admin lint
 ```
 
 Expected: PASS.
@@ -822,7 +822,7 @@ Expected: PASS.
 - [ ] **Step 4: Smoke run locally (optional but recommended)**
 
 ```bash
-pnpm --filter @jdm/admin dev
+pnpm --filter @ccc/admin dev
 ```
 
 Open `http://localhost:3000/configuracoes`. Verify:
@@ -882,7 +882,7 @@ Per `CLAUDE.md` git flow.
 - [ ] `reconcileGarageSpots(userId)` call (no second argument) consistent across handler, tests, and plan prose. Matches TASK-B declared signature.
 - [ ] Audit metadata shape consistent between handler code, plan section "AdminAudit entry", and test assertions.
 - [ ] `defaultFreeGarageSpots: null` is preserved through GET → Zod parse → form state → form submit → PUT body → Zod parse → DB write — round-trip drawn out in test cases.
-- [ ] `pnpm --filter @jdm/shared build` re-run after schema edits (per memory rule "Rebuild @jdm/shared after schema changes").
+- [ ] `pnpm --filter @ccc/shared build` re-run after schema edits (per memory rule "Rebuild @ccc/shared after schema changes").
 - [ ] Branch is feature/\* off main, never off production.
 - [ ] `apps/api/test/admin/general-settings.test.ts` has zero `vi.mock` calls after edits.
 - [ ] `apps/api/test/admin/general-settings-fanout.test.ts` has `reconcileMock.mockClear()` in `beforeEach`.

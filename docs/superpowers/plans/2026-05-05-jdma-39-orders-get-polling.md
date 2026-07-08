@@ -6,7 +6,7 @@
 
 **Architecture:** The route already lives at `apps/api/src/routes/orders.ts` and uses `expireSingleOrder` for lazy-expiry. We extend its response shape (add `provider`, `ticketId?`), differentiate 403 (non-owner) vs 404 (missing), add a per-user rate limit scoped to order polling, and emit a `Cache-Control: no-store` header so intermediaries don't cache pending→paid transitions. We also add an integration test that drives a pending → paid transition through the existing Stripe webhook handler and asserts the next poll returns `paid` with the issued `ticketId`.
 
-**Tech Stack:** Fastify, Prisma, Zod (`@jdm/shared/orders`), `@fastify/rate-limit`, Vitest + real Postgres.
+**Tech Stack:** Fastify, Prisma, Zod (`@ccc/shared/orders`), `@fastify/rate-limit`, Vitest + real Postgres.
 
 ---
 
@@ -73,7 +73,7 @@ export type GetOrderResponse = z.infer<typeof getOrderResponseSchema>;
 
 - [ ] **Step 3: Typecheck shared**
 
-Run from repo root: `pnpm --filter @jdm/shared typecheck`
+Run from repo root: `pnpm --filter @ccc/shared typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 4: Commit**
@@ -186,7 +186,7 @@ Delete the old `ExpiredOrderResult` type (lines 72-85 in the original).
 
 - [ ] **Step 3: Typecheck API to surface call-site breaks**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: errors only at the call site in `apps/api/src/routes/orders.ts` (Task 3 fixes it). If errors appear elsewhere, audit and fix in this task.
 
 - [ ] **Step 4: Commit (deferred — bundle with Task 3 since signature change has no standalone caller). Skip commit; proceed to Task 3.**
@@ -257,7 +257,7 @@ app.get('/orders/:id', { preHandler: [app.authenticate] }, async (request, reply
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 3: Commit (still defer — Task 5 brings tests; we want one logical commit per AGENTS.md "logical commits"). Continue.**
@@ -302,7 +302,7 @@ Expected: a version line (it's already used by auth routes).
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 4: Commit**
@@ -559,8 +559,8 @@ gh pr create --title "feat(api): JDMA-39 GET /orders/:id polling" --body "$(cat 
 - Roadmap §F4b 4.11 ticked to in-progress.
 
 ## Test plan
-- [x] `pnpm --filter @jdm/api test`
-- [x] `pnpm --filter @jdm/api typecheck`
+- [x] `pnpm --filter @ccc/api test`
+- [x] `pnpm --filter @ccc/api typecheck`
 - [x] New: pending→paid via Stripe webhook returns ticketId.
 - [x] New: 65th poll/min returns 429.
 

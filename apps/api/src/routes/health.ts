@@ -1,4 +1,4 @@
-import { healthResponseSchema } from '@jdm/shared/health';
+import { healthResponseSchema } from '@ccc/shared/health';
 import type { FastifyPluginAsync } from 'fastify';
 
 // eslint-disable-next-line @typescript-eslint/require-await

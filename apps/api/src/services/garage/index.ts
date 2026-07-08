@@ -1,6 +1,6 @@
-import { prisma } from '@jdm/db';
-import type { GarageBadgeOwnerState, GarageBadgePublic } from '@jdm/shared/badges';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import type { GarageBadgeOwnerState, GarageBadgePublic } from '@ccc/shared/badges';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { Garage, GarageSpotSource, Prisma } from '@prisma/client';
 
 // Inline the general-settings upsert here so we can run it inside the same

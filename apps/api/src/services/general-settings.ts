@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   type CapacityDisplayPolicy,
   defaultCapacityDisplayPolicy,
   GENERAL_SETTINGS_SINGLETON_ID,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 

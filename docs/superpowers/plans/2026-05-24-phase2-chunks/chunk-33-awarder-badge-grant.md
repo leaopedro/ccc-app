@@ -6,7 +6,7 @@
 
 **Architecture:** Single splice inside `apps/api/src/services/garage/awarder.ts` — append one `awardXp(...)` call after the `tx.garageBadge.create({ ... })` succeeds and the `recordAudit(...)` runs, **before** the optional Notification block. The rarity → delta switch lives inside `xp-awarder.ts` (chunk 27), not inside `awardBadge`. The XP call must NOT fire on the P2002 re-grant path (idempotency stays upstream at the `GarageBadge` unique). Per canon §5: `awardXp` silently no-ops on killswitch-off + P2002 (returns `{ awarded: false, ... }`); any other error RETHROWS so the parent tx rolls back the badge insert + audit row together. Callers MUST NOT wrap `awardXp` in their own try/catch inside the parent tx.
 
-**Tech Stack:** Fastify + Prisma (`@prisma/client`), TypeScript end-to-end, vitest with Testcontainers-Postgres (real DB per CLAUDE.md "Integration tests for the API must hit a real Postgres"). Workspace: `@jdm/api`.
+**Tech Stack:** Fastify + Prisma (`@prisma/client`), TypeScript end-to-end, vitest with Testcontainers-Postgres (real DB per CLAUDE.md "Integration tests for the API must hit a real Postgres"). Workspace: `@ccc/api`.
 
 ---
 
@@ -123,7 +123,7 @@ No new exports from `awarder.ts`. No shared-package changes. No prisma changes. 
 
 Test-design notes:
 
-- Follow `apps/api/test/garage/awarder.test.ts` style: `prisma` from `@jdm/db`, `makeApp` + `resetDatabase` from `./helpers.js`, seed via `prisma.badge.create`, call `awardBadge` inside `prisma.$transaction((tx) => ...)`.
+- Follow `apps/api/test/garage/awarder.test.ts` style: `prisma` from `@ccc/db`, `makeApp` + `resetDatabase` from `./helpers.js`, seed via `prisma.badge.create`, call `awardBadge` inside `prisma.$transaction((tx) => ...)`.
 - One rarity per happy-path test so failures point at the exact bucket.
 - Killswitch test asserts both upstream short-circuit AND absence of an `XpEvent` row.
 - Re-grant test: second call returns `already_earned`, XpEvent count stays at 1.
@@ -134,7 +134,7 @@ Test-design notes:
 - [ ] **Step 1.1 — Create the test file skeleton**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -360,7 +360,7 @@ Pins outline §456 invariant #3: the XP write lives in the same tx so the audit 
 Run only this file:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-badge-award.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-badge-award.test.ts
 ```
 
 Expected: all 7 tests FAIL. The most common failure modes will be:
@@ -440,7 +440,7 @@ Notes:
 - [ ] **Step 2.3 — Run the test file to confirm GREEN**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-badge-award.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-badge-award.test.ts
 ```
 
 Expected: 7 PASS. Failure modes:
@@ -451,8 +451,8 @@ Expected: 7 PASS. Failure modes:
 - [ ] **Step 2.4 — Targeted typecheck + no-regression on existing tests**
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/garage/awarder.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/garage/awarder.test.ts
 ```
 
 Expected: zero typecheck errors; all existing `awardBadge — core service` tests still pass. If typecheck flags drift, the chunk-27 signature changed — revisit the dependency guard. If `awarder.test.ts` fails due to leftover XpEvent rows, audit `resetDatabase()` (chunk 23 should truncate `XpEvent` — file a chunk-23 bug if not, do not patch helpers here).
@@ -479,9 +479,9 @@ Closes JDMA Phase 2 chunk 33."
 - [ ] **Step 3.1 — Touched-paths sweep** (per CLAUDE.md memory "touched files only; trust CI"):
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-badge-award.test.ts test/garage/awarder.test.ts
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec eslint src/services/garage/awarder.ts test/garage/xp-badge-award.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-badge-award.test.ts test/garage/awarder.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec eslint src/services/garage/awarder.ts test/garage/xp-badge-award.test.ts
 ```
 
 Expected: all green. With the try/catch + `console.warn` removed, there is no `no-console` risk and no need for an eslint-disable comment.
@@ -504,8 +504,8 @@ Any case that does not trace cleanly → re-read the diff and reconcile.
 Branch: `feat/jdma-garage-phase2-33` from fresh `main`.
 
 - [ ] CLAUDE.md preflight (`git branch --show-current` is not `production`).
-- [ ] `pnpm --filter @jdm/api typecheck` clean.
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/xp-badge-award.test.ts test/garage/awarder.test.ts` green.
+- [ ] `pnpm --filter @ccc/api typecheck` clean.
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/xp-badge-award.test.ts test/garage/awarder.test.ts` green.
 - [ ] Only `apps/api/src/services/garage/awarder.ts` + the new test file modified. No prisma / xp-awarder / route changes.
 - [ ] No new exports from `awarder.ts`.
 - [ ] PR description references skeleton §329–334 + outline §437 + locked-invariant #8 + chunk-27 runtime dependency.

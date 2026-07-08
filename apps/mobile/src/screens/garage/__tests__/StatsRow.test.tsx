@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // StatsRow tests. The component lives in `packages/ui/src/StatsRow.tsx`, but
-// tests live here so the mobile workspace's vitest picks them up — `@jdm/ui`
+// tests live here so the mobile workspace's vitest picks them up — `@ccc/ui`
 // has no test runner of its own (verified via packages/ui/package.json).
 // Same mocking pattern as BadgeRow.test.tsx.
 
@@ -14,7 +14,7 @@ declare global {
 }
 
 // Mirror the Phase 1 reference `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx`
-// RN mock block verbatim. Importing `@jdm/ui` also pulls in components that
+// RN mock block verbatim. Importing `@ccc/ui` also pulls in components that
 // touch `ActivityIndicator`, `Image`, `Modal`, and `ScrollView` (BadgesSheet
 // et al), so we MUST mock them here or the import-time evaluation crashes
 // before any StatsRow assertion fires.
@@ -68,9 +68,9 @@ vi.mock('react-native', async () => {
   };
 });
 
-// `@jdm/ui` re-exports components that pull `react-native-svg` (HexBadge,
+// `@ccc/ui` re-exports components that pull `react-native-svg` (HexBadge,
 // BadgesSheet). The Phase 1 reference test mocks the same surface; copy it
-// verbatim so importing `@jdm/ui` does not blow up at module-eval time.
+// verbatim so importing `@ccc/ui` does not blow up at module-eval time.
 vi.mock('react-native-svg', async () => {
   const ReactMod = await import('react');
   const make = (tag: string) =>
@@ -126,23 +126,23 @@ vi.mock('lucide-react-native', async () => {
 
 describe('formatJoinedAt', () => {
   it('formats a UTC ISO date to "<mês>. <YY>" PT-BR style', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('2026-02-14T00:00:00Z')).toBe('fev. 26');
   });
 
   it('always uses PT-BR regardless of host locale (no en-US fallback)', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     // March → "mar." in pt-BR; "Mar" in en-US. Assert PT-BR shape.
     expect(formatJoinedAt('2025-03-01T12:00:00Z')).toBe('mar. 25');
   });
 
   it('uses UTC so a midnight-UTC ISO never shifts month for east-of-UTC hosts', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('2026-02-01T00:00:00Z')).toBe('fev. 26');
   });
 
   it('returns "" for invalid input', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('not-a-date')).toBe('');
   });
 });
@@ -190,7 +190,7 @@ describe('StatsRow', () => {
   };
 
   it('renders 4 tiles in order: Eventos, Posts, Curtidas, Desde', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     const labels = Array.from(container.querySelectorAll('span'))
       .map((s) => s.textContent ?? '')
@@ -199,7 +199,7 @@ describe('StatsRow', () => {
   });
 
   it('renders zero values as "0" (never blank, never "undefined")', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_ZERO} />);
     const text = container.textContent ?? '';
     expect(text).not.toContain('undefined');
@@ -211,7 +211,7 @@ describe('StatsRow', () => {
   });
 
   it('renders numeric values raw with no thousand-separator (PT-BR `.` not inserted)', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(
       <StatsRow stats={{ ...STATS_NONZERO, events: 1234, posts: 5678, likesReceived: 9012 }} />,
     );
@@ -224,19 +224,19 @@ describe('StatsRow', () => {
   });
 
   it('formats joinedAt to "fev. 26" PT-BR abbreviated month', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     expect(container.textContent ?? '').toContain('fev. 26');
   });
 
   it('uses PT-BR locale on the date tile (never en-US "Feb")', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     expect(container.textContent ?? '').not.toMatch(/Feb\b/);
   });
 
   it('renders one icon per tile (flag, post, fire, pin via BadgeGlyph)', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     const icons = Array.from(container.querySelectorAll('i[data-icon]')).map((n) =>
       n.getAttribute('data-icon'),
@@ -246,7 +246,7 @@ describe('StatsRow', () => {
   });
 
   it('forwards testID to the outer container', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} testID="garage-stats-row" />);
     expect(container.querySelector('[data-testid="garage-stats-row"]')).not.toBeNull();
   });

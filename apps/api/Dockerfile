@@ -18,10 +18,10 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM deps AS build
 COPY . .
-RUN pnpm --filter @jdm/db db:generate
-RUN pnpm --filter @jdm/db build
-RUN pnpm --filter @jdm/shared build
-RUN pnpm --filter @jdm/api build
+RUN pnpm --filter @ccc/db db:generate
+RUN pnpm --filter @ccc/db build
+RUN pnpm --filter @ccc/shared build
+RUN pnpm --filter @ccc/api build
 
 FROM base AS runner
 ENV NODE_ENV=production

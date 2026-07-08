@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminEventRow } from '@jdm/shared/admin';
+import type { AdminEventRow } from '@ccc/shared/admin';
 import { useRouter } from 'next/navigation';
 import {
   useCallback,

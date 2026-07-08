@@ -1,6 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
-import type { UserRoleName } from '@jdm/shared/auth';
+import type { UserRoleName } from '@ccc/shared/auth';
 import jwt from 'jsonwebtoken';
 
 type TokenEnv = {

@@ -7,7 +7,7 @@
 // react-native + Modal/Image are stubbed to plain HTML tags so jsdom can
 // render them; api + upload-image modules are mocked per-test.
 
-import type { GarageOwner } from '@jdm/shared/garage';
+import type { GarageOwner } from '@ccc/shared/garage';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,7 +97,7 @@ vi.mock('react-native', async () => {
   };
 });
 
-// `@jdm/ui`'s barrel re-exports `ParkingStallCard`, which imports SVG
+// `@ccc/ui`'s barrel re-exports `ParkingStallCard`, which imports SVG
 // primitives. Stub them to inert tags so jsdom doesn't blow up loading the
 // SheetShell + garageTokens we actually use.
 vi.mock('react-native-svg', async () => {

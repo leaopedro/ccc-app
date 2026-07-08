@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

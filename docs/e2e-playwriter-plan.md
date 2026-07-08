@@ -11,8 +11,8 @@
 **Preconditions for running the e2e suite locally (documented in README):**
 
 - Docker Compose Postgres up, migrations applied.
-- `pnpm --filter @jdm/api dev` on `:4000` (NODE_ENV=development so DevMailer + `/dev/inbox` are live).
-- `pnpm --filter @jdm/mobile dev --web` on `:8081`.
+- `pnpm --filter @ccc/api dev` on `:4000` (NODE_ENV=development so DevMailer + `/dev/inbox` are live).
+- `pnpm --filter @ccc/mobile dev --web` on `:8081`.
 - `playwriter` CLI installed and the Chrome extension clicked on the `localhost:8081` tab at least once.
 
 ---
@@ -90,7 +90,7 @@ If `signupUser` / `buildTestApp({ NODE_ENV })` overrides don't exist in `helpers
 
 - [ ] **Step 2: Run the test, confirm it fails**
 
-Run: `pnpm --filter @jdm/api test dev/inbox`
+Run: `pnpm --filter @ccc/api test dev/inbox`
 Expected: FAIL with 404 on the second assertion (the route doesn't exist yet) or an import error on the new file.
 
 - [ ] **Step 3: Create the route file**
@@ -150,17 +150,17 @@ if (env.NODE_ENV !== 'production') {
 
 - [ ] **Step 5: Run the test, confirm it passes**
 
-Run: `pnpm --filter @jdm/api test dev/inbox`
+Run: `pnpm --filter @ccc/api test dev/inbox`
 Expected: PASS (all three cases).
 
 - [ ] **Step 6: Run the full API suite to confirm nothing else regressed**
 
-Run: `pnpm --filter @jdm/api test`
+Run: `pnpm --filter @ccc/api test`
 Expected: all tests green.
 
 - [ ] **Step 7: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: green.
 
 - [ ] **Step 8: Commit**
@@ -325,7 +325,7 @@ module.exports = { postJson, getJson, signupViaApi, verifyViaApi, forgotViaApi }
 
 - [ ] **Step 2: Sanity-check against the running API**
 
-Precondition: `pnpm --filter @jdm/api dev` running on `:4000`.
+Precondition: `pnpm --filter @ccc/api dev` running on `:4000`.
 
 Run:
 
@@ -1251,20 +1251,20 @@ Browser-driven smoke tests for the F1 auth flows. Runs against the local API + m
 1. Docker + Postgres up, migrations applied:
 
    ```bash
-   pnpm --filter @jdm/db exec prisma migrate deploy
+   pnpm --filter @ccc/db exec prisma migrate deploy
    ```
 ````
 
 2. API running on :4000 with `NODE_ENV=development` (enables DevMailer + `/dev/inbox`):
 
    ```bash
-   pnpm --filter @jdm/api dev
+   pnpm --filter @ccc/api dev
    ```
 
 3. Mobile web preview on :8081:
 
    ```bash
-   pnpm --filter @jdm/mobile dev --web
+   pnpm --filter @ccc/mobile dev --web
    ```
 
 4. `playwriter` CLI installed (`npm i -g playwriter@latest` or rely on `npx`).
@@ -1327,9 +1327,9 @@ git commit -m "docs(e2e): add playwriter README with run instructions + flow mat
 
 ## Post-implementation checklist
 
-- [ ] `pnpm --filter @jdm/api test` green (covers Task 1 endpoint).
+- [ ] `pnpm --filter @ccc/api test` green (covers Task 1 endpoint).
 - [ ] `pnpm typecheck` green (Task 1 is the only TS surface we added).
-- [ ] `pnpm lint --filter @jdm/api` green.
+- [ ] `pnpm lint --filter @ccc/api` green.
 - [ ] `pnpm e2e all` green with API + mobile web running.
 - [ ] `handoff.md` updated with a pointer to `tests/e2e/playwriter/README.md` under a new "Smoke coverage" section.
 - [ ] No changes to `roadmap.md` — this is tooling, not a roadmap line item.

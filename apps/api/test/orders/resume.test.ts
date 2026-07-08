@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { resumeOrderResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { resumeOrderResponseSchema } from '@ccc/shared/orders';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

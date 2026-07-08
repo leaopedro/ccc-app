@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
-import { mfaRecoverySchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { mfaRecoverySchema } from '@ccc/shared';
 import {
   ACCOUNT_DISABLED_ERROR,
   INACTIVE_USER_STATUSES,
   authResponseSchema,
-} from '@jdm/shared/auth';
+} from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verifyRecoveryCode } from '../../services/auth/mfa.js';

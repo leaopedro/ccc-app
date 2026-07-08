@@ -23,7 +23,7 @@ Install the resulting build on the device. Expo Go will not work — `expo-notif
 Two shells:
 
 ```sh
-pnpm --filter @jdm/api dev
+pnpm --filter @ccc/api dev
 stripe listen --forward-to localhost:3030/stripe/webhook
 ```
 
@@ -102,7 +102,7 @@ Same as step 7 but with `startsAt = now() + interval '59 minutes 45 seconds'`. E
 ## 10. Test local broadcast smoke path (F10)
 
 Default local dev does not run the broadcast worker and does not deliver real
-pushes — both behaviors are gated so ordinary `pnpm --filter @jdm/api dev`
+pushes — both behaviors are gated so ordinary `pnpm --filter @ccc/api dev`
 never sends accidental traffic. Use the env flags below to opt into a
 production-shaped local smoke.
 
@@ -133,7 +133,7 @@ without hitting Expo. Works with simulator tokens.
    # PUSH_PROVIDER unset (defaults to auto → DevPushSender in dev)
    ```
 
-2. `pnpm --filter @jdm/api dev`. On boot you will see
+2. `pnpm --filter @ccc/api dev`. On boot you will see
    `[broadcasts] worker enabled with DevPushSender — broadcasts will be marked
 sent but no real push will be delivered.` That is the signal you are in
    10A, not 10B.
@@ -168,7 +168,7 @@ Adds real device delivery on top of 10A. **Will not work against a simulator.**
    EXPO_ACCESS_TOKEN=<your-expo-access-token>
    ```
 
-3. `pnpm --filter @jdm/api dev`. The DevPushSender warning from 10A must
+3. `pnpm --filter @ccc/api dev`. The DevPushSender warning from 10A must
    **not** appear; absence of that warn line confirms `ExpoPushSender` is wired.
 4. From the admin composer (or `POST /admin/broadcasts`), create a send-now
    broadcast targeting that user.

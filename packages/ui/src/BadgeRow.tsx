@@ -1,4 +1,4 @@
-import type { GarageBadgesOwnerResponse, GarageBadgeOwnerState } from '@jdm/shared/badges';
+import type { GarageBadgesOwnerResponse, GarageBadgeOwnerState } from '@ccc/shared/badges';
 import { Pressable, Text, View } from 'react-native';
 
 import { HexBadge } from './HexBadge.js';

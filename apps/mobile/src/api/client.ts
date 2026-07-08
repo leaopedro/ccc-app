@@ -1,4 +1,4 @@
-import { ACCOUNT_DISABLED_ERROR } from '@jdm/shared/auth';
+import { ACCOUNT_DISABLED_ERROR } from '@ccc/shared/auth';
 import Constants from 'expo-constants';
 import type { z } from 'zod';
 

@@ -1,6 +1,6 @@
 // ios-stripe-isolation.test.ts
 //
-// Verifies the `jdm-mobile/no-stripe-on-ios` ESLint rule fires on a fixture
+// Verifies the `ccc-mobile/no-stripe-on-ios` ESLint rule fires on a fixture
 // file containing a forbidden Stripe token outside an Android guard.
 // Uses Node child_process to spawn ESLint and parse its JSON output — no
 // jsdom needed.
@@ -62,7 +62,7 @@ export default function BadComponent() { return null; }
       messages: Array<{ ruleId: string; message: string }>;
     }>;
     const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'jdm-mobile/no-stripe-on-ios');
+    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
     expect(ruleHit).toBe(true);
   });
 
@@ -83,7 +83,7 @@ export default function OkComponent() { return null; }
       messages: Array<{ ruleId: string }>;
     }>;
     const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'jdm-mobile/no-stripe-on-ios');
+    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
     expect(ruleHit).toBe(false);
   });
 
@@ -102,7 +102,7 @@ export default function BadEnvComponent() { return null; }
       messages: Array<{ ruleId: string }>;
     }>;
     const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'jdm-mobile/no-stripe-on-ios');
+    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
     expect(ruleHit).toBe(true);
   });
 });

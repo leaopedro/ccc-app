@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { registerDeviceTokenRequestSchema } from '@jdm/shared/push';
+import { prisma } from '@ccc/db';
+import { registerDeviceTokenRequestSchema } from '@ccc/shared/push';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';

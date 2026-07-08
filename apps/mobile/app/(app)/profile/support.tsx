@@ -1,4 +1,4 @@
-import type { SupportTicket } from '@jdm/shared/support';
+import type { SupportTicket } from '@ccc/shared/support';
 import { Image as LucideImage, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {

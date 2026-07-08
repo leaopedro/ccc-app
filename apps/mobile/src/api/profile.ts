@@ -3,7 +3,7 @@ import {
   type PublicProfile,
   updateProfileSchema,
   type UpdateProfileInput,
-} from '@jdm/shared/profile';
+} from '@ccc/shared/profile';
 
 import { authedRequest } from './client';
 

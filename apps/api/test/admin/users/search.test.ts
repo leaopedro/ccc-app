@@ -1,4 +1,4 @@
-import { adminUserSearchResponseSchema } from '@jdm/shared/admin';
+import { adminUserSearchResponseSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

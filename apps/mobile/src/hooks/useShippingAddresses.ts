@@ -1,4 +1,4 @@
-import type { ShippingAddressRecord } from '@jdm/shared/store';
+import type { ShippingAddressRecord } from '@ccc/shared/store';
 import { useCallback, useEffect, useState } from 'react';
 
 import { listShippingAddresses } from '~/api/store';

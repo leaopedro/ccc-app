@@ -1,6 +1,6 @@
 'use client';
 
-import type { UserStatusName } from '@jdm/shared/auth';
+import type { UserStatusName } from '@ccc/shared/auth';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 

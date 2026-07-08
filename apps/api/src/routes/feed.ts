@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   feedCommentCreateInputSchema,
   feedCommentListResponseSchema,
@@ -9,7 +9,7 @@ import {
   feedPostPatchInputSchema,
   feedPostResponseSchema,
   feedReactionInputSchema,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

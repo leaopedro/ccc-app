@@ -4,7 +4,7 @@ import type {
   AdminFinanceMembershipsQuery,
   AdminFinanceMembershipsResponse,
   AdminFinanceQuery,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 
 import {
   financeQs,

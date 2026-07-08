@@ -1,7 +1,7 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import type { AdminProductType } from '@jdm/shared/admin';
+import { brand } from '@ccc/design';
+import type { AdminProductType } from '@ccc/shared/admin';
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';

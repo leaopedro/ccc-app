@@ -1,4 +1,4 @@
-import type { GarageProgress } from '@jdm/shared/garage-progress';
+import type { GarageProgress } from '@ccc/shared/garage-progress';
 
 import { garageTokens } from '../garage-tokens.js';
 
@@ -26,7 +26,7 @@ const TICKS = Array.from({ length: 11 }, (_, i) => i);
  * React state, plain DOM + Tailwind utility classes + inline styles.
  *
  * Renders:
- * - Anton 46px XP number with brand-tinted text-shadow glow.
+ * - Jost 46px XP number with brand-tinted text-shadow glow.
  * - Rank pill (right-aligned, brand-tinted background + brand border).
  * - `?` hint element. OPTIONAL handler per canon §12: when defined renders a
  *   <button>; when undefined renders a static <span aria-hidden="true"> so
@@ -158,7 +158,7 @@ export function XPScoreboard({ progress, onPressHint, testID }: XPScoreboardProp
         <span
           aria-label={`${xpFormatted} XP`}
           style={{
-            fontFamily: 'Anton, ui-sans-serif, system-ui',
+            fontFamily: 'Jost_300Regular, ui-sans-serif, system-ui',
             fontSize: 46,
             lineHeight: 1,
             color: '#F5F5F5',

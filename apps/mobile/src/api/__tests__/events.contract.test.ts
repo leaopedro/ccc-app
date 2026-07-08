@@ -1,4 +1,4 @@
-import { eventDetailCommerceSchema, eventDetailPublicSchema } from '@jdm/shared/events';
+import { eventDetailCommerceSchema, eventDetailPublicSchema } from '@ccc/shared/events';
 import { describe, expect, it } from 'vitest';
 
 const CAPACITY_DISPLAY_ABSOLUTE = {

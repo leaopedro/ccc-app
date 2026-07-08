@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Expose a single **unauthed** `GET /api/premium/pricing` endpoint that resolves the two Stripe Prices for the Gold tier (monthly + annual) from env-configured price IDs, parses `baseAmountCents` + `devFeePercent` from `Stripe.Price.metadata` (canon §F8.1), computes `devFeeCents` + `grossAmountCents`, and returns the catalog under a new `premiumPricingResponseSchema` zod schema in `@jdm/shared/premium`. The endpoint exists so the web subscribe page (F8.17) and the mobile premium screen (F8.18) can render pricing without forcing a login first.
+**Goal:** Expose a single **unauthed** `GET /api/premium/pricing` endpoint that resolves the two Stripe Prices for the Gold tier (monthly + annual) from env-configured price IDs, parses `baseAmountCents` + `devFeePercent` from `Stripe.Price.metadata` (canon §F8.1), computes `devFeeCents` + `grossAmountCents`, and returns the catalog under a new `premiumPricingResponseSchema` zod schema in `@ccc/shared/premium`. The endpoint exists so the web subscribe page (F8.17) and the mobile premium screen (F8.18) can render pricing without forcing a login first.
 
 **Architecture:** New Fastify plugin `apps/api/src/routes/premium-pricing.ts` registered in `app.ts`. The plugin has NO `preHandler: [app.authenticate]` — anonymous callers receive the same response as logged-in users. The plugin gate-checks `env.GROWTH_PREMIUM_BILLING_ENABLED` (canon §F8.11) on every request, returning `503` when disabled. The handler reads `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` + `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL` from env (both already in `apps/api/src/env.ts` per F8.09); if either is absent it returns `503`. It then calls a new `app.stripe.retrievePrice` helper for each ID, parses `metadata.baseAmountCents` + `metadata.devFeePercent` as integers, computes `devFeeCents = Math.round(baseAmountCents * devFeePercent / 100)` and `grossAmountCents = baseAmountCents + devFeeCents` (canon §F8.1 + canon "Stripe gross formula `gross = base + devFee`"), and returns the parsed shape via the new `premiumPricingResponseSchema`.
 
-**Tech Stack:** Fastify 4, Stripe Node SDK (existing `buildStripe` client extended with one new method), zod 3, `@jdm/shared/premium` (existing subpath — extended with one new schema), vitest + Testcontainers Postgres (for the app boot — the route itself is stateless).
+**Tech Stack:** Fastify 4, Stripe Node SDK (existing `buildStripe` client extended with one new method), zod 3, `@ccc/shared/premium` (existing subpath — extended with one new schema), vitest + Testcontainers Postgres (for the app boot — the route itself is stateless).
 
 ---
 
@@ -24,16 +24,16 @@ git checkout -b feat/jdma-f8-billing-20
 Assumes on `main` before execution:
 
 - **F8.01** — `GROWTH_PREMIUM_BILLING_ENABLED` in `env.ts`. Verified on `main`.
-- **F8.09** — `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` + `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL` env vars + `@jdm/shared/premium` subpath. Verified on `main`.
-- **F8.11** — `premiumStatusSchema` in `@jdm/shared/premium`. Verified on `main`. Coexists with the new pricing schema in the same file.
+- **F8.09** — `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` + `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL` env vars + `@ccc/shared/premium` subpath. Verified on `main`.
+- **F8.11** — `premiumStatusSchema` in `@ccc/shared/premium`. Verified on `main`. Coexists with the new pricing schema in the same file.
 
 If F8.09 has NOT landed, STOP and run that chunk first.
 
 ## Corrections + canon refs
 
 - **§F8.11 — Feature flag.** The route gates on `env.GROWTH_PREMIUM_BILLING_ENABLED`. Disabled → `503 { error: 'ServiceUnavailable', message: 'premium billing not available' }`. Do NOT return `404`.
-- **§F8.12 — Filtered test command.** `pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts` — note `exec vitest run`, never `pnpm --filter @jdm/api test -- ...`.
-- **§F8.13 — Rebuild @jdm/shared.** After adding `premiumPricingResponseSchema` + `premiumPricingEntrySchema` exports to `packages/shared/src/premium.ts`, run `pnpm --filter @jdm/shared build` before running API tests.
+- **§F8.12 — Filtered test command.** `pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts` — note `exec vitest run`, never `pnpm --filter @ccc/api test -- ...`.
+- **§F8.13 — Rebuild @ccc/shared.** After adding `premiumPricingResponseSchema` + `premiumPricingEntrySchema` exports to `packages/shared/src/premium.ts`, run `pnpm --filter @ccc/shared build` before running API tests.
 - **§F8.1 — devfee storage.** The Stripe Price metadata keys are `baseAmountCents` + `devFeePercent` (verified on `main` against `apps/api/src/workers/billing-reconcile.ts:79-83` + `apps/api/src/services/billing/normalize-stripe.ts:205-206`). Do **NOT** use `devFeeCents` as a metadata key — that name appears in some draft docs but is not what the rest of F8 reads.
 - **Canon — Stripe gross formula.** `grossAmountCents = baseAmountCents + devFeeCents`, with `devFeeCents = Math.round(baseAmountCents * devFeePercent / 100)`. Use integer cents throughout; never floats.
 - **Unauthed by design.** Spec §8.2 calls the web `/premium` route a pricing page (no login required). The mobile premium screen (F8.18) renders pricing before the user signs in. The endpoint MUST NOT carry `preHandler: [app.authenticate]`. The reviewer checklist asserts this.
@@ -166,7 +166,7 @@ describe('premiumPricingResponseSchema', () => {
 - [ ] **Step 1.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium-pricing.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium-pricing.test.ts
 ```
 
 Expected FAIL: `premiumPricingEntrySchema` and `premiumPricingResponseSchema` are not exported from `../premium.js`.
@@ -215,15 +215,15 @@ export type PremiumPricingResponse = z.infer<typeof premiumPricingResponseSchema
 - [ ] **Step 1.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium-pricing.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium-pricing.test.ts
 ```
 
 Expected: 11 cases PASS.
 
-- [ ] **Step 1.5 — Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 1.5 — Rebuild `@ccc/shared` (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: success. `dist/premium.js` + `dist/premium.d.ts` carry the two new exports. The `./premium` subpath in `packages/shared/package.json` already exists from F8.09 — DO NOT touch `package.json`.
@@ -235,7 +235,7 @@ git add packages/shared/src/premium.ts packages/shared/src/__tests__/premium-pri
 git commit -m "$(cat <<'EOF'
 feat(shared): premiumPricingEntrySchema + premiumPricingResponseSchema (F8.20)
 
-Two new schemas in @jdm/shared/premium for the public pricing endpoint:
+Two new schemas in @ccc/shared/premium for the public pricing endpoint:
 premiumPricingEntrySchema (priceId, cadence, baseAmountCents, devFeePercent,
 devFeeCents, grossAmountCents, currency) and premiumPricingResponseSchema
 ({ monthly, annual }). Imported by the new GET /api/premium/pricing route
@@ -326,7 +326,7 @@ describe('retrievePrice', () => {
 - [ ] **Step 2.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-price.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-price.test.ts
 ```
 
 Expected FAIL: `client.retrievePrice is not a function` (method doesn't exist on `StripeClient` yet).
@@ -358,7 +358,7 @@ retrievePrice: (priceId: string) => Promise<Stripe.Price>;
 - [ ] **Step 2.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-price.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-price.test.ts
 ```
 
 Expected: 2 cases PASS.
@@ -419,7 +419,7 @@ Tests will override `stripe.retrievePrice = vi.fn(...)` per-test when they need 
 - [ ] **Step 2.6 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN. If you see `Property 'retrievePrice' is missing in type 'FakeStripe'`, Step 2.5 was incomplete.
@@ -429,7 +429,7 @@ Expected: GREEN. If you see `Property 'retrievePrice' is missing in type 'FakeSt
 The fake.ts edit is additive; existing tests should not regress. Run the F8.09 + F8.11 me-premium tests as a regression guard:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
 Expected: all existing cases still PASS.
@@ -747,7 +747,7 @@ describe('GET /api/premium/pricing', () => {
 - [ ] **Step 3.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts
 ```
 
 Expected FAIL: 404 (route not registered yet) on the happy-path test.
@@ -781,7 +781,7 @@ Expected FAIL: 404 (route not registered yet) on the happy-path test.
  *   500 PricingMetadataMissing — Stripe Price metadata invalid / unparseable
  */
 
-import { premiumPricingResponseSchema } from '@jdm/shared/premium';
+import { premiumPricingResponseSchema } from '@ccc/shared/premium';
 import type { FastifyPluginAsync } from 'fastify';
 
 type Cadence = 'monthly' | 'annual';
@@ -885,7 +885,7 @@ export const premiumPricingRoutes: FastifyPluginAsync = async (app) => {
 - [ ] **Step 3.4 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN.
@@ -893,7 +893,7 @@ Expected: GREEN.
 - [ ] **Step 3.5 — Run the tests (most still fail until Task 4)**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts
 ```
 
 If tests fail with 404, that is expected — Task 4 registers the route. If tests fail for other reasons (compile error, missing method), fix those before moving on.
@@ -925,7 +925,7 @@ await app.register(premiumPricingRoutes);
 - [ ] **Step 4.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN.
@@ -933,7 +933,7 @@ Expected: GREEN.
 - [ ] **Step 4.4 — Run the full test suite for this chunk**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts
 ```
 
 Expected: all tests PASS.
@@ -976,31 +976,31 @@ Stop and fix at the first failure.
 
 ```bash
 # 1. Shared
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium-pricing.test.ts
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium-pricing.test.ts
 
 # 2. API
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-price.test.ts
-pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-price.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts
 
 # 3. Regression guard: existing me-premium tests still green
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
-`pnpm --filter @jdm/shared build` is required before API tests (canon §F8.13 + `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only touched test files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
+`pnpm --filter @ccc/shared build` is required before API tests (canon §F8.13 + `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only touched test files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
 
 - [ ] **Step 5.2 — Lint touched files**
 
 ```bash
-pnpm --filter @jdm/api lint:fix \
+pnpm --filter @ccc/api lint:fix \
   src/routes/premium-pricing.ts \
   src/services/stripe/index.ts \
   src/services/stripe/fake.ts \
   src/app.ts \
   test/billing/premium-pricing.test.ts \
   test/billing/stripe-retrieve-price.test.ts
-pnpm --filter @jdm/shared lint:fix \
+pnpm --filter @ccc/shared lint:fix \
   src/premium.ts \
   src/__tests__/premium-pricing.test.ts
 ```
@@ -1030,7 +1030,7 @@ gh pr create --title "feat(api): GET /api/premium/pricing public pricing route (
 - New **unauthed** `GET /api/premium/pricing` endpoint (feature-flagged per canon §F8.11 — `GROWTH_PREMIUM_BILLING_ENABLED`)
 - Reads `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` + `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL` env vars (already added in F8.09)
 - Calls a new `app.stripe.retrievePrice(priceId)` helper for each, parses `Stripe.Price.metadata.baseAmountCents` + `metadata.devFeePercent` as integers, computes `devFeeCents = round(base * percent / 100)` + `grossAmountCents = base + devFeeCents` per canon §F8.1 + canon Stripe gross formula
-- Returns the parsed catalog under a new `premiumPricingResponseSchema` in `@jdm/shared/premium`
+- Returns the parsed catalog under a new `premiumPricingResponseSchema` in `@ccc/shared/premium`
 - Two new shared zod schemas: `premiumPricingEntrySchema` + `premiumPricingResponseSchema`
 - Closes orchestrator gap #4 — F8.17 (web /premium) + F8.18 (mobile Premium screen) can now render pricing without an auth context
 
@@ -1055,23 +1055,23 @@ gh pr create --title "feat(api): GET /api/premium/pricing public pricing route (
 This chunk has no skeleton entry (gap #4 was authored ad-hoc by the orchestrator after run 8). The implementation follows the patterns set by:
 
 - F8.09 chunk for the Fastify-plugin + Stripe-mock test shape
-- F8.11 chunk for the `premiumStatusSchema` + `@jdm/shared/premium` co-location
+- F8.11 chunk for the `premiumStatusSchema` + `@ccc/shared/premium` co-location
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/shared build` — shared compiles with new exports
-- [ ] `pnpm --filter @jdm/shared exec vitest run src/__tests__/premium-pricing.test.ts` — 11 schema tests PASS
-- [ ] `pnpm --filter @jdm/api typecheck` — GREEN
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/stripe-retrieve-price.test.ts` — 2 stripe-helper tests PASS
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/premium-pricing.test.ts` — 10 route tests PASS (happy path, unauthed equivalence, flag off, monthly env missing, annual env missing, metadata missing × 2, metadata non-numeric, currency casing, Stripe throw)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts` — regression guard PASS
+- [ ] `pnpm --filter @ccc/shared build` — shared compiles with new exports
+- [ ] `pnpm --filter @ccc/shared exec vitest run src/__tests__/premium-pricing.test.ts` — 11 schema tests PASS
+- [ ] `pnpm --filter @ccc/api typecheck` — GREEN
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/stripe-retrieve-price.test.ts` — 2 stripe-helper tests PASS
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/premium-pricing.test.ts` — 10 route tests PASS (happy path, unauthed equivalence, flag off, monthly env missing, annual env missing, metadata missing × 2, metadata non-numeric, currency casing, Stripe throw)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts` — regression guard PASS
 
 ## Canon refs
 
 - §F8.1 (devfee snapshotted from Stripe Price metadata; never re-derived from env)
 - §F8.11 (feature flag gate; 503 when disabled)
 - §F8.12 (filtered test command form)
-- §F8.13 (rebuild `@jdm/shared` after schema additions)
+- §F8.13 (rebuild `@ccc/shared` after schema additions)
 - Canon "Stripe gross formula: `gross = base + devFee`"
 - Canon "`Number.isFinite` over `||`"
 
@@ -1096,7 +1096,7 @@ PR opens against `main`. Never `production`.
 ## Self-review checklist (before requesting review)
 
 - [ ] Branch `feat/jdma-f8-billing-20`, cut from fresh `main`. F8.09 + F8.11 are on `main`.
-- [ ] `packages/shared/src/premium.ts` has `premiumPricingEntrySchema` + `premiumPricingResponseSchema` exports. `pnpm --filter @jdm/shared build` produced fresh `dist/premium.js`.
+- [ ] `packages/shared/src/premium.ts` has `premiumPricingEntrySchema` + `premiumPricingResponseSchema` exports. `pnpm --filter @ccc/shared build` produced fresh `dist/premium.js`.
 - [ ] `packages/shared/package.json` was NOT modified (the `./premium` subpath was added in F8.09).
 - [ ] `apps/api/src/services/stripe/index.ts` has `retrievePrice: (priceId: string) => Promise<Stripe.Price>` on the `StripeClient` type AND in the `buildStripe` return object.
 - [ ] `apps/api/src/services/stripe/fake.ts` gains `nextRetrievedPrice: Stripe.Price | null` field, `'retrievePrice'` literal in the `FakeCall` union, and a `retrievePrice` impl that returns `nextRetrievedPrice` (throws when null). No existing fake fields touched.
@@ -1129,7 +1129,7 @@ PR opens against `main`. Never `production`.
 - [ ] Currency is upper-cased via `.toUpperCase()`. Verbatim citation.
 - [ ] No PII / no user-scoped reads: grep the handler for `request.user`, `requireUser`, `request.headers.authorization`, `prisma.`, `garageId`, `userId`. All MUST be absent. Verbatim "not found" citation.
 - [ ] No partial response on failure: confirm the metadata-parse failure path returns 500 with both prices' metadata logged but no JSON body containing either entry. Verbatim citation.
-- [ ] `@jdm/shared` rebuilt after schema addition — verify `packages/shared/dist/premium.js` contains the new exports (`grep -c 'premiumPricingEntrySchema' packages/shared/dist/premium.js >= 1`). Verbatim citation.
+- [ ] `@ccc/shared` rebuilt after schema addition — verify `packages/shared/dist/premium.js` contains the new exports (`grep -c 'premiumPricingEntrySchema' packages/shared/dist/premium.js >= 1`). Verbatim citation.
 - [ ] No changes outside the file list above. Confirm `git diff --name-only main...HEAD` matches exactly these 8 files:
   - `packages/shared/src/premium.ts`
   - `packages/shared/src/__tests__/premium-pricing.test.ts`

@@ -4,9 +4,9 @@
 
 **Goal:** Extend the three existing `/finance/*` endpoints with membership-revenue fields and add a `findMembershipInvoices` query helper, so the admin financial dashboard can surface Premium Gold KPIs alongside existing ticket/store numbers.
 
-**Architecture:** `apps/api/src/routes/admin/finance.ts` gains a new `findMembershipInvoices(where)` helper (parallel in structure to `findFinanceOrders`) and inline aggregation logic inside each of the three affected route handlers. `packages/shared/src/admin.ts` gains new zod fields on the three existing finance response schemas. The `@jdm/shared` package is rebuilt after the schema change (canon §F8.13). All tests use Testcontainers Postgres — no mocks.
+**Architecture:** `apps/api/src/routes/admin/finance.ts` gains a new `findMembershipInvoices(where)` helper (parallel in structure to `findFinanceOrders`) and inline aggregation logic inside each of the three affected route handlers. `packages/shared/src/admin.ts` gains new zod fields on the three existing finance response schemas. The `@ccc/shared` package is rebuilt after the schema change (canon §F8.13). All tests use Testcontainers Postgres — no mocks.
 
-**Tech Stack:** Fastify, Prisma, `@jdm/shared` zod, Vitest + Testcontainers Postgres (`makeApp` + `resetDatabase` helpers), TypeScript.
+**Tech Stack:** Fastify, Prisma, `@ccc/shared` zod, Vitest + Testcontainers Postgres (`makeApp` + `resetDatabase` helpers), TypeScript.
 
 ---
 
@@ -71,7 +71,7 @@ Write all integration tests first. They target behavior that does not exist yet.
 
 ```ts
 // apps/api/test/admin/finance-summary-memberships.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -717,7 +717,7 @@ describe('GET /finance/payment-mix — membership rows (chunk 13)', () => {
 - [ ] **Step 2: Run and confirm all tests FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts
 ```
 
 Expected: multiple failures — the new fields (`membershipRevenueCents`, `membershipMRRCents`, etc.) are not returned yet and `stripe:subscription` / `apple_revenuecat:storekit` rows are absent from payment-mix.
@@ -791,10 +791,10 @@ export const adminFinanceTrendPointSchema = z.object({
 export type AdminFinanceTrendPoint = z.infer<typeof adminFinanceTrendPointSchema>;
 ```
 
-- [ ] **Step 3: Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 3: Rebuild `@ccc/shared` (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: clean build, 0 errors. If TS fails, the new fields have a type mismatch — fix before continuing.
@@ -904,7 +904,7 @@ async function findMembershipInvoices(
 - [ ] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors. If Prisma types mismatch (e.g. `Prisma.EnumGaragePremiumTierFilter` doesn't exist for this field), adjust the cast — the field is a string enum and a plain `where.tier` assignment works.
@@ -1074,7 +1074,7 @@ return {
 - [ ] **Step 5: Run summary tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/summary"
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/summary"
 ```
 
 Expected: all summary-group tests PASS.
@@ -1082,7 +1082,7 @@ Expected: all summary-group tests PASS.
 - [ ] **Step 6: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors.
@@ -1185,7 +1185,7 @@ for (const inv of membershipInvoicesForTrend) {
 - [ ] **Step 3: Run trends tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/trends"
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/trends"
 ```
 
 Expected: PASS.
@@ -1280,7 +1280,7 @@ for (const inv of membershipInvoicesForMix) {
 - [ ] **Step 3: Run payment-mix tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/payment-mix"
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts -t "GET /finance/payment-mix"
 ```
 
 Expected: PASS.
@@ -1299,7 +1299,7 @@ git commit -m "feat(finance): add stripe:subscription + apple_revenuecat:storeki
 - [ ] **Step 1: Run ALL new tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts
 ```
 
 Expected: all tests PASS (summary group + trends group + payment-mix group).
@@ -1307,15 +1307,15 @@ Expected: all tests PASS (summary group + trends group + payment-mix group).
 - [ ] **Step 2: Run the existing finance neighborhood to confirm no regression**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance.test.ts
 ```
 
 Expected: all previously-passing tests still PASS. (The handler additions are purely additive; no existing field is removed or renamed.)
 
-- [ ] **Step 3: Rebuild @jdm/shared (canon §F8.13)**
+- [ ] **Step 3: Rebuild @ccc/shared (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: clean build.
@@ -1323,7 +1323,7 @@ Expected: clean build.
 - [ ] **Step 4: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors.
@@ -1353,20 +1353,20 @@ gh pr create --base main \
 - Extends `GET /finance/trends` with `membershipRevenueCents` per daily bucket. Membership-only days create new buckets.
 - Extends `GET /finance/payment-mix` with `stripe:subscription` and `apple_revenuecat:storekit` rows, included in the total-revenue percentage calculation.
 - Extends `packages/shared/src/admin.ts` schemas: `adminFinanceSummarySchema` + `adminFinanceTrendPointSchema` gain the new fields.
-- Rebuilds `@jdm/shared` (canon §F8.13).
+- Rebuilds `@ccc/shared` (canon §F8.13).
 
 ## Canon references
 
 - §F8.1 — devfee storage: `devFeeAmountCents` read from snapshot, never re-derived from env.
-- §F8.13 — rebuild `@jdm/shared` after schema change.
+- §F8.13 — rebuild `@ccc/shared` after schema change.
 - Spec §7.1 (API deltas), §7.3 (MRR rounding).
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts` — all PASS
-- [ ] `pnpm --filter @jdm/api exec vitest run test/admin/finance.test.ts` — no regression
-- [ ] `pnpm --filter @jdm/shared build` — clean
-- [ ] `pnpm --filter @jdm/api typecheck` — 0 errors
+- [ ] `pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts` — all PASS
+- [ ] `pnpm --filter @ccc/api exec vitest run test/admin/finance.test.ts` — no regression
+- [ ] `pnpm --filter @ccc/shared build` — clean
+- [ ] `pnpm --filter @ccc/api typecheck` — 0 errors
 - [ ] CI green
 
 🤖 Generated with [Claude Code](https://claude.ai/claude-code)
@@ -1389,7 +1389,7 @@ EOF
 - §7.3 MRR math (monthly direct, annual `Math.round(/12)`) → Task 4 Step 3 + tests in Task 1.
 - ARPU /0 guard → Task 4 Step 3 + test in Task 1.
 - Canon §F8.1 devfee snapshot → `findMembershipInvoices` reads `devFeeAmountCents` from the invoice row, never from `app.env.DEV_FEE_PERCENT`.
-- Canon §F8.13 rebuild `@jdm/shared` → Task 2 Step 3 + Task 7 Step 3.
+- Canon §F8.13 rebuild `@ccc/shared` → Task 2 Step 3 + Task 7 Step 3.
 
 **Placeholder scan:** No "TBD", "TODO", or "similar to Task N" entries. Every step shows the exact code.
 

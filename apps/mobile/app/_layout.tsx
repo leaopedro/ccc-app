@@ -1,9 +1,9 @@
 import '../global.css';
 
-import { brand } from '@jdm/design';
-// TODO: install @expo-google-fonts/jost and swap this import once the
-// package is available. brand.typography.displayFont = 'Jost_300Regular'.
-import { Anton_400Regular } from '@expo-google-fonts/anton';
+import { brand } from '@ccc/design';
+// Display font. Jost ships its 300 weight as Jost_300Light; we register it
+// under the brand key 'Jost_300Regular' (brand.typography.displayFont).
+import { Jost_300Light } from '@expo-google-fonts/jost';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -45,7 +45,7 @@ import { theme } from '~/theme';
 // Stack/Tabs/SafeAreaView containers paint #0A0A0A on web — without this
 // the unfilled portion of every screen below the form bleeds the light
 // default theme through the mobile shell on the web export.
-const jdmNavTheme: Theme = {
+const cccNavTheme: Theme = {
   ...DarkTheme,
   dark: true,
   colors: {
@@ -158,7 +158,7 @@ export default function RootLayout() {
     initSentry();
   }, []);
   const [fontsLoaded, fontError] = useFonts({
-    Anton_400Regular,
+    Jost_300Regular: Jost_300Light,
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -199,7 +199,7 @@ export default function RootLayout() {
   // iOS users subscribe via Apple StoreKit through RevenueCat; ticket-order
   // payments on iOS are deferred to Phase F8.1 (RC or in-app fallback).
   return (
-    <ThemeProvider value={jdmNavTheme}>
+    <ThemeProvider value={cccNavTheme}>
       {Platform.OS !== 'ios' && stripeKey ? (
         <StripeProvider
           publishableKey={stripeKey}

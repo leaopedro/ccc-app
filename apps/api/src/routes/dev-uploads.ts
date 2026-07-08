@@ -4,7 +4,7 @@ import { dirname, extname, join, sep } from 'node:path';
 
 import type { FastifyPluginAsync } from 'fastify';
 
-const UPLOAD_DIR = join(tmpdir(), 'jdm-dev-uploads');
+const UPLOAD_DIR = join(tmpdir(), 'ccc-dev-uploads');
 
 const MIME: Record<string, string> = {
   jpg: 'image/jpeg',

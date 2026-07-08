@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { StorePickupItem, StorePickupOrder } from '@jdm/shared/check-in';
+import { prisma } from '@ccc/db';
+import type { StorePickupItem, StorePickupOrder } from '@ccc/shared/check-in';
 
 import { decryptField } from '../crypto/field-encryption.js';
 

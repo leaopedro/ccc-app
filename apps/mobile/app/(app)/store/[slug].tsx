@@ -1,5 +1,5 @@
-import { Text } from '@jdm/ui';
-import { Button } from '@jdm/ui';
+import { Text } from '@ccc/ui';
+import { Button } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Minus, Plus, ShoppingBag } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';

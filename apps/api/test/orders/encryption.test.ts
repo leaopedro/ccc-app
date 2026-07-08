@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-import { prisma } from '@jdm/db';
-import { adminStoreOrderDetailSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminStoreOrderDetailSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminAuditListQuerySchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminAuditListQuerySchema } from '@ccc/shared/admin';
 import type { FastifyPluginAsync } from 'fastify';
 
 const encodeCursor = (r: { createdAt: Date; id: string }): string =>

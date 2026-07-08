@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@jdm/shared/legal';
+import { brand } from '@ccc/design';
+import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {

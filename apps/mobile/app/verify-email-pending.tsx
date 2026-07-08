@@ -1,4 +1,4 @@
-import { Button } from '@jdm/ui';
+import { Button } from '@ccc/ui';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';

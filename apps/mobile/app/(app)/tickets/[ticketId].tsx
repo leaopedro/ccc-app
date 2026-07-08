@@ -1,4 +1,4 @@
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams } from 'expo-router';
 import { Share } from 'lucide-react-native';
@@ -49,12 +49,12 @@ export default function TicketDetail() {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const style = document.createElement('style');
-    style.setAttribute('data-jdm-print', 'ticket');
+    style.setAttribute('data-ccc-print', 'ticket');
     style.textContent = `
       @media print {
         body * { visibility: hidden !important; }
-        [data-jdm-export-card], [data-jdm-export-card] * { visibility: visible !important; }
-        [data-jdm-export-card] {
+        [data-ccc-export-card], [data-ccc-export-card] * { visibility: visible !important; }
+        [data-ccc-export-card] {
           position: absolute !important;
           left: 0 !important;
           top: 0 !important;
@@ -401,7 +401,7 @@ export default function TicketDetail() {
       )}
 
       {/* Hidden off-screen export card captured by react-native-view-shot */}
-      <ExportCardView dataSet={{ jdmExportCard: 'ticket' }} style={styles.exportCardHidden}>
+      <ExportCardView dataSet={{ cccExportCard: 'ticket' }} style={styles.exportCardHidden}>
         <TicketPassExportCard ref={exportRef} ticket={ticket} />
       </ExportCardView>
 

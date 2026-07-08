@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { router, Tabs } from 'expo-router';
 import { CalendarDays, ShoppingBag, ShoppingCart, Ticket, UserRound } from 'lucide-react-native';
 import { Platform } from 'react-native';

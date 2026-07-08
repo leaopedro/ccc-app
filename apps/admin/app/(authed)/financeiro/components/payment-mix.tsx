@@ -1,4 +1,4 @@
-import type { AdminFinancePaymentMixItem } from '@jdm/shared/admin';
+import type { AdminFinancePaymentMixItem } from '@ccc/shared/admin';
 
 const fmtCurrency = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);

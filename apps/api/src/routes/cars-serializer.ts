@@ -1,4 +1,4 @@
-import { carSchema } from '@jdm/shared/cars';
+import { carSchema } from '@ccc/shared/cars';
 import type { Car as DbCar, CarPhoto as DbPhoto, Garage } from '@prisma/client';
 
 import { computeIsPremiumActive } from '../services/garage/index.js';

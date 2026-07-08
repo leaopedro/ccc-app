@@ -6,7 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '~': path.resolve(__dirname, './src'),
-      '@jdm/shared/legal': path.resolve(__dirname, '../../packages/shared/src/legal.ts'),
+      '@ccc/shared/legal': path.resolve(__dirname, '../../packages/shared/src/legal.ts'),
     },
   },
   // Match Next.js so component files that omit `import React` still compile in

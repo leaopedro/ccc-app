@@ -1,4 +1,4 @@
-import type { GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageStats } from '@ccc/shared/garage-progress';
 
 export type StatsRowWebProps = { stats: GarageStats };
 

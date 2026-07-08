@@ -1,4 +1,4 @@
-import { ACCOUNT_DISABLED_ERROR } from '@jdm/shared/auth';
+import { ACCOUNT_DISABLED_ERROR } from '@ccc/shared/auth';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

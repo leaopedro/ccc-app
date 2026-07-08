@@ -128,10 +128,10 @@ model TicketTier {
 Run from repo root:
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name events_catalog
+pnpm --filter @ccc/db prisma migrate dev --name events_catalog
 ```
 
-> note: used `pnpm --filter @jdm/db exec prisma migrate dev --name events_catalog` (no `prisma` npm script exists). Migration folder: `20260419204258_events_catalog`.
+> note: used `pnpm --filter @ccc/db exec prisma migrate dev --name events_catalog` (no `prisma` npm script exists). Migration folder: `20260419204258_events_catalog`.
 
 Expected: new folder under `packages/db/prisma/migrations/<timestamp>_events_catalog/` containing `migration.sql` with `CREATE TYPE "EventType"`, `CREATE TYPE "EventStatus"`, `CREATE TABLE "Event"`, `CREATE TABLE "TicketTier"`, and the two `CREATE INDEX` statements. Prisma client is regenerated automatically.
 
@@ -145,7 +145,7 @@ pnpm -w typecheck
 
 Expected: all 6 packages clean.
 
-> note: 5 packages have a typecheck script (`@jdm/tsconfig` is config-only); all 5 pass.
+> note: 5 packages have a typecheck script (`@ccc/tsconfig` is config-only); all 5 pass.
 
 - [x] **Step 4: Commit**
 
@@ -243,7 +243,7 @@ export type EventListResponse = z.infer<typeof eventListResponseSchema>;
 - [x] **Step 2: Confirm typecheck**
 
 ```bash
-pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/shared typecheck
 ```
 
 Expected: clean.
@@ -289,8 +289,8 @@ export const resetDatabase = async (): Promise<void> => {
 - [x] **Step 2: Write failing tests** — create `apps/api/test/events/list.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
-import { eventListResponseSchema } from '@jdm/shared/events';
+import { prisma } from '@ccc/db';
+import { eventListResponseSchema } from '@ccc/shared/events';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -429,7 +429,7 @@ describe('GET /events', () => {
 - [x] **Step 3: Run tests to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- events/list.test.ts
+pnpm --filter @ccc/api test -- events/list.test.ts
 ```
 
 Expected: FAIL — route not registered / 404s.
@@ -437,12 +437,12 @@ Expected: FAIL — route not registered / 404s.
 - [x] **Step 4: Implement `apps/api/src/routes/events.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   eventListQuerySchema,
   eventListResponseSchema,
   eventSummarySchema,
-} from '@jdm/shared/events';
+} from '@ccc/shared/events';
 import type { Event as DbEvent } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -535,7 +535,7 @@ await app.register(eventRoutes);
 - [x] **Step 6: Run tests to confirm pass**
 
 ```bash
-pnpm --filter @jdm/api test -- events/list.test.ts
+pnpm --filter @ccc/api test -- events/list.test.ts
 ```
 
 Expected: all 6 tests PASS.
@@ -543,7 +543,7 @@ Expected: all 6 tests PASS.
 - [x] **Step 7: Run full API suite + monorepo typecheck**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 pnpm -w typecheck
 ```
 
@@ -571,8 +571,8 @@ git commit -m "feat(api): GET /events with filters, window, cursor pagination"
 - [x] **Step 1: Write failing tests** — `apps/api/test/events/detail.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
-import { eventDetailSchema } from '@jdm/shared/events';
+import { prisma } from '@ccc/db';
+import { eventDetailSchema } from '@ccc/shared/events';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -692,7 +692,7 @@ describe('GET /events/:slug', () => {
 - [x] **Step 2: Run tests to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- events/detail.test.ts
+pnpm --filter @ccc/api test -- events/detail.test.ts
 ```
 
 Expected: FAIL (404 on all because route doesn't exist yet).
@@ -705,7 +705,7 @@ Add inside `eventRoutes` after the list handler. Also add imports + helpers at t
 
 ```ts
 // add to imports:
-import { eventDetailSchema, ticketTierSchema } from '@jdm/shared/events';
+import { eventDetailSchema, ticketTierSchema } from '@ccc/shared/events';
 import type { Event as DbEvent, TicketTier as DbTier } from '@prisma/client';
 
 // add helper above eventRoutes:
@@ -760,7 +760,7 @@ app.get('/events/:slug', async (request, reply) => {
 - [x] **Step 4: Run tests to confirm pass**
 
 ```bash
-pnpm --filter @jdm/api test -- events/detail.test.ts
+pnpm --filter @ccc/api test -- events/detail.test.ts
 ```
 
 Expected: all 4 tests PASS.
@@ -768,7 +768,7 @@ Expected: all 4 tests PASS.
 - [x] **Step 5: Run full suite + typecheck**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 pnpm -w typecheck
 ```
 
@@ -939,7 +939,7 @@ Add a `prisma` block and a `db:seed` script. If `tsx` isn't already a devDep, ad
 
 ```bash
 pnpm install
-pnpm --filter @jdm/db db:seed
+pnpm --filter @ccc/db db:seed
 ```
 
 Expected: `Seeded 4 events.` and four rows visible in Prisma Studio.
@@ -970,7 +970,7 @@ import {
   type EventListQuery,
   type EventListResponse,
   eventListResponseSchema,
-} from '@jdm/shared/events';
+} from '@ccc/shared/events';
 
 import { request } from './client';
 
@@ -996,7 +996,7 @@ export const getEvent = (slug: string): Promise<EventDetail> =>
 - [x] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: clean.
@@ -1088,7 +1088,7 @@ export const formatEventDateRange = (startsAtIso: string, endsAtIso: string): st
 - [x] **Step 3: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/src/copy/events.ts apps/mobile/src/lib/format.ts
 git commit -m "feat(mobile): add events copy (PT-BR) and format helpers"
 ```
@@ -1133,7 +1133,7 @@ export default function EventsLayout() {
 - [x] **Step 3: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/\(app\)/_layout.tsx apps/mobile/app/\(app\)/events/_layout.tsx
 git commit -m "feat(mobile): introduce bottom tabs with events, garage, profile"
 ```
@@ -1158,7 +1158,7 @@ git commit -m "feat(mobile): introduce bottom tabs with events, garage, profile"
 > - Follow-up `fix(mobile): set events stack titles and drop redundant state coalesce` added titles to `events/_layout.tsx` (`index` → "Eventos", `[slug]` → blank so detail screen can set its own) and removed a redundant `?? undefined` call flagged in code review.
 
 ```tsx
-import type { EventSummary, EventWindow } from '@jdm/shared/events';
+import type { EventSummary, EventWindow } from '@ccc/shared/events';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -1322,7 +1322,7 @@ Start API + mobile locally; open the app, sign in, and confirm the Events tab li
 - [x] **Step 3: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/\(app\)/events/index.tsx
 git commit -m "feat(mobile): events list screen with tabs, filters, pull-to-refresh"
 ```
@@ -1339,7 +1339,7 @@ git commit -m "feat(mobile): events list screen with tabs, filters, pull-to-refr
 - [x] **Step 1: Implement the detail screen**
 
 ```tsx
-import type { EventDetail } from '@jdm/shared/events';
+import type { EventDetail } from '@ccc/shared/events';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -1498,7 +1498,7 @@ Skipped per user rule (no autonomous verification / background shells). Typechec
 - [x] **Step 3: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/\(app\)/events/\[slug\].tsx apps/mobile/src/components/Button.tsx
 git commit -m "feat(mobile): event detail screen with tiers, map link, disabled buy CTA"
 ```
@@ -1532,7 +1532,7 @@ Replace the F2 handoff with an F3 handoff summarizing:
 
 1. Branch: `feat/f3-events`.
 2. What shipped: 2 API routes, shared Zod schemas, 1 migration, seed script, mobile tabs + list + detail.
-3. How to run: `pnpm --filter @jdm/db db:seed`, then start API + Expo.
+3. How to run: `pnpm --filter @ccc/db db:seed`, then start API + Expo.
 4. Test status: full API suite green at NN tests; mobile typecheck clean.
 5. Known next steps: F7a will add admin event CRUD; F4 will wire the Buy CTA and add `Order`/`Ticket` models.
 6. Open edges: no real geolocation for "Perto de mim" — currently uses profile state code.
@@ -1554,16 +1554,16 @@ git commit -m "docs: mark roadmap 3.1-3.5 in-progress; update handoff for F3"
 
 ```bash
 pnpm -w typecheck
-pnpm --filter @jdm/api test
-pnpm --filter @jdm/shared test
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/api test
+pnpm --filter @ccc/shared test
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: all green. API tests ≥ 80 passing.
 
 - [ ] **Step 2: Manual end-to-end check**
 
-1. `pnpm --filter @jdm/db db:seed`
+1. `pnpm --filter @ccc/db db:seed`
 2. Start API + Expo mobile
 3. Sign in, tap **Eventos** tab
 4. See 2 upcoming events ("Próximos")
@@ -1583,8 +1583,8 @@ gh pr create --title "feat: F3 events catalog (read-only)" --body "$(cat <<'EOF'
 
 ## Test plan
 - [ ] `pnpm -w typecheck` clean
-- [ ] `pnpm --filter @jdm/api test` green
-- [ ] `pnpm --filter @jdm/db db:seed` populates 4 events locally
+- [ ] `pnpm --filter @ccc/api test` green
+- [ ] `pnpm --filter @ccc/db db:seed` populates 4 events locally
 - [ ] Events list shows upcoming/past filters; "Perto de mim" uses profile stateCode
 - [ ] Detail shows tiers with BRL prices and remaining capacity
 - [ ] "Abrir no mapa" launches maps

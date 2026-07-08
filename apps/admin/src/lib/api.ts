@@ -1,4 +1,4 @@
-import { healthResponseSchema, type HealthResponse } from '@jdm/shared/health';
+import { healthResponseSchema, type HealthResponse } from '@ccc/shared/health';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ZodType } from 'zod';

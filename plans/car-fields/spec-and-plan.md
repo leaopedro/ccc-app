@@ -27,7 +27,7 @@ In scope:
 - Pill rendering in: `apps/mobile/app/(app)/garage/index.tsx`, `apps/mobile/app/(app)/profile/garage/index.tsx`, `apps/mobile/src/screens/events/feed/FeedPostCard.tsx`, `apps/mobile/src/screens/events/feed/CarPickerPopover.tsx`, `apps/mobile/src/screens/cart/CarPlatePicker.tsx`.
 - `publicCarProfileSchema` in `packages/shared/src/feed.ts` gets `modifications` field.
 - API `serializeCarProfile` in `apps/api/src/routes/feed.ts` passes `modifications`.
-- Rebuild `@jdm/shared` after schema changes (per repo memory).
+- Rebuild `@ccc/shared` after schema changes (per repo memory).
 
 Explicitly out of scope:
 
@@ -747,8 +747,8 @@ describe('nickname uniqueness', () => {
 #### 8c. `apps/api/test/cars/modifications.test.ts` (create)
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { carSchema } from '@jdm/shared/cars';
+import { prisma } from '@ccc/db';
+import { carSchema } from '@ccc/shared/cars';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1100,7 +1100,7 @@ Add pills below:
 </View>
 ```
 
-`car` here is `post.car` which is typed as `PublicCarProfile | null` from `@jdm/shared/feed`. After step 4 above, `PublicCarProfile` includes `modifications: string[]`.
+`car` here is `post.car` which is typed as `PublicCarProfile | null` from `@ccc/shared/feed`. After step 4 above, `PublicCarProfile` includes `modifications: string[]`.
 
 Add `ModificationPills` and its styles to this file.
 
@@ -1148,7 +1148,7 @@ Add `ModificationPills` and its styles to this file.
 Already specified in §5. Run with:
 
 ```
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Coverage:
@@ -1184,7 +1184,7 @@ Coverage:
 Add inside `apps/api/test/` a new file `cars/migration-backfill.test.ts` that verifies the backfill logic directly using the Testcontainers Postgres:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createUser, resetDatabase } from '../helpers.js';
@@ -1274,7 +1274,7 @@ describe('car nickname backfill invariants (post-migration)', () => {
   If Prisma's migration is applied by the test setup, the health test passes if schema matches DB. Alternatively, run:
 
   ```
-  pnpm --filter @jdm/db exec prisma migrate deploy
+  pnpm --filter @ccc/db exec prisma migrate deploy
   ```
 
   against the test DB (requires `DATABASE_URL` set to test container URL).
@@ -1304,7 +1304,7 @@ describe('car nickname backfill invariants (post-migration)', () => {
 - [ ] **Step 2: Run tests to confirm they fail**
 
   ```
-  pnpm --filter @jdm/shared test
+  pnpm --filter @ccc/shared test
   ```
 
   Expected: most tests fail because `nicknameRegex` is not exported from `cars.ts` and schemas don't match yet.
@@ -1320,15 +1320,15 @@ describe('car nickname backfill invariants (post-migration)', () => {
 - [ ] **Step 5: Run tests to confirm they pass**
 
   ```
-  pnpm --filter @jdm/shared test
+  pnpm --filter @ccc/shared test
   ```
 
   Expected: all tests pass.
 
-- [ ] **Step 6: Rebuild `@jdm/shared`**
+- [ ] **Step 6: Rebuild `@ccc/shared`**
 
   ```
-  pnpm --filter @jdm/shared build
+  pnpm --filter @ccc/shared build
   ```
 
 - [ ] **Step 7: Commit**
@@ -1530,11 +1530,11 @@ describe('car nickname backfill invariants (post-migration)', () => {
 
 - [ ] **Step 3: Update `apps/mobile/src/screens/events/feed/FeedPostCard.tsx`**
 
-  `post.car` is typed as `FeedPostResponse.car` which includes `PublicCarProfile` from `@jdm/shared/feed`. After step §4 it includes `modifications`. Add pills inside `carInfo` view (see §"Public-profile pill rendering" §Surface 5).
+  `post.car` is typed as `FeedPostResponse.car` which includes `PublicCarProfile` from `@ccc/shared/feed`. After step §4 it includes `modifications`. Add pills inside `carInfo` view (see §"Public-profile pill rendering" §Surface 5).
 
 - [ ] **Step 4: Update `apps/mobile/src/screens/events/feed/CarPickerPopover.tsx`**
 
-  `cars` prop is `Car[]` from `@jdm/shared/cars`. After step §3 it includes `modifications`. Add pills below the label text (see §"Public-profile pill rendering" §Surface 6).
+  `cars` prop is `Car[]` from `@ccc/shared/cars`. After step §3 it includes `modifications`. Add pills below the label text (see §"Public-profile pill rendering" §Surface 6).
 
 - [ ] **Step 5: Update `apps/mobile/src/screens/cart/CarPlatePicker.tsx`**
 
@@ -1566,7 +1566,7 @@ describe('car nickname backfill invariants (post-migration)', () => {
 - [ ] **Step 1: Run full shared test suite**
 
   ```
-  pnpm --filter @jdm/shared test
+  pnpm --filter @ccc/shared test
   ```
 
   Expected: all pass.
@@ -1587,10 +1587,10 @@ describe('car nickname backfill invariants (post-migration)', () => {
 
   (Or per-package if global tsc is not wired.)
 
-- [ ] **Step 4: Verify `@jdm/shared` build is current**
+- [ ] **Step 4: Verify `@ccc/shared` build is current**
 
   ```
-  pnpm --filter @jdm/shared build
+  pnpm --filter @ccc/shared build
   ```
 
 - [ ] **Step 5: Open PR to `main`**
@@ -1632,7 +1632,7 @@ describe('car nickname backfill invariants (post-migration)', () => {
 - [ ] All four mobile form screens update nickname `onChangeText` to not set `undefined`.
 - [ ] Pills render in: both garage-list screens, FeedPostCard, CarPickerPopover, CarPlatePicker.
 - [ ] Copy strings in PT-BR; all new keys added to `profileCopy.garage`.
-- [ ] `@jdm/shared` rebuilt after schema changes.
+- [ ] `@ccc/shared` rebuilt after schema changes.
 - [ ] No admin files touched (admin has no car-identity surfaces).
 - [ ] TASK-A `tier` markers not removed.
 - [ ] Integration tests use real Postgres (Testcontainers), not mocks.

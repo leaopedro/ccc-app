@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminFinanceByEventResponseSchema,
   adminFinanceByProductResponseSchema,
   adminFinancePaymentMixResponseSchema,
   adminFinanceSummarySchema,
   adminFinanceTrendResponseSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1089,8 +1089,8 @@ describe('Admin Finance Endpoints', () => {
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('text/csv');
       expect(res.headers['content-disposition']).toContain('finance-export.csv');
-      expect(res.headers['x-jdm-k-anonymity-min']).toBe('5');
-      expect(res.headers['x-jdm-k-anonymity-suppressed-groups']).toBe('0');
+      expect(res.headers['x-ccc-k-anonymity-min']).toBe('5');
+      expect(res.headers['x-ccc-k-anonymity-suppressed-groups']).toBe('0');
     });
 
     it('emits aggregate rows without direct identifiers', async () => {
@@ -1184,7 +1184,7 @@ describe('Admin Finance Endpoints', () => {
       });
       expect(suppressed.statusCode).toBe(200);
       expect(suppressed.body.split('\n')).toHaveLength(1);
-      expect(suppressed.headers['x-jdm-k-anonymity-suppressed-groups']).toBe('1');
+      expect(suppressed.headers['x-ccc-k-anonymity-suppressed-groups']).toBe('1');
     });
 
     it('escapes aggregate CSV fields with commas', async () => {
@@ -1367,7 +1367,7 @@ describe('Admin Finance Endpoints', () => {
       const lines = res.body.split('\n');
       expect(lines).toHaveLength(2);
       expect(lines[1]).toContain(',10005,1000500,10005,');
-      expect(res.headers['x-jdm-k-anonymity-suppressed-groups']).toBe('0');
+      expect(res.headers['x-ccc-k-anonymity-suppressed-groups']).toBe('0');
     });
   });
 });

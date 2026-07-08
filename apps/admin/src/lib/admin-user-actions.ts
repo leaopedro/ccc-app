@@ -1,6 +1,6 @@
 'use server';
 
-import type { UserStatusName } from '@jdm/shared/auth';
+import type { UserStatusName } from '@ccc/shared/auth';
 
 import { createAdminUser, disableAdminUser, enableAdminUser } from './admin-api';
 import { ApiError } from './api';

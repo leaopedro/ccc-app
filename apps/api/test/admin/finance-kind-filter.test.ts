@@ -3,7 +3,7 @@
 //
 // External review flagged that those keys were silently ignored. These tests
 // drive the handler extensions: real Testcontainers Postgres, no mocks.
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

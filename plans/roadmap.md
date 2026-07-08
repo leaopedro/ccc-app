@@ -79,7 +79,7 @@ and load the admin page.
   - `packages/shared/src/index.ts`
   - Sub-modules `auth.ts`, `events.ts`, etc. (empty stubs for now).
   - Exports branded ID types (`UserId`, `EventId`, …).
-- **Done when:** `@jdm/shared` imports cleanly from another workspace package.
+- **Done when:** `@ccc/shared` imports cleanly from another workspace package.
 
 ### 0.5 `packages/db` — Prisma base
 
@@ -210,7 +210,7 @@ v0.2.
 
 - [x] **Scope:** Add User/AuthProvider/RefreshToken models and email
       verification fields. _(merged via PR #1; deployed to Railway)_
-- **Deliverables:** Prisma migration; Zod schemas in `@jdm/shared/auth`.
+- **Deliverables:** Prisma migration; Zod schemas in `@ccc/shared/auth`.
 - **Done when:** `db:migrate` green in CI; shared schemas typecheck.
 
 #### 1.2 Signup with email + password
@@ -589,7 +589,7 @@ copyPaste, expiresAt }`.
 
 #### 9.1 Schema: FeedPost, FeedLike, FeedComment, Report
 
-- [~] **Done when:** migration green; shared schemas in `@jdm/shared/feed`.
+- [~] **Done when:** migration green; shared schemas in `@ccc/shared/feed`.
 
 > note: model named `FeedReaction` (kind-flexible) instead of `FeedLike`; `Report` covers posts and comments; feed settings persisted on `Event`.
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import type { AdminFinanceTrendPoint } from '@jdm/shared/admin';
+import { brand } from '@ccc/design';
+import type { AdminFinanceTrendPoint } from '@ccc/shared/admin';
 import {
   Area,
   AreaChart,

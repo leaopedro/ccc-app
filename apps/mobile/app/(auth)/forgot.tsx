@@ -1,8 +1,8 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { forgotPasswordSchema } from '@jdm/shared/auth';
-import type { ForgotPasswordInput } from '@jdm/shared/auth';
-import { Button, Text } from '@jdm/ui';
+import { forgotPasswordSchema } from '@ccc/shared/auth';
+import type { ForgotPasswordInput } from '@ccc/shared/auth';
+import { Button, Text } from '@ccc/ui';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Mail } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';

@@ -1,6 +1,6 @@
 'use client';
 
-import { BRAZIL_STATE_CODES } from '@jdm/shared/profile';
+import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 

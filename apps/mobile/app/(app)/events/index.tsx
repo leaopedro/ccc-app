@@ -1,7 +1,7 @@
-import { brand } from '@jdm/design';
-import type { EventSummary, EventWindow } from '@jdm/shared/events';
-import type { PublicProfile } from '@jdm/shared/profile';
-import { Badge, Button, Text } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import type { EventSummary, EventWindow } from '@ccc/shared/events';
+import type { PublicProfile } from '@ccc/shared/profile';
+import { Badge, Button, Text } from '@ccc/ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, ShoppingCart } from 'lucide-react-native';

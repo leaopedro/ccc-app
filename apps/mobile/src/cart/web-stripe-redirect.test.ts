@@ -32,15 +32,15 @@ describe('redirectToStripeCheckout', () => {
       navigate,
     });
 
-    expect(storage.getItem('jdm:pendingOrderId')).toBe('order-1');
-    expect(storage.getItem('jdm:pendingCheckoutUrl:order-1')).toBe(
+    expect(storage.getItem('ccc:pendingOrderId')).toBe('order-1');
+    expect(storage.getItem('ccc:pendingCheckoutUrl:order-1')).toBe(
       'https://checkout.stripe.test/abc',
     );
     // Sibling orders must NOT retain the shared Checkout Session URL,
     // otherwise any sibling could reopen the session and pay the full
     // cart after sibling-level cancellations.
-    expect(storage.getItem('jdm:pendingCheckoutUrl:order-2')).toBeNull();
-    expect(storage.getItem('jdm:pendingCheckoutUrl:order-3')).toBeNull();
+    expect(storage.getItem('ccc:pendingCheckoutUrl:order-2')).toBeNull();
+    expect(storage.getItem('ccc:pendingCheckoutUrl:order-3')).toBeNull();
     expect(navigate).toHaveBeenCalledWith('https://checkout.stripe.test/abc');
   });
 
@@ -55,7 +55,7 @@ describe('redirectToStripeCheckout', () => {
       navigate,
     });
 
-    expect(storage.getItem('jdm:pendingOrderId')).toBeNull();
+    expect(storage.getItem('ccc:pendingOrderId')).toBeNull();
     expect(storage.length).toBe(0);
     expect(navigate).toHaveBeenCalledWith('https://checkout.stripe.test/abc');
   });

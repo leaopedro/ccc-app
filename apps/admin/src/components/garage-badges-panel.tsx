@@ -1,7 +1,7 @@
 'use client';
 
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
-import { HexBadge } from '@jdm/ui/web';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
+import { HexBadge } from '@ccc/ui/web';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 

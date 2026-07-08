@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { type CapacityDisplayPolicy, computeCapacityDisplay } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { type CapacityDisplayPolicy, computeCapacityDisplay } from '@ccc/shared/general-settings';
 import {
   storeCollectionListResponseSchema,
   storeCollectionSchema,
@@ -14,7 +14,7 @@ import {
   storeProductTypeSchema,
   storeProductVariantSchema,
   type StoreSort,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import type {
   Collection as DbCollection,
   Prisma,

@@ -1,4 +1,4 @@
-import { publicProfileSchema } from '@jdm/shared/profile';
+import { publicProfileSchema } from '@ccc/shared/profile';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

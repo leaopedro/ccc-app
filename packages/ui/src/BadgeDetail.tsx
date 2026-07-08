@@ -1,4 +1,4 @@
-import type { BadgeCatalogEntry, BadgeCategory, GarageBadgeOwnerState } from '@jdm/shared/badges';
+import type { BadgeCatalogEntry, BadgeCategory, GarageBadgeOwnerState } from '@ccc/shared/badges';
 import { ArrowLeft } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
 

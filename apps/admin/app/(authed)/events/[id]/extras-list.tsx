@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminExtra } from '@jdm/shared/admin';
+import type { AdminExtra } from '@ccc/shared/admin';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 

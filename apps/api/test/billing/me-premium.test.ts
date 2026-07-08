@@ -10,7 +10,7 @@
  * No real Stripe API calls happen — FakeStripe returns deterministic values.
  */
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

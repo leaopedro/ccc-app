@@ -1,7 +1,7 @@
 'use client';
 
-import type { AdminStoreOrderDetail } from '@jdm/shared/admin';
-import type { StoreFulfillmentStatus } from '@jdm/shared/store';
+import type { AdminStoreOrderDetail } from '@ccc/shared/admin';
+import type { StoreFulfillmentStatus } from '@ccc/shared/store';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 

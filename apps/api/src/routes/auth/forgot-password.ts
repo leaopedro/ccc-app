@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { forgotPasswordSchema, INACTIVE_USER_STATUSES } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { forgotPasswordSchema, INACTIVE_USER_STATUSES } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { resetMail } from '../../services/auth/mail-templates.js';

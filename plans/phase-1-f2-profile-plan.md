@@ -133,13 +133,13 @@ model CarPhoto {
 
 - [ ] **Step 2: Generate the migration**
 
-Run: `pnpm --filter @jdm/db exec prisma migrate dev --name profile_cars`
+Run: `pnpm --filter @ccc/db exec prisma migrate dev --name profile_cars`
 Expected: a new `migrations/<timestamp>_profile_cars/migration.sql` is created and applied; `prisma generate` runs; no errors.
 
 - [ ] **Step 3: Verify client typecheck**
 
-Run: `pnpm --filter @jdm/db typecheck && pnpm --filter api typecheck`
-Expected: green. If `prisma/client` types are stale, `pnpm --filter @jdm/db exec prisma generate` then retry.
+Run: `pnpm --filter @ccc/db typecheck && pnpm --filter api typecheck`
+Expected: green. If `prisma/client` types are stale, `pnpm --filter @ccc/db exec prisma generate` then retry.
 
 - [ ] **Step 4: Commit**
 
@@ -203,7 +203,7 @@ describe('publicProfileSchema', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/shared test`
+Run: `pnpm --filter @ccc/shared test`
 Expected: FAIL — modules don't exist.
 
 - [ ] **Step 2: Implement `profile.ts`**
@@ -375,7 +375,7 @@ export * from './uploads';
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `pnpm --filter @jdm/shared test && pnpm --filter @jdm/shared typecheck`
+Run: `pnpm --filter @ccc/shared test && pnpm --filter @ccc/shared typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -493,8 +493,8 @@ Expected: FAIL — PATCH /me route not defined, and GET /me does not return new 
 Replace `apps/api/src/routes/me.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { publicProfileSchema, updateProfileSchema } from '@jdm/shared/profile';
+import { prisma } from '@ccc/db';
+import { publicProfileSchema, updateProfileSchema } from '@ccc/shared/profile';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -924,7 +924,7 @@ Expected: FAIL — route not defined (404).
 Create `apps/api/src/routes/uploads.ts`:
 
 ```ts
-import { presignRequestSchema } from '@jdm/shared/uploads';
+import { presignRequestSchema } from '@ccc/shared/uploads';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -993,7 +993,7 @@ Create `apps/api/test/cars/list.test.ts`:
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
@@ -1109,8 +1109,8 @@ Expected: FAIL — 404.
 Create `apps/api/src/routes/cars.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { carInputSchema, carSchema } from '@jdm/shared/cars';
+import { prisma } from '@ccc/db';
+import { carInputSchema, carSchema } from '@ccc/shared/cars';
 import type { Car as DbCar, CarPhoto as DbPhoto } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -1202,7 +1202,7 @@ git commit -m "feat(api): list + create cars under /me/cars"
 Create `apps/api/test/cars/update.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1258,7 +1258,7 @@ describe('PATCH /me/cars/:id', () => {
 Create `apps/api/test/cars/delete.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1320,7 +1320,7 @@ Expected: FAIL on the new suites.
 Append to `apps/api/src/routes/cars.ts` inside the plugin function, and import `carUpdateSchema`:
 
 ```ts
-import { carInputSchema, carSchema, carUpdateSchema } from '@jdm/shared/cars';
+import { carInputSchema, carSchema, carUpdateSchema } from '@ccc/shared/cars';
 // ...
 app.patch('/me/cars/:id', { preHandler: [app.authenticate] }, async (request, reply) => {
   const { sub } = requireUser(request);
@@ -1375,7 +1375,7 @@ git commit -m "feat(api): update + delete own cars"
 Create `apps/api/test/cars/photos.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1461,7 +1461,7 @@ Expected: FAIL — routes not defined.
 Append to `apps/api/src/routes/cars.ts`:
 
 ```ts
-import { addCarPhotoSchema, carInputSchema, carSchema, carUpdateSchema } from '@jdm/shared/cars';
+import { addCarPhotoSchema, carInputSchema, carSchema, carUpdateSchema } from '@ccc/shared/cars';
 // ... inside the plugin:
 app.post('/me/cars/:id/photos', { preHandler: [app.authenticate] }, async (request, reply) => {
   const { sub } = requireUser(request);
@@ -1544,7 +1544,7 @@ import {
   type PublicProfile,
   updateProfileSchema,
   type UpdateProfileInput,
-} from '@jdm/shared/profile';
+} from '@ccc/shared/profile';
 
 import { authedRequest } from './client';
 
@@ -1566,7 +1566,7 @@ import {
   presignResponseSchema,
   type PresignRequest,
   type PresignResponse,
-} from '@jdm/shared/uploads';
+} from '@ccc/shared/uploads';
 
 import { authedRequest } from './client';
 
@@ -1594,7 +1594,7 @@ import {
   carInputSchema,
   type CarUpdateInput,
   carUpdateSchema,
-} from '@jdm/shared/cars';
+} from '@ccc/shared/cars';
 import { z } from 'zod';
 
 import { authedRequest } from './client';
@@ -1677,7 +1677,7 @@ export const profileCopy = {
 
 - [ ] **Step 5: Typecheck**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: green.
 
 - [ ] **Step 6: Commit**
@@ -1698,8 +1698,8 @@ git commit -m "feat(mobile): profile, cars, uploads api clients"
 
 - [ ] **Step 1: Install dep**
 
-Run: `pnpm --filter @jdm/mobile add expo-image-picker`
-Then: `pnpm --filter @jdm/mobile exec expo install --check`
+Run: `pnpm --filter @ccc/mobile add expo-image-picker`
+Then: `pnpm --filter @ccc/mobile exec expo install --check`
 Expected: version aligned with the Expo SDK in use.
 
 - [ ] **Step 2: Write the helper**
@@ -1710,7 +1710,7 @@ Create `apps/mobile/src/lib/upload-image.ts`:
 import * as ImagePicker from 'expo-image-picker';
 
 import { requestPresign } from '~/api/uploads';
-import type { UploadKind, PresignResponse } from '@jdm/shared/uploads';
+import type { UploadKind, PresignResponse } from '@ccc/shared/uploads';
 
 export type PickedImage = {
   uri: string;
@@ -1786,7 +1786,7 @@ export const pickAndUpload = async (
 
 - [ ] **Step 3: Typecheck**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: green.
 
 - [ ] **Step 4: Commit**
@@ -1837,12 +1837,12 @@ import {
   View,
 } from 'react-native';
 
-import { type PublicProfile } from '@jdm/shared/profile';
+import { type PublicProfile } from '@ccc/shared/profile';
 import {
   BRAZIL_STATE_CODES,
   updateProfileSchema,
   type UpdateProfileInput,
-} from '@jdm/shared/profile';
+} from '@ccc/shared/profile';
 
 import { getProfile, updateProfile } from '~/api/profile';
 import { Button } from '~/components/Button';
@@ -2018,7 +2018,7 @@ Minimal change (no new code unless Gate already has an explicit allowlist): if G
 
 - [ ] **Step 5: Run typegen + typecheck**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: green.
 
 - [ ] **Step 6: Commit**
@@ -2054,7 +2054,7 @@ import {
   View,
 } from 'react-native';
 
-import type { Car } from '@jdm/shared/cars';
+import type { Car } from '@ccc/shared/cars';
 
 import { listCars } from '~/api/cars';
 import { Button } from '~/components/Button';
@@ -2149,7 +2149,7 @@ import { useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 
-import { carInputSchema, type CarInput } from '@jdm/shared/cars';
+import { carInputSchema, type CarInput } from '@ccc/shared/cars';
 
 import { createCar } from '~/api/cars';
 import { Button } from '~/components/Button';
@@ -2237,7 +2237,7 @@ const styles = StyleSheet.create({
 
 - [ ] **Step 3: Typecheck + typegen**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: green (typegen runs as pretypecheck).
 
 - [ ] **Step 4: Commit**
@@ -2275,7 +2275,7 @@ import {
   View,
 } from 'react-native';
 
-import { type Car, carUpdateSchema, type CarUpdateInput } from '@jdm/shared/cars';
+import { type Car, carUpdateSchema, type CarUpdateInput } from '@ccc/shared/cars';
 
 import { addCarPhoto, deleteCar, listCars, removeCarPhoto, updateCar } from '~/api/cars';
 import { Button } from '~/components/Button';
@@ -2463,12 +2463,12 @@ const styles = StyleSheet.create({
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: green.
 
 - [ ] **Step 3: Manual smoke (web preview)**
 
-Run: `pnpm --filter @jdm/mobile dev --web` and verify `/profile`, `/garage`, `/garage/new`, `/garage/<id>` render against a running API (`pnpm --filter api dev`). Confirm:
+Run: `pnpm --filter @ccc/mobile dev --web` and verify `/profile`, `/garage`, `/garage/new`, `/garage/<id>` render against a running API (`pnpm --filter api dev`). Confirm:
 
 - Profile save persists after reload.
 - Car create/edit/delete all work.

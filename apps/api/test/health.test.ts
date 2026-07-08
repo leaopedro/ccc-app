@@ -1,4 +1,4 @@
-import { healthResponseSchema } from '@jdm/shared/health';
+import { healthResponseSchema } from '@ccc/shared/health';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildApp } from '../src/app.js';

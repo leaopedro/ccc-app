@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

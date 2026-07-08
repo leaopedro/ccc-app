@@ -1,4 +1,4 @@
-# Chunk 39 — `ProfileStats` composite wrapper (`@jdm/ui`) — Implementation Plan
+# Chunk 39 — `ProfileStats` composite wrapper (`@ccc/ui`) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -96,13 +96,13 @@ If no `test` script / `@testing-library/react-native` is wired, **STOP** — tha
 
 ## Type contract (locked, used across all tasks)
 
-The types below are referenced by **every** task. Define them in `ProfileStats.tsx` exactly as written. The `progress` + `stats` payload types come from `@jdm/shared/garage-progress` (chunk 24 §C12 subpath).
+The types below are referenced by **every** task. Define them in `ProfileStats.tsx` exactly as written. The `progress` + `stats` payload types come from `@ccc/shared/garage-progress` (chunk 24 §C12 subpath).
 
 ```ts
 import type {
   GarageProgress, // chunk 24 — { xp, rank, nextRank, xpInTier, xpToNextRank, tierSpan }
   GarageStats, // chunk 24 — { events, posts, likesReceived, joinedAt }
-} from '@jdm/shared/garage-progress';
+} from '@ccc/shared/garage-progress';
 
 export interface ProfileStatsProps {
   /** Progress block from the wire payload. Omitted when killswitch off (server) OR public hide-on-empty fires. */
@@ -160,7 +160,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { ProfileStats } from '../ProfileStats.js';
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 
 const zeroProgress: GarageProgress = {
   xp: 0,
@@ -342,10 +342,10 @@ Notes: tests assert on `props.visible` for the live `XPTooltip` node and dismiss
 - [ ] **Step 1.2: Run the failing tests**
 
 ```bash
-pnpm --filter @jdm/ui test -- ProfileStats.test.tsx
+pnpm --filter @ccc/ui test -- ProfileStats.test.tsx
 ```
 
-Expected: 12 failures, all with `Cannot find module '../ProfileStats.js'` (or the equivalent). If the test runner is not yet wired in `@jdm/ui`, that error is the engineer's signal — see Step 0.5.
+Expected: 12 failures, all with `Cannot find module '../ProfileStats.js'` (or the equivalent). If the test runner is not yet wired in `@ccc/ui`, that error is the engineer's signal — see Step 0.5.
 
 - [ ] **Step 1.3: Verify child contracts**
 
@@ -378,7 +378,7 @@ If any prop drifted, update Task 2 step 2.1 inline + add a one-line entry under 
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 
 import { StatsRow } from './StatsRow.js';
 import { XPScoreboard } from './XPScoreboard.js';
@@ -455,7 +455,7 @@ export { ProfileStats, type ProfileStatsProps } from './ProfileStats.js';
 - [ ] **Step 2.3: Run the tests — expect green**
 
 ```bash
-pnpm --filter @jdm/ui test -- ProfileStats.test.tsx
+pnpm --filter @ccc/ui test -- ProfileStats.test.tsx
 ```
 
 Expected: **12 passing, 0 failing, 0 skipped** (8 short-circuits + 2 renders + 2 tooltip). If count is wrong, diff against Task 1 Step 1.1 verbatim.
@@ -477,13 +477,13 @@ git -C /Users/pedro/Projects/jdm-experience commit -m "feat(ui): ProfileStats co
 - [ ] **Step 3.1: Typecheck**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/ui typecheck
 ```
 
-Expected: clean. If `@jdm/shared/garage-progress` is unresolved, chunk 24's subpath export (§C12) `dist/` is stale (memory rule `feedback_rebuild_shared_after_schema_change.md`):
+Expected: clean. If `@ccc/shared/garage-progress` is unresolved, chunk 24's subpath export (§C12) `dist/` is stale (memory rule `feedback_rebuild_shared_after_schema_change.md`):
 
 ```bash
-pnpm --filter @jdm/shared build && pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/shared build && pnpm --filter @ccc/ui typecheck
 ```
 
 This chunk does NOT modify `packages/shared`; rebuild is only to refresh `dist/` if a sibling chunk landed schema changes locally.
@@ -539,7 +539,7 @@ Expected: every name appears with identical spelling in every file that uses it.
 - [ ] **Step 5.1: Targeted vitest run**
 
 ```bash
-pnpm --filter @jdm/ui test -- ProfileStats.test.tsx
+pnpm --filter @ccc/ui test -- ProfileStats.test.tsx
 ```
 
 Expected counts:
@@ -552,7 +552,7 @@ Expected counts:
 - [ ] **Step 5.2: Touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/ui typecheck
 ```
 
 Expected: clean.
@@ -619,7 +619,7 @@ If pre-flight 0.4 surfaces a child-prop drift (e.g. chunk 36 named the hint prop
 
 - [ ] Branch cut from a freshly-pulled `main` (pre-flight 0.1–0.3 ran clean). Never branched from `production`.
 - [ ] Only three files changed: `packages/ui/src/ProfileStats.tsx` (new) + `packages/ui/src/__tests__/ProfileStats.test.tsx` (new) + `packages/ui/src/index.ts` (1-line export). Verify with `git diff --stat main...HEAD`.
-- [ ] `pnpm --filter @jdm/ui typecheck` clean.
+- [ ] `pnpm --filter @ccc/ui typecheck` clean.
 - [ ] Targeted vitest 12/12 in `ProfileStats.test.tsx`.
 - [ ] No edits to `packages/shared`, `packages/db`, `apps/api`, `apps/mobile`, `apps/admin`, or the three child component files (`XPScoreboard.tsx`, `StatsRow.tsx`, `XPTooltip.tsx`).
 - [ ] No edits on `production` (CLAUDE.md branch safety).

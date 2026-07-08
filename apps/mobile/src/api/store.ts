@@ -17,7 +17,7 @@ import {
   type StoreProductListResponse,
   type StoreSettings,
   type StoreProductTypeListResponse,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import { z } from 'zod';
 
 import { authedRequest, registerTokenProvider, request } from './client';

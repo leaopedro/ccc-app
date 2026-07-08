@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -89,13 +89,13 @@ describe('offline-storage.web', () => {
   });
 
   it('listSavedTickets survives corrupt storage gracefully', async () => {
-    localStorage.setItem('@jdm/tickets/offline-store/v1', 'not-valid-json{{');
+    localStorage.setItem('@ccc/tickets/offline-store/v1', 'not-valid-json{{');
     await expect(listSavedTickets()).resolves.toEqual([]);
   });
 
   it('listSavedTickets returns empty for invalid snapshot schema', async () => {
     localStorage.setItem(
-      '@jdm/tickets/offline-store/v1',
+      '@ccc/tickets/offline-store/v1',
       JSON.stringify({ 't-bad': { version: 1, savedAt: 'not-a-date', ticket: null } }),
     );
     await expect(listSavedTickets()).resolves.toEqual([]);

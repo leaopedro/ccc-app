@@ -8,7 +8,7 @@ import {
   getOrderResponseSchema,
   myOrdersResponseSchema,
   resumeOrderResponseSchema,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 import type {
   CancelMyOrderResponse,
   CreateOrderRequest,
@@ -19,7 +19,7 @@ import type {
   GetOrderResponse,
   MyOrdersResponse,
   ResumeOrderResponse,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 
 import { authedRequest } from './client';
 

@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 type AppTabPlatform = 'native' | 'web';
 

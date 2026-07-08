@@ -2,8 +2,8 @@ import {
   adminStoreOrderDetailSchema,
   adminStoreOrderListResponseSchema,
   adminStoreOrderQuerySchema,
-} from '@jdm/shared/admin';
-import { adminStoreFulfillmentUpdateSchema } from '@jdm/shared/store';
+} from '@ccc/shared/admin';
+import { adminStoreFulfillmentUpdateSchema } from '@ccc/shared/store';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

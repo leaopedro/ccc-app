@@ -6,8 +6,8 @@
 // `react-dom/server`'s `renderToString` so the SSR contract is asserted
 // directly, not via the mobile RN-mock shim.
 
-import type { GarageProgress } from '@jdm/shared/garage-progress';
-import { XPScoreboard, type XPScoreboardProps } from '@jdm/ui/web';
+import type { GarageProgress } from '@ccc/shared/garage-progress';
+import { XPScoreboard, type XPScoreboardProps } from '@ccc/ui/web';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 

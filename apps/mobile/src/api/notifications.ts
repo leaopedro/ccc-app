@@ -7,7 +7,7 @@ import {
   type NotificationListResponse,
   type NotificationMarkReadResponse,
   type NotificationUnreadCountResponse,
-} from '@jdm/shared/notifications';
+} from '@ccc/shared/notifications';
 
 import { authedRequest } from './client';
 

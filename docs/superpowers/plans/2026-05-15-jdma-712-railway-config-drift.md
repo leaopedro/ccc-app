@@ -28,7 +28,7 @@ Expected: no modified files and branch `worktree-jdma-712`
 - [x] **Step 2: Record the config drift evidence**
 
 Run: `diff -u railway.json apps/api/railway.json || true`
-Expected: root file uses `preDeployCommand` + `node apps/api/dist/server.js`; nested file uses inline `pnpm --filter @jdm/db db:deploy && node dist/server.js`
+Expected: root file uses `preDeployCommand` + `node apps/api/dist/server.js`; nested file uses inline `pnpm --filter @ccc/db db:deploy && node dist/server.js`
 
 - [x] **Step 3: Prove the repo-root runtime path matches the Docker image**
 
@@ -83,10 +83,10 @@ Expected: root config present, nested config absent, docs point at repo-root con
 
 - [x] **Step 2: Capture the local verification caveat**
 
-Run: `pnpm --filter @jdm/db db:generate && test -f apps/api/dist/server.js`
+Run: `pnpm --filter @ccc/db db:generate && test -f apps/api/dist/server.js`
 Expected: Prisma client refresh is possible locally; runtime path proof remains focused and does not require a full workspace suite
 
-> note: In the fresh `jdma-712` worktree, `pnpm --filter @jdm/db db:generate` fails before execution because the worktree does not have its own `node_modules` install (`prisma: command not found`). Verification stayed focused on the touched deploy-config paths plus the shared-root proof that `node_modules/.bin/prisma` exists and the app dist path is `apps/api/dist/server.js`.
+> note: In the fresh `jdma-712` worktree, `pnpm --filter @ccc/db db:generate` fails before execution because the worktree does not have its own `node_modules` install (`prisma: command not found`). Verification stayed focused on the touched deploy-config paths plus the shared-root proof that `node_modules/.bin/prisma` exists and the app dist path is `apps/api/dist/server.js`.
 
 - [x] **Step 3: Post the issue update with root cause, change, verification, and Railway follow-up**
 

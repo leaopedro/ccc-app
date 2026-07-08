@@ -5,9 +5,9 @@
 // All user-facing strings route through `~/copy/garage` per CLAUDE.md i18n
 // scaffold rule.
 
-import { brand } from '@jdm/design';
-import { type GarageOwner } from '@jdm/shared/garage';
-import { PremiumBadge } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import { type GarageOwner } from '@ccc/shared/garage';
+import { PremiumBadge } from '@ccc/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { garageCopy } from '~/copy/garage';

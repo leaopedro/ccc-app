@@ -109,8 +109,8 @@ Tone: mirror `apps/api/test/admin/user-garage/admin-user-garage.test.ts` (route-
 
 ```ts
 // apps/api/test/garage/awarder-premium-activation.test.ts
-import { prisma } from '@jdm/db';
-import { adminGarageSummarySchema } from '@jdm/shared/admin-garage';
+import { prisma } from '@ccc/db';
+import { adminGarageSummarySchema } from '@ccc/shared/admin-garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -182,7 +182,7 @@ describe('premium_activation XP hook (chunk 34)', () => {
 - [ ] **Step 1.2: Run the file to confirm it fails on the missing XP**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
 ```
 
 Expected: `expect(g.xp).toBe(200)` fails with `Received: 0`. (Premium grants succeed; the XP hook is not wired yet.)
@@ -251,7 +251,7 @@ Keep `recordAudit` BEFORE the XP write so the audit row lands even when the awar
 - [ ] **Step 2.3: Run the Task-1 test to confirm it now passes**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
 ```
 
 Expected: 1 passing.
@@ -259,7 +259,7 @@ Expected: 1 passing.
 - [ ] **Step 2.4: Touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -345,7 +345,7 @@ it('lapse + re-activate does NOT award a second +200 (one-shot ever per §invari
 - [ ] **Step 3.2: Run the new test to confirm pass**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'lapse'
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'lapse'
 ```
 
 Expected: 1 passing.
@@ -409,7 +409,7 @@ it('killswitch off — premium grants succeed but no XpEvent or Garage.xp change
 - [ ] **Step 4.2: Run + commit**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'killswitch'
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'killswitch'
 ```
 
 Expected: 1 passing.
@@ -478,7 +478,7 @@ it('revoke (no prior grant) does not award XP', async () => {
 - [ ] **Step 6.2: Run + commit**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
 ```
 
 Expected: 4 passing (first-grant, lapse+reactivate, killswitch off, revoke-alone).
@@ -548,7 +548,7 @@ it('concurrent two-request premium grants — final Garage.xp === 200, exactly o
 - [ ] **Step 7.2: Run + commit**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'concurrent'
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts -t 'concurrent'
 ```
 
 Expected: 1 passing.
@@ -565,7 +565,7 @@ git commit -m "test(api): concurrent premium grants stay one-shot (chunk 34)"
 - [ ] **Step V.1: Targeted vitest run — full file**
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
+pnpm --filter @ccc/api test -- apps/api/test/garage/awarder-premium-activation.test.ts
 ```
 
 Expected: **5 passing, 0 failing, 0 skipped**.
@@ -583,7 +583,7 @@ Test names (verbatim, for the PR body):
 The chunk-2A admin premium-grant tests in `apps/api/test/admin/user-garage/admin-user-garage.test.ts` MUST stay green — the splice is additive, not breaking.
 
 ```bash
-pnpm --filter @jdm/api test -- apps/api/test/admin/user-garage/admin-user-garage.test.ts
+pnpm --filter @ccc/api test -- apps/api/test/admin/user-garage/admin-user-garage.test.ts
 ```
 
 Expected: all existing tests pass (the count is whatever's on `main` at chunk-34 time; the splice should not change it).
@@ -591,14 +591,14 @@ Expected: all existing tests pass (the count is whatever's on `main` at chunk-34
 - [ ] **Step V.3: Touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
 
 - [ ] **Step V.4: Memory-rule check — no shared rebuild needed**
 
-`@jdm/shared` was not touched (the awarder call uses an internal API). `packages/db` was not touched (XpEvent model is chunk 23 — already on `main` when this chunk lands). The CLAUDE.md memory rule about rebuilding `@jdm/shared/dist` does NOT apply.
+`@ccc/shared` was not touched (the awarder call uses an internal API). `packages/db` was not touched (XpEvent model is chunk 23 — already on `main` when this chunk lands). The CLAUDE.md memory rule about rebuilding `@ccc/shared/dist` does NOT apply.
 
 ```bash
 git status
@@ -636,7 +636,7 @@ If a Stripe-driven premium subscription path lands BEFORE this PR merges, splice
 - [ ] All 5 tests in `awarder-premium-activation.test.ts` pass (including the concurrent two-request grant case).
 - [ ] `awardXp` call is NOT wrapped in try/catch (fix-canon §5 — callers let unexpected errors propagate so the parent tx rolls back).
 - [ ] Existing `admin-user-garage.test.ts` regression: still green.
-- [ ] `pnpm --filter @jdm/api typecheck` clean.
+- [ ] `pnpm --filter @ccc/api typecheck` clean.
 - [ ] No edits to `packages/shared`, `packages/db`, `xp-awarder.ts`, `killswitch.ts`, or any other route file.
 - [ ] No edits to `production` branch (CLAUDE.md branch safety).
 - [ ] PR opened against `main` (not `production`).

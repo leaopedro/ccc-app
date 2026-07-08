@@ -2,7 +2,7 @@ import {
   badgeCodeSchema,
   garageBadgesOwnerResponseSchema,
   type GarageBadgesOwnerResponse,
-} from '@jdm/shared/badges';
+} from '@ccc/shared/badges';
 import {
   garageCoverPatchSchema,
   garageOwnerSchema,
@@ -10,8 +10,8 @@ import {
   garageReadSchema,
   type GarageCoverPatch,
   type GaragePatch,
-} from '@jdm/shared/garage';
-import { garageCoverPresetSchema } from '@jdm/shared/garage-covers';
+} from '@ccc/shared/garage';
+import { garageCoverPresetSchema } from '@ccc/shared/garage-covers';
 import { z } from 'zod';
 
 import { authedRequest } from './client';
@@ -19,13 +19,13 @@ import { authedRequest } from './client';
 // Local mirror of the purchase-option contract.
 //
 // Source of truth (post-merge): TASK-C / TASK-B-prime publishes the shape
-// into `@jdm/shared/garage` (variantId, basePriceCents, displayPriceCents,
+// into `@ccc/shared/garage` (variantId, basePriceCents, displayPriceCents,
 // devFeePercent, currency). API merge ordering decides whether TASK-C or
 // this PR lands first; the mirror lets the buy-spot UI ship in parallel.
 //
 // Swap procedure once TASK-C ships the shared schema:
 //   1. Delete this `garagePurchaseOptionSchema` + `GaragePurchaseOption`.
-//   2. Import them from `@jdm/shared/garage`.
+//   2. Import them from `@ccc/shared/garage`.
 //   3. Update `garageReadResponseSchema` below to extend with the shared
 //      type.
 //   4. Verify shapes match — if TASK-C diverges (new fields, renamed
@@ -78,10 +78,10 @@ export const patchGarage = (input: GaragePatch): Promise<GaragePatchResponse> =>
 
 // Local mirror of the GET /me/garage/cover/presets contract.
 //
-// Source-of-truth note: `@jdm/shared` does not yet export a presets-response
+// Source-of-truth note: `@ccc/shared` does not yet export a presets-response
 // schema (the server resolves each preset's R2 image URL into the response
 // body). Mirror lives here so the picker can ship without a shared rev; once
-// chunk 09's contract stabilizes, lift this into `@jdm/shared/garage-covers`
+// chunk 09's contract stabilizes, lift this into `@ccc/shared/garage-covers`
 // and import here instead.
 export const garageCoverPresetItemSchema = z.object({
   slug: garageCoverPresetSchema,

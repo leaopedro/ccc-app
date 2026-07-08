@@ -1,4 +1,4 @@
-import type { GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageStats } from '@ccc/shared/garage-progress';
 import { Text, View } from 'react-native';
 
 import { BadgeGlyph } from './BadgeGlyph.js';
@@ -30,9 +30,9 @@ type Tile =
   | { kind: 'num'; label: string; icon: string; value: number }
   | { kind: 'date'; label: string; icon: string; value: string };
 
-// Hardcoded mono fontFamily. Other `@jdm/ui` components avoid `Platform`
+// Hardcoded mono fontFamily. Other `@ccc/ui` components avoid `Platform`
 // because barrel re-exports load module-level Platform.select into every
-// mobile test that imports from `@jdm/ui`, and most test files mock
+// mobile test that imports from `@ccc/ui`, and most test files mock
 // `react-native` without `Platform`. iOS renders 'Menlo' natively; Android
 // falls through to the system default.
 const MONO = 'Menlo';

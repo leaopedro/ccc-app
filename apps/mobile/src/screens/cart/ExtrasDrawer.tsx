@@ -1,5 +1,5 @@
-import type { CartItem } from '@jdm/shared/cart';
-import type { EventExtraPublic } from '@jdm/shared/extras';
+import type { CartItem } from '@ccc/shared/cart';
+import type { EventExtraPublic } from '@ccc/shared/extras';
 import { Minus, Plus, X } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {

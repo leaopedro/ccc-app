@@ -1,4 +1,4 @@
-import { confirmedCarsResponseSchema } from '@jdm/shared/events';
+import { confirmedCarsResponseSchema } from '@ccc/shared/events';
 import { describe, expect, it } from 'vitest';
 
 import { eventsCopy } from '../../../../copy/events';

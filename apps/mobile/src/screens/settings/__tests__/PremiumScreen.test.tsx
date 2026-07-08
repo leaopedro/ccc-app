@@ -111,7 +111,7 @@ vi.mock('~/api/client', () => ({
   authedRequest: vi.fn(),
 }));
 
-// ─── lucide-react-native stub (transitive via @jdm/ui if needed) ──────────────
+// ─── lucide-react-native stub (transitive via @ccc/ui if needed) ──────────────
 vi.mock('lucide-react-native', () => ({ default: {} }));
 
 // ─── import SUT ──────────────────────────────────────────────────────────────
@@ -308,7 +308,7 @@ describe('Platform.OS branching — iOS calls RC, Android opens WebBrowser', () 
     expect(mockFetchOfferings).not.toHaveBeenCalled();
     expect(mockOpenAuthSession).toHaveBeenCalledWith(
       'http://localhost:4000/premium',
-      'jdm://premium/return',
+      'ccc://premium/return',
     );
   });
 
@@ -317,7 +317,7 @@ describe('Platform.OS branching — iOS calls RC, Android opens WebBrowser', () 
     mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus).mockResolvedValueOnce(activeStatus);
     mockOpenAuthSession.mockResolvedValueOnce({
       type: 'success',
-      url: 'jdm://premium/return',
+      url: 'ccc://premium/return',
     });
     await mount();
     const cta = container.querySelector('[data-testid="premium-cta-android"]') as HTMLElement;

@@ -1,5 +1,5 @@
-import type { Prisma } from '@jdm/db';
-import type { TicketInput } from '@jdm/shared/orders';
+import type { Prisma } from '@ccc/db';
+import type { TicketInput } from '@ccc/shared/orders';
 
 export interface TicketValidationResult {
   totalExtrasCents: number;

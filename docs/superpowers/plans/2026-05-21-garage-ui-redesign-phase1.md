@@ -4,9 +4,9 @@
 
 **Goal:** Bring the shipped garage-per-user feature to pixel parity with the design handoff at `.handoffs/design-handoff/design_handoff_garage_redesign/` (HTML prototype + IMPLEMENTATION.md + README.md + JSX atoms/screens/badges). Mobile + admin + SSR public profile. Owner + public surfaces. Dark mode only. PT-BR primary. No locked-contract changes.
 
-**Architecture:** Additive tokens + new shared components in `@jdm/ui` + 2 new `Garage` columns (`coverPreset`, `coverImageUrl`) + 2 new cover endpoints + extension of `UploadKind` for `garage_cover` + new `garage-cover-*` upload route gate + replacement of placeholder stall cards with the parking-stall system + replacement of inline-edit `GarageHeader` with explicit `EditGarageSheet` + replacement of cart-deep-link buy-spot with `BuySpotSheet` + new SSR `/g/:slug` route on `apps/admin`. Premium remains serializer-computed. `/g/:slug` allowlist + anti-enumeration preserved.
+**Architecture:** Additive tokens + new shared components in `@ccc/ui` + 2 new `Garage` columns (`coverPreset`, `coverImageUrl`) + 2 new cover endpoints + extension of `UploadKind` for `garage_cover` + new `garage-cover-*` upload route gate + replacement of placeholder stall cards with the parking-stall system + replacement of inline-edit `GarageHeader` with explicit `EditGarageSheet` + replacement of cart-deep-link buy-spot with `BuySpotSheet` + new SSR `/g/:slug` route on `apps/admin`. Premium remains serializer-computed. `/g/:slug` allowlist + anti-enumeration preserved.
 
-**Tech Stack:** Expo + React Native (`apps/mobile`), Next.js App Router (`apps/admin`), Fastify (`apps/api`), Prisma (`packages/db`), zod (`packages/shared`), NativeWind 4 + Tailwind in `@jdm/ui`. RN libs already installed: `expo-linear-gradient`, `react-native-svg`, `expo-image-picker`. Sheets: RN `Modal` (existing pattern in `ExtrasDrawer`). Tests: vitest + Testcontainers Postgres (api), vitest + React Native Testing Library (mobile/ui).
+**Tech Stack:** Expo + React Native (`apps/mobile`), Next.js App Router (`apps/admin`), Fastify (`apps/api`), Prisma (`packages/db`), zod (`packages/shared`), NativeWind 4 + Tailwind in `@ccc/ui`. RN libs already installed: `expo-linear-gradient`, `react-native-svg`, `expo-image-picker`. Sheets: RN `Modal` (existing pattern in `ExtrasDrawer`). Tests: vitest + Testcontainers Postgres (api), vitest + React Native Testing Library (mobile/ui).
 
 **Out of scope (Phase 2 covers):** Conquistas / achievement badges — see `docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md`.
 
@@ -54,8 +54,8 @@
 - `apps/mobile/app/(app)/garage/index.tsx` — host all sheet state + handle `?highlight=` param + wire callbacks.
 - `apps/mobile/src/copy/garage.ts` — add (canonical key names; every chunk imports the names defined here): `invalidSlug`, `editSheetTitle`, `editSlugHint`, `editVisibilityPublicConsequence` (function), `welcomeTitle`, `welcomeBody` (function), `expiredTitle`, `expiredBody`, `coverPickerHintFree`, `coverPickerHintPremium`, `coverUploadButton`, `coverUploadHint`, `premiumSheetTitle`, `premiumHeroTitle`, `premiumHeroBody`, `premiumTierLabel` (function), `premiumNearExpiry` (function), `premiumBenefits` (array), `premiumFooter`, `sectionVagasTitle`, `sectionVagasMode` (object). Update slug-error map.
 - `apps/mobile/src/api/garage.ts` — add `patchGarageCover`, `presignGarageCoverUpload`.
-- `apps/admin/src/components/premium-badge.tsx` — replace with import from new `@jdm/ui-web/PremiumBadge` (see chunk 05). Do NOT delete; rewrite as a thin re-export.
-- `apps/admin/src/components/*` (every call site) — switch to `@jdm/ui-web` imports.
+- `apps/admin/src/components/premium-badge.tsx` — replace with import from new `@ccc/ui-web/PremiumBadge` (see chunk 05). Do NOT delete; rewrite as a thin re-export.
+- `apps/admin/src/components/*` (every call site) — switch to `@ccc/ui-web` imports.
 
 ### Deleted files
 
@@ -157,7 +157,7 @@ export const garageCoverPatchSchema = z.union([
 
 ### C3 — Public serializer does NOT mask; renderer is sole gating site (overrides chunk 02 §Step 2.9 + chunk 07)
 
-`serializeGaragePublic` returns the stored `coverPreset` + resolved `coverImageUrl` verbatim. The `resolveGarageCoverSlug` helper in `@jdm/shared/garage-covers` returns `default-door` when `!isPremiumActive`. Both mobile + SSR call the helper at render time. **Server never masks; renderer always resolves.** Eliminates the dual-gating contradiction.
+`serializeGaragePublic` returns the stored `coverPreset` + resolved `coverImageUrl` verbatim. The `resolveGarageCoverSlug` helper in `@ccc/shared/garage-covers` returns `default-door` when `!isPremiumActive`. Both mobile + SSR call the helper at render time. **Server never masks; renderer always resolves.** Eliminates the dual-gating contradiction.
 
 ### C4 — Missing cover endpoints (overrides chunk 03)
 
@@ -228,13 +228,13 @@ v1 ships the sheet but Pix/Cartão CTAs STILL navigate to `/cart` — the in-con
 
 Drop `disabled={locked}` on both the preset tile and the upload tile. Keep them visually dimmed (`opacity: 0.45`). `onPress` checks `locked` + fires `onPremiumUpsell()` instead of selecting. Same for the upload tile when `!isPremiumActive`. Without this the upsell path is unreachable.
 
-### C12 — `@jdm/ui` package depends on `expo-linear-gradient` + `@jdm/shared` (overrides chunk 07)
+### C12 — `@ccc/ui` package depends on `expo-linear-gradient` + `@ccc/shared` (overrides chunk 07)
 
 `packages/ui/package.json` MUST declare:
 
 ```json
 "dependencies": {
-  "@jdm/shared": "workspace:*",
+  "@ccc/shared": "workspace:*",
   "expo-linear-gradient": "~15.0.7"
 },
 "peerDependencies": {
@@ -263,7 +263,7 @@ export default async function PublicGaragePage({ params }: { params: Promise<{ s
 }
 ```
 
-### C15 — `@jdm/shared/garage-covers` subpath export (overrides chunk 01 §Step 1.6)
+### C15 — `@ccc/shared/garage-covers` subpath export (overrides chunk 01 §Step 1.6)
 
 Edit `packages/shared/package.json` `exports` field — add the subpath:
 
@@ -281,7 +281,7 @@ Edit `packages/shared/package.json` `exports` field — add the subpath:
 }
 ```
 
-Same pattern for any new shared subpath added later (`./badges`, `./garage-progress`, etc.). Rebuild `@jdm/shared` after every `package.json` edit per memory rule.
+Same pattern for any new shared subpath added later (`./badges`, `./garage-progress`, etc.). Rebuild `@ccc/shared` after every `package.json` edit per memory rule.
 
 ### C16 — `GarageSlotV2` is exported + uses `Extract` (overrides chunk 06 §Step 6.6)
 
@@ -415,7 +415,7 @@ describe('garageCoverPresetSchema', () => {
 
 ### Step 1.2 — Run test to verify it fails
 
-Run: `pnpm --filter @jdm/shared test -- garage-covers`
+Run: `pnpm --filter @ccc/shared test -- garage-covers`
 Expected: FAIL with "Cannot find module" or similar resolution error.
 
 ### Step 1.3 — Implement `garage-covers.ts`
@@ -539,7 +539,7 @@ export const resolveGarageCoverSlug = (
 
 ### Step 1.4 — Run test to verify pass
 
-Run: `pnpm --filter @jdm/shared test -- garage-covers`
+Run: `pnpm --filter @ccc/shared test -- garage-covers`
 Expected: PASS, 4 tests green.
 
 ### Step 1.5 — Implement `garage-tokens.ts`
@@ -626,7 +626,7 @@ export const tierColors = (tier: GaragePremiumTier | null) => {
 };
 ```
 
-### Step 1.6 — Export from `@jdm/ui` index
+### Step 1.6 — Export from `@ccc/ui` index
 
 - [ ] Edit `packages/ui/src/index.ts`, append:
 
@@ -641,7 +641,7 @@ export {
 
 ### Step 1.7 — Build + verify both packages
 
-Run: `pnpm --filter @jdm/shared build && pnpm --filter @jdm/ui typecheck && pnpm --filter @jdm/shared test`
+Run: `pnpm --filter @ccc/shared build && pnpm --filter @ccc/ui typecheck && pnpm --filter @ccc/shared test`
 Expected: builds clean, tests pass.
 
 ### Step 1.8 — Commit
@@ -763,7 +763,7 @@ describe('garagePatchSchema (cover)', () => {
 
 ### Step 2.2 — Run failing test
 
-Run: `pnpm --filter @jdm/shared test -- garage`
+Run: `pnpm --filter @ccc/shared test -- garage`
 Expected: FAIL (schema doesn't carry the new fields yet).
 
 ### Step 2.3 — Extend `garageOwnerSchema` + `garagePatchSchema`
@@ -831,7 +831,7 @@ export const garagePublicProfileSchema = z.object({
 
 ### Step 2.5 — Run zod test pass
 
-Run: `pnpm --filter @jdm/shared test -- garage`
+Run: `pnpm --filter @ccc/shared test -- garage`
 Expected: PASS (all new + existing tests green).
 
 ### Step 2.6 — Prisma migration
@@ -846,7 +846,7 @@ Expected: PASS (all new + existing tests green).
 - [ ] Generate the migration:
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name garage_cover --create-only
+pnpm --filter @ccc/db prisma migrate dev --name garage_cover --create-only
 ```
 
 - [ ] Open the generated SQL file under `packages/db/prisma/migrations/` and verify it is exactly:
@@ -862,14 +862,14 @@ If the generator added anything else (e.g. dropping/creating indexes unrelated t
 ### Step 2.7 — Apply the migration locally + generate client
 
 ```bash
-pnpm --filter @jdm/db prisma migrate deploy
-pnpm --filter @jdm/db prisma generate
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/db prisma migrate deploy
+pnpm --filter @ccc/db prisma generate
+pnpm --filter @ccc/shared build
 ```
 
 ### Step 2.8 — Run the existing api tests that touch GarageOwner serialization
 
-Run: `pnpm --filter @jdm/api test -- garage/me-garage garage/public-garage`
+Run: `pnpm --filter @ccc/api test -- garage/me-garage garage/public-garage`
 Expected: PASS. (Serializer still returns old shape; new keys are optional in zod — wait, they are NOT optional, they are nullable. We added them to `garageOwnerSchema` as required+nullable. Serializer test will FAIL on schema parse.)
 
 If FAIL, that means we have to land the serializer extension in this same PR. Continue:
@@ -966,7 +966,7 @@ Note: the owner-side payload exposes the raw stored values (so the picker shows 
 
 ### Step 2.10 — Tests pass
 
-Run: `pnpm --filter @jdm/api test -- garage`
+Run: `pnpm --filter @ccc/api test -- garage`
 Expected: PASS.
 
 ### Step 2.11 — Add a serializer-specific test for the lapse rule
@@ -1035,7 +1035,7 @@ describe('cover lapse', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/api test -- cover-lapse` (or the file you appended to).
+Run: `pnpm --filter @ccc/api test -- cover-lapse` (or the file you appended to).
 Expected: PASS.
 
 ### Step 2.12 — Commit
@@ -1107,7 +1107,7 @@ export type UploadKind =
 - [ ] Create `apps/api/test/garage/cover.test.ts`. Use the real helpers from `apps/api/test/helpers.ts` (`makeApp`, `resetDatabase`, `createUser`, `bearer`); set garage premium state via direct `prisma.garage.update` since `createUser` does not parameterize premium:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { describe, it, beforeAll, beforeEach, afterAll, expect } from 'vitest';
 import { makeApp, resetDatabase, createUser, bearer } from '../helpers.js';
 
@@ -1243,7 +1243,7 @@ Note: this test assumes `Garage.coverImageObjectKey` is the new column (server r
 
 ### Step 3.4 — Run failing test
 
-Run: `pnpm --filter @jdm/api test -- garage/cover`
+Run: `pnpm --filter @ccc/api test -- garage/cover`
 Expected: FAIL — route not registered.
 
 ### Step 3.5 — Implement `cover.ts` service
@@ -1252,7 +1252,7 @@ Expected: FAIL — route not registered.
 
 ```ts
 import type { Garage } from '@prisma/client';
-import { GARAGE_COVER_PRESETS, GARAGE_COVER_PRESET_SLUGS } from '@jdm/shared/garage-covers';
+import { GARAGE_COVER_PRESETS, GARAGE_COVER_PRESET_SLUGS } from '@ccc/shared/garage-covers';
 
 import { computeIsPremiumActive } from './index.js';
 
@@ -1355,7 +1355,7 @@ import { validateCoverPatch, type CoverPatch } from '../services/garage/cover.js
 
 ### Step 3.7 — Run all garage tests
 
-Run: `pnpm --filter @jdm/api test -- garage`
+Run: `pnpm --filter @ccc/api test -- garage`
 Expected: PASS.
 
 ### Step 3.8 — Smoke-check pre-signed upload manually
@@ -1415,7 +1415,7 @@ Visual canon: see `.handoffs/design-handoff/design_handoff_garage_redesign/jdma-
 
 ```tsx
 import { render, fireEvent } from '@testing-library/react-native';
-import { PremiumBadge } from '@jdm/ui';
+import { PremiumBadge } from '@ccc/ui';
 
 describe('PremiumBadge V2', () => {
   it('renders tier label (Gold) for gold premium', () => {
@@ -1455,7 +1455,7 @@ describe('PremiumBadge V2', () => {
 
 ### Step 4.2 — Run failing test
 
-Run: `pnpm --filter @jdm/mobile test -- PremiumBadge`
+Run: `pnpm --filter @ccc/mobile test -- PremiumBadge`
 Expected: FAIL — V2 visual not implemented.
 
 ### Step 4.3 — Rewrite `PremiumBadge.tsx`
@@ -1828,7 +1828,7 @@ export function PremiumSheet({
 }
 ```
 
-The benefit-row icon is dropped in v1 (Lucide RN icons are stroked SVGs; importing them here adds a dep + complicates the @jdm/ui surface). Caller passes pure text. Visual fidelity is preserved; we can add icons in a follow-up if product asks.
+The benefit-row icon is dropped in v1 (Lucide RN icons are stroked SVGs; importing them here adds a dep + complicates the @ccc/ui surface). Caller passes pure text. Visual fidelity is preserved; we can add icons in a follow-up if product asks.
 
 ### Step 4.6 — Export from index
 
@@ -1839,14 +1839,14 @@ export { SheetShell, type SheetShellProps } from './SheetShell.js';
 export { PremiumSheet, type PremiumSheetProps } from './PremiumSheet.js';
 ```
 
-### Step 4.7 — Rebuild `@jdm/ui`
+### Step 4.7 — Rebuild `@ccc/ui`
 
-Run: `pnpm --filter @jdm/ui typecheck`
+Run: `pnpm --filter @ccc/ui typecheck`
 Expected: clean build.
 
 ### Step 4.8 — Run mobile test
 
-Run: `pnpm --filter @jdm/mobile test -- PremiumBadge`
+Run: `pnpm --filter @ccc/mobile test -- PremiumBadge`
 Expected: PASS (5 tests).
 
 ### Step 4.9 — Add copy entries for premium sheet
@@ -1896,7 +1896,7 @@ EOF
 
 ---
 
-## Chunk 05 — `@jdm/ui-web` subpath + admin imports from web primitives
+## Chunk 05 — `@ccc/ui-web` subpath + admin imports from web primitives
 
 **Files:**
 
@@ -1904,19 +1904,19 @@ EOF
 - Create: `packages/ui/src/web/PremiumBadge.tsx` — web-safe twin (HTML+Tailwind, NOT React Native).
 - Create: `packages/ui/src/web/tokens.ts` — re-export `garageTokens` + `tierColors` (single token source; both renderers read this).
 - Modify: `packages/ui/package.json` — add `./web` export subpath.
-- Modify: `apps/admin/package.json` — add `@jdm/ui` as workspace dep if absent. Verify before adding.
-- Modify: `apps/admin/src/components/premium-badge.tsx` — replace body with `export { PremiumBadge } from '@jdm/ui-web';` (kept as a re-export shim so call-site imports continue to resolve while migrations happen).
-- Modify: every admin call site that imports `@/components/premium-badge` → switch path to `~/components/premium-badge` (or directly to `@jdm/ui-web`).
+- Modify: `apps/admin/package.json` — add `@ccc/ui` as workspace dep if absent. Verify before adding.
+- Modify: `apps/admin/src/components/premium-badge.tsx` — replace body with `export { PremiumBadge } from '@ccc/ui-web';` (kept as a re-export shim so call-site imports continue to resolve while migrations happen).
+- Modify: every admin call site that imports `@/components/premium-badge` → switch path to `~/components/premium-badge` (or directly to `@ccc/ui-web`).
 
 Locked-contract impact: none. Visual parity between mobile RN render + admin web render guaranteed by shared `tierColors` + matching layout grammar.
 
-**Rationale:** `@jdm/ui` exports `react-native` primitives (`View`, `Pressable`, `Text`, etc). Admin is Next.js — importing those without `react-native-web` setup breaks the SSR build. Splitting `@jdm/ui` into a default RN entry + a `/web` subpath is the cleanest fix. Both renderers read the same token source (`@jdm/ui/garage-tokens`), so a token change updates both apps simultaneously.
+**Rationale:** `@ccc/ui` exports `react-native` primitives (`View`, `Pressable`, `Text`, etc). Admin is Next.js — importing those without `react-native-web` setup breaks the SSR build. Splitting `@ccc/ui` into a default RN entry + a `/web` subpath is the cleanest fix. Both renderers read the same token source (`@ccc/ui/garage-tokens`), so a token change updates both apps simultaneously.
 
 ### Step 5.1 — Add web subpath export to `packages/ui/package.json`
 
 ```json
 {
-  "name": "@jdm/ui",
+  "name": "@ccc/ui",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -2015,12 +2015,12 @@ The web subpath is intentionally minimal in chunk 05. The Conquistas BadgeRow + 
 
 ### Step 5.3 — Repoint admin call sites
 
-- [ ] If `apps/admin/package.json` does not already depend on `@jdm/ui` as a workspace package, add it:
+- [ ] If `apps/admin/package.json` does not already depend on `@ccc/ui` as a workspace package, add it:
 
 ```json
 "dependencies": {
   ...,
-  "@jdm/ui": "workspace:*"
+  "@ccc/ui": "workspace:*"
 }
 ```
 
@@ -2028,12 +2028,12 @@ Run: `pnpm install`.
 
 - [ ] Map admin call sites: `git grep -l "from '@/components/premium-badge'\|from '~/components/premium-badge'" apps/admin/`.
 
-- [ ] For each match, replace the import path with `@jdm/ui-web` (or just `@jdm/ui/web` — the subpath form). Drop the relative import.
+- [ ] For each match, replace the import path with `@ccc/ui-web` (or just `@ccc/ui/web` — the subpath form). Drop the relative import.
 
 - [ ] Replace the body of `apps/admin/src/components/premium-badge.tsx` with a thin re-export so any path that was already correctly mapped keeps working:
 
 ```tsx
-export { PremiumBadge, type PremiumBadgeProps } from '@jdm/ui/web';
+export { PremiumBadge, type PremiumBadgeProps } from '@ccc/ui/web';
 ```
 
 (Don't delete the file. The re-export shim is intentional.)
@@ -2043,7 +2043,7 @@ export { PremiumBadge, type PremiumBadgeProps } from '@jdm/ui/web';
 Run:
 
 ```bash
-pnpm --filter @jdm/ui typecheck && pnpm --filter @jdm/admin build
+pnpm --filter @ccc/ui typecheck && pnpm --filter @ccc/admin build
 ```
 
 Expected: clean.
@@ -2055,11 +2055,11 @@ Visual smoke: open the admin user-detail page on a premium user. Badge renders p
 ```bash
 git add packages/ui/src/web/ packages/ui/package.json apps/admin/package.json apps/admin/src/components/
 git commit -m "$(cat <<'EOF'
-feat(ui,admin): split @jdm/ui into RN + web subpath; admin badges from @jdm/ui/web
+feat(ui,admin): split @ccc/ui into RN + web subpath; admin badges from @ccc/ui/web
 
-@jdm/ui keeps its RN default export. New /web subpath exports HTML+Tailwind
+@ccc/ui keeps its RN default export. New /web subpath exports HTML+Tailwind
 twins of the same components that share the token table with the RN entry.
-Admin imports PremiumBadge from @jdm/ui/web; visual + token parity is
+Admin imports PremiumBadge from @ccc/ui/web; visual + token parity is
 guaranteed by the shared `tierColors` source. Eliminates the drift flagged
 in UX-Audit F.1 without forcing react-native-web into the admin bundle.
 
@@ -2192,10 +2192,10 @@ describe('ParkingStallCard', () => {
 
 ### Step 6.2 — Run failing test
 
-Run: `pnpm --filter @jdm/mobile test -- ParkingStallCard`
+Run: `pnpm --filter @ccc/mobile test -- ParkingStallCard`
 Expected: FAIL — module not found.
 
-Note: `@jdm/ui` package has no `test` script. Component tests live under `apps/mobile/src/screens/garage/__tests__/` (mobile vitest workspace). The plan files the tests as `packages/ui/src/__tests__/*` for component co-location, but they execute via the mobile workspace (vitest picks them up via shared config). Verify the workspace test glob covers the path before merging.
+Note: `@ccc/ui` package has no `test` script. Component tests live under `apps/mobile/src/screens/garage/__tests__/` (mobile vitest workspace). The plan files the tests as `packages/ui/src/__tests__/*` for component co-location, but they execute via the mobile workspace (vitest picks them up via shared config). Verify the workspace test glob covers the path before merging.
 
 ### Step 6.3 — Implement `ParkingStallCard.tsx`
 
@@ -2537,7 +2537,7 @@ export {
 
 ### Step 6.5 — Run failing test → green
 
-Run: `pnpm --filter @jdm/mobile test -- ParkingStallCard`
+Run: `pnpm --filter @ccc/mobile test -- ParkingStallCard`
 Expected: PASS all 7 tests.
 
 ### Step 6.6 — Swap call sites in `GarageListView.tsx`
@@ -2567,7 +2567,7 @@ type GarageSlotV2 =
 - [ ] Replace `GarageListView.tsx` body with:
 
 ```tsx
-import { type ParkingStallCarPayload, ParkingStallCard } from '@jdm/ui';
+import { type ParkingStallCarPayload, ParkingStallCard } from '@ccc/ui';
 import { Link } from 'expo-router';
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -2717,7 +2717,7 @@ return (
 
 ### Step 6.9 — Run all mobile + ui tests
 
-Run: `pnpm --filter @jdm/mobile test -- garage`
+Run: `pnpm --filter @ccc/mobile test -- garage`
 Expected: PASS.
 
 ### Step 6.10 — Commit
@@ -2806,7 +2806,7 @@ describe('GarageCover', () => {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image, Text, View } from 'react-native';
 
-import { GARAGE_COVER_PRESETS, resolveGarageCoverSlug } from '@jdm/shared/garage-covers';
+import { GARAGE_COVER_PRESETS, resolveGarageCoverSlug } from '@ccc/shared/garage-covers';
 
 import { garageTokens } from './garage-tokens.js';
 
@@ -2905,7 +2905,7 @@ Note: the `inset: 0` trick may need an RN-style equivalent (`left: 0, right: 0, 
 export { GarageCover, type GarageCoverProps } from './GarageCover.js';
 ```
 
-Run: `pnpm --filter @jdm/mobile test -- GarageCover`
+Run: `pnpm --filter @ccc/mobile test -- GarageCover`
 Expected: PASS.
 
 ### Step 7.4 — Commit
@@ -2918,7 +2918,7 @@ git commit -m "$(cat <<'EOF'
 feat(ui): GarageCover component (preset gradient or R2 image)
 
 Renders the cover hero at the top of /garage and /g/:slug. Resolver
-defers to @jdm/shared/garage-covers so server + client agree on the
+defers to @ccc/shared/garage-covers so server + client agree on the
 precedence rule. Premium-lapse mask handled by the resolver, not by
 two parallel branches in the renderer.
 
@@ -2978,8 +2978,8 @@ Add EN equivalents.
 - [ ] Create `apps/mobile/src/screens/garage/IdentityCard.tsx`:
 
 ```tsx
-import { type GarageOwner } from '@jdm/shared/garage';
-import { PremiumBadge } from '@jdm/ui';
+import { type GarageOwner } from '@ccc/shared/garage';
+import { PremiumBadge } from '@ccc/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { garageCopy } from '~/copy/garage';
@@ -3180,8 +3180,8 @@ const styles = StyleSheet.create({
 - [ ] Create `apps/mobile/src/screens/garage/EditGarageSheet.tsx`:
 
 ```tsx
-import { GARAGE_RESERVED_SLUGS, type GarageOwner, type GaragePatch } from '@jdm/shared/garage';
-import { SheetShell } from '@jdm/ui';
+import { GARAGE_RESERVED_SLUGS, type GarageOwner, type GaragePatch } from '@ccc/shared/garage';
+import { SheetShell } from '@ccc/ui';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -3473,8 +3473,8 @@ const styles = StyleSheet.create({
   5. Exposes `handleShare` — fixed in chunk 11.
 
 ```tsx
-import { type GarageOwner } from '@jdm/shared/garage';
-import { GarageCover, PremiumSheet } from '@jdm/ui';
+import { type GarageOwner } from '@ccc/shared/garage';
+import { GarageCover, PremiumSheet } from '@ccc/ui';
 import { useState } from 'react';
 import { Share, View } from 'react-native';
 
@@ -3557,7 +3557,7 @@ export function GarageHeader({ garage, onUpdated, carCount, onCoverEdit }: Props
 
 ### Step 8.6 — Re-run mobile tests
 
-Run: `pnpm --filter @jdm/mobile test -- garage`
+Run: `pnpm --filter @ccc/mobile test -- garage`
 Expected: PASS. Update `GarageListView.viewmodel.test.ts` / `garage-slots.test.ts` if any assertions rely on the old `GarageHeader` shape.
 
 ### Step 8.7 — Visual smoke
@@ -3667,8 +3667,8 @@ export const putToR2 = async (
 - [ ] Create `apps/mobile/src/screens/garage/CoverPickerSheet.tsx`. Visual canon: `screens.jsx` lines 630-711.
 
 ```tsx
-import { GARAGE_COVER_PRESETS } from '@jdm/shared/garage-covers';
-import { GarageCover, SheetShell } from '@jdm/ui';
+import { GARAGE_COVER_PRESETS } from '@ccc/shared/garage-covers';
+import { GarageCover, SheetShell } from '@ccc/ui';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as RNImage, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -3947,7 +3947,7 @@ Visual canon: `screens.jsx` lines 714-775.
 - [ ] Create `apps/mobile/src/screens/garage/BuySpotSheet.tsx`:
 
 ```tsx
-import { SheetShell } from '@jdm/ui';
+import { SheetShell } from '@ccc/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { garageCopy } from '~/copy/garage';
@@ -4259,7 +4259,7 @@ Locked-contract impact: anti-enumeration 404 must be identical for unknown slug 
 - [ ] Create `apps/admin/src/lib/public-garage.ts`:
 
 ```ts
-import { garagePublicResponseSchema, type GaragePublicResponse } from '@jdm/shared/garage-public';
+import { garagePublicResponseSchema, type GaragePublicResponse } from '@ccc/shared/garage-public';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -4335,8 +4335,8 @@ export default async function PublicGaragePage({ params }: { params: { slug: str
 - [ ] Create `apps/admin/src/components/public-garage-view.tsx`. SSR-friendly version of the IdentityCard + cover. Cars rendered without source-aware tape (per design §"Public — /g/:slug"). Use Tailwind classes that already exist in the admin config.
 
 ```tsx
-import type { GaragePublicResponse } from '@jdm/shared/garage-public';
-import { PremiumBadge } from '@jdm/ui';
+import type { GaragePublicResponse } from '@ccc/shared/garage-public';
+import { PremiumBadge } from '@ccc/ui';
 
 type Props = {
   garage: GaragePublicResponse['garage'];
@@ -4742,7 +4742,7 @@ Extend the existing `GeneralSettings` (verify model name via `grep -n 'model Gen
 Generate the migration:
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name garage_conquistas --create-only
+pnpm --filter @ccc/db prisma migrate dev --name garage_conquistas --create-only
 ```
 
 Verify generated SQL adds enums + tables + the single column to `GeneralSettings` + nothing else.
@@ -4882,7 +4882,7 @@ Add to `packages/shared/package.json` exports:
 "./badges": { "types": "./dist/badges.d.ts", "import": "./dist/badges.js" }
 ```
 
-Rebuild: `pnpm --filter @jdm/shared build`.
+Rebuild: `pnpm --filter @ccc/shared build`.
 
 ### Step 15.4 — Audit actions
 
@@ -4938,7 +4938,7 @@ EOF
 // apps/api/src/routes/badges-catalog.ts
 import type { FastifyPluginAsync } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { readGamificationEnabled } from '../services/garage/killswitch.js';
 
@@ -4980,7 +4980,7 @@ export const badgesCatalogRoute: FastifyPluginAsync = async (app) => {
 `readGamificationEnabled()` lives at `apps/api/src/services/garage/killswitch.js`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 export const readGamificationEnabled = async (): Promise<boolean> => {
   const row = await prisma.generalSettings.findFirst({ select: { gamificationEnabled: true } });
@@ -5292,11 +5292,11 @@ Provide the exact query in the eligibility file. Skip pseudocode; ship a Prisma 
 - Modify: existing user-detail page to mount the panel.
 - Modify: admin audit visibility — `badge.award/pin/unpin` rows render appropriately in the audit log viewer.
 
-Renders the badges-grid using `@jdm/ui/web` `HexBadge` (web twin lands in chunk 21).
+Renders the badges-grid using `@ccc/ui/web` `HexBadge` (web twin lands in chunk 21).
 
 ---
 
-## Chunk 21 — Web-safe Conquistas primitives (`@jdm/ui/web`)
+## Chunk 21 — Web-safe Conquistas primitives (`@ccc/ui/web`)
 
 **Files:**
 
@@ -5354,16 +5354,16 @@ DSR export adds the user's `GarageBadge` rows to the exported tarball.
 
 (Recall: CLAUDE.md says **never run the full test suite locally**. Run the changed paths in each PR. CI on `main` covers the full sweep after merge.)
 
-### Verify @jdm/shared is rebuilt
+### Verify @ccc/shared is rebuilt
 
 After every schema/export change, ensure consumers rebuild:
 
 ```bash
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/ui typecheck
 ```
 
-(Memory rule: stale `@jdm/shared` `dist/` masks zod break that CI catches. See `feedback_rebuild_shared_after_schema_change.md`.)
+(Memory rule: stale `@ccc/shared` `dist/` masks zod break that CI catches. See `feedback_rebuild_shared_after_schema_change.md`.)
 
 ### Self-review pass before opening each PR
 

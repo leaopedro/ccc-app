@@ -1,4 +1,4 @@
-import { Button } from '@jdm/ui';
+import { Button } from '@ccc/ui';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useCallback, useRef, useState } from 'react';

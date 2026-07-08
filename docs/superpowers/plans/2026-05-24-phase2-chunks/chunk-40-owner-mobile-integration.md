@@ -4,9 +4,9 @@
 
 **Goal:** Slot `<ProfileStats viewMode="owner" />` into the mobile owner garage route between the `GarageHeader` (which owns `IdentityCard`, Phase 1 chunk 08) and `BadgeRow` (Phase 1 chunk 19) so authenticated users see their XP scoreboard + 4 stats tiles above their badges. Killswitch off and fresh-signup states hide the block.
 
-**Architecture:** Pure leaf wire-up. The composite `ProfileStats` already exists in `@jdm/ui` (chunk 39); chunk 40 derives its props from the in-flight `GarageReadResponse`, computes a `viewMode='owner'` `isFreshSignup` predicate that mirrors `showWelcomeBanner`, and renders the component inside the existing `ListHeaderComponent` JSX block in `apps/mobile/app/(app)/garage/index.tsx`. The killswitch is already read on the API side and surfaced through response top-level `gamification.enabled` (per outline §C10); the wrapper short-circuits on its own. A new viewmodel test file pins the visibility predicates so the route test stays focused on order.
+**Architecture:** Pure leaf wire-up. The composite `ProfileStats` already exists in `@ccc/ui` (chunk 39); chunk 40 derives its props from the in-flight `GarageReadResponse`, computes a `viewMode='owner'` `isFreshSignup` predicate that mirrors `showWelcomeBanner`, and renders the component inside the existing `ListHeaderComponent` JSX block in `apps/mobile/app/(app)/garage/index.tsx`. The killswitch is already read on the API side and surfaced through response top-level `gamification.enabled` (per outline §C10); the wrapper short-circuits on its own. A new viewmodel test file pins the visibility predicates so the route test stays focused on order.
 
-**Tech Stack:** Expo + React Native (`apps/mobile`), `@jdm/ui` (`ProfileStats`, exported in chunk 39), `@jdm/shared/garage-progress` (`garageProgressSchema` + `garageStatsSchema` from chunk 24), vitest + jsdom (existing pattern in `__tests__/GarageIndexRoute.test.tsx`).
+**Tech Stack:** Expo + React Native (`apps/mobile`), `@ccc/ui` (`ProfileStats`, exported in chunk 39), `@ccc/shared/garage-progress` (`garageProgressSchema` + `garageStatsSchema` from chunk 24), vitest + jsdom (existing pattern in `__tests__/GarageIndexRoute.test.tsx`).
 
 ---
 
@@ -38,7 +38,7 @@
 
 ### Modified files
 
-- `apps/mobile/app/(app)/garage/index.tsx` — import `ProfileStats` from `@jdm/ui`; insert one JSX block between `ExpiredPremiumNotice` and `BadgeRow`; derive props from the existing `garage` state. No new effect — the existing `useFocusEffect` at line 55 already refetches `getGarage()` on focus, which propagates a fresh response-level `gamification.enabled` flag through render.
+- `apps/mobile/app/(app)/garage/index.tsx` — import `ProfileStats` from `@ccc/ui`; insert one JSX block between `ExpiredPremiumNotice` and `BadgeRow`; derive props from the existing `garage` state. No new effect — the existing `useFocusEffect` at line 55 already refetches `getGarage()` on focus, which propagates a fresh response-level `gamification.enabled` flag through render.
 - `apps/mobile/src/screens/garage/__tests__/fixtures.ts` — extend the shared `ownerBase` (and per-fixture overrides where needed) with the new `progress` + `stats` blocks under `GarageOwner` so existing tests keep parsing through `garageReadResponseSchema` after chunk 24's schema extension landed. Owner fixtures always carry both fields; the zero-default fixture mirrors a fresh signup.
 
 ### New files
@@ -101,7 +101,7 @@ export const pickProfileStatsProps = (data: GarageReadResponse): ProfileStatsVie
 
 ### `apps/mobile/app/(app)/garage/index.tsx` (modify)
 
-Two imports: add `ProfileStats` to the existing `@jdm/ui` line; add `pickProfileStatsProps` from `~/screens/garage/garage-progression.viewmodel`. Derive once per render after the `if (!garage)` early-return:
+Two imports: add `ProfileStats` to the existing `@ccc/ui` line; add `pickProfileStatsProps` from `~/screens/garage/garage-progression.viewmodel`. Derive once per render after the `if (!garage)` early-return:
 
 ```ts
 const profileStatsProps = pickProfileStatsProps(garage);
@@ -286,7 +286,7 @@ describe('pickProfileStatsProps', () => {
 - [ ] **Step 2: run the test, watch it fail**
 
 ```bash
-pnpm --filter @jdm/mobile vitest run apps/mobile/src/screens/garage/__tests__/garage-progression.viewmodel.test.ts
+pnpm --filter @ccc/mobile vitest run apps/mobile/src/screens/garage/__tests__/garage-progression.viewmodel.test.ts
 # Expected: FAIL — `Cannot find module '../garage-progression.viewmodel'`.
 ```
 
@@ -297,17 +297,17 @@ Create `apps/mobile/src/screens/garage/garage-progression.viewmodel.ts` with the
 - [ ] **Step 4: run the test, watch it pass**
 
 ```bash
-pnpm --filter @jdm/mobile vitest run apps/mobile/src/screens/garage/__tests__/garage-progression.viewmodel.test.ts
+pnpm --filter @ccc/mobile vitest run apps/mobile/src/screens/garage/__tests__/garage-progression.viewmodel.test.ts
 # Expected: 6 passing.
 ```
 
 - [ ] **Step 5: typecheck the mobile workspace**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors. If chunk 24's optional schema additions haven't
-# resolved through @jdm/shared/dist, run `pnpm --filter @jdm/shared build`
-# per CLAUDE.md memory rule "Rebuild @jdm/shared after schema changes".
+# resolved through @ccc/shared/dist, run `pnpm --filter @ccc/shared build`
+# per CLAUDE.md memory rule "Rebuild @ccc/shared after schema changes".
 ```
 
 - [ ] **Step 6: commit**
@@ -326,7 +326,7 @@ git commit -m "feat(mobile): pickProfileStatsProps viewmodel for chunk-40 owner 
 
 - Modify: `apps/mobile/app/(app)/garage/index.tsx`
 
-- [ ] **Step 1: add imports** — append `ProfileStats` to the existing `@jdm/ui` import on line 2; add `import { pickProfileStatsProps } from '~/screens/garage/garage-progression.viewmodel';` next to the other `~/screens/garage/*` imports.
+- [ ] **Step 1: add imports** — append `ProfileStats` to the existing `@ccc/ui` import on line 2; add `import { pickProfileStatsProps } from '~/screens/garage/garage-progression.viewmodel';` next to the other `~/screens/garage/*` imports.
 
 - [ ] **Step 2: derive props** — after the `if (!garage)` early-return (around line 153), before the `renderBadgeRow` const, add:
 
@@ -339,7 +339,7 @@ const profileStatsProps = pickProfileStatsProps(garage);
 - [ ] **Step 4: typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors. ProfileStats prop drift here = chunk 39 contract miss → escalate.
 git add apps/mobile/app/\(app\)/garage/index.tsx
 git commit -m "feat(mobile): slot <ProfileStats /> between IdentityCard and BadgeRow on /garage (chunk 40)"
@@ -353,11 +353,11 @@ git commit -m "feat(mobile): slot <ProfileStats /> between IdentityCard and Badg
 
 - Modify: `apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx`
 
-> Mock `@jdm/ui`'s `ProfileStats` the same way the existing test mocks `BadgeRow`-adjacent screen components — render a tagged `<div>` so order is checkable. Real `<ProfileStats />` behaviour is covered by chunk 39's tests; this chunk only validates insertion order + the killswitch + fresh-signup gates.
+> Mock `@ccc/ui`'s `ProfileStats` the same way the existing test mocks `BadgeRow`-adjacent screen components — render a tagged `<div>` so order is checkable. Real `<ProfileStats />` behaviour is covered by chunk 39's tests; this chunk only validates insertion order + the killswitch + fresh-signup gates.
 
-- [ ] **Step 1: extend the `@jdm/ui` mock to expose a stand-in ProfileStats + hoist the route component**
+- [ ] **Step 1: extend the `@ccc/ui` mock to expose a stand-in ProfileStats + hoist the route component**
 
-The current test does not mock `@jdm/ui` (it lets the real `BadgeRow` / `BadgesSheet` / `PremiumSheet` render). For ProfileStats we want a stand-in so the assertion targets a deterministic tag without booting the real component's RN canvas. Add a partial mock that preserves the real exports and overrides `ProfileStats`.
+The current test does not mock `@ccc/ui` (it lets the real `BadgeRow` / `BadgesSheet` / `PremiumSheet` render). For ProfileStats we want a stand-in so the assertion targets a deterministic tag without booting the real component's RN canvas. Add a partial mock that preserves the real exports and overrides `ProfileStats`.
 
 Also hoist the route component import to outer test scope (BEFORE the `describe` block, AFTER the `vi.mock` calls so the mocks apply at import time). The existing `mount()` helper imports the route internally; the focus-re-enable test below needs to re-render after `unmount()`, so the `Route` reference must live in outer scope. Add this single import:
 
@@ -368,7 +368,7 @@ import RouteIndex from '../../../../app/(app)/garage/index';
 Mock setup:
 
 ```ts
-vi.mock('@jdm/ui', async (importOriginal) => {
+vi.mock('@ccc/ui', async (importOriginal) => {
   const real = await importOriginal<Record<string, unknown>>();
   const { createElement: el } = await import('react');
   const Stub = (props: Record<string, unknown>) =>
@@ -391,7 +391,7 @@ vi.mock('@jdm/ui', async (importOriginal) => {
 // IMPORTANT: hoist the route component to outer test scope so the
 // focus-re-enable test below can re-render it without re-deriving from
 // inside the mount() helper. Place this import once near the top of the
-// test file (after the @jdm/ui mock, before describe()):
+// test file (after the @ccc/ui mock, before describe()):
 //
 //   import RouteIndex from '../../../../app/(app)/garage/index';
 //
@@ -560,14 +560,14 @@ it('focus re-enable repaints ProfileStats when killswitch flips on mid-session',
 - [ ] **Step 3: run the route tests**
 
 ```bash
-pnpm --filter @jdm/mobile vitest run apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx
+pnpm --filter @ccc/mobile vitest run apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx
 # Expected: pre-existing chunk-19 tests still pass + 5 new tests pass.
 ```
 
 - [ ] **Step 4: typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
@@ -585,14 +585,14 @@ git commit -m "test(mobile): route-level ordering + killswitch + loading tests f
 - [ ] **A. Typecheck the mobile workspace**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
 - [ ] **B. Run the two touched test files**
 
 ```bash
-pnpm --filter @jdm/mobile vitest run \
+pnpm --filter @ccc/mobile vitest run \
   apps/mobile/src/screens/garage/__tests__/garage-progression.viewmodel.test.ts \
   apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx
 # Expected: 11+ passing (6 viewmodel + existing chunk-19 + 5 new route tests).
@@ -627,9 +627,9 @@ pnpm --filter @jdm/mobile vitest run \
 - [ ] Branch is `feat/jdma-garage-phase2-40`, created from a fresh `main` (CLAUDE.md preflight).
 - [ ] Five files touched (matches §"Touched-path summary").
 - [ ] No edits outside the five touched paths.
-- [ ] `pnpm --filter @jdm/mobile typecheck` clean.
+- [ ] `pnpm --filter @ccc/mobile typecheck` clean.
 - [ ] Touched-file vitest runs green (viewmodel + GarageIndexRoute).
-- [ ] `<ProfileStats />` import added to the existing `@jdm/ui` line — not a new import.
+- [ ] `<ProfileStats />` import added to the existing `@ccc/ui` line — not a new import.
 - [ ] JSX insertion is between `ExpiredPremiumNotice` and `BadgeRow` inside `ListHeaderComponent` — verified by ordering assertion.
 - [ ] `pickProfileStatsProps` returns `null` on killswitch off + on `progress`/`stats` undefined; flips `isFreshSignup` via `showWelcomeBanner`.
 - [ ] Owner-side empty metrics still derive props (no hide); fresh signup propagates the flag through `data-fresh="true"` for chunk-39's own visibility logic.

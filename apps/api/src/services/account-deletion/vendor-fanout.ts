@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import type { Env } from '../../env.js';
 import type { StripeClient } from '../stripe/index.js';

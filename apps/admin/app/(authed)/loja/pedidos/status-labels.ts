@@ -1,4 +1,4 @@
-import type { StoreFulfillmentStatus } from '@jdm/shared/store';
+import type { StoreFulfillmentStatus } from '@ccc/shared/store';
 
 export const FULFILLMENT_STATUS_LABEL: Record<StoreFulfillmentStatus, string> = {
   unfulfilled: 'Aguardando preparo',

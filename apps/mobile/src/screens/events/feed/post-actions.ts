@@ -1,4 +1,4 @@
-import type { UserRoleName } from '@jdm/shared/auth';
+import type { UserRoleName } from '@ccc/shared/auth';
 
 export const canModerateFeedPost = (role: UserRoleName): boolean =>
   role === 'organizer' || role === 'admin';

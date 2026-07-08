@@ -1,6 +1,6 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
-import { cancelMyOrderResponseSchema, myOrdersResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { cancelMyOrderResponseSchema, myOrdersResponseSchema } from '@ccc/shared/orders';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';

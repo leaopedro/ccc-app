@@ -1,7 +1,7 @@
 'use client';
 
-import type { AdminProductType, AdminStoreProductDetail } from '@jdm/shared/admin';
-import { GARAGE_SPOT_PRODUCT_SLUG } from '@jdm/shared/garage';
+import type { AdminProductType, AdminStoreProductDetail } from '@ccc/shared/admin';
+import { GARAGE_SPOT_PRODUCT_SLUG } from '@ccc/shared/garage';
 import React, { useEffect, useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -16,7 +16,7 @@ const initial: StoreFormState = { error: null };
 
 // Singleton slugs whose lifecycle is owned by seeds/webhooks; admins must not
 // archive or reactivate them from the UI. Server-side guards enforce the same
-// invariant (see assertVirtualSingletonProtected in @jdm/db).
+// invariant (see assertVirtualSingletonProtected in @ccc/db).
 const SINGLETON_PRODUCT_SLUGS = new Set<string>([GARAGE_SPOT_PRODUCT_SLUG]);
 
 const Submit = () => {

@@ -6,7 +6,7 @@
 
 **Architecture:** New `Consent` model with `ConsentPurpose` and `ConsentChannel` enums. Consent rows are append-only event log: granting creates a row, withdrawing sets `withdrawnAt`. Idempotency on `(userId, purpose, version)` — re-granting same version is a no-op. Admin gets read-only list with cursor pagination. A `hasActiveConsent` service function gates marketing sends.
 
-**Tech Stack:** Prisma 6, Fastify, Zod (`@jdm/shared`), Vitest with real Postgres.
+**Tech Stack:** Prisma 6, Fastify, Zod (`@ccc/shared`), Vitest with real Postgres.
 
 **Worktree:** `/Users/pedro/Projects/jdm-experience/.claude/worktrees/jdma-649`
 **Branch:** `feat/jdma-649-consent-model`
@@ -238,7 +238,7 @@ In `apps/api/test/helpers.ts`, add `await prisma.consent.deleteMany();` at the t
 Create `apps/api/test/services/consent.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -432,7 +432,7 @@ Expected: FAIL — module `../../src/services/consent.js` not found.
 Create `apps/api/src/services/consent.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { ConsentChannel, ConsentPurpose } from '@prisma/client';
 
 type RecordConsentParams = {
@@ -552,8 +552,8 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 Create `apps/api/test/me/consents.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { consentListResponseSchema, consentRecordSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { consentListResponseSchema, consentRecordSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -755,7 +755,7 @@ Create `apps/api/src/routes/me-consents.ts`:
 
 ```typescript
 import rateLimit from '@fastify/rate-limit';
-import { consentPurposeSchema, grantConsentBodySchema } from '@jdm/shared';
+import { consentPurposeSchema, grantConsentBodySchema } from '@ccc/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -873,8 +873,8 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 Create `apps/api/test/admin/consents.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { adminConsentListResponseSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminConsentListResponseSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1078,8 +1078,8 @@ Expected: FAIL — 404 on `/admin/consents`.
 Create `apps/api/src/routes/admin/consents.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { adminConsentListQuerySchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminConsentListQuerySchema } from '@ccc/shared';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

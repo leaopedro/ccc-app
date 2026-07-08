@@ -41,8 +41,8 @@ export const brand = {
 
   typography: {
     // CCC uses Jost (geometric sans) for display; replaces Anton.
-    // Mobile: swap @expo-google-fonts/anton → @expo-google-fonts/jost
-    // and update _layout.tsx imports accordingly.
+    // Mobile loads @expo-google-fonts/jost (Jost_300Light) registered
+    // under this key in _layout.tsx.
     displayFont: 'Jost_300Regular',
     displayFontFamily: ['Jost_300Regular', 'sans-serif'] as const,
     displayFontNative: 'Jost_300Regular',

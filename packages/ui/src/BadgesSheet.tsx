@@ -3,7 +3,7 @@ import type {
   BadgeCategory,
   GarageBadgeOwnerState,
   GarageBadgesOwnerResponse,
-} from '@jdm/shared/badges';
+} from '@ccc/shared/badges';
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 

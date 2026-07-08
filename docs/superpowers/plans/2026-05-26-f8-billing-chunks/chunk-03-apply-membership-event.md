@@ -478,7 +478,7 @@ export const applyInvoiceRefund = async (
 - [ ] **1.2:** Run typecheck to confirm the F8.02 types resolve:
 
 ```
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: PASS. If `BillingEvent` is missing, F8.02 has not landed — stop.
@@ -494,7 +494,7 @@ Expected: PASS. If `BillingEvent` is missing, F8.02 has not landed — stop.
 - [ ] **2.1:** Create the test file. The structure mirrors `apps/api/test/garage/xp-awarder.test.ts`. The key helper `garageId(userId)` resolves the Garage row, and `buildActivatedEvt(garageId, overrides?)` builds a minimal but valid `BillingEvent` fixture.
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -598,7 +598,7 @@ describe('applyMembershipEvent', () => {
 - [ ] **2.2:** Run the test to confirm it fails with `not implemented`:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: FAIL with `Error: not implemented`.
@@ -608,7 +608,7 @@ Expected: FAIL with `Error: not implemented`.
 - [ ] **2.4:** Re-run the test:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: The `activated` test PASSES.
@@ -657,7 +657,7 @@ it('activated: max() rule — existing admin-grant premiumUntil beyond sub perio
 - [ ] **3.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: Both tests PASS.
@@ -703,7 +703,7 @@ it('activated: replay with same invoiceRef is idempotent — single invoice row'
 - [ ] **4.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 3 tests PASS.
@@ -775,7 +775,7 @@ it('renewed: updates period + inserts invoice + max() snapshot — no XP', async
 - [ ] **5.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 4 tests PASS.
@@ -863,7 +863,7 @@ it('uncancelled: clears flag + refreshes snapshot', async () => {
 - [ ] **6.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 6 tests PASS.
@@ -986,7 +986,7 @@ it('past_due: flips status only — no snapshot change', async () => {
 - [ ] **7.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 9 tests PASS.
@@ -1090,7 +1090,7 @@ it('applyInvoiceRefund: partial refund sets partial_refund status', async () => 
 - [ ] **8.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 12 tests PASS.
@@ -1157,7 +1157,7 @@ it('concurrent activations for same garage: one wins, the other fails cleanly (P
 - [ ] **9.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 13 tests PASS.
@@ -1209,7 +1209,7 @@ it('canon §F8.6: awardXp called exactly once per activation tx', async () => {
 - [ ] **10.2:** Run:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts
 ```
 
 Expected: All 14 tests PASS.
@@ -1227,7 +1227,7 @@ Create the idempotency test file as specified in spec §3.6 + skeleton §F8.03.
 - [ ] **11.1:** Create the file:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1368,7 +1368,7 @@ describe('premium_activation XP idempotency — admin grant ↔ webhook (canon �
 - [ ] **11.2:** Run both test files:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
 ```
 
 Expected: All 17 tests PASS (14 + 3).
@@ -1382,7 +1382,7 @@ Expected: All 17 tests PASS (14 + 3).
 - [ ] **12.1:** Run typecheck across the full API package:
 
 ```
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: PASS with no errors.
@@ -1390,7 +1390,7 @@ Expected: PASS with no errors.
 - [ ] **12.2:** Run the complete filtered test suite for this chunk:
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
 ```
 
 Expected: **17 tests pass, 0 fail.** Exact counts: 14 in `apply-membership-event.test.ts` + 3 in `premium-activation-idempotency.test.ts`.
@@ -1398,7 +1398,7 @@ Expected: **17 tests pass, 0 fail.** Exact counts: 14 in `apply-membership-event
 - [ ] **12.3:** Run lint on the new files:
 
 ```
-pnpm --filter @jdm/api exec eslint src/services/billing/apply-membership-event.ts test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
+pnpm --filter @ccc/api exec eslint src/services/billing/apply-membership-event.ts test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
 ```
 
 Expected: PASS (no errors).
@@ -1447,7 +1447,7 @@ git push -u origin feat/jdma-f8-billing-03
 
 - [x] `apply-membership-event.test.ts` (14 tests): activated happy path, max() snapshot rule, invoice replay idempotency, renewal (no XP), cancelled/uncancelled status transitions, expired conditional snapshot clear (past admin grant preserved), past_due status-only flip, tier_changed cadence swap, full + partial refund, concurrent activation P2002, single-awardXp spy (canon §F8.6).
 - [x] `premium-activation-idempotency.test.ts` (3 tests): admin-grant-then-webhook, webhook-then-admin-grant, double-webhook — all yield exactly 1 XpEvent row and xp=200 (canon §F8.2).
-- [x] `pnpm --filter @jdm/api typecheck` green.
+- [x] `pnpm --filter @ccc/api typecheck` green.
 - [x] No full-suite local run (per `feedback_no_full_test_suite_locally.md`).
 
 ### Deviations from plan

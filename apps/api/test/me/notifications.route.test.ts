@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   notificationListResponseSchema,
   notificationMarkReadResponseSchema,
   notificationUnreadCountResponseSchema,
-} from '@jdm/shared/notifications';
+} from '@ccc/shared/notifications';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

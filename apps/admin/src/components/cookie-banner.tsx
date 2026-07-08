@@ -1,7 +1,7 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import { PRIVACY_POLICY_VERSION } from '@jdm/shared/legal';
+import { brand } from '@ccc/design';
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import { useCallback, useEffect, useState } from 'react';
 
 import { recordCookieConsent } from '~/lib/consent-actions';

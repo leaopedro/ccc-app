@@ -4,15 +4,15 @@
 
 **Goal:** Land the Prisma schema, migration, shared Zod contracts, and a privacy-contract proof for the F9 event-feed domain, plus per-event feed settings — without exposing any sensitive user keys.
 
-**Architecture:** Add four feed-domain Prisma models (`FeedPost`, `FeedPostPhoto`, `FeedComment`, `FeedReaction`, `Report`) plus per-event feed-setting columns on `Event`. Public identity for posts/comments is the `Car`, not the user; the user link is private and never serialized. Shared response schemas under `@jdm/shared/feed` deliberately omit all PII keys, enforced by a forbidden-key contract test that walks every Zod object shape.
+**Architecture:** Add four feed-domain Prisma models (`FeedPost`, `FeedPostPhoto`, `FeedComment`, `FeedReaction`, `Report`) plus per-event feed-setting columns on `Event`. Public identity for posts/comments is the `Car`, not the user; the user link is private and never serialized. Shared response schemas under `@ccc/shared/feed` deliberately omit all PII keys, enforced by a forbidden-key contract test that walks every Zod object shape.
 
-**Tech Stack:** Prisma 5 (Postgres 16), `@jdm/db`, `@jdm/shared` (Zod), Vitest, pnpm workspace.
+**Tech Stack:** Prisma 5 (Postgres 16), `@ccc/db`, `@ccc/shared` (Zod), Vitest, pnpm workspace.
 
 **Conventions used by this repo (read once before starting):**
 
-- Prisma schema lives at `packages/db/prisma/schema.prisma`; migrations under `packages/db/prisma/migrations/<YYYYMMDDHHMMSS_slug>/migration.sql`. Use `pnpm --filter @jdm/db db:migrate -- --name <slug>` to create migrations when a local Postgres is running on port 5433 (see `docker-compose.yml`). If no DB is available, hand-author the SQL alongside the schema edit and verify with `pnpm --filter @jdm/db db:generate` only.
-- Shared Zod modules live in `packages/shared/src/<topic>.ts`, exported from `packages/shared/src/index.ts`. Each new module also needs a `./<topic>` subpath in `packages/shared/package.json` `exports`. Build with `pnpm --filter @jdm/shared build` (runtime resolves `dist/`).
-- Tests live in `packages/shared/src/__tests__/*.test.ts`; run with `pnpm --filter @jdm/shared test`.
+- Prisma schema lives at `packages/db/prisma/schema.prisma`; migrations under `packages/db/prisma/migrations/<YYYYMMDDHHMMSS_slug>/migration.sql`. Use `pnpm --filter @ccc/db db:migrate -- --name <slug>` to create migrations when a local Postgres is running on port 5433 (see `docker-compose.yml`). If no DB is available, hand-author the SQL alongside the schema edit and verify with `pnpm --filter @ccc/db db:generate` only.
+- Shared Zod modules live in `packages/shared/src/<topic>.ts`, exported from `packages/shared/src/index.ts`. Each new module also needs a `./<topic>` subpath in `packages/shared/package.json` `exports`. Build with `pnpm --filter @ccc/shared build` (runtime resolves `dist/`).
+- Tests live in `packages/shared/src/__tests__/*.test.ts`; run with `pnpm --filter @ccc/shared test`.
 - API tests must hit a real Postgres, not mocks (CLAUDE.md). This plan does not touch the API; downstream issues will.
 - Privacy-forbidden keys (per issue brief): `plate`, `email`, `phone`, `cpf`, `userId`, `ownerId`, `address`. These MUST NOT appear at any depth in any shared feed response schema.
 
@@ -254,7 +254,7 @@ model Report {
 
 - [x] **Step 6: Format & validate the schema**
 
-Run: `pnpm --filter @jdm/db exec prisma format && pnpm --filter @jdm/db exec prisma validate`
+Run: `pnpm --filter @ccc/db exec prisma format && pnpm --filter @ccc/db exec prisma validate`
 Expected: both succeed, exit 0, no diff complaints.
 
 - [x] **Step 7: Commit schema edit**
@@ -283,7 +283,7 @@ If Docker is unavailable in the worker environment, skip ahead to Step 5 (hand-a
 
 - [x] **Step 2: Create the migration**
 
-Run: `pnpm --filter @jdm/db exec prisma migrate dev --name feed_schema --create-only`
+Run: `pnpm --filter @ccc/db exec prisma migrate dev --name feed_schema --create-only`
 Expected: a new directory `packages/db/prisma/migrations/<timestamp>_feed_schema/` containing `migration.sql`. `--create-only` means the SQL is written but not applied yet, so the dev DB stays clean.
 
 - [x] **Step 3: Inspect the generated SQL**
@@ -315,14 +315,14 @@ If Step 2 could not run, create `packages/db/prisma/migrations/<UTC-timestamp>_f
 
 - [x] **Step 6: Apply the migration to confirm it runs cleanly**
 
-Run: `pnpm --filter @jdm/db exec prisma migrate deploy`
+Run: `pnpm --filter @ccc/db exec prisma migrate deploy`
 Expected: `Applying migration <timestamp>_feed_schema` followed by `All migrations have been successfully applied.`
 
 If Docker is unavailable, skip and rely on CI to verify.
 
 - [x] **Step 7: Regenerate the Prisma client**
 
-Run: `pnpm --filter @jdm/db db:generate`
+Run: `pnpm --filter @ccc/db db:generate`
 Expected: `Generated Prisma Client (v...)` with no errors.
 
 - [x] **Step 8: Commit the migration**
@@ -336,7 +336,7 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 
 ---
 
-## ✅ Task 3: Add `@jdm/shared/feed` Zod contracts
+## ✅ Task 3: Add `@ccc/shared/feed` Zod contracts
 
 **Files:**
 
@@ -538,19 +538,19 @@ Edit `packages/shared/package.json`. Inside the `exports` object, add a new entr
 
 - [x] **Step 4: Build the package**
 
-Run: `pnpm --filter @jdm/shared build`
+Run: `pnpm --filter @ccc/shared build`
 Expected: `dist/feed.js`, `dist/feed.d.ts`, `dist/feed.js.map` are produced. No tsc errors.
 
 - [x] **Step 5: Typecheck the workspace**
 
-Run: `pnpm --filter @jdm/shared typecheck`
+Run: `pnpm --filter @ccc/shared typecheck`
 Expected: exits 0.
 
 - [x] **Step 6: Commit shared contracts**
 
 ```bash
 git add packages/shared/src/feed.ts packages/shared/src/index.ts packages/shared/package.json
-git commit -m "feat(jdma-589): @jdm/shared/feed schemas with PublicCarProfile
+git commit -m "feat(jdma-589): @ccc/shared/feed schemas with PublicCarProfile
 
 Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 ```
@@ -675,7 +675,7 @@ describe('feed post create input', () => {
 
 - [x] **Step 2: Run the test, observe it pass (it should — schemas already exist after Task 3)**
 
-Run: `pnpm --filter @jdm/shared test -- src/__tests__/feed.test.ts`
+Run: `pnpm --filter @ccc/shared test -- src/__tests__/feed.test.ts`
 Expected: all tests pass.
 
 If any test fails, the failure points at a bug in `feed.ts` from Task 3 — fix the schema, not the test.
@@ -796,7 +796,7 @@ describe('feed privacy contract', () => {
 
 - [x] **Step 2: Run the test, observe it pass**
 
-Run: `pnpm --filter @jdm/shared test -- src/__tests__/feed-privacy-contract.test.ts`
+Run: `pnpm --filter @ccc/shared test -- src/__tests__/feed-privacy-contract.test.ts`
 Expected: all assertions green. If any forbidden key appears, the schema in `feed.ts` is wrong — fix the schema, not the test.
 
 - [x] **Step 3: Sanity: prove the test catches regressions**
@@ -830,7 +830,7 @@ In `plans/roadmap.md`, find the F9.1 line:
 ```
 #### 9.1 Schema: FeedPost, FeedLike, FeedComment, Report
 
-- [x] **Done when:** migration green; shared schemas in `@jdm/shared/feed`.
+- [x] **Done when:** migration green; shared schemas in `@ccc/shared/feed`.
 ```
 
 Change `- [ ]` to `- [~]`. (Per CLAUDE.md: `[~]` while in-progress on-branch; flip to `[x]` only after merge to `main` AND deployment.)
@@ -843,12 +843,12 @@ Add a one-line `> note:` immediately under the bullet:
 
 - [x] **Step 2: Verify the formatter / linter does not complain**
 
-Run: `pnpm --filter @jdm/shared lint && pnpm --filter @jdm/db lint`
+Run: `pnpm --filter @ccc/shared lint && pnpm --filter @ccc/db lint`
 Expected: both exit 0.
 
 - [x] **Step 3: Run the full shared package test suite**
 
-Run: `pnpm --filter @jdm/shared test`
+Run: `pnpm --filter @ccc/shared test`
 Expected: all tests pass, including the two new files from Tasks 4 and 5.
 
 - [x] **Step 4: Commit**
@@ -879,7 +879,7 @@ gh pr create --base main --title "feat(jdma-589): event feed schema + shared con
 ## Summary
 - Adds Prisma models: `FeedPost`, `FeedPostPhoto`, `FeedComment`, `FeedReaction`, `Report`.
 - Adds per-event feed settings on `Event` (`feedEnabled`, `feedAccess`, `postingAccess`, `maxPostsPerUser`, `maxPhotosPerUser`).
-- Adds `@jdm/shared/feed` Zod contracts with `PublicCarProfile`.
+- Adds `@ccc/shared/feed` Zod contracts with `PublicCarProfile`.
 - Adds a privacy-contract test proving `plate|email|phone|cpf|userId|ownerId|address` cannot appear in any feed response schema.
 
 ## Constraints honoured
@@ -888,14 +888,14 @@ gh pr create --base main --title "feat(jdma-589): event feed schema + shared con
 - Forbidden response keys enumerated centrally and asserted by recursive Zod walk.
 
 ## Rollback
-- `pnpm --filter @jdm/db exec prisma migrate resolve --rolled-back <timestamp>_feed_schema`
+- `pnpm --filter @ccc/db exec prisma migrate resolve --rolled-back <timestamp>_feed_schema`
 - Then drop the migration directory and revert the schema/shared commits.
 
 ## Test plan
-- [x] `pnpm --filter @jdm/shared test`
-- [x] `pnpm --filter @jdm/shared typecheck`
-- [x] `pnpm --filter @jdm/db exec prisma validate`
-- [x] Run `pnpm --filter @jdm/db db:migrate` in CI
+- [x] `pnpm --filter @ccc/shared test`
+- [x] `pnpm --filter @ccc/shared typecheck`
+- [x] `pnpm --filter @ccc/db exec prisma validate`
+- [x] Run `pnpm --filter @ccc/db db:migrate` in CI
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
@@ -915,7 +915,7 @@ Use the Paperclip API to set JDMA-589 to `in_review` with a comment linking the 
 - **Spec coverage:**
   - Prisma schema/migration ✅ (Tasks 1–2)
   - Event-level feed settings (5 fields) ✅ (Task 1 Step 2; defaults locked in Task 1 + Task 3)
-  - `@jdm/shared/feed/*` with `PublicCarProfile` ✅ (Task 3)
+  - `@ccc/shared/feed/*` with `PublicCarProfile` ✅ (Task 3)
   - Privacy contract proof ✅ (Task 5)
   - Per-event setting persistence ✅ (Task 1 Step 2 + Task 2)
   - Roadmap F9 delta ✅ (Task 6)

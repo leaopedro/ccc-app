@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 

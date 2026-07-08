@@ -3,7 +3,7 @@ import {
   BADGE_AWARDED_NOTIFICATION_TITLE,
   badgeAwardedDedupeKey,
   badgeTitlePtBr,
-} from '@jdm/shared/badges-copy';
+} from '@ccc/shared/badges-copy';
 import type { Prisma } from '@prisma/client';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';

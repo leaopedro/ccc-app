@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY = `@${brand.app.storagePrefix}/consent/marketing/seen/v1`;

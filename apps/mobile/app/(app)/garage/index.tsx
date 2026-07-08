@@ -1,5 +1,5 @@
-import type { GarageBadgesOwnerResponse } from '@jdm/shared/badges';
-import { BadgeRow, BadgesSheet, PremiumSheet, ProfileStats, type BadgesSheetCopy } from '@jdm/ui';
+import type { GarageBadgesOwnerResponse } from '@ccc/shared/badges';
+import { BadgeRow, BadgesSheet, PremiumSheet, ProfileStats, type BadgesSheetCopy } from '@ccc/ui';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';

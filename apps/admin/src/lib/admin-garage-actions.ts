@@ -6,8 +6,8 @@ import type {
   AdminGarageSpotRevokeBody,
   AdminGarageSummary,
   AdminGarageSpotRow,
-} from '@jdm/shared/admin-garage';
-import { adminXpAdjustmentSchema, type AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+} from '@ccc/shared/admin-garage';
+import { adminXpAdjustmentSchema, type AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { revalidatePath } from 'next/cache';
 
 import {

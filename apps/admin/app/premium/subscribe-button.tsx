@@ -1,6 +1,6 @@
 'use client';
 
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { useTransition } from 'react';
 
 import { subscribeAction } from './actions';

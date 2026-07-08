@@ -1,4 +1,4 @@
-import { HexBadge } from '@jdm/ui/web';
+import { HexBadge } from '@ccc/ui/web';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

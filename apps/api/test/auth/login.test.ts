@@ -1,4 +1,4 @@
-import { authResponseSchema } from '@jdm/shared/auth';
+import { authResponseSchema } from '@ccc/shared/auth';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';

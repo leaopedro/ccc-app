@@ -1,6 +1,6 @@
 'use client';
 
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import { useRouter } from 'next/navigation';
 import React from 'react';
 import { useActionState, useEffect, useState, useTransition } from 'react';

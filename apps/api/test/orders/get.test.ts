@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { getOrderResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { getOrderResponseSchema } from '@ccc/shared/orders';
 import * as Sentry from '@sentry/node';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

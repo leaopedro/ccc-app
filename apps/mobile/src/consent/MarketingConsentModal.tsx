@@ -1,4 +1,4 @@
-import { Button } from '@jdm/ui';
+import { Button } from '@ccc/ui';
 import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 
 import { profileCopy } from '~/copy/profile';

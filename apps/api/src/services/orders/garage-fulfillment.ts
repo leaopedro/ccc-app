@@ -1,4 +1,4 @@
-import { GARAGE_SPOT_PRODUCT_TYPE_NAME } from '@jdm/db';
+import { GARAGE_SPOT_PRODUCT_TYPE_NAME } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 
 export type GarageFulfillmentResult = {

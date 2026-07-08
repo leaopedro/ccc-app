@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   BADGE_AWARDED_NOTIFICATION_KIND,
   BADGE_AWARDED_NOTIFICATION_TITLE,
   badgeAwardedDedupeKey,
   badgeTitlePtBr,
-} from '@jdm/shared/badges-copy';
+} from '@ccc/shared/badges-copy';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

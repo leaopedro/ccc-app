@@ -1,5 +1,5 @@
-import type { Car } from '@jdm/shared/cars';
-import { PremiumBadge } from '@jdm/ui';
+import type { Car } from '@ccc/shared/cars';
+import { PremiumBadge } from '@ccc/ui';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {

@@ -232,7 +232,7 @@ Same pattern as `garage-covers` + `badges` subpaths. Add to `packages/shared/pac
 "./garage-progress": { "types": "./dist/garage-progress.d.ts", "import": "./dist/garage-progress.js" }
 ```
 
-Rebuild `@jdm/shared` after edit per CLAUDE.md memory rule.
+Rebuild `@ccc/shared` after edit per CLAUDE.md memory rule.
 
 ### C13 — Admin XP route registration (overrides File structure §)
 
@@ -296,7 +296,7 @@ Goal: the new payload renders.
 
 **Chunks:**
 
-- **2C.36** `XPScoreboard` component in `@jdm/ui`. Card with brand-tinted 135° gradient, 4×64px corner racing stripe, Anton 46px XP number with red glow text-shadow, rank pill on the right, `?` button (18×18), progress bar (8px tall, brand-deep → brand gradient, glow shadow), mono ticker hatches (10 across, every 5th tall), caption row (current rank + "`N → Next`" or "Topo do ranking" on top tier).
+- **2C.36** `XPScoreboard` component in `@ccc/ui`. Card with brand-tinted 135° gradient, 4×64px corner racing stripe, Anton 46px XP number with red glow text-shadow, rank pill on the right, `?` button (18×18), progress bar (8px tall, brand-deep → brand gradient, glow shadow), mono ticker hatches (10 across, every 5th tall), caption row (current rank + "`N → Next`" or "Topo do ranking" on top tier).
 - **2C.37** `StatsRow` component. 4-column grid. 12px radius tiles. Icon + big mono number + uppercase mono label per tile. "Desde" tile uses sans 13px instead of mono for the value (`'fev. 26'` style abbreviated PT-BR date).
 - **2C.38** `XPTooltip` component. **Tooltip-style centered card, NOT a bottom sheet.** Backdrop + blur. Lists the 8 `XP_RULES` with icon + action + `+N XP`. Footer dashed note: "XP não expira e não pode ser comprado. Premium dá um bônus único de +200 XP no momento da ativação." Backdrop tap dismisses.
 - **2C.39** `ProfileStats` composite wrapper. Owns tooltip-open state. Only renders if `progress.xp > 0 || stats.events > 0 || stats.posts > 0 || stats.likesReceived > 0` on public view (hides for newly-active public profiles with zero activity). Owner view always renders unless `fresh` signup state.

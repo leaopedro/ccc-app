@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 export type DeletionRequestResult =
   | { ok: true; status: 'deletion_scheduled' }

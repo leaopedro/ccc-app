@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 export const PUBLIC_PROFILE_BASE_URL = brand.urls.publicProfileBase;
 

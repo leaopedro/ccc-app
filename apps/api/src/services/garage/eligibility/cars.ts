@@ -1,4 +1,4 @@
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { Prisma } from '@prisma/client';
 
 // Badge codes — typed loosely as `string[]` since the awarder validates the

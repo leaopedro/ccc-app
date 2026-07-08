@@ -16,7 +16,7 @@
 // HMAC code is generated on-demand from ticket.id at display time via
 // signTicketCode(). This worker only creates the entitlement row.
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { Prisma } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';

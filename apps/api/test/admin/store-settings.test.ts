@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { STORE_SETTINGS_SINGLETON_ID, storeSettingsSchema } from '@jdm/shared/store';
+import { prisma } from '@ccc/db';
+import { STORE_SETTINGS_SINGLETON_ID, storeSettingsSchema } from '@ccc/shared/store';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

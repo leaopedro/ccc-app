@@ -29,7 +29,7 @@ const ptBR = {
     catalog: {
       'EVT-001': {
         title: 'Primeira Largada',
-        description: 'Seu primeiro check-in confirmado em um encontro JDM.',
+        description: 'Seu primeiro check-in confirmado em um encontro CCC.',
         criteria: 'Faça check-in em qualquer evento publicado.',
       },
       'EVT-002': {
@@ -39,7 +39,7 @@ const ptBR = {
       },
       'EVT-003': {
         title: 'Veterano de Pista',
-        description: 'Dez check-ins confirmados na sua trajetória JDM.',
+        description: 'Dez check-ins confirmados na sua trajetória CCC.',
         criteria: 'Acumule 10 check-ins em eventos publicados.',
       },
       'CAR-001': {
@@ -53,7 +53,7 @@ const ptBR = {
         criteria: 'Tenha 5 carros simultâneos na garagem.',
       },
       'CAR-003': {
-        title: 'Curador JDM',
+        title: 'Curador CCC',
         description: 'Dez carros ou mais na coleção da sua garagem.',
         criteria: 'Tenha 10 carros simultâneos na garagem.',
       },
@@ -74,11 +74,11 @@ const ptBR = {
       },
       'JDM-001': {
         title: 'Marco Fixado',
-        description: 'Primeiro local fixado no seu mapa JDM.',
+        description: 'Primeiro local fixado no seu mapa CCC.',
         criteria: 'Fixe um local no seu mapa pessoal.',
       },
       'JDM-002': {
-        title: 'Itinerário JDM',
+        title: 'Itinerário CCC',
         description: 'Participação ativa na agenda nacional de eventos.',
         criteria: 'Compareça a múltiplos eventos pelo país.',
       },
@@ -114,7 +114,7 @@ const en = {
     catalog: {
       'EVT-001': {
         title: 'First Lap',
-        description: 'Your first confirmed check-in at a JDM meet.',
+        description: 'Your first confirmed check-in at a CCC meet.',
         criteria: 'Check in to any published event.',
       },
       'EVT-002': {
@@ -124,7 +124,7 @@ const en = {
       },
       'EVT-003': {
         title: 'Track Veteran',
-        description: 'Ten confirmed check-ins on your JDM journey.',
+        description: 'Ten confirmed check-ins on your CCC journey.',
         criteria: 'Accumulate 10 check-ins at published events.',
       },
       'CAR-001': {
@@ -159,7 +159,7 @@ const en = {
       },
       'JDM-001': {
         title: 'Marker Pinned',
-        description: 'First location pinned to your JDM map.',
+        description: 'First location pinned to your CCC map.',
         criteria: 'Pin a location on your personal map.',
       },
       'JDM-002': {

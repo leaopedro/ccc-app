@@ -159,7 +159,7 @@ That is the entire production-code change.
 The skeletons below are complete — they compile and run against the testcontainer once chunk 27 lands. Copy verbatim and adapt only the imports if a helper has moved on `main`.
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -356,7 +356,7 @@ describe('XP awarder hook — POST /me/cars awards +5 per car_create', () => {
 - [ ] **Step 1.2:** Run the targeted suite. Tests 1, 2, 4 fail because no XpEvent row is being written by `cars.ts` yet. Tests 3 and 5 may pass against chunk 27's already-merged awarder (they exercise the awarder directly via dynamic import) — that is fine; what matters is that the route-driven cases (1, 2, 4) are red until step 2.2 lands.
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-car-create.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-car-create.test.ts
 ```
 
 Expected: at least 3 failing tests (1, 2, 4) with messages like `expected 1 to be 0` for the event count and `expected 5 to be 0` for `garage.xp`.
@@ -411,7 +411,7 @@ if (garage) {
 - [ ] **Step 2.3:** Typecheck.
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors. If TypeScript complains about the `'car_create'` literal not matching the awarder's reason union, double-check chunk 27 exposes `'car_create'` in `XpReason` — escalate to the chunk-27 PR if missing.
@@ -419,7 +419,7 @@ Expected: no errors. If TypeScript complains about the `'car_create'` literal no
 - [ ] **Step 2.4:** Run the targeted suite again.
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-car-create.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-car-create.test.ts
 ```
 
 Expected: all 5 tests pass.
@@ -440,7 +440,7 @@ The car POST is on the badge-hook hot path; re-run the closest-neighbour suites 
 - [ ] **Step 3.1:** Run the badge write-hook suite (unchanged behaviour expected).
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts
 ```
 
 Expected: all green — the badge hooks still fire, XP rows now coexist alongside badge rows.
@@ -448,7 +448,7 @@ Expected: all green — the badge hooks still fire, XP rows now coexist alongsid
 - [ ] **Step 3.2:** Run the cars routes suite (unchanged behaviour expected).
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/cars
+pnpm --filter @ccc/api exec vitest run test/cars
 ```
 
 Expected: all green. Car CRUD, photos, allocation, retry-on-P2034 all untouched.
@@ -456,7 +456,7 @@ Expected: all green. Car CRUD, photos, allocation, retry-on-P2034 all untouched.
 - [ ] **Step 3.3:** Run the eligibility + XP awarder suites (unchanged). XP awarder file is chunk 27's `xp-awarder.test.ts` per canon §11 — `awarder.test.ts` is the Phase 1 badge awarder and is also re-checked.
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/eligibility.test.ts test/garage/xp-awarder.test.ts test/garage/awarder.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/eligibility.test.ts test/garage/xp-awarder.test.ts test/garage/awarder.test.ts
 ```
 
 Expected: all green.
@@ -469,10 +469,10 @@ No new commit for this step — it's verification only. If any pre-existing test
 
 Per `superpowers:verification-before-completion`: run these and confirm output before claiming done.
 
-- [ ] `pnpm --filter @jdm/api typecheck` → clean.
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/xp-car-create.test.ts` → 5/5 pass.
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts test/garage/xp-awarder.test.ts test/garage/awarder.test.ts test/garage/eligibility.test.ts` → all green (canon §11: chunk 27's XP awarder file is `xp-awarder.test.ts`; Phase 1 `awarder.test.ts` is the badge awarder).
-- [ ] `pnpm --filter @jdm/api exec vitest run test/cars` → all green.
+- [ ] `pnpm --filter @ccc/api typecheck` → clean.
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/xp-car-create.test.ts` → 5/5 pass.
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts test/garage/xp-awarder.test.ts test/garage/awarder.test.ts test/garage/eligibility.test.ts` → all green (canon §11: chunk 27's XP awarder file is `xp-awarder.test.ts`; Phase 1 `awarder.test.ts` is the badge awarder).
+- [ ] `pnpm --filter @ccc/api exec vitest run test/cars` → all green.
 - [ ] `git diff --stat main` shows **exactly two files**: `apps/api/src/routes/cars.ts` (+~10 −0) and `apps/api/test/garage/xp-car-create.test.ts` (new).
 - [ ] No edits to `packages/db/**`, `packages/shared/**`, `apps/mobile/**`, `apps/admin/**`, or any route file other than `cars.ts`.
 - [ ] `git grep -n "awardXp" apps/api/src/routes` → returns exactly one hit (in `cars.ts`).

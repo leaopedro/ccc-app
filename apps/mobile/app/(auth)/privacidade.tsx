@@ -1,6 +1,6 @@
-import { brand } from '@jdm/design';
-import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@jdm/shared/legal';
-import { Text } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
+import { Text } from '@ccc/ui';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { Pressable, SafeAreaView, ScrollView, View } from 'react-native';

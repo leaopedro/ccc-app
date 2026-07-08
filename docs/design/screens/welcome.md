@@ -71,11 +71,11 @@ SafeAreaView (bg-bg)
 
 `formatEventDateRange` from `~/lib/format` is reused for all date strings.
 
-## Component breakdown (`@jdm/ui` primitives)
+## Component breakdown (`@ccc/ui` primitives)
 
 | UI element                     | Primitive / Element                                                     |
 | ------------------------------ | ----------------------------------------------------------------------- |
-| Wordmark                       | `<Image source={require('@jdm/design/...')}>`                           |
+| Wordmark                       | `<Image source={require('@ccc/design/...')}>`                           |
 | Greeting                       | `<Text variant="eyebrow" tone="muted">`                                 |
 | Section eyebrow                | `<Text variant="eyebrow" tone="muted">`                                 |
 | Hero title                     | `<Text variant="h1">`                                                   |
@@ -157,7 +157,7 @@ staff` — no membership flag.
   reference, not a real signal.
 - **Hero countdown timer.** Tempting for "premium scene access" energy
   but adds re-render churn and a custom primitive. Defer to a future
-  pass once `mono` countdown component lives in `@jdm/ui`.
+  pass once `mono` countdown component lives in `@ccc/ui`.
 - **Vote / category nav entry.** Voting (F6) is event-scoped, not
   global; belongs in event detail, not the home shell.
 - **Notification bell / inbox.** Push delivery exists but there is no

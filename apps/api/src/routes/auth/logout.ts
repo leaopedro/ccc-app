@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { logoutSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { logoutSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { hashRefreshToken } from '../../services/auth/tokens.js';

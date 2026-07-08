@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import type {
   StoreCollection,
   StoreProduct,
@@ -6,8 +6,8 @@ import type {
   StoreSettings,
   StoreProductType,
   StoreProductVariant,
-} from '@jdm/shared/store';
-import { Badge, Button, Text } from '@jdm/ui';
+} from '@ccc/shared/store';
+import { Badge, Button, Text } from '@ccc/ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ShoppingCart } from 'lucide-react-native';

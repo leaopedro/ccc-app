@@ -1,4 +1,4 @@
-import type { MyOrder } from '@jdm/shared/orders';
+import type { MyOrder } from '@ccc/shared/orders';
 
 import { ordersCopy } from '../../copy/orders';
 

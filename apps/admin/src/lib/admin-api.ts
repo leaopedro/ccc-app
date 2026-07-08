@@ -64,7 +64,7 @@ import {
   adminTicketTierSchema,
   type AdminAuditListResponse,
   adminAuditListResponseSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
@@ -79,7 +79,7 @@ import {
   type PickupVoucherClaimResponse,
   type TicketCheckInRequest,
   type TicketCheckInResponse,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 import {
   createFeedBanInputSchema,
   feedBanResponseSchema,
@@ -88,26 +88,26 @@ import {
   type CreateFeedBanInput,
   type ModerateCommentInput,
   type ModeratePostInput,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import {
   generalSettingsSchema,
   type GeneralSettings,
   type GeneralSettingsUpdate,
-} from '@jdm/shared/general-settings';
-import { publicProfileSchema } from '@jdm/shared/profile';
+} from '@ccc/shared/general-settings';
+import { publicProfileSchema } from '@ccc/shared/profile';
 import {
   storeSettingsSchema,
   type AdminStoreFulfillmentUpdate,
   type StoreSettings,
   type StoreSettingsUpdate,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import {
   adminSupportTicketDetailSchema,
   adminSupportTicketListResponseSchema,
   type AdminSupportTicketDetail,
   type AdminSupportTicketListResponse,
   type SupportTicketInternalStatus,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import { z } from 'zod';
 
 import {

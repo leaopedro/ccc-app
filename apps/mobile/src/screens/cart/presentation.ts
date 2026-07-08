@@ -1,5 +1,5 @@
-import type { CartItem, CartTotals, FulfillmentMethod } from '@jdm/shared/cart';
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { CartItem, CartTotals, FulfillmentMethod } from '@ccc/shared/cart';
+import type { MyTicket } from '@ccc/shared/tickets';
 
 import { cartCopy } from '../../copy/cart';
 

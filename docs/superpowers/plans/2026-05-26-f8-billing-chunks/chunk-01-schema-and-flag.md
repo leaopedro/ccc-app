@@ -6,7 +6,7 @@
 
 **Architecture:** Schema-only delta + env flag + shared scaffold. No service code, no routes, no UI. Migration file is Prisma-generated with two raw SQL statements manually appended for the partial unique indexes that Prisma's DSL cannot express. Feature flag defaults to `false`; all F8 routes gate on it (canon §F8.11). `packages/shared/src/premium.ts` ships empty (`export {};`) so downstream F8 chunks can import from it without a build-order hazard — F8.11 populates the actual zod schemas.
 
-**Tech Stack:** Prisma 5 + Postgres 16. Testcontainers-Postgres for integration tests (shared global-setup in `apps/api/test/global-setup.ts`). vitest. pnpm workspaces (`@jdm/db`, `@jdm/api`, `@jdm/shared`). zod (env schema in `apps/api/src/env.ts`).
+**Tech Stack:** Prisma 5 + Postgres 16. Testcontainers-Postgres for integration tests (shared global-setup in `apps/api/test/global-setup.ts`). vitest. pnpm workspaces (`@ccc/db`, `@ccc/api`, `@ccc/shared`). zod (env schema in `apps/api/src/env.ts`).
 
 ---
 
@@ -42,7 +42,7 @@ apps/api/test/env.test.ts                                                  (modi
 
 - **§F8.8** — partial unique `ticket_one_premium_grant_per_user_event ON "Ticket" ("userId","eventId") WHERE status = 'valid' AND source = 'premium_grant'` lands here. **Narrowed scope vs initial draft:** an earlier draft of canon §F8.8 omitted the `source` predicate, but external review of PR #445 surfaced that migration `20260503163319_drop_ticket_user_event_unique` had explicitly dropped the broader form to support multi-ticket purchases (`Event.maxTicketsPerUser > 1`) and multi-comp grants. The premium-grant flows (F8.06 backfill, F8.07 publish-hook) only ever create `source='premium_grant'` rows; narrowing the index gives them DB-level idempotency without regressing purchase/comp flows.
 - **§F8.11** — `GROWTH_PREMIUM_BILLING_ENABLED` feature flag added here; default `false`.
-- **§F8.13** — rebuild `@jdm/shared` after any schema/export change.
+- **§F8.13** — rebuild `@ccc/shared` after any schema/export change.
 - Phase 2 **§C1** — `XpEvent @@unique([garageId, reason, sourceRef])` carries forward; no change in this chunk.
 
 ---
@@ -225,8 +225,8 @@ In the `Garage` model relations block (after `xpEvents XpEvent[]`, around line 2
 - [ ] **Step 1.7 — Run `prisma format` and `prisma generate`**
 
 ```bash
-pnpm --filter @jdm/db exec prisma format
-pnpm --filter @jdm/db prisma generate
+pnpm --filter @ccc/db exec prisma format
+pnpm --filter @ccc/db prisma generate
 ```
 
 Expected: no parse errors. Client types now include `PremiumMembership`, `PremiumMembershipInvoice`, `SubscriptionWebhookEvent`, updated `TicketTier`. If `format` reorders declarations, accept — Prisma's canonical ordering wins.
@@ -242,7 +242,7 @@ Expected: no parse errors. Client types now include `PremiumMembership`, `Premiu
 - [ ] **Step 2.1 — Generate the migration (no apply)**
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --create-only --name f8_premium_billing
+pnpm --filter @ccc/db prisma migrate dev --create-only --name f8_premium_billing
 ```
 
 `--create-only` produces the file without applying it to the local dev DB.
@@ -302,7 +302,7 @@ These two statements MUST be appended by hand — Prisma's schema DSL cannot exp
 - [ ] **Step 2.4 — Apply the migration to the local dev DB**
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev
+pnpm --filter @ccc/db prisma migrate dev
 ```
 
 Expected: applies cleanly. `prisma generate` runs implicitly at the tail.
@@ -388,7 +388,7 @@ describe('env: F8 billing entries (chunk F8.01)', () => {
 - [ ] **Step 3.2 — Run the test to confirm it fails**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 Expected: FAIL — `env.GROWTH_PREMIUM_BILLING_ENABLED` is `undefined`, properties don't exist yet.
@@ -411,7 +411,7 @@ In the `envSchema` object, add after the `DELETION_GRACE_DAYS` line (currently t
 - [ ] **Step 3.4 — Run the test to confirm it passes**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 Expected: PASS — all 7 new cases green.
@@ -443,10 +443,10 @@ EOF
 
 - [ ] **Step 4.1 — Write the failing shared build test**
 
-There is no dedicated test file for this step — the test is `pnpm --filter @jdm/shared build` succeeding after the re-export is added. First confirm the build currently passes (baseline):
+There is no dedicated test file for this step — the test is `pnpm --filter @ccc/shared build` succeeding after the re-export is added. First confirm the build currently passes (baseline):
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: PASS. This confirms the current state is clean before we touch it.
@@ -456,7 +456,7 @@ Expected: PASS. This confirms the current state is clean before we touch it.
 ```ts
 // packages/shared/src/premium.ts
 // Populated by F8.11 (premium status + checkout zod schemas).
-// This scaffold exists so downstream F8 chunks can import from '@jdm/shared'
+// This scaffold exists so downstream F8 chunks can import from '@ccc/shared'
 // without a build-order hazard.
 
 export {};
@@ -472,10 +472,10 @@ export * from './premium.js';
 
 The existing pattern in `index.ts` uses the `.js` extension on all re-exports (e.g., `export * from './garage.js'`). Match it exactly.
 
-- [ ] **Step 4.4 — Rebuild `@jdm/shared` and confirm it passes**
+- [ ] **Step 4.4 — Rebuild `@ccc/shared` and confirm it passes**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: PASS. The empty export barrel compiles cleanly.
@@ -489,7 +489,7 @@ feat(shared): scaffold premium.ts export barrel (F8.01)
 
 Empty re-export barrel; F8.11 populates premiumStatusSchema + checkout
 zod schemas. Added to index.ts so downstream F8 chunks can import from
-@jdm/shared without build-order hazard (canon §F8.13).
+@ccc/shared without build-order hazard (canon §F8.13).
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
@@ -504,13 +504,13 @@ EOF
 
 - Create: `apps/api/test/billing/schema-f8.test.ts`
 
-This test uses the shared Testcontainers Postgres setup in `apps/api/test/global-setup.ts`. That setup runs `prisma migrate deploy` on startup, which picks up the new `f8_premium_billing` migration automatically. Use the shared `prisma` client from `@jdm/db`.
+This test uses the shared Testcontainers Postgres setup in `apps/api/test/global-setup.ts`. That setup runs `prisma migrate deploy` on startup, which picks up the new `f8_premium_billing` migration automatically. Use the shared `prisma` client from `@ccc/db`.
 
 - [ ] **Step 5.1 — Write the failing test**
 
 ```ts
 // apps/api/test/billing/schema-f8.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { PremiumCadence, PremiumMembershipStatus, PremiumProvider } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -812,17 +812,17 @@ describe('schema: F8 premium billing tables + partial unique indexes (chunk F8.0
 If you haven't applied the migration yet, run:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/schema-f8.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/schema-f8.test.ts
 ```
 
 Expected: FAIL — tables/columns don't exist yet (or Prisma client types missing).
 
-If migration was already applied in Task 2.4, run `pnpm --filter @jdm/db build` first to ensure the Prisma client output is current, then run the test. It should PASS (the Testcontainers container runs `prisma migrate deploy` on fresh start).
+If migration was already applied in Task 2.4, run `pnpm --filter @ccc/db build` first to ensure the Prisma client output is current, then run the test. It should PASS (the Testcontainers container runs `prisma migrate deploy` on fresh start).
 
-- [ ] **Step 5.3 — Build `@jdm/db` to refresh the Prisma client**
+- [ ] **Step 5.3 — Build `@ccc/db` to refresh the Prisma client**
 
 ```bash
-pnpm --filter @jdm/db build
+pnpm --filter @ccc/db build
 ```
 
 Expected: PASS.
@@ -830,7 +830,7 @@ Expected: PASS.
 - [ ] **Step 5.4 — Run the test suite against the fresh container**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/schema-f8.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/schema-f8.test.ts
 ```
 
 Expected: PASS — all 12 cases green. The Testcontainers setup runs `prisma migrate deploy` which picks up the new migration including the appended raw SQL.
@@ -902,14 +902,14 @@ BillingEvent types (F8.02), applyMembershipEvent service (F8.03), webhook routes
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/db exec prisma format` — no parse errors
-- [ ] `pnpm --filter @jdm/db prisma generate` — client builds
-- [ ] `pnpm --filter @jdm/db prisma migrate dev` — migration applies forward cleanly
-- [ ] `pnpm --filter @jdm/db build` — package builds
-- [ ] `pnpm --filter @jdm/shared build` — shared builds (canon §F8.13)
-- [ ] `pnpm --filter @jdm/api typecheck` — green
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/schema-f8.test.ts` — 12 cases pass
-- [ ] `pnpm --filter @jdm/api exec vitest run test/env.test.ts` — 7 new cases pass
+- [ ] `pnpm --filter @ccc/db exec prisma format` — no parse errors
+- [ ] `pnpm --filter @ccc/db prisma generate` — client builds
+- [ ] `pnpm --filter @ccc/db prisma migrate dev` — migration applies forward cleanly
+- [ ] `pnpm --filter @ccc/db build` — package builds
+- [ ] `pnpm --filter @ccc/shared build` — shared builds (canon §F8.13)
+- [ ] `pnpm --filter @ccc/api typecheck` — green
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/schema-f8.test.ts` — 12 cases pass
+- [ ] `pnpm --filter @ccc/api exec vitest run test/env.test.ts` — 7 new cases pass
 
 ## Reviewer checklist
 
@@ -931,25 +931,25 @@ EOF
 
 ```bash
 # 1. Format + client validation
-pnpm --filter @jdm/db exec prisma format
-pnpm --filter @jdm/db prisma generate
+pnpm --filter @ccc/db exec prisma format
+pnpm --filter @ccc/db prisma generate
 
 # 2. Migration forward-apply
-pnpm --filter @jdm/db prisma migrate dev
+pnpm --filter @ccc/db prisma migrate dev
 
 # 3. Build packages
-pnpm --filter @jdm/db build
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/db build
+pnpm --filter @ccc/shared build
 
 # 4. Type-check api
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 
 # 5. Targeted test runs only (per feedback_no_full_test_suite_locally.md)
-pnpm --filter @jdm/api exec vitest run test/billing/schema-f8.test.ts
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/schema-f8.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
-Stop at the first failure. Do not run the full `@jdm/api` suite locally — trust CI for the cross-cutting sweep.
+Stop at the first failure. Do not run the full `@ccc/api` suite locally — trust CI for the cross-cutting sweep.
 
 ---
 

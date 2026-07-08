@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminCreateUserBodySchema,
   adminUserCreatedSchema,
@@ -8,7 +8,7 @@ import {
   adminUserSearchQuerySchema,
   adminUserSearchResponseSchema,
   adminUserStatusUpdatedSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type { Prisma, User as DbUser } from '@prisma/client';
 import { Prisma as PrismaNS } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';

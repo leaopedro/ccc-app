@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { GARAGE_COVER_PRESETS } from '@jdm/shared/garage-covers';
+import { prisma } from '@ccc/db';
+import { GARAGE_COVER_PRESETS } from '@ccc/shared/garage-covers';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

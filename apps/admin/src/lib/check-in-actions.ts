@@ -6,7 +6,7 @@ import type {
   PickupVoucherClaimResponse,
   StorePickupOrder,
   TicketCheckInResponse,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 
 import {
   checkInTicket as apiCheckInTicket,

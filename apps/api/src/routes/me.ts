@@ -1,12 +1,12 @@
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   pushPrefsSchema,
   pushPrefsStorageSchema,
   updatePushPrefsRequestSchema,
   type PushPrefs,
-} from '@jdm/shared';
-import { publicProfileSchema, updateProfileSchema } from '@jdm/shared/profile';
+} from '@ccc/shared';
+import { publicProfileSchema, updateProfileSchema } from '@ccc/shared/profile';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

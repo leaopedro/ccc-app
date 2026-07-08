@@ -119,7 +119,7 @@ git commit -m "feat(api): add DELETION_GRACE_DAYS env var (default 30)"
 Create `apps/api/test/me/account-delete.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -212,7 +212,7 @@ Expected: FAIL - route not found (404).
 Create `apps/api/src/services/account-deletion/request.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 export type DeletionRequestResult =
   | { ok: true; status: 'deletion_scheduled' }
@@ -320,7 +320,7 @@ git commit -m "feat(api): add POST /me/account/delete endpoint with token revoca
 Create `apps/api/test/account-deletion/worker.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -456,7 +456,7 @@ Create `apps/api/src/services/account-deletion/anonymize.ts`:
 ```typescript
 import { randomBytes } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 
 import type { Uploads } from '../uploads/index.js';
@@ -628,7 +628,7 @@ Expected: FAIL - cannot resolve `vendor-fanout.js`.
 Create `apps/api/src/services/account-deletion/vendor-fanout.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import type { Env } from '../../env.js';
 import type { StripeClient } from '../stripe/index.js';
@@ -762,7 +762,7 @@ Expected: FAIL - cannot resolve `workers/account-deletion.js`.
 Create `apps/api/src/workers/account-deletion.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 

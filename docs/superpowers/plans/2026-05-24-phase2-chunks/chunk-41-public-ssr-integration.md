@@ -6,7 +6,7 @@
 
 **Architecture:** Phase 1 chunk 13 owns the SSR page (`apps/admin/app/g/[slug]/page.tsx`) and its composition (`apps/admin/src/components/public-garage-view.tsx`). This chunk extends the composition to accept `progress` + `stats` + `gamificationEnabled` from chunk-28's response top-level fields, gates by `data.gamification.enabled` (response top-level per canon §1 / §C10), and adds three SSR-safe web twins (`XPScoreboardWeb`, `StatsRowWeb`, `ProfileStatsWeb`) under `packages/ui/src/web/` — same pattern Phase 1 chunk 21 used for `BadgeRow`. Phase 2D may replace the static `?` with a client-island.
 
-**Tech Stack:** Next.js 16 App Router (server components), `@jdm/ui/web` subpath (HTML + Tailwind, no React Native), `@jdm/shared/garage-progress` zod types, `renderToStaticMarkup` for unit tests, Vitest in `@jdm/admin` + `@jdm/ui`.
+**Tech Stack:** Next.js 16 App Router (server components), `@ccc/ui/web` subpath (HTML + Tailwind, no React Native), `@ccc/shared/garage-progress` zod types, `renderToStaticMarkup` for unit tests, Vitest in `@ccc/admin` + `@ccc/ui`.
 
 ---
 
@@ -93,7 +93,7 @@ git checkout -b feat/jdma-garage-phase2-41
 ### `packages/ui/src/web/XPScoreboardWeb.tsx`
 
 ```tsx
-import type { GarageProgress } from '@jdm/shared/garage-progress';
+import type { GarageProgress } from '@ccc/shared/garage-progress';
 
 export type XPScoreboardWebProps = { progress: GarageProgress };
 
@@ -185,7 +185,7 @@ Use `getUTCMonth` / `getUTCFullYear` (not local-time variants) so SSR output is 
 ### `packages/ui/src/web/ProfileStatsWeb.tsx`
 
 ```tsx
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 import { StatsRowWeb } from './StatsRowWeb.js';
 import { XPScoreboardWeb } from './XPScoreboardWeb.js';
 
@@ -227,7 +227,7 @@ export { ProfileStatsWeb, type ProfileStatsWebProps } from './ProfileStatsWeb.js
 
 Four changes:
 
-1. Add `ProfileStatsWeb` to the `from '@jdm/ui/web'` import (alongside `BadgeRow`).
+1. Add `ProfileStatsWeb` to the `from '@ccc/ui/web'` import (alongside `BadgeRow`).
 2. Extend `Props` with three new optional fields:
    - `gamificationEnabled?: boolean` — response top-level flag (canon §1).
    - `progress?: GaragePublicResponse['progress']`.
@@ -426,7 +426,7 @@ Five TDD tasks, ~70 min total. Each ends with a commit.
 - [ ] **1.2 — Run, confirm failures**
 
 ```bash
-pnpm --filter @jdm/ui exec vitest run src/web/__tests__/profile-stats-web.test.tsx
+pnpm --filter @ccc/ui exec vitest run src/web/__tests__/profile-stats-web.test.tsx
 ```
 
 Expected: "Cannot find module '../index.js'" or "ProfileStatsWeb is not a function" — twins don't exist yet. Confirms test reach.
@@ -438,13 +438,13 @@ Expected: "Cannot find module '../index.js'" or "ProfileStatsWeb is not a functi
 - [ ] **1.5 — Run, confirm all 10 PASS**
 
 ```bash
-pnpm --filter @jdm/ui exec vitest run src/web/__tests__/profile-stats-web.test.tsx
+pnpm --filter @ccc/ui exec vitest run src/web/__tests__/profile-stats-web.test.tsx
 ```
 
-- [ ] **1.6 — Typecheck `@jdm/ui`**
+- [ ] **1.6 — Typecheck `@ccc/ui`**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/ui typecheck
 ```
 
 - [ ] **1.7 — Commit**
@@ -462,12 +462,12 @@ git commit -m "feat(ui/web): add ProfileStatsWeb + XPScoreboardWeb + StatsRowWeb
 
 **File:** `apps/admin/src/components/__tests__/public-garage-view.test.tsx`.
 
-- [ ] **2.1 — Add imports + fixtures + new `describe` block** from §"Test plan". Import `GarageProgress` + `GarageStats` from `@jdm/shared/garage-progress`. The new specs pass `gamificationEnabled` as a **top-level prop** on `<PublicGarageView />` (canon §1) — do NOT mutate `baseGarage.gamification`.
+- [ ] **2.1 — Add imports + fixtures + new `describe` block** from §"Test plan". Import `GarageProgress` + `GarageStats` from `@ccc/shared/garage-progress`. The new specs pass `gamificationEnabled` as a **top-level prop** on `<PublicGarageView />` (canon §1) — do NOT mutate `baseGarage.gamification`.
 
 - [ ] **2.2 — Run, confirm 7 NEW failures**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run public-garage-view
+pnpm --filter @ccc/admin exec vitest run public-garage-view
 ```
 
 Expected: 7 failures + the existing 12 specs still PASS. TypeScript complains about unknown `progress` / `stats` / `gamificationEnabled` props on `<PublicGarageView />` — that's the red signal we want.
@@ -490,13 +490,13 @@ git commit -m "test(admin): failing chunk-41 ProfileStats SSR specs"
 - [ ] **3.2 — Run, confirm all 19 specs PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run public-garage-view
+pnpm --filter @ccc/admin exec vitest run public-garage-view
 ```
 
-- [ ] **3.3 — Typecheck `@jdm/admin`**
+- [ ] **3.3 — Typecheck `@ccc/admin`**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 If `data.progress` / `data.stats` typecheck-fail at the page level, that's expected; Task 4 wires the page.
@@ -519,7 +519,7 @@ git commit -m "feat(admin): slot ProfileStatsWeb into SSR public garage (chunk 4
 - [ ] **4.2 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 If TypeScript says `Property 'progress' does not exist on type 'GaragePublicResponse'`, the chunk-24 envelope extension never merged or chunk 28 shipped a different shape — STOP and reconcile with the chunk-24 / chunk-28 authors. Do NOT paper over locally.
@@ -527,7 +527,7 @@ If TypeScript says `Property 'progress' does not exist on type 'GaragePublicResp
 - [ ] **4.3 — Re-run the test scope**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run public-garage-view
+pnpm --filter @ccc/admin exec vitest run public-garage-view
 ```
 
 Expected: all 19 specs still PASS.
@@ -550,13 +550,13 @@ Chunk 41 only touches the happy-path render in `page.tsx`; the `notFound()` shor
 If the chunk-13 / chunk-28 §C9 test exists at `apps/api/test/public-garage/404-byte-parity.test.ts` (API-side authoritative source), run:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/public-garage/404-byte-parity.test.ts
+pnpm --filter @ccc/api exec vitest run test/public-garage/404-byte-parity.test.ts
 ```
 
 Otherwise run the admin route-level equivalent at `apps/admin/src/app/g/[slug]/__tests__/not-found-byte-parity.test.ts` (or wherever Phase 1 chunk 13 / 14 parked it — `grep -rn "byte" apps/admin/src/app/g/`):
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run --testPathPattern "g/\\[slug\\].*not-found"
+pnpm --filter @ccc/admin exec vitest run --testPathPattern "g/\\[slug\\].*not-found"
 ```
 
 Both variants must hit BOTH paths (unknown slug + private slug) and compare status code, response body, and response headers. The admin component-level test does NOT satisfy this — that test only proves the React component renders nothing on a `notFound()` throw, it does not exercise the route handler or assert byte equality across paths.
@@ -566,14 +566,14 @@ Expected: route-level §C9 test PASSes; unknown-slug response is byte-identical 
 - [ ] **5.2 — Both typechecks clean**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/ui typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 - [ ] **5.3 — Lint touched files only** (per CLAUDE.md "touched-paths only"):
 
 ```bash
-pnpm --filter @jdm/admin lint -- \
+pnpm --filter @ccc/admin lint -- \
   apps/admin/src/components/public-garage-view.tsx \
   apps/admin/app/g/[slug]/page.tsx \
   apps/admin/src/components/__tests__/public-garage-view.test.tsx
@@ -625,8 +625,8 @@ git push -u origin feat/jdma-garage-phase2-41
 - [ ] Branch `feat/jdma-garage-phase2-41` from fresh `main` (PF-1 + PF-5 verified).
 - [ ] All 19 specs in `public-garage-view.test.tsx` PASS (12 existing + 7 new).
 - [ ] All 10 specs in `profile-stats-web.test.tsx` PASS.
-- [ ] `pnpm --filter @jdm/ui typecheck` clean.
-- [ ] `pnpm --filter @jdm/admin typecheck` clean.
+- [ ] `pnpm --filter @ccc/ui typecheck` clean.
+- [ ] `pnpm --filter @ccc/admin typecheck` clean.
 - [ ] Lint clean on touched files (per CLAUDE.md).
 - [ ] Real route-level §C9 404 byte-parity spec PASSes (Task 5.1 — NOT the admin component test).
 - [ ] PR body documents the six §"Deviations" entries (especially #1 — static `?`; #4 — top-level `gamification.enabled`; #5 — all-zero hide-on-empty).

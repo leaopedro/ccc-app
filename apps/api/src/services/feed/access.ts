@@ -1,6 +1,6 @@
-import { prisma } from '@jdm/db';
-import type { UserRoleName } from '@jdm/shared/auth';
-import type { FeedAccess, PostingAccess } from '@jdm/shared/feed';
+import { prisma } from '@ccc/db';
+import type { UserRoleName } from '@ccc/shared/auth';
+import type { FeedAccess, PostingAccess } from '@ccc/shared/feed';
 
 type AccessResult = 'ok' | 'forbidden' | 'banned';
 

@@ -1,4 +1,4 @@
-import type { Cart, CartStockWarning, EvictedCartItem } from '@jdm/shared/cart';
+import type { Cart, CartStockWarning, EvictedCartItem } from '@ccc/shared/cart';
 
 export type CartState = {
   cart: Cart | null;

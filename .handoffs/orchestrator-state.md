@@ -42,7 +42,7 @@ flipped to `true` in Railway production after F8.19 smoke evidence attached.
 - §F8.10: Refund honors period end — entitlement persists; invoice status flips only.
 - §F8.11: Feature flag `GROWTH_PREMIUM_BILLING_ENABLED` — now default `true` post-smoke.
 - §F8.12: Filtered test command shape (same as Phase 2 §10).
-- §F8.13: Rebuild `@jdm/shared` after schema/export changes.
+- §F8.13: Rebuild `@ccc/shared` after schema/export changes.
 - §F8.14: UI dep + harness in same chunk.
 - §F8.15: Webhook idempotency two-layer model.
 - §F8.16: iOS bundle isolation — no Stripe references in iOS-conditional code.

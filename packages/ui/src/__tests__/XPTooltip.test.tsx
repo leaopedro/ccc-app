@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // XPTooltip tests. Mirrors the mobile workspace's working pattern for
-// `@jdm/ui` components that depend on react-native: vi.mock RN to
+// `@ccc/ui` components that depend on react-native: vi.mock RN to
 // jsdom-friendly host tags + render via `react-dom/client.createRoot`.
 //
 // Why not `@testing-library/react-native` (plan §"Tech Stack"):

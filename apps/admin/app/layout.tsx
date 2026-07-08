@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 import type { Metadata } from 'next';
 
 import './globals.css';

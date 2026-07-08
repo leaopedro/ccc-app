@@ -1,5 +1,5 @@
 {
-  "name": "@jdm/shared",
+  "name": "@ccc/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -149,7 +149,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"

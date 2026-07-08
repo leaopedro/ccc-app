@@ -1,5 +1,5 @@
-import type { Car } from '@jdm/shared/cars';
-import type { GarageSpot, GarageSpotSource } from '@jdm/shared/garage';
+import type { Car } from '@ccc/shared/cars';
+import type { GarageSpot, GarageSpotSource } from '@ccc/shared/garage';
 
 import type { GaragePurchaseOption, GarageReadResponse } from '~/api/garage';
 

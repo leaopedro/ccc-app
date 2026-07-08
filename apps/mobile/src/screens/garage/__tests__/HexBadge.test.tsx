@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // HexBadge tests. The component lives in `packages/ui/src/`, but the tests
-// live here so the mobile workspace's vitest picks them up — `@jdm/ui` has
+// live here so the mobile workspace's vitest picks them up — `@ccc/ui` has
 // no test runner of its own (verified via packages/ui/package.json). This
 // mirrors the ParkingStallCard / CoverPickerSheet test pattern.
 //
@@ -10,7 +10,7 @@
 // jsdom. Visual assertions are limited to behavioural proxies — text content,
 // aria roles, click handlers, and data-testid markers.
 
-import type { HexBadgeProps } from '@jdm/ui';
+import type { HexBadgeProps } from '@ccc/ui';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -150,7 +150,7 @@ describe('HexBadge', () => {
   };
 
   it('earned variant renders the catalog glyph (Flag for icon=flag)', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge code="EVT-001" variant="earned" rarity="common" icon="flag" size="md" />,
     );
@@ -160,7 +160,7 @@ describe('HexBadge', () => {
   });
 
   it('locked variant renders the Lock glyph', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge code="CAR-003" variant="locked" rarity="legendary" icon="curator" size="md" />,
     );
@@ -169,7 +169,7 @@ describe('HexBadge', () => {
   });
 
   it('locked_premium variant renders the "Exclusivo Premium" tag', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge
         code="JDM-003"
@@ -183,7 +183,7 @@ describe('HexBadge', () => {
   });
 
   it('earned variant does NOT render the Premium tag', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge code="EVT-001" variant="earned" rarity="common" icon="flag" size="md" />,
     );
@@ -192,7 +192,7 @@ describe('HexBadge', () => {
 
   it('renders a button when onPress is provided and fires it on click', async () => {
     const fn = vi.fn();
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge
         code="EVT-001"
@@ -213,7 +213,7 @@ describe('HexBadge', () => {
   });
 
   it('renders an unknown icon string as HelpCircle (no crash)', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge code="EVT-001" variant="earned" rarity="common" icon="not-a-real-icon" size="md" />,
     );
@@ -222,7 +222,7 @@ describe('HexBadge', () => {
   });
 
   it('accepts sm and lg sizes without error', async () => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(
       <HexBadge code="EVT-001" variant="earned" rarity="common" icon="flag" size="sm" />,
     );
@@ -236,7 +236,7 @@ describe('HexBadge', () => {
   const dot = () => container.querySelector('[data-testid="hex-legendary-dot"]');
   type RestProps = Pick<HexBadgeProps, 'variant' | 'rarity' | 'size'>;
   const renderHex = async (props: RestProps) => {
-    const { HexBadge } = await import('@jdm/ui');
+    const { HexBadge } = await import('@ccc/ui');
     await renderEl(<HexBadge code="X" icon="flag" {...props} />);
   };
 

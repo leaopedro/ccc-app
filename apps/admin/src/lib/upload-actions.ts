@@ -1,6 +1,6 @@
 'use server';
 
-import { presignRequestSchema, presignResponseSchema } from '@jdm/shared/uploads';
+import { presignRequestSchema, presignResponseSchema } from '@ccc/shared/uploads';
 
 import { apiFetch } from './api';
 

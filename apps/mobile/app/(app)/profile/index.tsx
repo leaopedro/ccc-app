@@ -1,4 +1,4 @@
-import type { PublicProfile } from '@jdm/shared/profile';
+import type { PublicProfile } from '@ccc/shared/profile';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   Bell,

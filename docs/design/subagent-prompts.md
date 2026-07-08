@@ -5,8 +5,8 @@ redesigned mobile screens captured in `docs/design/screenshots/`.
 
 Each subagent gets the universal template plus the per-screen filled-in
 parameters. Spawn fresh sessions; do not reuse context. Verify output
-in the main thread with `pnpm --filter @jdm/mobile typecheck` and
-`pnpm --filter @jdm/mobile lint` before merging.
+in the main thread with `pnpm --filter @ccc/mobile typecheck` and
+`pnpm --filter @ccc/mobile lint` before merging.
 
 ---
 
@@ -45,13 +45,13 @@ in the main thread with `pnpm --filter @jdm/mobile typecheck` and
 Copy-paste, fill the `{{ }}` placeholders.
 
 ```
-DO NOT RETURN UNTIL ALL DELIVERABLES ARE WRITTEN AND `pnpm --filter @jdm/mobile typecheck` IS GREEN. You are forbidden from returning a "I'll continue" or "Reading files in parallel" message — those are not acceptable outputs. Only return when work is complete.
+DO NOT RETURN UNTIL ALL DELIVERABLES ARE WRITTEN AND `pnpm --filter @ccc/mobile typecheck` IS GREEN. You are forbidden from returning a "I'll continue" or "Reading files in parallel" message — those are not acceptable outputs. Only return when work is complete.
 
 ## Mission
 
 Implement the JDM Experience mobile screen `{{SLUG}}` in code, matching the design mockup pixel-for-pixel within RN/NativeWind constraints.
 
-The design system foundation is already in place. NativeWind v4 is wired into the app. `@jdm/design` (tokens + Tailwind preset) and `@jdm/ui` (Button, Text, Card, Badge primitives) are installed and importable from the mobile app. Three sibling screens are already shipped and serve as style reference: `app/welcome.tsx`, `app/(auth)/login.tsx`, `app/(app)/events/index.tsx`.
+The design system foundation is already in place. NativeWind v4 is wired into the app. `@ccc/design` (tokens + Tailwind preset) and `@ccc/ui` (Button, Text, Card, Badge primitives) are installed and importable from the mobile app. Three sibling screens are already shipped and serve as style reference: `app/welcome.tsx`, `app/(auth)/login.tsx`, `app/(app)/events/index.tsx`.
 
 ## Visual source of truth
 
@@ -88,9 +88,9 @@ The PNG wins on any conflict.
 ## Implementation rules
 
 - Use NativeWind `className=""` only. No `StyleSheet.create`. Inline `style` only for image dimensions, font-family overrides, and gradient props.
-- Import primitives: `import { Button, Text, Card, Badge } from '@jdm/ui'`.
+- Import primitives: `import { Button, Text, Card, Badge } from '@ccc/ui'`.
 - Use `TextField` from `~/components/TextField` for any text input.
-- Logo: `<Image source={require('@jdm/design/assets/logo-wordmark.webp')} style={{ width: <px>, height: <px>, resizeMode: 'contain' }} />`.
+- Logo: `<Image source={require('@ccc/design/assets/logo-wordmark.webp')} style={{ width: <px>, height: <px>, resizeMode: 'contain' }} />`.
 - Use `SafeAreaView` from `react-native-safe-area-context` on full-screen surfaces.
 - Use `KeyboardAvoidingView` + `ScrollView` on any screen with form inputs.
 - Use `expo-linear-gradient` `LinearGradient` for cover bottom-fades.
@@ -115,7 +115,7 @@ The PNG wins on any conflict.
    - Purpose (1 paragraph)
    - Layout sketch (component tree)
    - All copy strings (PT-BR), grouped
-   - Component breakdown referencing `@jdm/ui` primitives
+   - Component breakdown referencing `@ccc/ui` primitives
    - States: loading / empty / error / populated / pressed (and any screen-specific states)
    - Accessibility notes (touch targets, labels, live regions, contrast)
    - Deliberately deferred items
@@ -124,9 +124,9 @@ The PNG wins on any conflict.
 
 ## Verification gate
 
-Run from repo root: `pnpm --filter @jdm/mobile typecheck`. If it fails, read the error, fix, re-run. Loop until green.
+Run from repo root: `pnpm --filter @ccc/mobile typecheck`. If it fails, read the error, fix, re-run. Loop until green.
 
-Then run: `pnpm --filter @jdm/mobile lint`. New code must add zero new lint errors. Pre-existing warnings can stay.
+Then run: `pnpm --filter @ccc/mobile lint`. New code must add zero new lint errors. Pre-existing warnings can stay.
 
 Only after both gates pass, return your summary.
 
@@ -153,7 +153,7 @@ If you cannot finish, describe the blocker explicitly and which file has the unr
 {{TARGET_FILE_PATH}} = apps/mobile/app/(auth)/signup.tsx
 {{API_CLIENT_FILES}} = apps/mobile/src/auth/context.tsx
 {{COPY_FILE}} = apps/mobile/src/copy/auth.ts
-{{LOGIC_TO_PRESERVE}} = Form must use react-hook-form + zodResolver(signupSchema) from @jdm/shared/auth. On success call useAuth().signup(values) and router.replace('/verify-email-pending'). Error mapping: 409 → setError email "E-mail já cadastrado", 422 → field errors from response, 429 → rateLimited, else → unknown. Preserve all existing copy keys in authCopy.
+{{LOGIC_TO_PRESERVE}} = Form must use react-hook-form + zodResolver(signupSchema) from @ccc/shared/auth. On success call useAuth().signup(values) and router.replace('/verify-email-pending'). Error mapping: 409 → setError email "E-mail já cadastrado", 422 → field errors from response, 429 → rateLimited, else → unknown. Preserve all existing copy keys in authCopy.
 {{DEFERRED}} = Marketing-consent split (LGPD requirement) — render the toggle but no API call yet; persist locally via useState only. Spec'd as deferred.
 ```
 

@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { Prisma } from '@prisma/client';
 import type { ConsentChannel, ConsentPurpose } from '@prisma/client';
 

@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
@@ -7,7 +7,7 @@ import {
   pickupVoucherClaimResponseSchema,
   ticketCheckInRequestSchema,
   ticketCheckInResponseSchema,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';

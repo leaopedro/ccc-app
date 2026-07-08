@@ -1,4 +1,4 @@
-import type { GarageProgress } from '@jdm/shared/garage-progress';
+import type { GarageProgress } from '@ccc/shared/garage-progress';
 
 import { garageTokens } from '../garage-tokens.js';
 
@@ -11,7 +11,7 @@ const BRAND_SOFT = garageTokens.brand.soft;
 /**
  * XPScoreboardWeb — SSR-safe twin of the mobile XPScoreboard (chunk 36).
  *
- * Visual: brand-gradient card, Anton 46px XP number, rank pill, static
+ * Visual: brand-gradient card, Jost 46px XP number, rank pill, static
  * `?` mark, brand-gradient progress bar, caption row.
  *
  * Canon §12: the `?` is a static <span aria-label="Sobre XP">, NOT a

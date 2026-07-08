@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Car, Garage, Ticket, TicketTier, User } from '@prisma/client';
 
 import { awardBadge } from '../garage/awarder.js';

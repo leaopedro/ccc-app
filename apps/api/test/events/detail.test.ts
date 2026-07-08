@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { eventDetailPublicSchema } from '@jdm/shared/events';
+import { prisma } from '@ccc/db';
+import { eventDetailPublicSchema } from '@ccc/shared/events';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

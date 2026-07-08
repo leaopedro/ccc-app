@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Garage } from '@prisma/client';
 
 import { isUniqueConstraintError, isUniqueConstraintErrorOn } from '../../lib/prisma-errors.js';

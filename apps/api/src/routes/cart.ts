@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   beginCheckoutRequestSchema,
   beginCheckoutResponseSchema,
@@ -6,8 +6,8 @@ import {
   upsertCartItemRequestSchema,
   upsertCartItemResponseSchema,
   clearCartResponseSchema,
-} from '@jdm/shared/cart';
-import type { CartItemInput } from '@jdm/shared/cart';
+} from '@ccc/shared/cart';
+import type { CartItemInput } from '@ccc/shared/cart';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';

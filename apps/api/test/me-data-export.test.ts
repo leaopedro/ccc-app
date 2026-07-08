@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../src/env.js';

@@ -4,7 +4,7 @@
 // ("Unexpected token 'typeof'" SyntaxError on transitive load). Once
 // chunk 17 added `BadgeGlyph` (imports `lucide-react-native`) to
 // `packages/ui/src/index.ts`, EVERY mobile test that pulls anything
-// from `@jdm/ui` started loading lucide via the barrel re-export —
+// from `@ccc/ui` started loading lucide via the barrel re-export —
 // not just the new HexBadge/BadgeRow tests. Per-file vi.mock didn't
 // scale (6 unrelated tests broke); a `resolve.alias` in
 // `apps/mobile/vitest.config.ts` redirects all lucide imports here,

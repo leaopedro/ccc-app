@@ -1,5 +1,5 @@
-import type { CartItemInput } from '@jdm/shared/cart';
-import type { StoreProduct, StoreProductVariant } from '@jdm/shared/store';
+import type { CartItemInput } from '@ccc/shared/cart';
+import type { StoreProduct, StoreProductVariant } from '@ccc/shared/store';
 
 import { clampProductQuantity, getDefaultVariant, isVariantSelectable } from './variant-selection';
 

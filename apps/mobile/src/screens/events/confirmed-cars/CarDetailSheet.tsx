@@ -1,5 +1,5 @@
-import type { ConfirmedCar } from '@jdm/shared/events';
-import { PremiumBadge } from '@jdm/ui';
+import type { ConfirmedCar } from '@ccc/shared/events';
+import { PremiumBadge } from '@ccc/ui';
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {

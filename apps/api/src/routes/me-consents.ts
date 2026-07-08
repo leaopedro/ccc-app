@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import { consentPurposeSchema, grantConsentBodySchema } from '@jdm/shared';
+import { consentPurposeSchema, grantConsentBodySchema } from '@ccc/shared';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

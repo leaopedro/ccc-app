@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';

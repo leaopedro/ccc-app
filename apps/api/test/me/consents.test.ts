@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { consentListResponseSchema, consentRecordSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { consentListResponseSchema, consentRecordSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

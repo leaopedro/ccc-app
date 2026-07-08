@@ -1,7 +1,7 @@
 -- store_v1
 -- Rollback path before deploy: restore the pre-migration database snapshot, then mark
 -- this migration rolled back with:
---   pnpm --filter @jdm/db exec prisma migrate resolve --rolled-back 20260507143000_store_v1
+--   pnpm --filter @ccc/db exec prisma migrate resolve --rolled-back 20260507143000_store_v1
 -- Enum value removal is not safely reversible in-place on PostgreSQL, so snapshot restore
 -- is the only supported rollback for this migration.
 

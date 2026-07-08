@@ -4,10 +4,8 @@
       "http://localhost:3000",
       "http://localhost:8081",
       "http://localhost:19006",
-      "https://admin.jdmexperience.com.br",
-      "https://app.jdmexperience.com.br",
-      "https://jdm-admin.vercel.app",
-      "https://jdm-mobile-web.vercel.app",
+      "https://admin.casacarclub.com.br",
+      "https://app.casacarclub.com.br",
       "https://*.vercel.app"
     ],
     "AllowedMethods": ["GET", "PUT", "HEAD"],

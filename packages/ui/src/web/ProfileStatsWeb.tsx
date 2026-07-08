@@ -1,4 +1,4 @@
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 
 import { StatsRowWeb } from './StatsRowWeb.js';
 import { XPScoreboardWeb } from './XPScoreboardWeb.js';

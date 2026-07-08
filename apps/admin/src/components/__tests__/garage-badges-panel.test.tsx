@@ -1,4 +1,4 @@
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';

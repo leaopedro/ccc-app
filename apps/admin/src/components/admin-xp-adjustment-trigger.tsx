@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 

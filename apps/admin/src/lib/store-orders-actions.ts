@@ -1,6 +1,6 @@
 'use server';
 
-import { adminStoreFulfillmentUpdateSchema } from '@jdm/shared/store';
+import { adminStoreFulfillmentUpdateSchema } from '@ccc/shared/store';
 import { revalidatePath } from 'next/cache';
 
 import { updateAdminStoreOrderFulfillment } from './admin-api';

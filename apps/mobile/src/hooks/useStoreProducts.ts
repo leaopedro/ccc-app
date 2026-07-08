@@ -1,4 +1,4 @@
-import type { StoreProductListQuery, StoreProductSummary } from '@jdm/shared/store';
+import type { StoreProductListQuery, StoreProductSummary } from '@ccc/shared/store';
 import { useCallback, useEffect, useState } from 'react';
 
 import { listStoreProducts } from '../api/store';

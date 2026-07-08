@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
-import type { MyTicketPickupOrder, MyTicketPickupVoucher } from '@jdm/shared/tickets';
+import { prisma } from '@ccc/db';
+import type { MyTicketPickupOrder, MyTicketPickupVoucher } from '@ccc/shared/tickets';
 import {
   myTicketSchema,
   myTicketsResponseSchema,
   updateTicketRequestSchema,
-} from '@jdm/shared/tickets';
+} from '@ccc/shared/tickets';
 import type { Ticket, Event, TicketTier, TicketExtraItem, TicketExtra } from '@prisma/client';
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify';
 

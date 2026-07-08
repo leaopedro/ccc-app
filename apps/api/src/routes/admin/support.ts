@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminSupportTicketDetailSchema,
   adminSupportTicketListResponseSchema,
   updateInternalStatusBodySchema,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import type { SupportTicket } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';

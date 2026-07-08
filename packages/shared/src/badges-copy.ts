@@ -15,12 +15,12 @@ export const BADGE_TITLES_PT_BR: Record<string, string> = {
   'EVT-003': 'Veterano de Pista',
   'CAR-001': 'Garagem Aberta',
   'CAR-002': 'Garagem Cheia',
-  'CAR-003': 'Curador JDM',
+  'CAR-003': 'Curador CCC',
   'COM-001': 'Primeira Postagem',
   'COM-002': 'Voz da Comunidade',
   'COM-003': 'Em Chamas',
   'JDM-001': 'Marco Fixado',
-  'JDM-002': 'Itinerário JDM',
+  'JDM-002': 'Itinerário CCC',
   'JDM-003': 'Fundador',
 };
 

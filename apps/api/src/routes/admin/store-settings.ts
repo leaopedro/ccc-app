@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { STORE_SETTINGS_SINGLETON_ID, storeSettingsUpdateSchema } from '@jdm/shared/store';
+import { prisma } from '@ccc/db';
+import { STORE_SETTINGS_SINGLETON_ID, storeSettingsUpdateSchema } from '@ccc/shared/store';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

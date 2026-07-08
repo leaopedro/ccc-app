@@ -7,8 +7,8 @@ export default defineConfig({
     alias: {
       '~': path.resolve(__dirname, 'src'),
       // `lucide-react-native` ships ESM that vitest can't transform under
-      // jsdom. Once `BadgeGlyph` joined `@jdm/ui`'s barrel export, every
-      // mobile test that pulls anything from `@jdm/ui` started loading
+      // jsdom. Once `BadgeGlyph` joined `@ccc/ui`'s barrel export, every
+      // mobile test that pulls anything from `@ccc/ui` started loading
       // lucide transitively. The stub returns a Proxy-of-forwardRef so
       // the catalog can grow without revisiting this alias.
       'lucide-react-native': path.resolve(__dirname, 'test-stubs/lucide-react-native.tsx'),

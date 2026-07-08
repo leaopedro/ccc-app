@@ -9,7 +9,7 @@
 // them rather than rendering a button that cannot resolve. The
 // click-time freshness check lives in resume-web-checkout.ts.
 
-import type { MyOrder } from '@jdm/shared/orders';
+import type { MyOrder } from '@ccc/shared/orders';
 
 export type ResumeKind = 'pix' | 'web' | 'native-stripe' | 'none';
 

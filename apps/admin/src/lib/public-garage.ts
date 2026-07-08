@@ -1,5 +1,5 @@
-import { badgeCatalogResponseSchema, type BadgeCatalogResponse } from '@jdm/shared/badges';
-import { garagePublicResponseSchema, type GaragePublicResponse } from '@jdm/shared/garage-public';
+import { badgeCatalogResponseSchema, type BadgeCatalogResponse } from '@ccc/shared/badges';
+import { garagePublicResponseSchema, type GaragePublicResponse } from '@ccc/shared/garage-public';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 

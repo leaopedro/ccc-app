@@ -20,7 +20,7 @@
 // BadgesSheet) are NOT mocked — we want them rendered so the e2e wire is
 // covered (BadgeRow tile → onLockedPress → PremiumSheet appears).
 
-import type { GarageBadgesOwnerResponse } from '@jdm/shared/badges';
+import type { GarageBadgesOwnerResponse } from '@ccc/shared/badges';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -206,12 +206,12 @@ vi.mock('expo-router', async () => {
 // tagged <div> so the order check is text-based.
 // ----------------------------------------------------------------------------
 
-// Chunk 40 — stand-in <ProfileStats /> via a partial @jdm/ui mock that
+// Chunk 40 — stand-in <ProfileStats /> via a partial @ccc/ui mock that
 // preserves every other real export (BadgeRow / BadgesSheet / PremiumSheet
 // stay real so existing chunk-19 specs keep their e2e coverage). The stub
 // renders a tagged <div> so ordering + the flag props are deterministic
 // without booting the real RN canvas inside ProfileStats.
-vi.mock('@jdm/ui', async (importOriginal) => {
+vi.mock('@ccc/ui', async (importOriginal) => {
   const real = await importOriginal<Record<string, unknown>>();
   const { createElement: el } = await import('react');
   const Stub = (props: { isFreshSignup?: boolean; viewMode?: string }) =>
@@ -736,7 +736,7 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
   // --------------------------------------------------------------------------
   // Chunk 40 — <ProfileStats /> slot between IdentityCard (inside GarageHeader)
   // and BadgeRow inside ListHeaderComponent. The real ProfileStats is stubbed
-  // via the @jdm/ui partial mock at the top of the file; these tests only
+  // via the @ccc/ui partial mock at the top of the file; these tests only
   // verify the route's insertion order, killswitch gate, fresh-signup flag
   // pass-through, loading-state hide, and focus-effect re-enable carry-over.
   // --------------------------------------------------------------------------

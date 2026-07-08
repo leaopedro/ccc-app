@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DevPushSender } from '../../src/services/push/dev.js';

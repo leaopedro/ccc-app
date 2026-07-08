@@ -1,4 +1,4 @@
-import type { ConfirmedCar } from '@jdm/shared/events';
+import type { ConfirmedCar } from '@ccc/shared/events';
 import {
   ActivityIndicator,
   Image,

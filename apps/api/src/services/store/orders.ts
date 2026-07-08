@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   type AdminStoreOrderAuditEntry,
   type AdminStoreOrderDetail,
@@ -8,8 +8,8 @@ import {
   type AdminStoreOrderQueueTotals,
   type AdminStoreOrderRow,
   adminAuditActionSchema,
-} from '@jdm/shared/admin';
-import { type AdminStoreFulfillmentUpdate, type StoreFulfillmentStatus } from '@jdm/shared/store';
+} from '@ccc/shared/admin';
+import { type AdminStoreFulfillmentUpdate, type StoreFulfillmentStatus } from '@ccc/shared/store';
 import type { OrderKind, Prisma } from '@prisma/client';
 
 import { recordAudit } from '../admin-audit.js';

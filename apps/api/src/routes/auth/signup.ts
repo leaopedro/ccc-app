@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { authResponseSchema, signupSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { authResponseSchema, signupSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verificationMail } from '../../services/auth/mail-templates.js';

@@ -3,7 +3,7 @@
 // shared test-fixtures yet). Keep these payloads schema-shaped — they are
 // also valid inputs to garageReadResponseSchema.
 
-import type { GarageBadgeOwnerState } from '@jdm/shared/badges';
+import type { GarageBadgeOwnerState } from '@ccc/shared/badges';
 
 import type { GaragePurchaseOption, GarageReadResponse } from '~/api/garage';
 

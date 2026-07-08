@@ -3,7 +3,7 @@
 import {
   adminStoreCollectionCreateSchema,
   adminStoreCollectionUpdateSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 

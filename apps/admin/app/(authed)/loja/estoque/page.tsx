@@ -1,4 +1,4 @@
-import { adminStoreInventoryFilterSchema, type AdminStoreInventoryFilter } from '@jdm/shared/admin';
+import { adminStoreInventoryFilterSchema, type AdminStoreInventoryFilter } from '@ccc/shared/admin';
 import Link from 'next/link';
 
 import { InventoryRow } from './inventory-row';

@@ -553,7 +553,7 @@ cd packages/shared && pnpm build
 Create `apps/api/test/admin/mfa.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -742,13 +742,13 @@ Expected: FAIL — 404 on `/admin/mfa/setup`.
 Create `apps/api/src/routes/admin/mfa.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   mfaDisableSchema,
   mfaSetupResponseSchema,
   mfaStatusSchema,
   mfaVerifySetupSchema,
-} from '@jdm/shared/mfa';
+} from '@ccc/shared/mfa';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {
@@ -1023,7 +1023,7 @@ it('returns mfaRequired when user has MFA enabled', async () => {
 Add import at top of file:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1076,7 +1076,7 @@ return reply.status(200).send(
 );
 ```
 
-Also add `MfaSecret` import from prisma if needed (it should come from `@jdm/db` via `prisma`).
+Also add `MfaSecret` import from prisma if needed (it should come from `@ccc/db` via `prisma`).
 
 - [ ] **Step 4: Run login tests to verify they pass**
 
@@ -1093,7 +1093,7 @@ Expected: All tests PASS including the new MFA test.
 Create `apps/api/test/auth/mfa.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1270,9 +1270,9 @@ Expected: FAIL — 404 on `/auth/mfa/verify`.
 Create `apps/api/src/routes/auth/mfa-verify.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema } from '@jdm/shared/auth';
-import { mfaVerifySchema } from '@jdm/shared/mfa';
+import { prisma } from '@ccc/db';
+import { authResponseSchema } from '@ccc/shared/auth';
+import { mfaVerifySchema } from '@ccc/shared/mfa';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { decryptSecret, verifyTotp } from '../../services/auth/mfa.js';
@@ -1342,9 +1342,9 @@ export const mfaVerifyRoute: FastifyPluginAsync = async (app) => {
 Create `apps/api/src/routes/auth/mfa-recovery.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema } from '@jdm/shared/auth';
-import { mfaRecoverySchema } from '@jdm/shared/mfa';
+import { prisma } from '@ccc/db';
+import { authResponseSchema } from '@ccc/shared/auth';
+import { mfaRecoverySchema } from '@ccc/shared/mfa';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verifyRecoveryCode } from '../../services/auth/mfa.js';
@@ -1476,7 +1476,7 @@ In `apps/admin/src/lib/auth-actions.ts`, modify the login action to handle MFA r
 ```typescript
 'use server';
 
-import { authResponseSchema, loginSchema, mfaChallengeResponseSchema } from '@jdm/shared/auth';
+import { authResponseSchema, loginSchema, mfaChallengeResponseSchema } from '@ccc/shared/auth';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, ApiError } from './api';

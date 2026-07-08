@@ -25,7 +25,7 @@
 // This worker only writes the entitlement row (userId, eventId, tierId,
 // source, status).
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { Prisma } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 

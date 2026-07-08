@@ -1,6 +1,6 @@
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
-import type { GaragePublicResponse } from '@jdm/shared/garage-public';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
+import type { GaragePublicResponse } from '@ccc/shared/garage-public';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

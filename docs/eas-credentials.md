@@ -187,7 +187,7 @@ purchase product before the iOS store release.
 
 Before submitting a TestFlight or App Store build:
 
-1. Run `pnpm --filter @jdm/mobile exec eslint src/ app/` and confirm 0
+1. Run `pnpm --filter @ccc/mobile exec eslint src/ app/` and confirm 0
    errors from the `jdm-mobile/no-stripe-on-ios` rule.
 2. Confirm `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` is `true` in the EAS build
    secret so the Premium screen is not hidden behind the maintenance banner.
@@ -258,8 +258,8 @@ For internal iOS preview builds, Expo uses ad hoc provisioning. Every iPhone
 that will install the preview IPA must be registered first:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas device:create
-pnpm --filter @jdm/mobile exec eas device:list
+pnpm --filter @ccc/mobile exec eas device:create
+pnpm --filter @ccc/mobile exec eas device:list
 ```
 
 Notes:
@@ -337,7 +337,7 @@ Run on a real terminal with TTY:
 
 ```bash
 pnpm dlx eas-cli login
-pnpm --filter @jdm/mobile exec eas whoami
+pnpm --filter @ccc/mobile exec eas whoami
 ```
 
 ### 3.2 Link the project
@@ -345,7 +345,7 @@ pnpm --filter @jdm/mobile exec eas whoami
 Run once:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas init --non-interactive
+pnpm --filter @ccc/mobile exec eas init --non-interactive
 ```
 
 Copy the generated UUID into `apps/mobile/.env`:
@@ -383,7 +383,7 @@ Use this to prove the Expo project is linked and the native project compiles.
 This does not prove device install, push, or App Store readiness.
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile development --platform ios
+pnpm --filter @ccc/mobile exec eas build --profile development --platform ios
 ```
 
 Expected outcome:
@@ -396,7 +396,7 @@ Expected outcome:
 Use this for the first installable iPhone build:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile preview --platform ios
+pnpm --filter @ccc/mobile exec eas build --profile preview --platform ios
 ```
 
 Expected outcome:
@@ -415,7 +415,7 @@ Important:
 Use this for the first installable Android artifact:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile preview --platform android
+pnpm --filter @ccc/mobile exec eas build --profile preview --platform android
 ```
 
 Expected outcome:
@@ -428,8 +428,8 @@ Expected outcome:
 Do not use these as the first proof. They are for release readiness:
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build --profile production --platform ios
-pnpm --filter @jdm/mobile exec eas build --profile production --platform android
+pnpm --filter @ccc/mobile exec eas build --profile production --platform ios
+pnpm --filter @ccc/mobile exec eas build --profile production --platform android
 ```
 
 Production submit remains blocked on:

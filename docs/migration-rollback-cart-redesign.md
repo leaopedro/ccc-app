@@ -97,5 +97,5 @@ HAVING COUNT(*) > 1;
 
 - Revert schema/client code in the same deploy (remove `Order.kind` usage,
   restore pre-cart constraints in Prisma).
-- Run `pnpm --filter @jdm/db prisma generate`.
+- Run `pnpm --filter @ccc/db prisma generate`.
 - Run focused checkout/webhook smoke before reopening checkout traffic.

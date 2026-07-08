@@ -16,8 +16,8 @@
 // All user-facing strings route through `~/copy/garage` per CLAUDE.md i18n
 // scaffold rule.
 
-import { type GarageOwner } from '@jdm/shared/garage';
-import { SheetShell, garageTokens } from '@jdm/ui';
+import { type GarageOwner } from '@ccc/shared/garage';
+import { SheetShell, garageTokens } from '@ccc/ui';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 

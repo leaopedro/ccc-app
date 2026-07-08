@@ -1,5 +1,5 @@
-import type { PublicUser } from '@jdm/shared/auth';
-import type { LoginInput, SignupInput } from '@jdm/shared/auth';
+import type { PublicUser } from '@ccc/shared/auth';
+import type { LoginInput, SignupInput } from '@ccc/shared/auth';
 import {
   createContext,
   useCallback,

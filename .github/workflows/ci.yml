@@ -78,5 +78,6 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ccc/shared build
+      - run: pnpm --filter @ccc/design build
       - run: pnpm --filter @ccc/mobile typecheck
       - run: pnpm --filter @ccc/mobile exec expo config --type public

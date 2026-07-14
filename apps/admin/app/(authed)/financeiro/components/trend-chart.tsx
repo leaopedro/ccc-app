@@ -1,6 +1,5 @@
 'use client';
 
-import { brand } from '@ccc/design';
 import type { AdminFinanceTrendPoint } from '@ccc/shared/admin';
 import {
   Area,
@@ -12,6 +11,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+
+import { brand } from '~/brand';
 
 const fmtCurrency = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);

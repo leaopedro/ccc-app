@@ -1,4 +1,3 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -6,6 +5,7 @@ import { z } from 'zod';
 import { requireUser } from '../plugins/auth.js';
 import { consumeEmailChangeToken, issueEmailChangeToken } from '../services/auth/email-change.js';
 import { emailChangeConfirmMail, emailChangeNotifyMail } from '../services/auth/mail-templates.js';
+import rateLimit from '@fastify/rate-limit';
 
 const initiateSchema = z.object({
   newEmail: z.string().email().toLowerCase(),

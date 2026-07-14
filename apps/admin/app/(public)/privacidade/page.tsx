@@ -1,4 +1,4 @@
-import { brand } from '@ccc/design';
+import { brand } from '~/brand';
 import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { Metadata } from 'next';
 

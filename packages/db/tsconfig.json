@@ -1,9 +1,16 @@
 {
   "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@ccc/shared": ["../shared/src/index.ts"],
+      "@ccc/shared/*": ["../shared/src/*"]
+    },
+    "composite": true,
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },
+  "references": [{ "path": "../shared" }],
   "include": ["src/**/*", "prisma/**/*"]
 }

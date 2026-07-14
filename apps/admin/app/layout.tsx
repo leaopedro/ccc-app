@@ -1,4 +1,4 @@
-import { brand } from '@ccc/design';
+import { brand } from '~/brand';
 import type { Metadata } from 'next';
 
 import './globals.css';

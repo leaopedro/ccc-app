@@ -1,6 +1,5 @@
 'use client';
 
-import { brand } from '@ccc/design';
 import { useRouter } from 'next/navigation';
 import React from 'react';
 import { useActionState, useEffect, useState, useTransition } from 'react';
@@ -12,6 +11,7 @@ import type {
   NotificationDestination,
 } from '../../../../../packages/shared/src/notifications';
 
+import { brand } from '~/brand';
 import {
   createBroadcastAction,
   dryRunBroadcastAction,

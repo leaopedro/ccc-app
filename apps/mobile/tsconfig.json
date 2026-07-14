@@ -4,10 +4,26 @@
     "baseUrl": ".",
     "paths": {
       "~/*": ["src/*"],
+      "@ccc/shared": ["../../packages/shared/src/index.ts"],
+      "@ccc/shared/*": ["../../packages/shared/src/*"],
+      "@ccc/design": ["../../packages/design/src/index.ts"],
+      "@ccc/design/*": ["../../packages/design/src/*"],
+      "@ccc/ui": ["../../packages/ui/src/index.ts"],
+      "@ccc/ui/*": ["../../packages/ui/src/*"],
       "@ccc/shared/legal": ["../../packages/shared/src/legal.ts"]
     },
     "types": ["node"]
   },
+  "references": [
+    { "path": "../../packages/design" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/ui" }
+  ],
+  "references": [
+    { "path": "../../packages/design" },
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/ui" }
+  ],
   "include": [
     "app/**/*",
     "src/**/*",

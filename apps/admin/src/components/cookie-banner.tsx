@@ -1,9 +1,9 @@
 'use client';
 
-import { brand } from '@ccc/design';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import { useCallback, useEffect, useState } from 'react';
 
+import { brand } from '~/brand';
 import { recordCookieConsent } from '~/lib/consent-actions';
 
 const STORAGE_KEY = `${brand.app.storagePrefix}_cookie_consent`;

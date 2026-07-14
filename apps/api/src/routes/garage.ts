@@ -1,4 +1,3 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
 import { badgeCodeSchema } from '@ccc/shared/badges';
 import {
@@ -18,6 +17,7 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { recordAudit } from '../services/admin-audit.js';
 import { readOwnerBadgesState, readPublicBadges } from '../services/garage/badges-read.js';
+import rateLimit from '@fastify/rate-limit';
 import { validateCoverPatch, type CoverPatch } from '../services/garage/cover.js';
 import {
   computeIsPremiumActive,

@@ -1,9 +1,10 @@
 'use client';
 
-import { brand } from '@ccc/design';
 import { useTransition } from 'react';
 
 import { subscribeAction } from './actions';
+
+import { brand } from '~/brand';
 
 export function SubscribeButton({ cadence }: { cadence: 'monthly' | 'annual' }) {
   const [isPending, startTransition] = useTransition();

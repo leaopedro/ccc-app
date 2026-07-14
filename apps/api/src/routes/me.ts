@@ -1,4 +1,3 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
 import {
   pushPrefsSchema,
@@ -14,6 +13,7 @@ import { requireUser } from '../plugins/auth.js';
 import { recordConsent, withdrawConsent } from '../services/consent.js';
 import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';
 import type { Uploads } from '../services/uploads/index.js';
+import rateLimit from '@fastify/rate-limit';
 
 type DbUser = {
   id: string;

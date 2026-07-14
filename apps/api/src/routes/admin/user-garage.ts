@@ -1,4 +1,3 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
 import {
   adminGaragePatchSchema,
@@ -18,6 +17,7 @@ import { recordAudit } from '../../services/admin-audit.js';
 import { awardBadge } from '../../services/garage/awarder.js';
 import { ensureGarageForUserId } from '../../services/garage/ensure.js';
 import { computeIsPremiumActive, reconcileGarageSpots } from '../../services/garage/index.js';
+import rateLimit from '@fastify/rate-limit';
 import { awardXp } from '../../services/garage/xp-awarder.js';
 
 const serializeGarageSummary = (g: Garage) => ({

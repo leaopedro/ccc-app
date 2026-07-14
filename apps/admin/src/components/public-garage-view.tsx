@@ -1,4 +1,3 @@
-import { brand } from '@ccc/design';
 import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import {
   GARAGE_COVER_PRESETS,

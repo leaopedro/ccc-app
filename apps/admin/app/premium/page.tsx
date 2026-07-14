@@ -32,7 +32,6 @@ function isRedirectError(e: unknown): boolean {
   );
 }
 
-import { brand } from '@ccc/design';
 import {
   premiumPricingResponseSchema,
   premiumStatusSchema,
@@ -43,6 +42,7 @@ import { garageTokens } from '@ccc/ui/web';
 
 import { SubscribeButton } from './subscribe-button';
 
+import { brand } from '~/brand';
 import { apiFetch } from '~/lib/api';
 import { readRole } from '~/lib/auth-session';
 

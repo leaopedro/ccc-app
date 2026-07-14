@@ -1,4 +1,4 @@
-import { PrismaClient, type Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 import {
   GARAGE_SPOT_DEFAULT_DESCRIPTION,
@@ -95,7 +95,7 @@ type SeedVariant = {
   sku: string;
   priceCents: number;
   quantityTotal: number;
-  attributes: Prisma.InputJsonValue;
+  attributes: Record<string, string>;
 };
 
 type SeedProduct = {
@@ -184,7 +184,9 @@ const seedStore = async (): Promise<void> => {
     },
   });
 
-  for (const [index, product] of STORE_PRODUCTS.entries()) {
+  for (let index = 0; index < STORE_PRODUCTS.length; index += 1) {
+    const product = STORE_PRODUCTS[index];
+    if (!product) continue;
     const upserted = await prisma.product.upsert({
       where: { slug: product.slug },
       update: {
@@ -316,7 +318,8 @@ const seedGarageSpotProduct = async (): Promise<void> => {
     select: { slug: true, virtual: true, visibleInStore: true },
   });
   if (foreignTypedProducts.length > 0) {
-    const squatter = foreignTypedProducts[0]!;
+    const squatter = foreignTypedProducts[0];
+    if (!squatter) return;
     assertVirtualSingletonProtected('duplicate', {
       slug: squatter.slug,
       virtual: squatter.virtual,

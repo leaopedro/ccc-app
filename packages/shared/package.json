@@ -59,8 +59,8 @@
       "default": "./dist/garage-covers.js"
     },
     "./garage-progress": {
-      "types": "./dist/garage-progress.d.ts",
-      "import": "./dist/garage-progress.js"
+      "types": "./src/garage-progress.ts",
+      "default": "./dist/garage-progress.js"
     },
     "./feed": {
       "types": "./src/feed.ts",

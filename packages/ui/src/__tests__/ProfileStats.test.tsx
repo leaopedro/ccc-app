@@ -337,8 +337,9 @@ describe('ProfileStats', () => {
 
       const hint = q('profile-stats-scoreboard-hint');
       expect(hint).not.toBeNull();
+      if (!hint) throw new Error('Expected score hint');
       await act(async () => {
-        hint!.click();
+        hint.click();
         await flush();
       });
 
@@ -358,7 +359,9 @@ describe('ProfileStats', () => {
       );
 
       await act(async () => {
-        q('profile-stats-scoreboard-hint')!.click();
+        const hint = q('profile-stats-scoreboard-hint');
+        if (!hint) throw new Error('Expected score hint');
+        hint.click();
         await flush();
       });
       expect(q('profile-stats-tooltip')).not.toBeNull();
@@ -370,8 +373,9 @@ describe('ProfileStats', () => {
       // simply absent from the DOM.
       const backdrop = q('profile-stats-tooltip-backdrop');
       expect(backdrop).not.toBeNull();
+      if (!backdrop) throw new Error('Expected tooltip backdrop');
       await act(async () => {
-        backdrop!.click();
+        backdrop.click();
         await flush();
       });
 

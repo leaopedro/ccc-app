@@ -1,11 +1,11 @@
 'use client';
 
-import { brand } from '@ccc/design';
 import type { AdminProductType } from '@ccc/shared/admin';
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 
+import { brand } from '~/brand';
 import { createProductAction, type StoreFormState } from '~/lib/store-actions';
 
 const initial: StoreFormState = { error: null };

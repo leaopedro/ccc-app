@@ -1,8 +1,8 @@
-import { brand } from '@ccc/design';
 import { router, Tabs } from 'expo-router';
 import { CalendarDays, ShoppingBag, ShoppingCart, Ticket, UserRound } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
+import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
 import { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName } from '~/navigation/app-tabs';

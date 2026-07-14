@@ -1,4 +1,4 @@
-import { brand } from '@ccc/design';
+import { brand } from '~/brand';
 
 type AppTabPlatform = 'native' | 'web';
 

@@ -1,10 +1,22 @@
 {
   "extends": "@ccc/tsconfig/react-native.json",
   "compilerOptions": {
+    "composite": true,
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@ccc/shared": ["../shared/src/index.ts"],
+      "@ccc/shared/*": ["../shared/src/*"],
+      "@ccc/design": ["../design/src/index.ts"],
+      "@ccc/design/*": ["../design/src/*"]
+    }
   },
+  "references": [
+    { "path": "../design" },
+    { "path": "../shared" }
+  ],
   "include": ["src/**/*", "vitest.config.ts", "test-stubs/**/*", "nativewind-env.d.ts"]
 }

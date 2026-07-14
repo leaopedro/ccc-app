@@ -1,4 +1,3 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
 import {
   createOrderRequestSchema,
@@ -24,6 +23,7 @@ import {
   PendingTicketOrderForEventError,
   findPendingTicketOrderForEvent,
 } from '../services/orders/pending-guard.js';
+import rateLimit from '@fastify/rate-limit';
 import { reserveExtras, validateTickets } from '../services/orders/validate-tickets.js';
 import { applyDevFee } from '../services/pricing/dev-fee.js';
 

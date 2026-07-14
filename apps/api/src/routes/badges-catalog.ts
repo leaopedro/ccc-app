@@ -1,5 +1,5 @@
-import rateLimit from '@fastify/rate-limit';
 import { prisma } from '@ccc/db';
+import rateLimit from '@fastify/rate-limit';
 import type { Badge } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

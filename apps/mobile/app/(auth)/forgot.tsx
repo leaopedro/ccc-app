@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { brand } from '@jdm/design';
 import { forgotPasswordSchema } from '@jdm/shared/auth';
 import type { ForgotPasswordInput } from '@jdm/shared/auth';
 import { Button, Text } from '@jdm/ui';

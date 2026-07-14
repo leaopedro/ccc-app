@@ -3,6 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@jdm/design": ["../../packages/design/src/index.ts"],
+      "@jdm/design/*": ["../../packages/design/src/*"],
       "~/*": ["src/*"],
       "@jdm/shared/legal": ["../../packages/shared/src/legal.ts"]
     },

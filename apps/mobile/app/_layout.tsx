@@ -1,6 +1,5 @@
 import '../global.css';
 
-import { brand } from '@jdm/design';
 // TODO: install @expo-google-fonts/jost and swap this import once the
 // package is available. brand.typography.displayFont = 'Jost_300Regular'.
 import { Anton_400Regular } from '@expo-google-fonts/anton';
@@ -11,6 +10,7 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
+import { brand } from '@jdm/design';
 import { DarkTheme, ThemeProvider, type Theme } from '@react-navigation/native';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import Constants from 'expo-constants';

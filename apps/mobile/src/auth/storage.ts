@@ -1,6 +1,6 @@
+import { brand } from '@jdm/design';
 import * as SecureStore from 'expo-secure-store';
 
-import { brand } from '@jdm/design';
 
 const ACCESS_KEY = `${brand.app.storagePrefix}.auth.access`;
 const REFRESH_KEY = `${brand.app.storagePrefix}.auth.refresh`;

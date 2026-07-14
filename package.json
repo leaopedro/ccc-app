@@ -17,7 +17,7 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
-    "prepare": "if [ -f ./scripts/sync-git-hooks.sh ] && [ -d .git ]; then sh ./scripts/sync-git-hooks.sh; fi"
+    "prepare": "node -e \"const fs=require('fs');const {spawnSync}=require('child_process');if(process.platform!=='win32'&&fs.existsSync('.git')&&fs.existsSync('./scripts/sync-git-hooks.sh')){const result=spawnSync('sh',['./scripts/sync-git-hooks.sh'],{stdio:'inherit'});process.exit(result.status ?? 0);}\""
   },
   "simple-git-hooks": {
     "pre-commit": "./scripts/guard-branch-context.sh pre-commit && pnpm lint-staged"

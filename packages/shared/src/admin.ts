@@ -1263,3 +1263,177 @@ export const adminCarUpdateSchema = z
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
 export type AdminCarUpdate = z.infer<typeof adminCarUpdateSchema>;
+
+// ── Admin premium catalog ──────────────────────────────────────────────
+//
+// ADMIN surface for the premium subscription catalog. Unlike the public read
+// schemas in ./premium-catalog.ts, these DO carry provider price ids
+// (stripePriceId / rcProductId) and inactive rows. Never wire these into the
+// public /api/plans routes.
+
+const premiumTierSchema = z.enum(['bronze', 'silver', 'gold']);
+const premiumCadenceSchema = z.enum(['monthly', 'annual']);
+const premiumAddonUnitSchema = z.enum(['access', 'hours']);
+
+const premiumPlanSlugSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(40)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug must be lowercase kebab-case');
+
+const premiumModuleKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, 'key must be lowercase alphanumeric with - or _');
+
+// Provider ids: blank string coerces to null so the admin form can clear them.
+const providerIdSchema = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+  z.string().trim().min(1).max(120).nullable(),
+);
+
+// --- Response shapes (admin view: provider ids + inactive rows included) ---
+
+export const adminPremiumPlanPriceSchema = z.object({
+  cadence: premiumCadenceSchema,
+  baseAmountCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  stripePriceId: z.string().nullable(),
+  rcProductId: z.string().nullable(),
+  active: z.boolean(),
+});
+export type AdminPremiumPlanPrice = z.infer<typeof adminPremiumPlanPriceSchema>;
+
+export const adminPremiumPlanBenefitSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  sortOrder: z.number().int(),
+});
+export type AdminPremiumPlanBenefit = z.infer<typeof adminPremiumPlanBenefitSchema>;
+
+export const adminPremiumPlanSchema = z.object({
+  id: z.string().min(1),
+  tier: premiumTierSchema,
+  slug: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  active: z.boolean(),
+  sortOrder: z.number().int(),
+  prices: z.array(adminPremiumPlanPriceSchema),
+  benefits: z.array(adminPremiumPlanBenefitSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AdminPremiumPlan = z.infer<typeof adminPremiumPlanSchema>;
+
+export const adminPremiumAddonModuleSchema = z.object({
+  id: z.string().min(1),
+  key: z.string(),
+  name: z.string(),
+  description: z.string(),
+  monthlyDeltaCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  quotaPerCycle: z.number().int(),
+  quotaUnit: premiumAddonUnitSchema,
+  active: z.boolean(),
+  sortOrder: z.number().int(),
+  stripePriceId: z.string().nullable(),
+  rcProductId: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AdminPremiumAddonModule = z.infer<typeof adminPremiumAddonModuleSchema>;
+
+export const adminPremiumCatalogResponseSchema = z.object({
+  plans: z.array(adminPremiumPlanSchema),
+  modules: z.array(adminPremiumAddonModuleSchema),
+});
+export type AdminPremiumCatalogResponse = z.infer<typeof adminPremiumCatalogResponseSchema>;
+
+export const adminPremiumBenefitsReplaceResponseSchema = z.object({
+  benefits: z.array(adminPremiumPlanBenefitSchema),
+});
+export type AdminPremiumBenefitsReplaceResponse = z.infer<
+  typeof adminPremiumBenefitsReplaceResponseSchema
+>;
+
+// --- Inputs ---
+
+// tier is the immutable identity of a plan; it is only set on create.
+export const adminPremiumPlanCreateSchema = z.object({
+  tier: premiumTierSchema,
+  slug: premiumPlanSlugSchema,
+  name: z.string().trim().min(1).max(80),
+  description: optionalText(500).optional(),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().nonnegative().optional(),
+});
+export type AdminPremiumPlanCreate = z.infer<typeof adminPremiumPlanCreateSchema>;
+
+export const adminPremiumPlanUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: optionalText(500),
+    active: z.boolean(),
+    sortOrder: z.number().int().nonnegative(),
+  })
+  .partial()
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
+export type AdminPremiumPlanUpdate = z.infer<typeof adminPremiumPlanUpdateSchema>;
+
+export const adminPremiumPriceUpsertSchema = z.object({
+  baseAmountCents: z.number().int().nonnegative(),
+  currency: z.string().length(3).default('BRL'),
+  stripePriceId: providerIdSchema.optional(),
+  rcProductId: providerIdSchema.optional(),
+  active: z.boolean().default(true),
+});
+export type AdminPremiumPriceUpsert = z.infer<typeof adminPremiumPriceUpsertSchema>;
+
+export const adminPremiumBenefitInputSchema = z.object({
+  label: z.string().trim().min(1).max(140),
+  sortOrder: z.number().int().nonnegative(),
+});
+export type AdminPremiumBenefitInput = z.infer<typeof adminPremiumBenefitInputSchema>;
+
+export const adminPremiumBenefitsReplaceSchema = z.object({
+  benefits: z.array(adminPremiumBenefitInputSchema).max(50),
+});
+export type AdminPremiumBenefitsReplace = z.infer<typeof adminPremiumBenefitsReplaceSchema>;
+
+export const adminPremiumAddonModuleCreateSchema = z.object({
+  key: premiumModuleKeySchema,
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(240),
+  monthlyDeltaCents: z.number().int().nonnegative(),
+  quotaPerCycle: z.number().int().nonnegative(),
+  quotaUnit: premiumAddonUnitSchema,
+  currency: z.string().length(3).default('BRL'),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().nonnegative().optional(),
+  stripePriceId: providerIdSchema.optional(),
+  rcProductId: providerIdSchema.optional(),
+});
+export type AdminPremiumAddonModuleCreate = z.infer<typeof adminPremiumAddonModuleCreateSchema>;
+
+export const adminPremiumAddonModuleUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().trim().min(1).max(240),
+    monthlyDeltaCents: z.number().int().nonnegative(),
+    quotaPerCycle: z.number().int().nonnegative(),
+    quotaUnit: premiumAddonUnitSchema,
+    currency: z.string().length(3),
+    active: z.boolean(),
+    sortOrder: z.number().int().nonnegative(),
+    stripePriceId: providerIdSchema,
+    rcProductId: providerIdSchema,
+  })
+  .partial()
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
+export type AdminPremiumAddonModuleUpdate = z.infer<typeof adminPremiumAddonModuleUpdateSchema>;

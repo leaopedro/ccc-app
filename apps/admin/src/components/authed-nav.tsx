@@ -10,6 +10,7 @@ import { LogoutButton } from './logout-button';
 const ORGANIZER_LINKS = [
   { href: '/events', label: 'Eventos' },
   { href: '/loja', label: 'Loja' },
+  { href: '/premium/catalogo', label: 'Premium' },
   { href: '/users', label: 'Usuários' },
   { href: '/financeiro', label: 'Financeiro' },
   { href: '/broadcasts', label: 'Broadcasts' },

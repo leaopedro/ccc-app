@@ -102,6 +102,10 @@
       "types": "./src/premium-catalog.ts",
       "default": "./dist/premium-catalog.js"
     },
+    "./premium-subscription": {
+      "types": "./src/premium-subscription.ts",
+      "default": "./dist/premium-subscription.js"
+    },
     "./profile": {
       "types": "./src/profile.ts",
       "default": "./dist/profile.js"

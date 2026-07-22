@@ -29,6 +29,7 @@ import { meDeviceTokenRoutes } from './routes/me-device-tokens.js';
 import { meEmailChangeRoutes } from './routes/me-email-change.js';
 import { meNotificationsRoutes } from './routes/me-notifications.js';
 import { meOrdersRoutes } from './routes/me-orders.js';
+import { mePremiumAddonRoutes } from './routes/me-premium-addons.js';
 import { mePremiumRoutes } from './routes/me-premium.js';
 import { meShippingAddressRoutes } from './routes/me-shipping-addresses.js';
 import { meSupportRoutes } from './routes/me-support.js';
@@ -127,6 +128,7 @@ export const buildApp = async (
   await app.register(meAccountDeleteRoutes);
   await app.register(meSupportRoutes);
   await app.register(mePremiumRoutes);
+  await app.register(mePremiumAddonRoutes);
   await app.register(premiumPricingRoutes);
   await app.register(premiumCatalogRoutes);
   await app.register(uploadRoutes);

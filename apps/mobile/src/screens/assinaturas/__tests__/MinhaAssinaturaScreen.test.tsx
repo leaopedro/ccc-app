@@ -187,7 +187,9 @@ describe('MinhaAssinaturaScreen', () => {
     await renderScreen();
     const text = container.textContent ?? '';
     expect(text).toContain('Você ainda não é assinante.');
-    const cta = container.querySelector('[data-testid="assinatura-empty-cta"]') as HTMLElement | null;
+    const cta = container.querySelector(
+      '[data-testid="assinatura-empty-cta"]',
+    ) as HTMLElement | null;
     if (!cta) throw new Error('empty CTA not rendered');
     await act(async () => {
       cta.click();

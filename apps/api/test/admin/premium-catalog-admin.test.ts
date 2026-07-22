@@ -97,7 +97,12 @@ describe('Admin premium catalog', () => {
               stripePriceId: 'price_gold_monthly',
             },
           },
-          benefits: { create: [{ label: 'B', sortOrder: 1 }, { label: 'A', sortOrder: 0 }] },
+          benefits: {
+            create: [
+              { label: 'B', sortOrder: 1 },
+              { label: 'A', sortOrder: 0 },
+            ],
+          },
         },
       });
 

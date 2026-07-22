@@ -141,14 +141,19 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
 
           <View style={styles.tierRow}>
             <View
-              style={[styles.tierDot, { backgroundColor: visual.accent, shadowColor: visual.accent }]}
+              style={[
+                styles.tierDot,
+                { backgroundColor: visual.accent, shadowColor: visual.accent },
+              ]}
             />
             <Text style={[styles.tierLabel, { color: visual.accent }]}>{visual.label}</Text>
           </View>
           <Text style={styles.planName}>{plan.name}</Text>
 
           <View style={styles.priceRow}>
-            <Text style={styles.planPrice}>{priceCents === null ? '—' : formatBRL(priceCents)}</Text>
+            <Text style={styles.planPrice}>
+              {priceCents === null ? '—' : formatBRL(priceCents)}
+            </Text>
             <Text style={styles.perMonth}>{assinaturasCopy.detail.perMonth}</Text>
           </View>
 
@@ -182,7 +187,9 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>{assinaturasCopy.detail.cta}</Text>
+            <Text style={[styles.ctaText, { color: t.btnColor }]}>
+              {assinaturasCopy.detail.cta}
+            </Text>
           </Pressable>
         ) : (
           <Pressable
@@ -192,7 +199,9 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
             style={[styles.cta, { borderColor: t.btnBorder }]}
             testID="detalhe-assinar"
           >
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>{assinaturasCopy.detail.cta}</Text>
+            <Text style={[styles.ctaText, { color: t.btnColor }]}>
+              {assinaturasCopy.detail.cta}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -204,7 +213,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
   content: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 120 },
 
-  centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 14 },
+  centerFill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 14,
+  },
   stateTitle: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,

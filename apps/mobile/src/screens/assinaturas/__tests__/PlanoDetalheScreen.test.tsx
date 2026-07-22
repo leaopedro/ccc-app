@@ -16,7 +16,9 @@ declare global {
 const showToast = vi.fn();
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlan>>();
 
-vi.mock('~/api/premium-catalog', () => ({ getPremiumPlan: (slug: string) => getPremiumPlan(slug) }));
+vi.mock('~/api/premium-catalog', () => ({
+  getPremiumPlan: (slug: string) => getPremiumPlan(slug),
+}));
 vi.mock('~/lib/toast', () => ({ showToast }));
 
 vi.mock('react-native', async () => {

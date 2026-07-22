@@ -16,7 +16,8 @@ function readWebParams(): { orderId: string | null; cancelled: boolean } {
   if (Platform.OS !== 'web') return { orderId: null, cancelled: false };
   const params = new URLSearchParams(window.location.search);
   const cancelled = params.get('cancelled') === 'true';
-  const orderId = params.get('orderId') ?? sessionStorage.getItem(`${brand.app.storagePrefix}:pendingOrderId`);
+  const orderId =
+    params.get('orderId') ?? sessionStorage.getItem(`${brand.app.storagePrefix}:pendingOrderId`);
   return { orderId, cancelled };
 }
 

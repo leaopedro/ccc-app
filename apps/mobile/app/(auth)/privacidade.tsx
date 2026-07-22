@@ -67,7 +67,8 @@ export default function PrivacidadeScreen() {
           style={{ borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingTop: 16, marginTop: 8 }}
         >
           <Text variant="caption" tone="muted">
-            Dúvidas? Fale com nosso Encarregado:{'\n'}{brand.contact.privacyEmail}
+            Dúvidas? Fale com nosso Encarregado:{'\n'}
+            {brand.contact.privacyEmail}
           </Text>
         </View>
       </ScrollView>

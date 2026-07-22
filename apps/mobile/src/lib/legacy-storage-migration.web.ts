@@ -32,10 +32,7 @@ const getStorage = (kind: 'local' | 'session'): Storage | null => {
   }
 };
 
-const migrateExact = (
-  storage: Storage,
-  templates: readonly ((p: string) => string)[],
-): void => {
+const migrateExact = (storage: Storage, templates: readonly ((p: string) => string)[]): void => {
   for (const template of templates) {
     const legacyKey = template(LEGACY_PREFIX);
     const newKey = template(NEW_PREFIX);

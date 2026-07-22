@@ -25,7 +25,7 @@ that need a plan + coordinated rollout, deliberately left out of the sweep.
 Your job: plan and execute these. Think it through; the notes below are context,
 not a rigid recipe.
 
-## 1. Badge codes + category enum (DB + API contract)  — highest care
+## 1. Badge codes + category enum (DB + API contract) — highest care
 
 Badge codes `JDM-001 / JDM-002 / JDM-003` and the badge **category enum value**
 `jdm` still travel over the API verbatim and are persisted in Postgres. Display
@@ -88,7 +88,7 @@ Coordinate with whoever owns the Railway project.
 - ~35 API/mobile test fixtures use inline `'Camiseta JDM'` / `'Encontro JDM'` mock
   strings (not coupled to seed). Rename only if you want zero "JDM" in the tree.
 - Doc/plan references and the GitHub repo slug `leaopedro/jdm` (README, CONTRIBUTING,
-  LGPD_scan.md, plans/*).
+  LGPD_scan.md, plans/\*).
 
 ## Guardrails
 

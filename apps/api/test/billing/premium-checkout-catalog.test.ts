@@ -55,7 +55,14 @@ const seedGoldPlan = (monthlyStripePriceId: string | null) =>
       name: 'Gold',
       sortOrder: 0,
       prices: {
-        create: [{ cadence: 'monthly', baseAmountCents: 2990, currency: 'BRL', stripePriceId: monthlyStripePriceId }],
+        create: [
+          {
+            cadence: 'monthly',
+            baseAmountCents: 2990,
+            currency: 'BRL',
+            stripePriceId: monthlyStripePriceId,
+          },
+        ],
       },
     },
   });
@@ -69,7 +76,10 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'true';
     process.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY = 'price_env_gold_monthly';
     stripe = buildFakeStripe();
-    stripe.nextSubscriptionCheckoutSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+    stripe.nextSubscriptionCheckoutSession = {
+      id: 'cs_test',
+      url: 'https://checkout.stripe.com/pay/cs_test',
+    };
     stripe.nextFoundOrCreatedCustomer = { customerId: 'cus_test' };
     app = await buildApp(loadEnv(), { stripe });
     env = loadEnv();
@@ -179,7 +189,11 @@ describe('POST /webhooks/stripe-billing — add-ons amount reconciliation', () =
         current_period_start: 1748300000,
         current_period_end: 1750892000,
         canceled_at: null,
-        items: { data: [{ price: { id: 'price_monthly_test', metadata: {}, recurring: { interval: 'month' } } }] },
+        items: {
+          data: [
+            { price: { id: 'price_monthly_test', metadata: {}, recurring: { interval: 'month' } } },
+          ],
+        },
         // No previous_attributes → normalizes to null; the addons seam still runs.
       },
     },
@@ -244,7 +258,9 @@ describe('POST /webhooks/stripe-billing — add-ons amount reconciliation', () =
     });
     expect(res.statusCode).toBe(200);
 
-    const after = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membership.id } });
+    const after = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membership.id },
+    });
     expect(after.addonsAmountCents).toBe(1990);
   });
 });

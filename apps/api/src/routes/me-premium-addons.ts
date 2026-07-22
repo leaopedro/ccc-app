@@ -200,9 +200,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
       where: { membershipId_addonKey: { membershipId: membership.id, addonKey } },
     });
     if (existing && existing.status !== 'cancelled') {
-      return reply
-        .status(409)
-        .send({ error: 'AlreadyExists', message: 'add-on already attached' });
+      return reply.status(409).send({ error: 'AlreadyExists', message: 'add-on already attached' });
     }
 
     const cycleStart = membership.currentPeriodStart ?? new Date();

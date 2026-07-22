@@ -96,7 +96,10 @@ function ActiveSubscription({ sub }: { sub: MySubscriptionResponse }) {
         <View style={styles.tierRow}>
           {visual ? (
             <View
-              style={[styles.tierDot, { backgroundColor: visual.accent, shadowColor: visual.accent }]}
+              style={[
+                styles.tierDot,
+                { backgroundColor: visual.accent, shadowColor: visual.accent },
+              ]}
             />
           ) : null}
           <Text style={styles.planName}>{sub.planName ?? visual?.label ?? '—'}</Text>
@@ -179,7 +182,11 @@ export default function MinhaAssinaturaScreen() {
     );
   } else if (billingUnavailable) {
     body = (
-      <CenteredState title={copy.unavailableTitle} subcopy={copy.unavailableSubcopy} testID="assinatura-unavailable" />
+      <CenteredState
+        title={copy.unavailableTitle}
+        subcopy={copy.unavailableSubcopy}
+        testID="assinatura-unavailable"
+      />
     );
   } else if (error) {
     body = (
@@ -347,5 +354,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   addonUsage: { fontFamily: 'Inter_400Regular', fontSize: 13.5, color: c.cream, marginTop: 4 },
-  addonRemaining: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: c.goldLight, marginTop: 3 },
+  addonRemaining: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    color: c.goldLight,
+    marginTop: 3,
+  },
 });

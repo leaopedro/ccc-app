@@ -55,8 +55,7 @@ const BenefitsEditor = ({ plan }: { plan: AdminPremiumPlan }) => {
   const update = (i: number, patch: Partial<BenefitRow>) =>
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const remove = (i: number) => setRows((prev) => prev.filter((_, idx) => idx !== i));
-  const add = () =>
-    setRows((prev) => [...prev, { label: '', sortOrder: prev.length }]);
+  const add = () => setRows((prev) => [...prev, { label: '', sortOrder: prev.length }]);
 
   return (
     <form action={action} className="flex flex-col gap-2">
@@ -102,18 +101,9 @@ const BenefitsEditor = ({ plan }: { plan: AdminPremiumPlan }) => {
 // ── Plan card ──────────────────────────────────────────────────────
 
 const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
-  const [detailState, detailAction] = useActionState(
-    updatePlanAction.bind(null, plan.id),
-    initial,
-  );
-  const [priceState, priceAction] = useActionState(
-    upsertPriceAction.bind(null, plan.id),
-    initial,
-  );
-  const [deleteState, deleteAction] = useActionState(
-    deletePlanAction.bind(null, plan.id),
-    initial,
-  );
+  const [detailState, detailAction] = useActionState(updatePlanAction.bind(null, plan.id), initial);
+  const [priceState, priceAction] = useActionState(upsertPriceAction.bind(null, plan.id), initial);
+  const [deleteState, deleteAction] = useActionState(deletePlanAction.bind(null, plan.id), initial);
   const monthly = plan.prices.find((p) => p.cadence === 'monthly');
 
   return (
@@ -125,7 +115,9 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
             ({plan.tier} · {plan.slug})
           </span>
         </h3>
-        <span className={`text-xs ${plan.active ? 'text-green-400' : 'text-[color:var(--color-muted)]'}`}>
+        <span
+          className={`text-xs ${plan.active ? 'text-green-400' : 'text-[color:var(--color-muted)]'}`}
+        >
           {plan.active ? 'Ativo' : 'Inativo'}
         </span>
       </div>
@@ -133,7 +125,13 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
       <form action={detailAction} className="flex flex-wrap items-end gap-3">
         <label className={labelCls}>
           Nome
-          <input name="name" defaultValue={plan.name} required maxLength={80} className={inputCls} />
+          <input
+            name="name"
+            defaultValue={plan.name}
+            required
+            maxLength={80}
+            className={inputCls}
+          />
         </label>
         <label className={`${labelCls} flex-1`}>
           Descrição
@@ -210,7 +208,10 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
 
       <BenefitsEditor plan={plan} />
 
-      <form action={deleteAction} className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3">
+      <form
+        action={deleteAction}
+        className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3"
+      >
         <button
           type="submit"
           disabled={!plan.active}
@@ -269,7 +270,13 @@ const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => (
   <>
     <label className={labelCls}>
       Nome
-      <input name="name" defaultValue={mod?.name ?? ''} required maxLength={80} className={inputCls} />
+      <input
+        name="name"
+        defaultValue={mod?.name ?? ''}
+        required
+        maxLength={80}
+        className={inputCls}
+      />
     </label>
     <label className={`${labelCls} flex-1`}>
       Descrição
@@ -310,19 +317,39 @@ const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => (
     </label>
     <label className={labelCls}>
       Moeda
-      <input name="currency" defaultValue={mod?.currency ?? 'BRL'} maxLength={3} className={`${inputCls} w-16`} />
+      <input
+        name="currency"
+        defaultValue={mod?.currency ?? 'BRL'}
+        maxLength={3}
+        className={`${inputCls} w-16`}
+      />
     </label>
     <label className={labelCls}>
       Ordem
-      <input name="sortOrder" type="number" defaultValue={mod?.sortOrder ?? 0} className={`${inputCls} w-20`} />
+      <input
+        name="sortOrder"
+        type="number"
+        defaultValue={mod?.sortOrder ?? 0}
+        className={`${inputCls} w-20`}
+      />
     </label>
     <label className={labelCls}>
       stripePriceId
-      <input name="stripePriceId" defaultValue={mod?.stripePriceId ?? ''} maxLength={120} className={inputCls} />
+      <input
+        name="stripePriceId"
+        defaultValue={mod?.stripePriceId ?? ''}
+        maxLength={120}
+        className={inputCls}
+      />
     </label>
     <label className={labelCls}>
       rcProductId
-      <input name="rcProductId" defaultValue={mod?.rcProductId ?? ''} maxLength={120} className={inputCls} />
+      <input
+        name="rcProductId"
+        defaultValue={mod?.rcProductId ?? ''}
+        maxLength={120}
+        className={inputCls}
+      />
     </label>
     <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]">
       <input name="active" type="checkbox" defaultChecked={mod?.active ?? true} />
@@ -347,7 +374,10 @@ const ModuleCard = ({ mod }: { mod: AdminPremiumAddonModule }) => {
         <Submit label="Salvar" />
         <Err state={state} />
       </form>
-      <form action={deleteAction} className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3">
+      <form
+        action={deleteAction}
+        className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3"
+      >
         <button
           type="submit"
           disabled={!mod.active}

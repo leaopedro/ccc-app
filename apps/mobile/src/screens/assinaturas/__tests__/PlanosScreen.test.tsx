@@ -118,7 +118,9 @@ vi.mock('expo-router', () => ({
   router: { canGoBack: () => true, back: vi.fn(), replace: vi.fn(), push },
 }));
 
-const plan = (over: Partial<PremiumPlan> & Pick<PremiumPlan, 'tier' | 'slug' | 'name'>): PremiumPlan => ({
+const plan = (
+  over: Partial<PremiumPlan> & Pick<PremiumPlan, 'tier' | 'slug' | 'name'>,
+): PremiumPlan => ({
   description: null,
   sortOrder: 0,
   prices: [{ cadence: 'monthly', baseAmountCents: 49000, currency: 'BRL' }],
@@ -146,7 +148,10 @@ const SAMPLE_PLANS: PremiumPlan[] = [
     slug: 'fundador',
     name: 'Fundador',
     prices: [{ cadence: 'monthly', baseAmountCents: 149000, currency: 'BRL' }],
-    benefits: [{ label: 'Concierge', sortOrder: 1 }, { label: 'Clube 24h', sortOrder: 0 }],
+    benefits: [
+      { label: 'Concierge', sortOrder: 1 },
+      { label: 'Clube 24h', sortOrder: 0 },
+    ],
   }),
 ];
 

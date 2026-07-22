@@ -92,14 +92,19 @@ function PlanCard({ plan }: { plan: PremiumPlan }) {
           <View style={styles.cardHeaderLeft}>
             <View style={styles.tierRow}>
               <View
-                style={[styles.tierDot, { backgroundColor: visual.accent, shadowColor: visual.accent }]}
+                style={[
+                  styles.tierDot,
+                  { backgroundColor: visual.accent, shadowColor: visual.accent },
+                ]}
               />
               <Text style={[styles.tierLabel, { color: visual.accent }]}>{visual.label}</Text>
             </View>
             <Text style={styles.planName}>{plan.name}</Text>
           </View>
           <View style={styles.cardHeaderRight}>
-            <Text style={styles.planPrice}>{priceCents === null ? '—' : formatBRL(priceCents)}</Text>
+            <Text style={styles.planPrice}>
+              {priceCents === null ? '—' : formatBRL(priceCents)}
+            </Text>
             <Text style={styles.perMonth}>{assinaturasCopy.plans.perMonth}</Text>
           </View>
         </View>

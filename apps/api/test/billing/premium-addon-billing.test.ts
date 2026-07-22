@@ -48,7 +48,9 @@ const buildAddonApp = async (): Promise<{ app: FastifyInstance; stripe: FakeStri
   return { app, stripe };
 };
 
-const seedModule = (overrides: { key?: string; monthlyDeltaCents?: number; stripePriceId?: string | null } = {}) =>
+const seedModule = (
+  overrides: { key?: string; monthlyDeltaCents?: number; stripePriceId?: string | null } = {},
+) =>
   prisma.premiumAddonModule.create({
     data: {
       key: overrides.key ?? 'wash',
@@ -60,7 +62,8 @@ const seedModule = (overrides: { key?: string; monthlyDeltaCents?: number; strip
       quotaUnit: 'access',
       active: true,
       sortOrder: 0,
-      stripePriceId: overrides.stripePriceId === undefined ? 'price_addon_wash' : overrides.stripePriceId,
+      stripePriceId:
+        overrides.stripePriceId === undefined ? 'price_addon_wash' : overrides.stripePriceId,
     },
   });
 
@@ -204,7 +207,9 @@ describe('premium add-on billing (Stripe subscription items)', () => {
       where: { membershipId: membership.id },
     });
     expect(rows).toHaveLength(0);
-    const after = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membership.id } });
+    const after = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membership.id },
+    });
     expect(after.addonsAmountCents).toBe(0);
   });
 });

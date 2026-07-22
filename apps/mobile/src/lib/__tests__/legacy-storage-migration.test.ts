@@ -38,8 +38,12 @@ describe('migrateLegacyStorageKeys (web)', () => {
     await migrateLegacyStorageKeys();
 
     expect(window.sessionStorage.getItem(`${NEW}:pendingOrderId`)).toBe('order-1');
-    expect(window.sessionStorage.getItem(`${NEW}:pendingCheckoutUrl:order-1`)).toBe('https://pay/1');
-    expect(window.sessionStorage.getItem(`${NEW}:pendingCheckoutUrl:order-2`)).toBe('https://pay/2');
+    expect(window.sessionStorage.getItem(`${NEW}:pendingCheckoutUrl:order-1`)).toBe(
+      'https://pay/1',
+    );
+    expect(window.sessionStorage.getItem(`${NEW}:pendingCheckoutUrl:order-2`)).toBe(
+      'https://pay/2',
+    );
 
     expect(window.sessionStorage.getItem(`${OLD}:pendingOrderId`)).toBeNull();
     expect(window.sessionStorage.getItem(`${OLD}:pendingCheckoutUrl:order-1`)).toBeNull();

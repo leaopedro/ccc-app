@@ -28,9 +28,7 @@ type EarnedBadge = {
   pinnedAt: string | null;
 };
 
-const isEarned = (
-  b: GarageBadgeOwnerState,
-): b is EarnedBadge => b.state === 'earned';
+const isEarned = (b: GarageBadgeOwnerState): b is EarnedBadge => b.state === 'earned';
 
 const badgeTimestamp = (badge: EarnedBadge): string => badge.pinnedAt ?? badge.earnedAt;
 

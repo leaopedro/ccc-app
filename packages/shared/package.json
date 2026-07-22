@@ -98,6 +98,10 @@
       "types": "./src/premium.ts",
       "default": "./dist/premium.js"
     },
+    "./premium-catalog": {
+      "types": "./src/premium-catalog.ts",
+      "default": "./dist/premium-catalog.js"
+    },
     "./profile": {
       "types": "./src/profile.ts",
       "default": "./dist/profile.js"

@@ -35,6 +35,7 @@ import { meSupportRoutes } from './routes/me-support.js';
 import { meTicketsRoutes } from './routes/me-tickets.js';
 import { meRoutes } from './routes/me.js';
 import { orderRoutes } from './routes/orders.js';
+import { premiumCatalogRoutes } from './routes/premium-catalog.js';
 import { premiumPricingRoutes } from './routes/premium-pricing.js';
 import { revenuecatWebhookRoutes } from './routes/revenuecat-webhook.js';
 import { storeRoutes } from './routes/store.js';
@@ -127,6 +128,7 @@ export const buildApp = async (
   await app.register(meSupportRoutes);
   await app.register(mePremiumRoutes);
   await app.register(premiumPricingRoutes);
+  await app.register(premiumCatalogRoutes);
   await app.register(uploadRoutes);
   await app.register(carRoutes);
   await app.register(garageRoutes);

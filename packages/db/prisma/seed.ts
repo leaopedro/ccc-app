@@ -498,6 +498,137 @@ const seedBadgeCatalog = async (): Promise<void> => {
   console.log(`Seeded badge catalog: ${BADGES.length} entries.`);
 };
 
+// Premium plans catalog. tier links to the existing GaragePremiumTier enum.
+// PT-BR display names: silver == Prata, gold == Ouro (enum stays bronze/silver/gold).
+const PREMIUM_PLANS = [
+  {
+    tier: 'bronze' as const,
+    slug: 'ingresso',
+    name: 'Ingresso',
+    sortOrder: 0,
+    monthlyCents: 49000,
+    benefits: [
+      'Acesso ao clube em horário comercial',
+      'Eventos abertos da comunidade',
+      'Comunidade no app',
+    ],
+  },
+  {
+    tier: 'silver' as const,
+    slug: 'estrada',
+    name: 'Estrada',
+    sortOrder: 1,
+    monthlyCents: 89000,
+    benefits: [
+      'Tudo do Bronze',
+      'Prioridade em eventos exclusivos',
+      '1 convidado por evento',
+      'Descontos com parceiros',
+    ],
+  },
+  {
+    tier: 'gold' as const,
+    slug: 'fundador',
+    name: 'Fundador',
+    sortOrder: 2,
+    monthlyCents: 149000,
+    benefits: [
+      'Tudo da Prata',
+      'Acesso ao clube 24 horas',
+      'Até 3 convidados por evento',
+      'Concierge dedicado',
+      'Vaga premium na garagem',
+    ],
+  },
+];
+
+const PREMIUM_ADDON_MODULES = [
+  {
+    key: 'detailing',
+    name: 'Detailing',
+    description: '3 acessos/mês para lavagem & detailing',
+    monthlyDeltaCents: 15000,
+    quotaPerCycle: 3,
+    quotaUnit: 'access' as const,
+    sortOrder: 0,
+  },
+  {
+    key: 'oficina',
+    name: 'Oficina',
+    description: '5 horas de oficina por mês',
+    monthlyDeltaCents: 50000,
+    quotaPerCycle: 5,
+    quotaUnit: 'hours' as const,
+    sortOrder: 1,
+  },
+];
+
+const seedPremiumCatalog = async (): Promise<void> => {
+  for (const p of PREMIUM_PLANS) {
+    // Plan. Upsert on the unique tier.
+    const plan = await prisma.premiumPlan.upsert({
+      where: { tier: p.tier },
+      update: { slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
+      create: { tier: p.tier, slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
+    });
+
+    // Monthly price. Upsert on composite [planId, cadence].
+    // stripePriceId / rcProductId stay null until the Stripe/RC products are
+    // created in a later billing phase; do not clobber them here.
+    await prisma.premiumPlanPrice.upsert({
+      where: { planId_cadence: { planId: plan.id, cadence: 'monthly' } },
+      update: { baseAmountCents: p.monthlyCents, currency: 'BRL', active: true },
+      create: {
+        planId: plan.id,
+        cadence: 'monthly',
+        baseAmountCents: p.monthlyCents,
+        currency: 'BRL',
+        active: true,
+      },
+    });
+
+    // Benefits have no natural unique beyond (planId,label). Delete-and-recreate
+    // per plan keeps display order authoritative and is trivially idempotent.
+    await prisma.premiumPlanBenefit.deleteMany({ where: { planId: plan.id } });
+    await prisma.premiumPlanBenefit.createMany({
+      data: p.benefits.map((label, index) => ({ planId: plan.id, label, sortOrder: index })),
+    });
+  }
+
+  for (const m of PREMIUM_ADDON_MODULES) {
+    // Addon module. Upsert on the unique key.
+    await prisma.premiumAddonModule.upsert({
+      where: { key: m.key },
+      update: {
+        name: m.name,
+        description: m.description,
+        monthlyDeltaCents: m.monthlyDeltaCents,
+        currency: 'BRL',
+        quotaPerCycle: m.quotaPerCycle,
+        quotaUnit: m.quotaUnit,
+        sortOrder: m.sortOrder,
+        active: true,
+      },
+      create: {
+        key: m.key,
+        name: m.name,
+        description: m.description,
+        monthlyDeltaCents: m.monthlyDeltaCents,
+        currency: 'BRL',
+        quotaPerCycle: m.quotaPerCycle,
+        quotaUnit: m.quotaUnit,
+        sortOrder: m.sortOrder,
+        active: true,
+      },
+    });
+  }
+
+  const benefitCount = PREMIUM_PLANS.reduce((sum, p) => sum + p.benefits.length, 0);
+  console.log(
+    `Seeded premium catalog: ${PREMIUM_PLANS.length} plans, ${PREMIUM_PLANS.length} monthly prices, ${benefitCount} benefits, ${PREMIUM_ADDON_MODULES.length} addon modules.`,
+  );
+};
+
 const main = async (): Promise<void> => {
   for (const e of events) {
     const { tiers, ...rest } = e;
@@ -528,6 +659,8 @@ const main = async (): Promise<void> => {
   await seedGaragesForExistingUsers();
 
   await seedBadgeCatalog();
+
+  await seedPremiumCatalog();
 };
 
 main()

@@ -102,6 +102,7 @@ function AppTabs() {
         <Tabs.Screen name="store" options={{ href: null, title: 'Loja', tabBarIcon: StoreIcon }} />
       )}
       <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[4].title }} />
+      <Tabs.Screen name="assinaturas" options={{ href: null, title: 'Assinatura' }} />
       <Tabs.Screen
         name="profile"
         options={{ title: APP_TAB_SPECS[5].title, tabBarIcon: ProfileIcon }}

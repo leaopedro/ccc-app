@@ -14,6 +14,10 @@
       "types": "./src/tokens.ts",
       "default": "./src/tokens.ts"
     },
+    "./brand": {
+      "types": "./src/brand.ts",
+      "default": "./dist/brand.js"
+    },
     "./tailwind-preset": "./tailwind-preset.cjs",
     "./assets/*": "./assets/*"
   },

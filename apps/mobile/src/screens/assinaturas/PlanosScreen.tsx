@@ -1,87 +1,36 @@
 // Assinaturas — "Planos disponíveis" screen (non-subscriber).
 //
-// Recreated from the Claude Design handoff (design_handoff_assinaturas).
-// First delivery: presentation only. Plan/module data is hardcoded in
-// ~/screens/assinaturas/plans-data (API-ready shape). "ASSINAR {tier}" is a
-// placeholder — it will route into the future checkout carrying selectedTier.
+// Recreated from the Claude Design handoff (design_handoff_assinaturas). Data
+// now comes from the premium catalog API (usePremiumPlans / usePremiumAddonModules)
+// — the visual treatment is unchanged. Tapping a plan (card or CTA) opens the
+// plan detail screen, where the "Assinar" (contratação) stub lives.
 //
 // Typography note: the handoff specifies Cormorant Garamond + Jost. Those fonts
 // are not bundled in the app; per product decision this screen renders with the
 // already-loaded Inter family (weights mapped 1:1). Layout, spacing, and color
 // follow the handoff exactly.
 
+import type { PremiumAddonModule, PremiumPlan } from '@jdm/shared/premium-catalog';
 import { ArrowLeft, Check, SprayCan, Wrench } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { assinaturasCopy } from '~/copy/assinaturas';
-import { showToast } from '~/lib/toast';
+import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
+import { formatBRL } from '~/lib/format';
 import {
-  ADDON_MODULES,
-  PLANS,
-  type AddonModule,
-  type Plan,
-  type PlanTier,
-} from '~/screens/assinaturas/plans-data';
+  c,
+  monthlyPriceCents,
+  orderedBenefits,
+  TIER_VISUAL,
+  tierStyle,
+} from '~/screens/assinaturas/tier-visual';
 
-// Handoff palette (authoritative hex values).
-const c = {
-  bg: '#0A0A0A',
-  surface: '#0F0E0B',
-  elevated: '#14110a',
-  cream: '#F2E8D8',
-  goldDeep: '#C9A227',
-  goldLight: '#E8CE86',
-  gold: '#D4AF37',
-  muted55: 'rgba(242,232,216,0.55)',
-  muted50: 'rgba(242,232,216,0.5)',
-  muted42: 'rgba(242,232,216,0.42)',
-  muted40: 'rgba(242,232,216,0.4)',
-  hairline: 'rgba(212,175,55,0.14)',
-  tileBorder: 'rgba(212,175,55,0.22)',
-};
-
-// Per-tier visual treatment derived from the tier (kept out of the data model
-// so the future API only supplies content, not styling).
-function tierStyle(plan: Plan): {
-  border: string;
-  divider: string;
-  btnBg: string;
-  btnColor: string;
-  btnBorder: string;
-} {
-  switch (plan.tier) {
-    case 'bronze':
-      return {
-        border: 'rgba(192,138,78,0.34)',
-        divider: 'rgba(192,138,78,0.2)',
-        btnBg: 'transparent',
-        btnColor: c.goldLight,
-        btnBorder: 'rgba(192,138,78,0.55)',
-      };
-    case 'prata':
-      return {
-        border: 'rgba(199,204,209,0.34)',
-        divider: 'rgba(199,204,209,0.2)',
-        btnBg: 'transparent',
-        btnColor: c.cream,
-        btnBorder: 'rgba(199,204,209,0.6)',
-      };
-    case 'ouro':
-    default:
-      return {
-        border: 'rgba(212,175,55,0.5)',
-        divider: 'rgba(212,175,55,0.28)',
-        btnBg: 'gradient',
-        btnColor: '#0A0A0A',
-        btnBorder: 'transparent',
-      };
-  }
-}
-
-const MODULE_ICON: Record<AddonModule['icon'], typeof SprayCan> = {
+// Add-on module icon by key. Falls back to the detailing glyph for unknown keys.
+const MODULE_ICON: Record<string, typeof SprayCan> = {
   detailing: SprayCan,
   oficina: Wrench,
 };
@@ -91,11 +40,8 @@ function onBack() {
   else router.replace('/events');
 }
 
-function onSubscribe(tier: PlanTier) {
-  // Placeholder — checkout flow not built yet (future delivery). The selected
-  // tier is what checkout will receive.
-  showToast('Contratação em breve.');
-  void tier;
+function openPlan(slug: string) {
+  router.push(`/assinaturas/${slug}` as never);
 }
 
 function OuroBackground() {
@@ -114,14 +60,23 @@ function OuroBackground() {
   );
 }
 
-function PlanCard({ plan }: { plan: Plan }) {
-  const t = tierStyle(plan);
-  const isOuro = plan.tier === 'ouro';
-  const ctaLabel = `${assinaturasCopy.plans.ctaPrefix} ${plan.tierLabel}`;
+function PlanCard({ plan }: { plan: PremiumPlan }) {
+  const t = tierStyle(plan.tier);
+  const visual = TIER_VISUAL[plan.tier];
+  const isOuro = plan.tier === 'gold';
+  const priceCents = monthlyPriceCents(plan);
+  const benefits = orderedBenefits(plan);
+  const ctaLabel = `${assinaturasCopy.plans.ctaPrefix} ${visual.label}`;
 
   return (
-    <View style={[styles.cardOuter, isOuro && styles.cardOuterOuro]}>
-      {plan.recommended ? (
+    <Pressable
+      onPress={() => openPlan(plan.slug)}
+      accessibilityRole="button"
+      accessibilityLabel={plan.name}
+      style={[styles.cardOuter, isOuro && styles.cardOuterOuro]}
+      testID={`plan-${plan.slug}`}
+    >
+      {visual.recommended ? (
         <View style={styles.recommendedWrap} pointerEvents="none">
           <View style={styles.recommendedPill}>
             <Text style={styles.recommendedText}>RECOMENDADO</Text>
@@ -137,14 +92,14 @@ function PlanCard({ plan }: { plan: Plan }) {
           <View style={styles.cardHeaderLeft}>
             <View style={styles.tierRow}>
               <View
-                style={[styles.tierDot, { backgroundColor: plan.accent, shadowColor: plan.accent }]}
+                style={[styles.tierDot, { backgroundColor: visual.accent, shadowColor: visual.accent }]}
               />
-              <Text style={[styles.tierLabel, { color: plan.accent }]}>{plan.tierLabel}</Text>
+              <Text style={[styles.tierLabel, { color: visual.accent }]}>{visual.label}</Text>
             </View>
             <Text style={styles.planName}>{plan.name}</Text>
           </View>
           <View style={styles.cardHeaderRight}>
-            <Text style={styles.planPrice}>{plan.priceLabel}</Text>
+            <Text style={styles.planPrice}>{priceCents === null ? '—' : formatBRL(priceCents)}</Text>
             <Text style={styles.perMonth}>{assinaturasCopy.plans.perMonth}</Text>
           </View>
         </View>
@@ -152,9 +107,9 @@ function PlanCard({ plan }: { plan: Plan }) {
         <View style={[styles.divider, { backgroundColor: t.divider }]} />
 
         <View style={styles.benefits}>
-          {plan.benefits.map((benefit) => (
+          {benefits.map((benefit) => (
             <View key={benefit} style={styles.benefitRow}>
-              <Check color={plan.accent} size={18} strokeWidth={2} style={styles.benefitIcon} />
+              <Check color={visual.accent} size={18} strokeWidth={2} style={styles.benefitIcon} />
               <Text style={styles.benefitText}>{benefit}</Text>
             </View>
           ))}
@@ -162,7 +117,7 @@ function PlanCard({ plan }: { plan: Plan }) {
 
         {t.btnBg === 'gradient' ? (
           <Pressable
-            onPress={() => onSubscribe(plan.tier)}
+            onPress={() => openPlan(plan.slug)}
             accessibilityRole="button"
             accessibilityLabel={ctaLabel}
             style={styles.ctaGradient}
@@ -178,7 +133,7 @@ function PlanCard({ plan }: { plan: Plan }) {
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => onSubscribe(plan.tier)}
+            onPress={() => openPlan(plan.slug)}
             accessibilityRole="button"
             accessibilityLabel={ctaLabel}
             style={[styles.cta, { borderColor: t.btnBorder }]}
@@ -188,12 +143,12 @@ function PlanCard({ plan }: { plan: Plan }) {
           </Pressable>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-function ModuleRow({ module }: { module: AddonModule }) {
-  const Icon = MODULE_ICON[module.icon];
+function ModuleRow({ module }: { module: PremiumAddonModule }) {
+  const Icon = MODULE_ICON[module.key] ?? SprayCan;
   return (
     <View style={styles.moduleRow}>
       <View style={styles.moduleIconTile}>
@@ -204,30 +159,68 @@ function ModuleRow({ module }: { module: AddonModule }) {
         <Text style={styles.moduleSubtitle}>{module.description}</Text>
       </View>
       <View style={styles.moduleRight}>
-        <Text style={styles.modulePrice}>{module.priceLabel}</Text>
+        <Text style={styles.modulePrice}>+{formatBRL(module.monthlyDeltaCents)}</Text>
         <Text style={styles.modulePerMonth}>{assinaturasCopy.modules.perMonth}</Text>
       </View>
     </View>
   );
 }
 
+function Header() {
+  return (
+    <View style={styles.header}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel={assinaturasCopy.header.back}
+        hitSlop={8}
+        style={styles.backButton}
+      >
+        <ArrowLeft color={c.cream} size={26} strokeWidth={1.75} />
+      </Pressable>
+      <Text style={styles.headerTitle}>{assinaturasCopy.header.title}</Text>
+      <View style={styles.headerSpacer} />
+    </View>
+  );
+}
+
 export default function PlanosScreen() {
+  const { plans, loading, error, refresh } = usePremiumPlans();
+  const { modules } = usePremiumAddonModules();
+
+  if (loading) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.centerFill}>
+          <ActivityIndicator color={c.gold} />
+          <Text style={styles.stateText}>{assinaturasCopy.states.loading}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.centerFill}>
+          <Text style={styles.stateTitle}>{assinaturasCopy.states.errorTitle}</Text>
+          <Pressable
+            onPress={() => void refresh()}
+            accessibilityRole="button"
+            accessibilityLabel={assinaturasCopy.states.errorRetry}
+            style={styles.retryButton}
+            testID="planos-retry"
+          >
+            <Text style={styles.retryText}>{assinaturasCopy.states.errorRetry}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* Header bar */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          accessibilityRole="button"
-          accessibilityLabel={assinaturasCopy.header.back}
-          hitSlop={8}
-          style={styles.backButton}
-        >
-          <ArrowLeft color={c.cream} size={26} strokeWidth={1.75} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{assinaturasCopy.header.title}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <Header />
 
       {/* Intro block */}
       <View style={styles.intro}>
@@ -240,24 +233,31 @@ export default function PlanosScreen() {
         <Text style={styles.subcopy}>{assinaturasCopy.intro.subcopy}</Text>
       </View>
 
-      {/* Plan cards */}
-      <View style={styles.plans}>
-        {PLANS.map((plan) => (
-          <PlanCard key={plan.tier} plan={plan} />
-        ))}
-      </View>
-
-      {/* Add-on modules */}
-      <View style={styles.modulesSection}>
-        <Text style={styles.modulesEyebrow}>{assinaturasCopy.modules.eyebrow}</Text>
-        <Text style={styles.modulesSubcopy}>{assinaturasCopy.modules.subcopy}</Text>
-        <View style={styles.modules}>
-          {ADDON_MODULES.map((module) => (
-            <ModuleRow key={module.key} module={module} />
+      {plans.length === 0 ? (
+        <View style={styles.emptyBlock}>
+          <Text style={styles.stateTitle}>{assinaturasCopy.states.empty}</Text>
+        </View>
+      ) : (
+        <View style={styles.plans}>
+          {plans.map((plan) => (
+            <PlanCard key={plan.slug} plan={plan} />
           ))}
         </View>
-        <Text style={styles.footnote}>{assinaturasCopy.modules.footnote}</Text>
-      </View>
+      )}
+
+      {/* Add-on modules */}
+      {modules.length > 0 ? (
+        <View style={styles.modulesSection}>
+          <Text style={styles.modulesEyebrow}>{assinaturasCopy.modules.eyebrow}</Text>
+          <Text style={styles.modulesSubcopy}>{assinaturasCopy.modules.subcopy}</Text>
+          <View style={styles.modules}>
+            {modules.map((module) => (
+              <ModuleRow key={module.key} module={module} />
+            ))}
+          </View>
+          <Text style={styles.footnote}>{assinaturasCopy.modules.footnote}</Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -265,6 +265,41 @@ export default function PlanosScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.bg },
   content: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 120 },
+
+  // State screens
+  centerFill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  stateText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: c.muted55,
+    textAlign: 'center',
+  },
+  stateTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: c.cream,
+    textAlign: 'center',
+  },
+  retryButton: {
+    borderRadius: 11,
+    paddingVertical: 13,
+    paddingHorizontal: 26,
+    borderWidth: 1,
+    borderColor: c.tileBorder,
+  },
+  retryText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.4,
+    color: c.goldLight,
+  },
+  emptyBlock: { marginTop: 40, alignItems: 'center' },
 
   // Header
   header: {

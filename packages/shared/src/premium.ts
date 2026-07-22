@@ -6,11 +6,15 @@ import { z } from 'zod';
 
 /**
  * POST /api/me/premium/checkout — request body.
- * Client sends cadence; server resolves priceId from env (never trusts
- * client-supplied Stripe price IDs).
+ * Client sends cadence; server resolves priceId server-side (never trusts
+ * client-supplied Stripe price IDs). `planSlug` is optional and additive: when
+ * present the server resolves the plan tier from it and reads the matching
+ * PremiumPlanPrice.stripePriceId from the catalog; when absent the server keeps
+ * the legacy GOLD env-price behavior.
  */
 export const premiumCheckoutRequestSchema = z.object({
   cadence: z.enum(['monthly', 'annual']),
+  planSlug: z.string().min(1).max(40).optional(),
 });
 
 export type PremiumCheckoutRequest = z.infer<typeof premiumCheckoutRequestSchema>;

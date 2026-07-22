@@ -8,8 +8,11 @@
  * All endpoints gate on env.GROWTH_PREMIUM_BILLING_ENABLED (503 when off) and
  * require app.authenticate, mirroring me-premium.ts.
  *
- * Provider billing is STUBBED here — real Stripe subscription-item wiring lands
- * in P5 (see the TODO(P5) seams below). providerItemRef stays null for now.
+ * Provider billing (P5): attach/detach wire Stripe subscription items when the
+ * membership is Stripe-backed AND the module has a stripePriceId. Provider calls
+ * run provider-first (before the DB tx) so a Stripe failure never corrupts local
+ * state. When there is no Stripe sub ref or no module stripePriceId, the flow
+ * stays local-only (providerItemRef null) and logs — it does not throw.
  */
 
 import { prisma } from '@jdm/db';
@@ -205,6 +208,34 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
     const cycleStart = membership.currentPeriodStart ?? new Date();
     const cycleEnd = membership.currentPeriodEnd;
 
+    // P5 provider seam — provider-first ordering:
+    // Create the Stripe subscription item BEFORE the DB transaction. A Stripe
+    // failure throws here and leaves local state untouched (no compensation
+    // needed). The rare orphan case (Stripe ok, DB tx fails afterwards) is
+    // reconciled by the addons webhook sync + the reconcile worker.
+    // Local-only fallback (no throw) when the membership has no Stripe
+    // subscription ref OR the module has no stripePriceId configured.
+    let providerItemRef: string | null = null;
+    const stripeBacked = membership.provider === 'stripe' && Boolean(membership.providerSubRef);
+    if (stripeBacked && module.stripePriceId) {
+      const item = await app.stripe.addSubscriptionItem({
+        subscriptionId: membership.providerSubRef,
+        priceId: module.stripePriceId,
+        idempotencyKey: `addon_attach_${membership.id}_${addonKey}`,
+      });
+      providerItemRef = item.subscriptionItemId;
+    } else {
+      request.log.info(
+        {
+          membershipId: membership.id,
+          addonKey,
+          provider: membership.provider,
+          hasStripePrice: Boolean(module.stripePriceId),
+        },
+        'me-premium-addons: attach local-only (no stripe sub ref or module stripePriceId)',
+      );
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       if (existing) {
         // Re-attach a previously cancelled add-on: refresh the snapshot back to
@@ -213,8 +244,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
           where: { id: existing.id },
           data: {
             status: 'active',
-            // TODO(P5): create Stripe subscription item + set providerItemRef
-            providerItemRef: null,
+            providerItemRef,
             monthlyDeltaCents: module.monthlyDeltaCents,
             quotaPerCycle: module.quotaPerCycle,
             quotaUnit: module.quotaUnit,
@@ -240,8 +270,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
             membershipId: membership.id,
             addonKey,
             status: 'active',
-            // TODO(P5): create Stripe subscription item + set providerItemRef
-            providerItemRef: null,
+            providerItemRef,
             monthlyDeltaCents: module.monthlyDeltaCents,
             quotaPerCycle: module.quotaPerCycle,
             quotaUnit: module.quotaUnit,
@@ -326,10 +355,28 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'NotFound', message: 'add-on not attached' });
       }
 
+      // P5 provider seam — provider-first ordering (mirrors attach):
+      // Remove the Stripe subscription item BEFORE the DB transaction. A Stripe
+      // failure throws here and leaves the add-on row untouched. The Stripe item
+      // is deleted immediately with proration (see removeSubscriptionItem); the
+      // local row is set to `cancel_scheduled` so the member keeps quota through
+      // period end while Stripe stops billing — a deliberate simplification.
+      // Local-only fallback (no throw) when there is no provider item to remove.
+      if (membership.provider === 'stripe' && addon.providerItemRef) {
+        await app.stripe.removeSubscriptionItem({
+          subscriptionItemId: addon.providerItemRef,
+          idempotencyKey: `addon_detach_${addon.id}`,
+        });
+      } else {
+        request.log.info(
+          { membershipId: membership.id, addonKey, provider: membership.provider },
+          'me-premium-addons: detach local-only (no provider item ref)',
+        );
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         await tx.premiumMembershipAddon.update({
           where: { id: addon.id },
-          // TODO(P5): schedule Stripe subscription item removal at period end
           data: { status: 'cancel_scheduled' },
         });
 

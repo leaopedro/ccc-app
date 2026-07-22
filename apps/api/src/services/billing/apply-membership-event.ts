@@ -464,6 +464,52 @@ export const applyInvoiceRefund = async (
 };
 
 // ---------------------------------------------------------------------------
+// reconcileMembershipAddonsAmount — P5 additive add-ons sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Recompute PremiumMembership.addonsAmountCents from the active
+ * PremiumMembershipAddon rows (sum of monthlyDeltaCents where status='active').
+ *
+ * This mirrors EXACTLY how the attach/detach routes compute the total, so the
+ * membership snapshot stays consistent when a Stripe
+ * `customer.subscription.updated` event lands (e.g. an add-on item was added or
+ * removed out-of-band via the Billing Portal). It is deliberately independent
+ * of the tier/status normalization in applyMembershipEvent — it ONLY touches
+ * addonsAmountCents and never the tier, status, period, or pricing snapshot.
+ *
+ * No-op when the (provider, providerSubRef) membership is unknown.
+ *
+ * Lock contract (canon §F8.5): the caller MUST hold the garage-level
+ * `SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE` inside the same
+ * transaction before invoking this.
+ */
+export const reconcileMembershipAddonsAmount = async (
+  tx: Prisma.TransactionClient,
+  provider: PremiumProvider,
+  providerSubRef: string,
+): Promise<void> => {
+  const membership = await tx.premiumMembership.findUnique({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    select: { id: true, addonsAmountCents: true },
+  });
+  if (!membership) return;
+
+  const agg = await tx.premiumMembershipAddon.aggregate({
+    where: { membershipId: membership.id, status: 'active' },
+    _sum: { monthlyDeltaCents: true },
+  });
+  const addonsAmountCents = agg._sum.monthlyDeltaCents ?? 0;
+
+  if (addonsAmountCents === membership.addonsAmountCents) return; // already in sync
+
+  await tx.premiumMembership.update({
+    where: { id: membership.id },
+    data: { addonsAmountCents },
+  });
+};
+
+// ---------------------------------------------------------------------------
 // enqueuePremiumTicketBackfillIfActivated — F8.06 post-commit hook
 // ---------------------------------------------------------------------------
 

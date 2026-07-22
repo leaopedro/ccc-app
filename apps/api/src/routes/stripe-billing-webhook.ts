@@ -8,6 +8,7 @@ import {
   applyInvoiceRefund,
   applyMembershipEvent,
   enqueuePremiumTicketBackfillIfActivated,
+  reconcileMembershipAddonsAmount,
 } from '../services/billing/apply-membership-event.js';
 import { normalizeStripeEvent } from '../services/billing/normalize-stripe.js';
 import type {
@@ -167,6 +168,34 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: 'Processing', message: 'concurrent or stale unprocessed event, retry' });
       }
       throw err;
+    }
+
+    // -----------------------------------------------------------------------
+    // P5 additive seam — add-ons amount sync.
+    // On ANY customer.subscription.updated, re-derive
+    // PremiumMembership.addonsAmountCents from the active add-on rows (the same
+    // rule attach/detach use). This is intentionally SEPARATE from the tier/
+    // status normalization below — it only touches addonsAmountCents. Runs in
+    // its own tx + garage lock. No-op when the subscription/membership or its
+    // garage is unknown. Kept before the normalize dispatch so it applies even
+    // to updates that normalize to null (e.g. an item add/remove that does not
+    // flip cancel_at_period_end or swap the base price).
+    // -----------------------------------------------------------------------
+    if (event.type === 'customer.subscription.updated') {
+      const subObj = event.data.object as { id?: string };
+      const subRef = subObj.id;
+      if (subRef) {
+        const membershipRow = await prisma.premiumMembership.findUnique({
+          where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: subRef } },
+          select: { garageId: true },
+        });
+        if (membershipRow) {
+          await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${membershipRow.garageId} FOR UPDATE`;
+            await reconcileMembershipAddonsAmount(tx, 'stripe', subRef);
+          });
+        }
+      }
     }
 
     // -----------------------------------------------------------------------

@@ -72,6 +72,27 @@ export type BillingPortalSessionResult = {
   url: string;
 };
 
+/**
+ * Add a recurring add-on line to an existing subscription (P5 premium add-ons).
+ * priceId is resolved server-side from the add-on module catalog — never from a
+ * client-supplied value.
+ */
+export type AddSubscriptionItemInput = {
+  subscriptionId: string;
+  priceId: string;
+  idempotencyKey: string;
+};
+
+export type AddSubscriptionItemResult = {
+  subscriptionItemId: string;
+};
+
+/** Remove an add-on line from a subscription (P5 premium add-on detach). */
+export type RemoveSubscriptionItemInput = {
+  subscriptionItemId: string;
+  idempotencyKey: string;
+};
+
 export type StripeClient = {
   createPaymentIntent: (input: CreatePaymentIntentInput) => Promise<PaymentIntentResult>;
   createCheckoutSession: (input: CreateCheckoutSessionInput) => Promise<CheckoutSessionResult>;
@@ -120,6 +141,17 @@ export type StripeClient = {
    * snapshot drift occurs.
    */
   retrievePrice: (priceId: string) => Promise<Stripe.Price>;
+  /**
+   * Add a recurring add-on item to an existing subscription (P5). Uses Stripe's
+   * default proration (`create_prorations`) so the customer is charged/credited
+   * the pro-rated delta immediately.
+   */
+  addSubscriptionItem: (input: AddSubscriptionItemInput) => Promise<AddSubscriptionItemResult>;
+  /**
+   * Remove an add-on item from a subscription (P5 detach). See the real impl
+   * for the proration-behavior choice.
+   */
+  removeSubscriptionItem: (input: RemoveSubscriptionItemInput) => Promise<void>;
 };
 
 export type OpenSubscriptionCheckoutSession = {
@@ -358,6 +390,36 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     },
     retrievePrice: async (priceId) => {
       return stripe.prices.retrieve(priceId);
+    },
+    addSubscriptionItem: async ({ subscriptionId, priceId, idempotencyKey }) => {
+      // Stripe default proration_behavior for subscription-item create is
+      // 'create_prorations'; we set it explicitly so the pro-rated delta is
+      // charged/credited immediately when an add-on is attached mid-cycle.
+      const item = await stripe.subscriptionItems.create(
+        {
+          subscription: subscriptionId,
+          price: priceId,
+          quantity: 1,
+          proration_behavior: 'create_prorations',
+        },
+        { idempotencyKey },
+      );
+      return { subscriptionItemId: item.id };
+    },
+    removeSubscriptionItem: async ({ subscriptionItemId, idempotencyKey }) => {
+      // Proration-behavior choice (P5): we delete the item immediately with
+      // 'create_prorations' (Stripe's default for item delete). This issues a
+      // pro-rated credit for the unused portion of the current cycle. True
+      // "remove at period end" would require scheduling a subscription phase,
+      // which is materially more complex; the local DB row is still marked
+      // `cancel_scheduled` so the member keeps the add-on's quota through the
+      // period end while Stripe stops billing it. Documented as a deliberate
+      // simplification (see me-premium-addons.ts detach handler).
+      await stripe.subscriptionItems.del(
+        subscriptionItemId,
+        { proration_behavior: 'create_prorations' },
+        { idempotencyKey },
+      );
     },
   };
 };

@@ -15,6 +15,8 @@ import { adminGarageXpAdjustmentRoutes } from './garage-xp-adjustment.js';
 import { adminGeneralSettingsRoutes } from './general-settings.js';
 import { adminGroupRoutes } from './groups.js';
 import { adminMfaRoutes } from './mfa.js';
+import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
+import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
 import { adminStoreOrderRoutes } from './store/orders.js';
 import { adminStorePhotoRoutes } from './store/photos.js';
@@ -41,6 +43,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   await app.register(async (scope) => {
     scope.addHook('preHandler', scope.requireRole('organizer', 'admin', 'staff'));
     await scope.register(adminCheckInRoutes);
+    await scope.register(adminPremiumRedemptionRoutes);
   });
 
   // Event + tier management + comp grants: organizer/admin only. Staff are rejected here.
@@ -65,6 +68,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminSupportRoutes);
     await scope.register(adminFeedModerationRoutes);
     await scope.register(adminGroupRoutes);
+    await scope.register(adminPremiumCatalogRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

@@ -2,16 +2,21 @@
   "name": "@ccc/design",
   "version": "0.0.0",
   "private": true,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./tokens": {
-      "types": "./dist/tokens.d.ts",
-      "default": "./dist/tokens.js"
+      "types": "./src/tokens.ts",
+      "default": "./src/tokens.ts"
+    },
+    "./brand": {
+      "types": "./src/brand.ts",
+      "default": "./dist/brand.js"
     },
     "./tailwind-preset": "./tailwind-preset.cjs",
     "./assets/*": "./assets/*"

@@ -3,9 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "references": [
-    { "path": "../../packages/db" },
-    { "path": "../../packages/shared" }
-  ],
   "include": ["src/**/*", "test/**/*", "scripts/**/*", "vitest.config.ts"]
 }

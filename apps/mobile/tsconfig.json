@@ -14,16 +14,6 @@
     },
     "types": ["node"]
   },
-  "references": [
-    { "path": "../../packages/design" },
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/ui" }
-  ],
-  "references": [
-    { "path": "../../packages/design" },
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/ui" }
-  ],
   "include": [
     "app/**/*",
     "src/**/*",

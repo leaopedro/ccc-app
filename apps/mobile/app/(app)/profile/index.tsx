@@ -5,6 +5,7 @@ import {
   BellDot,
   CarFront,
   ChevronRight,
+  Gem,
   LogOut,
   MapPinned,
   MessageCircle,
@@ -220,6 +221,12 @@ export default function ProfileMenuScreen() {
           label={profileCopy.menu.garage}
           hint={profileCopy.menu.garageHint}
           onPress={() => router.push('/profile/garage' as never)}
+        />
+        <MenuRow
+          icon={<Gem color={theme.colors.fg} size={18} strokeWidth={1.75} />}
+          label={profileCopy.menu.assinatura}
+          hint={profileCopy.menu.assinaturaHint}
+          onPress={() => router.push('/assinaturas' as never)}
         />
         <MenuRow
           icon={<MessageCircle color={theme.colors.fg} size={18} strokeWidth={1.75} />}

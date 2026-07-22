@@ -139,17 +139,49 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
           issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
         });
       }
-      const { cadence } = parsed.data;
+      const { cadence, planSlug } = parsed.data;
 
-      const priceId =
-        cadence === 'monthly'
-          ? app.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY
-          : app.env.STRIPE_PRICE_PREMIUM_GOLD_ANNUAL;
+      // Resolve the target tier. Default 'gold' keeps the legacy single-tier
+      // env flow working when no planSlug is supplied. When planSlug is given
+      // we resolve the tier from the catalog (server-side; never trust a
+      // client price id).
+      let tier: 'gold' | 'silver' | 'bronze' = 'gold';
+      if (planSlug) {
+        const plan = await prisma.premiumPlan.findUnique({
+          where: { slug: planSlug },
+          select: { tier: true, active: true },
+        });
+        if (!plan || !plan.active) {
+          return reply.status(404).send({ error: 'NotFound', message: 'plan not found' });
+        }
+        tier = plan.tier;
+      }
+
+      // Catalog-aware price resolution (additive). Prefer the catalog's
+      // stripePriceId for (tier, cadence) when configured. Fall back to the
+      // legacy GOLD env price ONLY for the gold tier, so existing behavior is
+      // unchanged when the catalog has no provider price wired. A non-gold tier
+      // without a configured stripePriceId is 503 (we never substitute the gold
+      // price for another tier).
+      const catalogPrice = await prisma.premiumPlanPrice.findFirst({
+        where: { plan: { tier }, cadence },
+        select: { stripePriceId: true },
+      });
+
+      let priceId: string | undefined;
+      if (catalogPrice?.stripePriceId) {
+        priceId = catalogPrice.stripePriceId;
+      } else if (tier === 'gold') {
+        priceId =
+          cadence === 'monthly'
+            ? app.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY
+            : app.env.STRIPE_PRICE_PREMIUM_GOLD_ANNUAL;
+      }
 
       if (!priceId) {
         request.log.error(
-          { cadence },
-          'me-premium: checkout requested but price env var not configured',
+          { cadence, tier, planSlug },
+          'me-premium: checkout requested but no stripe price resolved (catalog + env)',
         );
         return reply
           .status(503)

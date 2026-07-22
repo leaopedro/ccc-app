@@ -93,8 +93,17 @@ const resolveGitSha = (env: RawEnv): string => {
   return 'dev';
 };
 
+const normalizeEnv = (source: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const normalized: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === '') continue;
+    normalized[key] = value;
+  }
+  return normalized;
+};
+
 export const loadEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
-  const parsed = envSchema.safeParse(source);
+  const parsed = envSchema.safeParse(normalizeEnv(source));
   if (!parsed.success) {
     const flat = parsed.error.flatten().fieldErrors;
     throw new Error(`Invalid environment: ${JSON.stringify(flat)}`);

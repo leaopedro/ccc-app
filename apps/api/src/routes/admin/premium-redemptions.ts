@@ -45,20 +45,25 @@ export const adminPremiumRedemptionRoutes: FastifyPluginAsync = async (app) => {
     const usage = await prisma.premiumAddonUsage.findFirst({
       where: { membershipAddonId: addon.id, cycleEnd: { gte: new Date() } },
       orderBy: { cycleStart: 'desc' },
+      select: { id: true, quotaTotal: true },
     });
     if (!usage) {
       return reply.status(404).send({ error: 'NotFound', message: 'no open usage cycle' });
     }
 
-    if (usage.quotaUsed + amount > usage.quotaTotal) {
-      return reply.status(409).send({
-        error: 'QuotaExceeded',
-        message: 'redemption exceeds remaining quota',
-        quotaRemaining: usage.quotaTotal - usage.quotaUsed,
-      });
-    }
+    // Atomic guard against concurrent redeems: the over-quota check and the
+    // increment happen in one conditional updateMany. quotaTotal is fixed per
+    // cycle, so `threshold` is stable; the race is only on quotaUsed, and
+    // `quotaUsed <= threshold` is evaluated at write time under the row lock.
+    // count === 0 means another redeem already consumed the remaining quota.
+    const threshold = usage.quotaTotal - amount;
 
     const updated = await prisma.$transaction(async (tx) => {
+      const guarded = await tx.premiumAddonUsage.updateMany({
+        where: { id: usage.id, quotaUsed: { lte: threshold } },
+        data: { quotaUsed: { increment: amount } },
+      });
+      if (guarded.count === 0) return null;
       await tx.premiumAddonRedemption.create({
         data: {
           usageId: usage.id,
@@ -67,11 +72,23 @@ export const adminPremiumRedemptionRoutes: FastifyPluginAsync = async (app) => {
           note: note ?? null,
         },
       });
-      return tx.premiumAddonUsage.update({
+      return tx.premiumAddonUsage.findUnique({
         where: { id: usage.id },
-        data: { quotaUsed: { increment: amount } },
+        select: { quotaTotal: true, quotaUsed: true },
       });
     });
+
+    if (!updated) {
+      const current = await prisma.premiumAddonUsage.findUnique({
+        where: { id: usage.id },
+        select: { quotaTotal: true, quotaUsed: true },
+      });
+      return reply.status(409).send({
+        error: 'QuotaExceeded',
+        message: 'redemption exceeds remaining quota',
+        quotaRemaining: current ? current.quotaTotal - current.quotaUsed : 0,
+      });
+    }
 
     return reply.status(200).send(
       redeemAddonResponseSchema.parse({

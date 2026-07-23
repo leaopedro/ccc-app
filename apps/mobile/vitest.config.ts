@@ -6,6 +6,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '~': path.resolve(__dirname, 'src'),
+      // Resolve @jdm/design from source so tests never depend on its built
+      // dist being present (the package ships dist for the Expo config loader,
+      // but vitest handles the TS source directly).
+      '@jdm/design': path.resolve(__dirname, '../../packages/design/src/index.ts'),
       // `lucide-react-native` ships ESM that vitest can't transform under
       // jsdom. Once `BadgeGlyph` joined `@jdm/ui`'s barrel export, every
       // mobile test that pulls anything from `@jdm/ui` started loading

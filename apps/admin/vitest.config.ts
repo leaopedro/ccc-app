@@ -6,6 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '~': path.resolve(__dirname, './src'),
+      '@jdm/design': path.resolve(__dirname, '../../packages/design/src/index.ts'),
       '@jdm/shared/legal': path.resolve(__dirname, '../../packages/shared/src/legal.ts'),
     },
   },

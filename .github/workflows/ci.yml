@@ -57,6 +57,8 @@ jobs:
 
       - run: pnpm --filter @jdm/shared build
 
+      - run: pnpm --filter @jdm/design build
+
       - run: pnpm lint
 
       - run: pnpm format:check

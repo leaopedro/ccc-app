@@ -1,6 +1,11 @@
 {
   "extends": "@jdm/tsconfig/react-native.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@jdm/design": ["../design/src/index.ts"],
+      "@jdm/design/*": ["../design/src/*"]
+    },
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",

@@ -13,7 +13,7 @@
     "ios:preview:sim-build": "SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace ios/JDMExperiencePreview.xcworkspace -scheme JDMExperiencePreview -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' build",
     "ios:preview:metro-localhost": "EXPO_PUBLIC_API_BASE_URL=https://jdm-production.up.railway.app APP_VARIANT=preview expo start --no-dev --minify --host localhost",
     "android": "expo run:android",
-    "build": "sh -c 'test -f ../../packages/shared/dist/index.js || pnpm --filter @jdm/shared build; expo export --platform web'",
+    "build": "sh -c 'test -f ../../packages/shared/dist/index.js || pnpm --filter @jdm/shared build; test -f ../../packages/design/dist/index.js || pnpm --filter @jdm/design build; expo export --platform web'",
     "typegen": "node scripts/typegen.js",
     "typecheck": "node scripts/typegen.js && tsc --noEmit",
     "lint": "eslint app src",

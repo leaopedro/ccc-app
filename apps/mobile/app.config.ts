@@ -30,8 +30,7 @@ const bundleId: Record<Variant, string> = {
 // local broadcast push smoke (JDMA-534).
 const easProjectId = process.env.EAS_PROJECT_ID || 'c071216e-6224-4f00-9eb0-6737fb5e1691';
 
-const stripeMerchantIdentifier =
-  variant === 'production' ? brand.app.stripeMerchantId : undefined;
+const stripeMerchantIdentifier = variant === 'production' ? brand.app.stripeMerchantId : undefined;
 const sentryOrg = process.env.SENTRY_ORG;
 const sentryProjectMobile = process.env.SENTRY_PROJECT_MOBILE;
 

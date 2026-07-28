@@ -90,7 +90,7 @@ GET    /api/me/premium/subscription  ALTERADA
 #### `POST /api/me/premium/checkout` (alterada)
 
 - Body ganha `addonKeys?: string[]`, máximo 10.
-- Chave desconhecida ou módulo inativo no catálogo: 400.
+- Chave desconhecida ou módulo inativo no catálogo: 400. Mais de 10 chaves: 422, que é o código que a rota já devolve para falha de `safeParse`.
 - Resolve o `stripePriceId` de cada módulo ativo do catálogo. Se algum faltar, responde 503 listando exatamente as chaves faltantes. A distinção importa: 400 é erro do cliente, 503 é catálogo mal configurado pelo operador.
 - Passa `[planPriceId, ...addonPriceIds]` para a sessão, nessa ordem.
 - Idempotency key passa de `checkout_sub_{garageId}_{cadence}` para incluir `planSlug` e um digest curto dos `addonKeys` ordenados. Sem isso, trocar de pacote e tentar de novo colide na key (risco R4).
@@ -309,7 +309,8 @@ Testcontainers com Postgres real e `FakeStripe`, conforme `apps/api/test/global-
 **`premium-checkout-addons.test.ts`**
 - `line_items` na ordem `[plano, ...módulos]`
 - módulo ativo sem `stripePriceId` retorna 503 listando as chaves faltantes
-- mais de 10 `addonKeys` retorna 400
+- mais de 10 `addonKeys` retorna 422 (falha de schema, mesmo código já usado pela rota)
+- falha do Stripe ao criar a sessão vira 503 com mensagem clara (R1)
 - a idempotency key muda quando a seleção muda (R4)
 - a sessão aberta é expirada antes de criar a nova (R5)
 

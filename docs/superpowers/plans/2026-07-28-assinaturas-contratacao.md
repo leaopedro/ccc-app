@@ -722,7 +722,7 @@ git commit -m "feat(api): GET /api/me/premium/invoices com historico de cobranca
 
 **Interfaces:**
 - Consumes: `premiumCheckoutRequestSchema` com `addonKeys` (Task 1).
-- Produces: `CreateSubscriptionCheckoutSessionInput.priceIds: string[]` no lugar de `priceId`; `StripeClient.expireCheckoutSession(sessionId: string) => Promise<void>`; idempotency key no formato `checkout_sub_{garageId}_{cadence}_{planSlugOuTier}_{digest}`.
+- Produces: `CreateSubscriptionCheckoutSessionInput.priceIds: string[]` no lugar de `priceId`; `StripeClient.expireCheckoutSession(sessionId: string) => Promise<void>`; idempotency key no formato `checkout_sub_{garageId}_{cadence}_{digest}`, onde o digest cobre os price ids **resolvidos** (`[priceId, ...addonPriceIds]`), não as chaves pedidas pelo cliente. Digerir a seleção deixa a chave estável quando o operador roda um `stripePriceId` no catálogo, e aí o Stripe responde 400 `idempotency_error`.
 
 - [ ] **Step 1: Escrever o teste que falha**
 

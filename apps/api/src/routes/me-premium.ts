@@ -12,6 +12,8 @@
  *   §8.3 — status response shape (premiumStatusSchema)
  */
 
+import { createHash } from 'node:crypto';
+
 import { prisma } from '@ccc/db';
 import {
   premiumBillingPortalResponseSchema,
@@ -140,7 +142,8 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
           issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
         });
       }
-      const { cadence, planSlug } = parsed.data;
+      const { cadence, planSlug, addonKeys } = parsed.data;
+      const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
 
       // Resolve the target tier. Default 'gold' keeps the legacy single-tier
       // env flow working when no planSlug is supplied. When planSlug is given
@@ -187,6 +190,44 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         return reply
           .status(503)
           .send({ error: 'ServiceUnavailable', message: 'billing price not configured' });
+      }
+
+      // Resolve add-on prices from the catalog. Unknown/inactive key is a client
+      // error (400); a known module with no stripePriceId is an operator
+      // misconfiguration (503).
+      const addonPriceIds: string[] = [];
+      if (selectedAddonKeys.length > 0) {
+        const modules = await prisma.premiumAddonModule.findMany({
+          where: { key: { in: selectedAddonKeys }, active: true },
+          select: { key: true, stripePriceId: true },
+        });
+
+        const found = new Set(modules.map((m) => m.key));
+        const unknownAddonKeys = selectedAddonKeys.filter((k) => !found.has(k));
+        if (unknownAddonKeys.length > 0) {
+          return reply
+            .status(400)
+            .send({ error: 'BadRequest', message: 'unknown add-on key', unknownAddonKeys });
+        }
+
+        const missingAddonKeys = modules.filter((m) => !m.stripePriceId).map((m) => m.key);
+        if (missingAddonKeys.length > 0) {
+          request.log.error(
+            { missingAddonKeys },
+            'me-premium: checkout requested but add-on stripePriceId not configured',
+          );
+          return reply.status(503).send({
+            error: 'ServiceUnavailable',
+            message: 'add-on price not configured',
+            missingAddonKeys,
+          });
+        }
+
+        // Preserve catalog order for a stable session; the plan price stays first.
+        for (const key of selectedAddonKeys) {
+          const found = modules.find((m) => m.key === key);
+          if (found?.stripePriceId) addonPriceIds.push(found.stripePriceId);
+        }
       }
 
       // Inline precheck — close the race window between GET precheck + POST.
@@ -240,27 +281,44 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         garageId: garage.id,
       });
 
+      // A stale open session holds the previous package. Expire it so the member
+      // is not pushed back into a selection they abandoned.
       const openSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
-      if (openSessions.length > 0) {
-        const existing = openSessions[0]!;
-        return reply.status(409).send({
-          error: 'AlreadySubscribed',
-          provider: 'stripe',
-          manageUrl: existing.url ?? `${app.env.APP_WEB_BASE_URL}/premium`,
-          message: 'checkout already in progress',
-        });
+      for (const open of openSessions) {
+        await app.stripe.expireCheckoutSession(open.id);
       }
 
-      const idempotencyKey = `checkout_sub_${garage.id}_${cadence}`;
+      // The key must cover the whole package: same garage + cadence with a
+      // different plan or module set is a genuinely different session, and
+      // Stripe rejects a reused key carrying different params.
+      const packageDigest = createHash('sha1')
+        .update([planSlug ?? tier, ...selectedAddonKeys].join('|'))
+        .digest('hex')
+        .slice(0, 12);
+      const idempotencyKey = `checkout_sub_${garage.id}_${cadence}_${packageDigest}`;
 
-      const session = await app.stripe.createSubscriptionCheckoutSession({
-        customerId,
-        priceId,
-        successUrl: `${app.env.APP_WEB_BASE_URL}/premium/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${app.env.APP_WEB_BASE_URL}/premium`,
-        metadata: { garageId: garage.id, userId: sub, cadence },
-        idempotencyKey,
-      });
+      // R1: a multi-line subscription session requires every price to share the
+      // same interval and currency. Stripe rejects the mix, and that is an
+      // operator catalog problem, not a client error — surface it as 503.
+      let session;
+      try {
+        session = await app.stripe.createSubscriptionCheckoutSession({
+          customerId,
+          priceIds: [priceId, ...addonPriceIds],
+          successUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas/checkout-return`,
+          cancelUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas`,
+          metadata: { garageId: garage.id, userId: sub, cadence },
+          idempotencyKey,
+        });
+      } catch (err) {
+        request.log.error(
+          { err, priceIds: [priceId, ...addonPriceIds] },
+          'me-premium: stripe rejected the subscription checkout session',
+        );
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+      }
 
       return reply
         .status(201)

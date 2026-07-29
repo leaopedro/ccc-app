@@ -37,7 +37,11 @@ export type WebhookEvent = {
 
 export type CreateSubscriptionCheckoutSessionInput = {
   customerId: string;
-  priceId: string;
+  /**
+   * All recurring prices in the session, plan first. Every price MUST share the
+   * same interval and currency — Stripe rejects a mixed subscription session.
+   */
+  priceIds: string[];
   successUrl: string;
   cancelUrl: string;
   /**
@@ -158,6 +162,12 @@ export type StripeClient = {
   listOpenSubscriptionCheckoutSessions: (
     customerId: string,
   ) => Promise<OpenSubscriptionCheckoutSession[]>;
+  /**
+   * Expire an open Checkout Session. Used before minting a new subscription
+   * session so a member who abandoned checkout and changed their package is
+   * not pushed back into the stale one.
+   */
+  expireCheckoutSession: (sessionId: string) => Promise<void>;
   /**
    * Retrieve a Stripe Price by ID. Used by the public pricing route (F8.20)
    * to read metadata (`baseAmountCents`, `devFeePercent`) at request time so
@@ -348,7 +358,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     publishableKey: () => env.STRIPE_PUBLISHABLE_KEY ?? '',
     createSubscriptionCheckoutSession: async ({
       customerId,
-      priceId,
+      priceIds,
       successUrl,
       cancelUrl,
       metadata,
@@ -358,7 +368,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         {
           mode: 'subscription',
           customer: customerId,
-          line_items: [{ price: priceId, quantity: 1 }],
+          line_items: priceIds.map((price) => ({ price, quantity: 1 })),
           // subscription_data.metadata carries garageId so the F8.04 webhook
           // handler can resolve the garage on invoice.paid /
           // customer.subscription.* without an extra DB lookup. (Gap #15 in
@@ -414,6 +424,9 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       return sessions.data
         .filter((s) => s.mode === 'subscription')
         .map((s) => ({ id: s.id, url: s.url }));
+    },
+    expireCheckoutSession: async (sessionId) => {
+      await stripe.checkout.sessions.expire(sessionId);
     },
     retrievePrice: async (priceId) => {
       return stripe.prices.retrieve(priceId);

@@ -112,7 +112,9 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     const res = await checkout(user.id, { cadence: 'monthly' });
     expect(res.statusCode).toBe(201);
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_catalog_gold_monthly');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual([
+      'price_catalog_gold_monthly',
+    ]);
   });
 
   it('falls back to the GOLD env price when the catalog has no stripePriceId', async () => {
@@ -123,7 +125,9 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     const res = await checkout(user.id, { cadence: 'monthly' });
     expect(res.statusCode).toBe(201);
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_env_gold_monthly');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual([
+      'price_env_gold_monthly',
+    ]);
   });
 
   it('falls back to the GOLD env price when no catalog plan exists (legacy behavior)', async () => {
@@ -133,7 +137,9 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     const res = await checkout(user.id, { cadence: 'monthly' });
     expect(res.statusCode).toBe(201);
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_env_gold_monthly');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual([
+      'price_env_gold_monthly',
+    ]);
   });
 
   it('resolves the tier from planSlug and uses its catalog stripePriceId', async () => {
@@ -144,7 +150,9 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     const res = await checkout(user.id, { cadence: 'monthly', planSlug: 'gold' });
     expect(res.statusCode).toBe(201);
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_catalog_gold_monthly');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual([
+      'price_catalog_gold_monthly',
+    ]);
   });
 
   it('returns 404 for an unknown planSlug', async () => {

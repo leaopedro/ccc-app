@@ -40,6 +40,7 @@
 - `apps/mobile/src/screens/assinaturas/ContratarScreen.tsx`
 - `apps/mobile/src/screens/assinaturas/package-total.ts`
 - `apps/mobile/src/screens/assinaturas/package-total.test.ts`
+- `apps/mobile/src/screens/assinaturas/poll-subscription.ts`
 - `apps/mobile/src/screens/assinaturas/checkout.test.ts`
 - `apps/mobile/src/screens/assinaturas/TierCta.tsx`
 - `apps/mobile/src/hooks/usePremiumInvoices.ts`
@@ -2702,18 +2703,23 @@ Handler do CTA:
   };
 ```
 
-E o polling, no mesmo arquivo:
+E o polling, num módulo próprio porque a Task 13 usa o mesmo. Criar `apps/mobile/src/screens/assinaturas/poll-subscription.ts`:
 
-```tsx
-/**
- * The webhook is asynchronous — a closed browser does not prove payment.
- * Poll the subscription until it flips active. Mirrors the cadence of
- * app/(app)/events/buy/checkout-return.tsx.
- */
-const POLL_INTERVAL_MS = 2000;
-const POLL_MAX_ATTEMPTS = 15;
+```ts
+// Shared post-payment poller for the two checkout return paths (Android deep
+// link inside ContratarScreen, and the web checkout-return route).
+//
+// The webhook is asynchronous — a closed browser does not prove payment. Poll
+// until the membership flips active. Cadence mirrors
+// app/(app)/events/buy/checkout-return.tsx.
 
-async function pollSubscriptionActive(): Promise<boolean> {
+import { getMyPremiumSubscription } from '~/api/premium-catalog';
+
+export const POLL_INTERVAL_MS = 2000;
+export const POLL_MAX_ATTEMPTS = 15;
+
+/** Resolves true once the subscription is active, false when the attempts run out. */
+export async function pollSubscriptionActive(): Promise<boolean> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt += 1) {
     try {
       const sub = await getMyPremiumSubscription();
@@ -2726,6 +2732,8 @@ async function pollSubscriptionActive(): Promise<boolean> {
   return false;
 }
 ```
+
+`ContratarScreen.tsx` importa `pollSubscriptionActive` desse módulo. Não redeclarar o loop na tela.
 
 O estado `pending` renderiza `pendingTitle`, `pendingSubcopy` e um botão `pendingCta` que faz `router.replace('/assinaturas/minha-assinatura')`. O estado `confirming` renderiza `ActivityIndicator` mais `contratar.confirming`, no mesmo formato de `MinhaAssinaturaScreen.tsx:177-181`.
 
@@ -2771,7 +2779,7 @@ git commit -m "feat(mobile): tela de contratacao com montagem de pacote"
 - Create: `apps/mobile/app/(app)/assinaturas/checkout-return.tsx`
 
 **Interfaces:**
-- Consumes: `getMyPremiumSubscription`, `assinaturasCopy.contratar`.
+- Consumes: `pollSubscriptionActive` de `~/screens/assinaturas/poll-subscription` (Task 12), `assinaturasCopy.contratar`.
 - Produces: rota `/assinaturas/checkout-return`, que é o `successUrl` configurado na Task 4.
 
 - [ ] **Step 1: Escrever a tela**
@@ -2788,29 +2796,20 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getMyPremiumSubscription } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { pollSubscriptionActive } from '~/screens/assinaturas/poll-subscription';
 import { c } from '~/screens/assinaturas/tier-visual';
 
 const copy = assinaturasCopy.contratar;
-const POLL_INTERVAL_MS = 2000;
-const POLL_MAX_ATTEMPTS = 15;
 
 export default function CheckoutReturnRoute() {
   const [pending, setPending] = useState(false);
 
   const poll = useCallback(async () => {
-    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        const sub = await getMyPremiumSubscription();
-        if (sub.active) {
-          router.replace('/assinaturas/minha-assinatura');
-          return;
-        }
-      } catch {
-        // Transient failure — keep polling.
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    const active = await pollSubscriptionActive();
+    if (active) {
+      router.replace('/assinaturas/minha-assinatura');
+      return;
     }
     setPending(true);
   }, []);

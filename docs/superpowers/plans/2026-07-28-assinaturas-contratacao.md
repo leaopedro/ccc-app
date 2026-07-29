@@ -19,6 +19,8 @@
 - Nunca `npx turbo run build --force`. Buildar sequencialmente: `design` → `db` → `shared` → `api` → `admin`.
 - `pnpm lint` na raiz estoura heap. Lintar por pacote.
 - Testes de API usam Postgres real via Testcontainers. Nunca mock de banco.
+- Filtrar teste é `pnpm --filter @ccc/api test <padrão>`, **sem `--`**. Com `--` o vitest recebe o literal e roda a suite inteira: 214 arquivos, 1932 testes, cerca de 12 minutos. Medido em 2026-07-28.
+- O `pretest` do `@ccc/api` roda `prisma generate`, que renomeia `node_modules/.prisma/client/query_engine-windows.dll.node`. Nenhum outro processo Node pode ter essa DLL carregada. Na prática: o dev server da API precisa estar parado e nunca pode haver duas suites rodando ao mesmo tempo. Se houver, o teste morre com `EPERM: operation not permitted, rename` antes de rodar uma única asserção, e isso não é erro de código.
 - `resetDatabase()` não limpa `PremiumPlan` nem `PremiumAddonModule`. Cada arquivo de teste declara seu próprio `resetCatalog()`.
 - Estado de assinatura só muda por webhook verificado. Nenhuma rota de cliente escreve `PremiumMembership.status`.
 - Canon §F8.5: quem chama `applyMembershipEvent` já fez `SELECT id FROM "Garage" WHERE id = $garageId FOR UPDATE` na mesma transação.
@@ -348,7 +350,7 @@ describe('POST /api/me/premium/cancel', () => {
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-cancel`
+Run: `pnpm --filter @ccc/api test premium-cancel`
 Expected: FAIL. A rota não existe, então o primeiro caso volta 404 em vez de 401 e o resto quebra em `stripe.nextCancelledSubscription` indefinido.
 
 - [ ] **Step 3: Adicionar o método ao cliente Stripe**
@@ -487,7 +489,7 @@ Em `apps/api/src/routes/me-premium.ts`, depois do handler de `billing-portal`:
 
 - [ ] **Step 6: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-cancel`
+Run: `pnpm --filter @ccc/api test premium-cancel`
 Expected: PASS, 4 testes.
 
 - [ ] **Step 7: Commit**
@@ -633,7 +635,7 @@ describe('GET /api/me/premium/invoices', () => {
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-invoices`
+Run: `pnpm --filter @ccc/api test premium-invoices`
 Expected: FAIL com 404 em todos os casos. A rota não existe.
 
 - [ ] **Step 3: Escrever a rota**
@@ -698,7 +700,7 @@ Em `apps/api/src/routes/me-premium.ts`, adicionar `premiumInvoicesResponseSchema
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-invoices`
+Run: `pnpm --filter @ccc/api test premium-invoices`
 Expected: PASS, 3 testes.
 
 - [ ] **Step 5: Commit**
@@ -960,7 +962,7 @@ describe('POST /api/me/premium/checkout with add-ons', () => {
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-checkout-addons`
+Run: `pnpm --filter @ccc/api test premium-checkout-addons`
 Expected: FAIL. `priceIds` não existe no payload, `expireCheckoutSession` não existe, as urls ainda apontam para `/premium/success`.
 
 - [ ] **Step 3: Trocar `priceId` por `priceIds` e adicionar `expireCheckoutSession`**
@@ -1132,12 +1134,12 @@ Substituir o bloco `:242-262` por:
 
 - [ ] **Step 6: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-checkout-addons`
+Run: `pnpm --filter @ccc/api test premium-checkout-addons`
 Expected: PASS, 8 testes.
 
 - [ ] **Step 7: Rodar a suite de billing inteira**
 
-Run: `pnpm --filter @ccc/api test -- billing`
+Run: `pnpm --filter @ccc/api test billing`
 Expected: PASS. Se algum teste antigo asserta `priceId` no payload da sessão, atualizar para `priceIds` — a troca de contrato é intencional.
 
 - [ ] **Step 8: Commit**
@@ -1249,7 +1251,7 @@ describe('normalizeStripeEvent — invoice lines', () => {
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe-lines`
+Run: `pnpm --filter @ccc/api test normalize-stripe-lines`
 Expected: FAIL. `result.lines` é `undefined` e `tier` volta `'gold'`.
 
 - [ ] **Step 3: Estender os tipos do billing**
@@ -1396,7 +1398,7 @@ No ramo `tier_changed` (`:198-222`), trocar as três linhas de metadata por plac
 
 - [ ] **Step 5: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe-lines`
+Run: `pnpm --filter @ccc/api test normalize-stripe-lines`
 Expected: PASS, 2 testes.
 
 - [ ] **Step 6: Commit**
@@ -1528,7 +1530,7 @@ O `addonsAmountCents` e as linhas de `PremiumMembershipAddon` ficam para a Task 
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook`
+Run: `pnpm --filter @ccc/api test stripe-billing-webhook`
 Expected: FAIL. `tier` volta `'bronze'` (o placeholder) e `baseAmountCents` volta 0.
 
 - [ ] **Step 3: Escrever a resolução na rota**
@@ -1652,7 +1654,7 @@ Nota de escopo: a renovação patcha só o `pricing`. Add-on que muda entre cicl
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook`
+Run: `pnpm --filter @ccc/api test stripe-billing-webhook`
 Expected: PASS, incluindo o caso novo.
 
 Se `tier` ainda voltar `'bronze'`, o problema está no match: conferir que a seed usa `stripePriceId: 'price_plan_silver'` igual ao `price.id` do evento.
@@ -1840,7 +1842,7 @@ No mesmo `describe('multi-line invoice resolution')`, adicionar:
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook`
+Run: `pnpm --filter @ccc/api test stripe-billing-webhook`
 Expected: FAIL. `findUniqueOrThrow` do add-on estoura: nada foi criado.
 
 - [ ] **Step 3: Escrever a criação dos add-ons**
@@ -1906,7 +1908,7 @@ Depois do bloco de invoice e antes do snapshot do Garage (`:167`), inserir:
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook`
+Run: `pnpm --filter @ccc/api test stripe-billing-webhook`
 Expected: PASS, incluindo os três casos novos da Task 6 e 7.
 
 - [ ] **Step 5: Rodar a suite inteira e o typecheck**
@@ -1976,7 +1978,7 @@ Se `seedGoldPlan` ou `seedMembership` tiverem outra assinatura no arquivo, adapt
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-subscription`
+Run: `pnpm --filter @ccc/api test premium-subscription`
 Expected: FAIL. `benefits` é `undefined` e o `parse` do schema rejeita a resposta.
 
 - [ ] **Step 3: Incluir os campos no handler**
@@ -1999,7 +2001,7 @@ No caminho de "sem assinatura viva", devolver `planDescription: null` e `benefit
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-subscription`
+Run: `pnpm --filter @ccc/api test premium-subscription`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2052,7 +2054,7 @@ Em `apps/api/test/billing/premium-cancel.test.ts`, adicionar:
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-cancel`
+Run: `pnpm --filter @ccc/api test premium-cancel`
 Expected: FAIL. A sexta chamada volta 200.
 
 - [ ] **Step 3: Envelopar as rotas em escopos com rate limit**
@@ -2095,7 +2097,7 @@ Em `apps/api/src/routes/me-premium-addons.ts`, aplicar o mesmo padrão em `POST 
 
 - [ ] **Step 4: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-cancel`
+Run: `pnpm --filter @ccc/api test premium-cancel`
 Expected: PASS, 5 testes.
 
 - [ ] **Step 5: Rodar toda a suite de API**
@@ -2435,7 +2437,7 @@ describe('startPremiumCheckout', () => {
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/mobile test -- package-total checkout`
+Run: `pnpm --filter @ccc/mobile test package-total checkout`
 Expected: FAIL. `package-total` não existe e `startPremiumCheckout` ainda é síncrono e devolve `undefined`.
 
 - [ ] **Step 3: Escrever `package-total.ts`**
@@ -2518,7 +2520,7 @@ export async function startPremiumCheckout(input: {
 
 - [ ] **Step 5: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/mobile test -- package-total checkout`
+Run: `pnpm --filter @ccc/mobile test package-total checkout`
 Expected: PASS, 8 testes.
 
 - [ ] **Step 6: Corrigir o call-site antigo**

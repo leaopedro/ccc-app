@@ -8,14 +8,19 @@ const env = loadEnv();
 
 const seedMembership = async (
   garageId: string,
-  overrides: Partial<{ provider: 'stripe' | 'apple_revenuecat'; status: string }> = {},
+  overrides: Partial<{
+    provider: 'stripe' | 'apple_revenuecat';
+    status: string;
+    providerCustomerRef: string;
+    providerSubRef: string;
+  }> = {},
 ) =>
   prisma.premiumMembership.create({
     data: {
       garageId,
       provider: overrides.provider ?? 'stripe',
-      providerCustomerRef: 'cus_cancel_1',
-      providerSubRef: 'sub_cancel_1',
+      providerCustomerRef: overrides.providerCustomerRef ?? 'cus_cancel_1',
+      providerSubRef: overrides.providerSubRef ?? 'sub_cancel_1',
       tier: 'gold',
       cadence: 'monthly',
       status: (overrides.status ?? 'active') as 'active',
@@ -143,6 +148,54 @@ describe('POST /api/me/premium/cancel', () => {
 
     expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
     expect(codes[5]).toBe(429);
+    await app.close();
+  });
+
+  it('rate limits per user, not per IP: a throttled user does not block a different user', async () => {
+    // Regression guard for the key generator falling back to req.ip: if that
+    // happened, both users (same synthetic app.inject IP) would share one
+    // bucket and user B would also see 429. Both users are exercised against
+    // the SAME app instance so the rate-limit store's window is shared,
+    // which is the only way this test can distinguish a per-user key from a
+    // per-IP one.
+    const { app, stripe } = await makeAppWithFakeStripe();
+    stripe.nextCancelledSubscription = { cancelAtPeriodEnd: true };
+
+    const { user: userA } = await createUser({ email: 'rl-a@jdm.test' });
+    const garageA = await prisma.garage.findUniqueOrThrow({ where: { userId: userA.id } });
+    await seedMembership(garageA.id, {
+      providerCustomerRef: 'cus_cancel_a',
+      providerSubRef: 'sub_cancel_a',
+    });
+    const headersA = { authorization: bearer(env, userA.id) };
+
+    const codesA: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/me/premium/cancel',
+        headers: headersA,
+      });
+      codesA.push(res.statusCode);
+    }
+    expect(codesA.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(codesA[5]).toBe(429);
+
+    const { user: userB } = await createUser({ email: 'rl-b@jdm.test' });
+    const garageB = await prisma.garage.findUniqueOrThrow({ where: { userId: userB.id } });
+    await seedMembership(garageB.id, {
+      providerCustomerRef: 'cus_cancel_b',
+      providerSubRef: 'sub_cancel_b',
+    });
+    const headersB = { authorization: bearer(env, userB.id) };
+
+    const resB = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/cancel',
+      headers: headersB,
+    });
+    expect(resB.statusCode).toBe(200);
+
     await app.close();
   });
 });

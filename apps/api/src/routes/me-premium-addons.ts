@@ -21,7 +21,8 @@ import {
   attachAddonRequestSchema,
   mySubscriptionResponseSchema,
 } from '@ccc/shared/premium-subscription';
-import type { FastifyPluginAsync } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 
@@ -35,7 +36,6 @@ const LIVE_STATUSES = ['active', 'past_due', 'cancel_scheduled'] as const;
 /** Add-on statuses that still count as attached (billable or winding down). */
 const ATTACHED_ADDON_STATUSES = ['active', 'cancel_scheduled'] as const;
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /api/me/premium/subscription
@@ -159,7 +159,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
    * snapshotting the module's price/quota so later catalog edits don't change an
    * active add-on. Opens the first usage cycle aligned to the membership period.
    */
-  app.post('/api/me/premium/addons', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const attachAddonHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
       return reply
         .status(503)
@@ -312,7 +312,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         totalAmountCents: membership.baseAmountCents + result.addonsAmountCents,
       }),
     );
-  });
+  };
 
   /**
    * DELETE /api/me/premium/addons/:addonKey
@@ -406,4 +406,19 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
       );
     },
   );
+
+  // hook: 'preHandler' is required because the keyGenerator reads
+  // request.user, which only exists after app.authenticate runs. Without it
+  // the rate-limit plugin keys on the earlier onRequest hook and falls back
+  // to req.ip, rate-limiting every user behind one NAT as a single caller.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 20,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => `premium-addons:${req.user?.sub ?? req.ip}`,
+    });
+    scoped.post('/api/me/premium/addons', attachAddonHandler);
+  });
 };

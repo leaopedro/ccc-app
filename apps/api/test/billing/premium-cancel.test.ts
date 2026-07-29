@@ -121,4 +121,28 @@ describe('POST /api/me/premium/cancel', () => {
 
     await app.close();
   });
+
+  it('rate limits cancel at 5 requests per minute', async () => {
+    const { app, stripe } = await makeAppWithFakeStripe();
+    const { user } = await createUser({ email: 'rl@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id);
+    // currentPeriodEnd is not part of CancelSubscriptionAtPeriodEndResult (the
+    // route reads it from the DB row, not Stripe's response) — see the same
+    // note on the 'calls Stripe with cancel_at_period_end' test above.
+    stripe.nextCancelledSubscription = {
+      cancelAtPeriodEnd: true,
+    };
+    const headers = { authorization: bearer(env, user.id) };
+
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const res = await app.inject({ method: 'POST', url: '/api/me/premium/cancel', headers });
+      codes.push(res.statusCode);
+    }
+
+    expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(codes[5]).toBe(429);
+    await app.close();
+  });
 });

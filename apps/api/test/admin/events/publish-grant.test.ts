@@ -56,9 +56,14 @@ const seedActiveMember = async (email: string) => {
 
 describe('POST /admin/events/:id/publish — premium-grant hook', () => {
   let app: FastifyInstance;
+  // Captured per-test (not at module-eval time) so this file is self-healing
+  // regardless of what any earlier file in the shared test process left
+  // behind — see test/setup.ts for the process-wide baseline.
+  let originalBillingFlag: string | undefined;
 
   beforeEach(async () => {
     await resetDatabase();
+    originalBillingFlag = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'true';
     app = await makeApp();
   });
@@ -66,7 +71,11 @@ describe('POST /admin/events/:id/publish — premium-grant hook', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
-    process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'false';
+    if (originalBillingFlag === undefined) {
+      delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+    } else {
+      process.env.GROWTH_PREMIUM_BILLING_ENABLED = originalBillingFlag;
+    }
   });
 
   it('publish tx commits and returns 200 even if grant job throws (fire-and-forget)', async () => {

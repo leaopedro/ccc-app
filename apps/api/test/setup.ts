@@ -12,3 +12,15 @@ process.env.STRIPE_WEBHOOK_SECRET = 'test_stripe_webhook_secret_32_chars_min_xx'
 process.env.TICKET_CODE_SECRET = 'test_ticket_code_secret_32_chars_min_xx';
 process.env.FIELD_ENCRYPTION_KEY = 'ab'.repeat(32);
 process.env.MFA_ENCRYPTION_KEY = 'test-mfa-encryption-key-32chars!!';
+
+// vitest.config.ts runs this suite with pool 'forks' + singleFork: true, so
+// every test file shares one process.env. GROWTH_PREMIUM_BILLING_ENABLED is
+// mutated directly by several billing test files, and env.ts defaults it to
+// true only when the var is ABSENT — so a file that sets it and forgets (or
+// is unable) to restore it leaks that value into every later file. Deleting
+// it here, before each test file's module graph loads, re-establishes the
+// "fresh process" baseline (flag absent -> defaults true) regardless of what
+// any prior file in this run left behind. Do not replace this with a fixed
+// 'true'/'false' assignment — deletion is what reproduces the unset-default
+// behavior tests rely on.
+delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;

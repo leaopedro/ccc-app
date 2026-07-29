@@ -66,8 +66,17 @@ async function handleActivated(
     pricing,
     invoice,
     addons,
-    addonsAmountCents,
   } = evt;
+
+  // Fix round 1, finding 5: `evt.addonsAmountCents` is the route's raw sum of
+  // Stripe invoice line amounts (proration/discount included) — a one-off
+  // number that means nothing added to baseAmountCents, which is the catalog
+  // LIST price. Every other writer of this column (reconcileMembershipAddonsAmount
+  // below, and the attach/detach routes in me-premium-addons.ts) sums the
+  // catalog's monthlyDeltaCents across active add-ons instead. Match them here
+  // so a later customer.subscription.updated reconciliation doesn't silently
+  // "correct" a value we just wrote.
+  const addonsAmountCents = addons.reduce((sum, a) => sum + a.monthlyDeltaCents, 0);
 
   // Stripe webhooks are NOT order-guaranteed: a delayed activation can arrive
   // AFTER a later renewal updated currentPeriodEnd forward. Read the existing
@@ -172,51 +181,84 @@ async function handleActivated(
   // no external call inside the tx. The route resolved these against the
   // catalog; price/quota here are snapshots.
   //
+  // Fix round 1, finding 2: gated on didAdvancePeriod, exactly like the Garage
+  // snapshot below — same rationale. A stale (out-of-order) activation replay
+  // carries an older snapshot of the subscription's add-on lines by
+  // construction; writing add-on rows from it could resurrect a module the
+  // member has since cancelled (and Stripe has since removed the
+  // subscription item for), pointing providerItemRef at a deleted item and
+  // handing out quota nobody is paying for. Skipping it here mirrors the
+  // "do not regress" treatment pricing/period already get in this branch, and
+  // it also fixes finding 3: since this only runs on the create/forward-advance
+  // branches, `membership.currentPeriodStart/currentPeriodEnd` below are always
+  // this event's period, never a stale one.
+  //
   // Upsert, not create: @@unique([membershipId, addonKey]) has no status filter,
   // so re-subscribing a module that was previously cancelled would otherwise
   // violate the constraint.
-  for (const addon of addons) {
-    const addonRow = await tx.premiumMembershipAddon.upsert({
-      where: {
-        membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
-      },
-      create: {
-        membershipId: membership.id,
-        addonKey: addon.addonKey,
-        status: 'active',
-        providerItemRef: addon.providerItemRef,
-        monthlyDeltaCents: addon.monthlyDeltaCents,
-        quotaPerCycle: addon.quotaPerCycle,
-        quotaUnit: addon.quotaUnit,
-        currency: addon.currency,
-      },
-      update: {
-        status: 'active',
-        providerItemRef: addon.providerItemRef,
-        monthlyDeltaCents: addon.monthlyDeltaCents,
-        quotaPerCycle: addon.quotaPerCycle,
-        quotaUnit: addon.quotaUnit,
-        currency: addon.currency,
-      },
-    });
-
-    // One usage row per cycle. Upsert keeps an activation replay idempotent
-    // without clobbering quotaUsed.
-    await tx.premiumAddonUsage.upsert({
-      where: {
-        membershipAddonId_cycleStart: {
-          membershipAddonId: addonRow.id,
-          cycleStart: currentPeriodStart,
+  //
+  // Fix round 1, finding 4: no SAVEPOINT here, unlike the invoice insert above.
+  // The invoice insert needs one because a P2002 there is an EXPECTED, routine
+  // replay outcome that must be swallowed so the rest of the tx (snapshot + XP)
+  // can still run. There is no equivalent "expected duplicate" case for the
+  // add-on upsert — if it ever throws (whatever the cause), letting it abort
+  // the whole transaction is the correct, safe outcome: nothing has committed,
+  // and Stripe's automatic retry re-runs handleActivated from a clean read.
+  // Two claims this comment does NOT make, on purpose: (1) the caller's Garage
+  // `FOR UPDATE` lock does NOT serialize this against a member's own
+  // attach/detach — `me-premium-addons.ts` takes no Garage lock at all, so it
+  // only protects webhook-vs-webhook, never webhook-vs-attach/detach; (2)
+  // whether Prisma compiles this compound-unique upsert to a single atomic
+  // `INSERT ... ON CONFLICT DO UPDATE` on Postgres, or falls back to
+  // read-then-write, was not verified here. Either way the transaction-abort
+  // fallback above makes a savepoint unnecessary regardless of which one it is.
+  if (didAdvancePeriod) {
+    for (const addon of addons) {
+      const addonRow = await tx.premiumMembershipAddon.upsert({
+        where: {
+          membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
         },
-      },
-      create: {
-        membershipAddonId: addonRow.id,
-        cycleStart: currentPeriodStart,
-        cycleEnd: currentPeriodEnd,
-        quotaTotal: addon.quotaPerCycle,
-      },
-      update: {},
-    });
+        create: {
+          membershipId: membership.id,
+          addonKey: addon.addonKey,
+          status: 'active',
+          providerItemRef: addon.providerItemRef,
+          monthlyDeltaCents: addon.monthlyDeltaCents,
+          quotaPerCycle: addon.quotaPerCycle,
+          quotaUnit: addon.quotaUnit,
+          currency: addon.currency,
+        },
+        update: {
+          status: 'active',
+          providerItemRef: addon.providerItemRef,
+          monthlyDeltaCents: addon.monthlyDeltaCents,
+          quotaPerCycle: addon.quotaPerCycle,
+          quotaUnit: addon.quotaUnit,
+          currency: addon.currency,
+        },
+      });
+
+      // One usage row per cycle. Upsert keeps an activation replay idempotent
+      // without clobbering quotaUsed. Fix round 1, finding 3: cycle bounds
+      // come from the membership row itself, not the event locals — identical
+      // to evt.currentPeriodStart/End on both branches that reach this block,
+      // but anchored to the row that is the actual source of truth.
+      await tx.premiumAddonUsage.upsert({
+        where: {
+          membershipAddonId_cycleStart: {
+            membershipAddonId: addonRow.id,
+            cycleStart: membership.currentPeriodStart,
+          },
+        },
+        create: {
+          membershipAddonId: addonRow.id,
+          cycleStart: membership.currentPeriodStart,
+          cycleEnd: membership.currentPeriodEnd,
+          quotaTotal: addon.quotaPerCycle,
+        },
+        update: {},
+      });
+    }
   }
 
   // Garage snapshot — max() rule (canon §F8.3).

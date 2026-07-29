@@ -1298,6 +1298,14 @@ describe('multi-line invoice resolution', () => {
     const { user } = await createUser({ email: 'readd@jdm.test' });
     const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
 
+    // Fix round 1, finding 1: the incoming invoice's period (period_start
+    // 1767225600 / period_end 1769904000 below) decodes to
+    // 2026-01-01T00:00:00.000Z .. 2026-02-01T00:00:00.000Z. This membership's
+    // period must end strictly BEFORE that for the event to land on the
+    // forward-advance branch — the re-subscribe case this test's title
+    // promises — rather than the stale-replay branch. The stale-replay case
+    // (a cancelled add-on must NOT be resurrected by an out-of-order event)
+    // is covered separately by the next test below.
     const stale = await prisma.premiumMembership.create({
       data: {
         garageId: garage.id,
@@ -1307,8 +1315,8 @@ describe('multi-line invoice resolution', () => {
         tier: 'silver',
         cadence: 'monthly',
         status: 'expired',
-        currentPeriodStart: new Date('2026-01-01T00:00:00.000Z'),
-        currentPeriodEnd: new Date('2026-02-01T00:00:00.000Z'),
+        currentPeriodStart: new Date('2025-12-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-01-01T00:00:00.000Z'),
         cancelAtPeriodEnd: false,
         baseAmountCents: 89000,
         devFeePercent: 10,
@@ -1376,6 +1384,118 @@ describe('multi-line invoice resolution', () => {
     });
     expect(addon.status).toBe('active');
     expect(addon.providerItemRef).toBe('si_addon_3');
+    await app.close();
+  });
+
+  // Fix round 1, findings 1 and 2: an adversarial review found that the
+  // add-on loop used to run unconditionally, including on the stale-replay
+  // branch. A delayed/duplicate activation webhook carrying an OLDER period
+  // than the membership's current one would then resurrect a cancelled
+  // add-on and overwrite providerItemRef with a subscription item the detach
+  // route already deleted on Stripe's side — quota nobody is paying for.
+  // This asserts the fix: gating the add-on loop on didAdvancePeriod, exactly
+  // like the Garage snapshot immediately below it in handleActivated.
+  it('does not resurrect a cancelled add-on on a stale (out-of-order) activation replay', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'staleaddon@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+    // Membership already advanced past the incoming event's period — e.g. a
+    // later renewal or activation already landed before this delayed replay
+    // arrives.
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_ml_4',
+        providerSubRef: 'sub_ml_4',
+        tier: 'silver',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-02-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-03-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+        baseAmountCents: 89000,
+        devFeePercent: 10,
+        devFeeAmountCents: 8900,
+        grossAmountCents: 97900,
+        currency: 'BRL',
+      },
+    });
+    const cancelledAddon = await prisma.premiumMembershipAddon.create({
+      data: {
+        membershipId: membership.id,
+        addonKey: 'detailing',
+        status: 'cancelled',
+        providerItemRef: 'si_addon_stale_old',
+        monthlyDeltaCents: 15000,
+        quotaPerCycle: 3,
+        quotaUnit: 'access',
+        currency: 'BRL',
+      },
+    });
+
+    stripe.customers.set('cus_ml_4', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_4',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_4',
+          subscription: 'sub_ml_4',
+          customer: 'cus_ml_4',
+          billing_reason: 'subscription_create',
+          amount_paid: 113900,
+          currency: 'brl',
+          // Decodes to 2026-01-01T00:00:00.000Z .. 2026-02-01T00:00:00.000Z —
+          // strictly BEFORE membership.currentPeriodEnd (2026-03-01), so this
+          // is a genuine stale/out-of-order replay.
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_plan_4',
+              },
+              {
+                price: { id: 'price_addon_detailing', metadata: {} },
+                amount: 15000,
+                subscription_item: 'si_addon_stale_new',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
+      where: { id: cancelledAddon.id },
+    });
+    expect(addon.status).toBe('cancelled');
+    expect(addon.providerItemRef).toBe('si_addon_stale_old');
+
+    const usageCount = await prisma.premiumAddonUsage.count({
+      where: { membershipAddonId: cancelledAddon.id },
+    });
+    expect(usageCount).toBe(0);
+
+    const reloaded = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membership.id },
+    });
+    expect(reloaded.addonsAmountCents).toBe(0);
+
     await app.close();
   });
 });

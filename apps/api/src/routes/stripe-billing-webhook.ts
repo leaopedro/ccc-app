@@ -131,7 +131,6 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
     : undefined;
 
   const addons: BillingAddonLine[] = [];
-  let addonsAmountCents = 0;
   for (const line of lines) {
     const mod = addonModules.find((m) => m.stripePriceId === line.priceRef);
     if (!mod) continue;
@@ -143,7 +142,6 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
       quotaUnit: mod.quotaUnit,
       currency: mod.currency,
     });
-    addonsAmountCents += line.amountCents;
   }
 
   const devFeePercent = parseDevFeePercent(planLine?.metadata.devFeePercent);
@@ -155,7 +153,15 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
     devFeePercent,
     devFeeAmountCents: Math.round((baseAmountCents * devFeePercent) / 100),
     addons,
-    addonsAmountCents,
+    // Fix round 1, finding 5: this used to sum the raw Stripe invoice line
+    // amounts (proration/discount included) for add-on lines. Nothing reads
+    // it anymore — handleActivated now derives its own addonsAmountCents from
+    // the resolved add-ons' catalog monthlyDeltaCents (matching
+    // reconcileMembershipAddonsAmount and the attach/detach routes), which is
+    // the only place BillingEvent.addonsAmountCents was ever consumed. The
+    // field stays 0 here rather than being removed because BillingEvent still
+    // requires it (types.ts is out of scope for this task); it is vestigial.
+    addonsAmountCents: 0,
   };
 };
 

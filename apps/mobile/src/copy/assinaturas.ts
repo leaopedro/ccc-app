@@ -37,9 +37,29 @@ export const assinaturasCopy = {
     cta: 'ASSINAR',
     notFound: 'Plano não encontrado.',
   },
-  // Contratação stub — real checkout is P5 (see screens/assinaturas/checkout.ts).
-  checkout: {
-    comingSoon: 'Contratação em breve.',
+  contratar: {
+    header: 'CONTRATAR',
+    back: 'Voltar',
+    planLabel: 'PLANO ESCOLHIDO',
+    modulesTitle: 'MÓDULOS ADICIONAIS',
+    modulesSubcopy: 'Opcionais. Você pode adicionar ou remover depois.',
+    add: 'ADICIONAR',
+    remove: 'REMOVER',
+    quotaAccess: (n: number) => `${n} acessos por mês`,
+    quotaHours: (n: number) => `${n} horas por mês`,
+    summaryBase: 'Mensalidade base',
+    summaryModules: 'Módulos',
+    summaryTotal: 'Total por mês',
+    cta: 'IR PARA O PAGAMENTO',
+    ctaLoading: 'PROCESSANDO...',
+    confirming: 'Confirmando pagamento...',
+    pendingTitle: 'Pagamento em processamento.',
+    pendingSubcopy: 'Assim que o pagamento for confirmado sua assinatura aparece aqui.',
+    pendingCta: 'VER MINHA ASSINATURA',
+    successToast: 'Assinatura ativada.',
+    errorGeneric: 'Não foi possível iniciar o pagamento. Tente novamente.',
+    iosTitle: 'Contratação pelo site.',
+    iosSubcopy: 'No iPhone a contratação é feita pelo site da Casa Car Club.',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -68,6 +88,29 @@ export const assinaturasCopy = {
     // Billing switched off (flag / 503).
     unavailableTitle: 'Assinaturas em breve.',
     unavailableSubcopy: 'A contratação de planos ainda não está disponível. Volte em breve.',
+    benefitsTitle: 'O QUE ESTÁ INCLUÍDO',
+    seeAllPlans: 'VER TODOS OS PLANOS',
+    historico: {
+      title: 'HISTÓRICO DE COBRANÇAS',
+      empty: 'Nenhuma cobrança ainda.',
+      error: 'Não foi possível carregar o histórico.',
+      refunded: 'Estornado',
+      paidAt: (date: string) => `Pago em ${date}`,
+    },
+    cancelar: {
+      trigger: 'Cancelar assinatura',
+      sheetTitle: 'Cancelar assinatura',
+      body: (date: string) =>
+        `Sua assinatura continua ativa até ${date}. Depois dessa data você perde os benefícios e os módulos contratados.`,
+      keep: 'MANTER ASSINATURA',
+      confirm: 'CANCELAR ASSINATURA',
+      loading: 'CANCELANDO...',
+      successToast: 'Cancelamento agendado.',
+      error: 'Não foi possível cancelar. Tente novamente.',
+      appleTitle: 'Assinatura pela App Store',
+      appleBody: 'Esta assinatura foi contratada pela App Store. O cancelamento é feito por lá.',
+      appleCta: 'ABRIR APP STORE',
+    },
   },
 } as const;
 

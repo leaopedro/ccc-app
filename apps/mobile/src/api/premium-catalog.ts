@@ -15,7 +15,9 @@ import {
 } from '@ccc/shared/premium-catalog';
 import {
   mySubscriptionResponseSchema,
+  premiumInvoicesResponseSchema,
   type MySubscriptionResponse,
+  type PremiumInvoicesResponse,
 } from '@ccc/shared/premium-subscription';
 import type { z } from 'zod';
 
@@ -26,6 +28,7 @@ const planListSchema = premiumPlanListResponseSchema as z.ZodType<PremiumPlanLis
 const addonListSchema =
   premiumAddonModuleListResponseSchema as z.ZodType<PremiumAddonModuleListResponse>;
 const subscriptionSchema = mySubscriptionResponseSchema as z.ZodType<MySubscriptionResponse>;
+const invoicesSchema = premiumInvoicesResponseSchema as z.ZodType<PremiumInvoicesResponse>;
 
 export const listPremiumPlans = (): Promise<PremiumPlanListResponse> =>
   request('/api/plans', planListSchema);
@@ -38,3 +41,6 @@ export const listPremiumAddonModules = (): Promise<PremiumAddonModuleListRespons
 
 export const getMyPremiumSubscription = (): Promise<MySubscriptionResponse> =>
   authedRequest('/api/me/premium/subscription', subscriptionSchema);
+
+export const listPremiumInvoices = (): Promise<PremiumInvoicesResponse> =>
+  authedRequest('/api/me/premium/invoices', invoicesSchema);

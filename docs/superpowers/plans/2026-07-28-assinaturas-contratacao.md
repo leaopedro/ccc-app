@@ -18,6 +18,7 @@
 - Depois de qualquer mudança em `packages/shared`: `pnpm --filter @ccc/shared build`. Canon §F8.13.
 - Nunca `npx turbo run build --force`. Buildar sequencialmente: `design` → `db` → `shared` → `api` → `admin`.
 - `pnpm lint` na raiz estoura heap. Lintar por pacote.
+- **O CI roda `pnpm lint` E `pnpm format:check` (`.github/workflows/ci.yml:60,62`).** Typecheck e teste verdes não bastam: um arquivo fora do padrão do prettier reprova o build. Rodar `pnpm --filter <pacote> lint` e `npx prettier --check <arquivos tocados>` antes de cada commit. Descoberto na Task 6, quando um commit verde em teste e typecheck quebrou o CI.
 - Testes de API usam Postgres real via Testcontainers. Nunca mock de banco.
 - Filtrar teste é `pnpm --filter @ccc/api test <padrão>`, **sem `--`**. Com `--` o vitest recebe o literal e roda a suite inteira: 214 arquivos, 1932 testes, cerca de 12 minutos. Medido em 2026-07-28.
 - O `pretest` do `@ccc/api` roda `prisma generate`, que renomeia `node_modules/.prisma/client/query_engine-windows.dll.node`. Nenhum outro processo Node pode ter essa DLL carregada. Na prática: o dev server da API precisa estar parado e nunca pode haver duas suites rodando ao mesmo tempo. Se houver, o teste morre com `EPERM: operation not permitted, rename` antes de rodar uma única asserção, e isso não é erro de código.
@@ -3454,6 +3455,8 @@ git commit -m "docs: passo a passo dos price ids de assinatura multi-tier"
 - [ ] `pnpm --filter @ccc/mobile test` verde
 - [ ] `pnpm --filter @ccc/mobile typecheck` verde
 - [ ] `pnpm --filter @ccc/mobile lint` verde
+- [ ] `pnpm --filter @ccc/api lint` verde
+- [ ] `pnpm format:check` verde na raiz. O CI roda isso e ele reprova independente de teste e typecheck
 - [ ] `pnpm --filter @ccc/ui typecheck` verde
 - [ ] `pnpm --filter @ccc/admin typecheck` verde
 - [ ] `git diff --stat packages/db/prisma/schema.prisma` vazio. Zero migrations é requisito, não meta.

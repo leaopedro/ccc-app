@@ -1408,7 +1408,7 @@ git add apps/api/src/services/billing/types.ts apps/api/src/services/billing/nor
 git commit -m "fix(api): normalizer devolve linhas da fatura e remove tierFromPrice hardcoded"
 ```
 
-Nota: `pnpm --filter @ccc/api typecheck` vai falhar aqui, na rota do webhook e em `apply-membership-event`, porque os campos novos são obrigatórios. As Tasks 6 e 7 fecham isso. É o único ponto do plano onde o typecheck fica vermelho entre tasks.
+Nota, **corrigida em 2026-07-29 depois de medir**: `pnpm --filter @ccc/api typecheck` fica vermelho aqui, mas NÃO onde este plano previa. `stripe-billing-webhook.ts` e `apply-membership-event.ts` têm zero erros: a rota faz `const billingEvt: BillingEvent = normalized`, que é atribuição e só checa assinabilidade estrutural, e o `apply` nunca constrói literal, só destrutura via `Extract`. Os 18 erros reais ficam em `normalize-revenuecat.ts` (6, produção), `billing-reconcile.ts` (2, produção) e quatro arquivos de teste. As Tasks 6 e 7 não fecham nenhum deles. Quem fecha é a Task 19, que por isso roda ANTES da Task 6.
 
 ---
 
@@ -1523,10 +1523,73 @@ describe('multi-line invoice resolution', () => {
     expect(membership.devFeeAmountCents).toBe(8900);
     await app.close();
   });
+
+  it('refuses to activate when no catalog plan price matches the invoice', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'catalogmiss@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ml_miss', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_miss',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_miss',
+          subscription: 'sub_ml_miss',
+          customer: 'cus_ml_miss',
+          billing_reason: 'subscription_create',
+          amount_paid: 89000,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                // Not in the catalog: an operator forgot to paste this price id.
+                price: { id: 'price_never_registered', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_orphan',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    // 200 on purpose: Stripe must NOT redeliver, the fix is an operator action.
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ignored: true, reason: 'unknown-plan-price' });
+
+    // The placeholder tier is a valid enum value, so the real assertion is that
+    // NO membership was created rather than that some tier was written.
+    const membership = await prisma.premiumMembership.findUnique({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_miss' } },
+    });
+    expect(membership).toBeNull();
+
+    // The event is marked processed so a replay short-circuits instead of 503ing.
+    const evtRow = await prisma.subscriptionWebhookEvent.findUniqueOrThrow({
+      where: { provider_providerEventId: { provider: 'stripe', providerEventId: 'evt_ml_miss' } },
+    });
+    expect(evtRow.processedAt).not.toBeNull();
+
+    await app.close();
+  });
 });
 ```
 
 O `addonsAmountCents` e as linhas de `PremiumMembershipAddon` ficam para a Task 7: são escrita, não resolução.
+
+O segundo teste é a rede de segurança do risco herdado da Task 5: o placeholder de `tier` é `'bronze'`, um valor válido do enum, então sem essa guarda um cliente Ouro pagante seria gravado como Bronze e nada falharia.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
@@ -1615,11 +1678,39 @@ Logo depois de `const billingEvt: BillingEvent = normalized;` (`:268`), inserir:
     // same spirit as the garageId patch below.
     if (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') {
       const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+
+      // The normalizer's tier placeholder is a VALID enum value ('bronze'), so a
+      // silent fall-through would provision a paying gold customer as bronze and
+      // nothing would fail. Refuse to activate on an unresolved plan line instead.
+      // Decision 2026-07-29: ignore + alert. Stripe must NOT redeliver, because
+      // the fix is an operator action in the admin catalog, not a transient error.
+      if (billingEvt.kind === 'subscription.activated' && !resolved.tier) {
+        await prisma.subscriptionWebhookEvent.update({
+          where: { id: webhookEventId },
+          data: { processedAt: new Date() },
+        });
+        request.log.error(
+          { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+          'stripe-billing webhook: no catalog plan price matched the invoice, refusing to activate',
+        );
+        Sentry.captureMessage(
+          'stripe-billing webhook: invoice.paid with no matching PremiumPlanPrice, activation refused',
+          {
+            level: 'error',
+            tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
+            extra: { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+          },
+        );
+        return reply
+          .status(200)
+          .send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
+      }
+
       billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
       billingEvt.pricing.devFeePercent = resolved.devFeePercent;
       billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
       if (billingEvt.kind === 'subscription.activated') {
-        if (resolved.tier) billingEvt.tier = resolved.tier;
+        billingEvt.tier = resolved.tier;
         billingEvt.addons = resolved.addons;
         billingEvt.addonsAmountCents = resolved.addonsAmountCents;
       }

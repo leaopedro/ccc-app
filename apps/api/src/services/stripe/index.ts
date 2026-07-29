@@ -97,6 +97,16 @@ export type RemoveSubscriptionItemInput = {
  * Schedule cancellation at the end of the current paid period. Never cancels
  * immediately: canon §F8.10 keeps entitlement alive until periodEnd. The DB is
  * written by the resulting customer.subscription.updated webhook, not here.
+ *
+ * Deliberately does NOT return a period-end date. `current_period_end` is a
+ * per-SubscriptionItem field in Stripe SDK 2026-04-22.dahlia, not a
+ * subscription-wide one, and once a subscription carries add-on items
+ * (multi-item subscriptions, see addSubscriptionItem) there is no
+ * contractually-ordered "the plan item" to read it off safely. Scheduling a
+ * cancellation does not move the period boundary anyway, so callers that need
+ * the date should read `PremiumMembership.currentPeriodEnd` — the row this
+ * repo's canon already treats as the source of truth, kept in sync by the
+ * verified customer.subscription.updated webhook.
  */
 export type CancelSubscriptionAtPeriodEndInput = {
   subscriptionId: string;
@@ -105,7 +115,6 @@ export type CancelSubscriptionAtPeriodEndInput = {
 
 export type CancelSubscriptionAtPeriodEndResult = {
   cancelAtPeriodEnd: boolean;
-  currentPeriodEnd: Date;
 };
 
 export type StripeClient = {
@@ -440,23 +449,17 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       );
     },
     cancelSubscriptionAtPeriodEnd: async ({ subscriptionId, idempotencyKey }) => {
+      // Only cancel_at_period_end is read back. current_period_end is
+      // intentionally NOT sourced from Stripe here — see the doc comment on
+      // CancelSubscriptionAtPeriodEndResult for why (per-item field, no safe
+      // "the plan item" index once add-ons attach to the subscription).
       const sub = await stripe.subscriptions.update(
         subscriptionId,
         { cancel_at_period_end: true },
         { idempotencyKey },
       );
-      // Stripe SDK 2026-04-22 dahlia exposes current_period_end on
-      // SubscriptionItem, not Subscription (see billing-reconcile.ts). Read
-      // the first item's bracket, matching the reconcile worker's pattern.
-      const item = sub.items.data[0];
-      const itemPeriodEnd =
-        item && typeof item.current_period_end === 'number' ? item.current_period_end : null;
-      if (itemPeriodEnd === null) {
-        throw new Error(`stripe subscription ${subscriptionId} missing item current_period_end`);
-      }
       return {
         cancelAtPeriodEnd: sub.cancel_at_period_end,
-        currentPeriodEnd: new Date(itemPeriodEnd * 1000),
       };
     },
   };

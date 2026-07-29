@@ -63,9 +63,11 @@ describe('POST /api/me/premium/cancel', () => {
     const { user } = await createUser({ email: 'cancel@jdm.test' });
     const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
     const membership = await seedMembership(garage.id);
+    // currentPeriodEnd is no longer part of Stripe's response shape (it is a
+    // per-item field, not subscription-wide); the route reads the date off
+    // the DB row instead, so only cancelAtPeriodEnd is stubbed here.
     stripe.nextCancelledSubscription = {
       cancelAtPeriodEnd: true,
-      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
     };
 
     const res = await app.inject({

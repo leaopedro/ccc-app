@@ -107,7 +107,6 @@ export const buildFakeStripe = (): FakeStripe => {
     nextRemoveSubscriptionItemError: null,
     nextCancelledSubscription: {
       cancelAtPeriodEnd: true,
-      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {

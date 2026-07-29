@@ -369,7 +369,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
     const membership = await prisma.premiumMembership.findFirst({
       where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-      select: { id: true, provider: true, providerSubRef: true },
+      select: { id: true, provider: true, providerSubRef: true, currentPeriodEnd: true },
     });
     if (!membership) {
       return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
@@ -388,9 +388,14 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       idempotencyKey: `cancel_sub_${membership.id}`,
     });
 
+    // currentPeriodEnd comes from the DB row, not Stripe's response.
+    // Scheduling a cancellation does not move the period boundary, and the
+    // row is this repo's source of truth for subscription state (kept in
+    // sync by the verified customer.subscription.updated webhook) — see the
+    // doc comment on CancelSubscriptionAtPeriodEndResult.
     return reply.status(200).send({
       cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-      currentPeriodEnd: result.currentPeriodEnd.toISOString(),
+      currentPeriodEnd: membership.currentPeriodEnd.toISOString(),
     });
   });
 

@@ -1,9 +1,9 @@
 // Assinaturas — plan detail screen.
 //
 // Fetches GET /api/plans/:slug and renders full benefits + monthly price + the
-// "Assinar" CTA. The CTA is an HONEST contratação stub (see checkout.ts) — real
-// multi-tier checkout is P5. Data source is the API; presentation reuses the
-// shared handoff palette + tier treatment (tier-visual.ts).
+// "Assinar" CTA. The CTA navigates to the contratação screen, which owns the
+// real checkout seam (checkout.ts). Data source is the API; presentation
+// reuses the shared handoff palette + tier treatment (tier-visual.ts).
 
 import type { PremiumPlan } from '@ccc/shared/premium-catalog';
 import { ArrowLeft, Check } from 'lucide-react-native';
@@ -16,7 +16,6 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { formatBRL } from '~/lib/format';
-import { startPremiumCheckout } from '~/screens/assinaturas/checkout';
 import {
   c,
   monthlyPriceCents,
@@ -171,11 +170,11 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
         </View>
       </ScrollView>
 
-      {/* Sticky CTA — contratação stub (P5 replaces startPremiumCheckout). */}
+      {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam). */}
       <View style={styles.ctaBar}>
         {t.btnBg === 'gradient' ? (
           <Pressable
-            onPress={() => startPremiumCheckout(plan.slug)}
+            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
             accessibilityRole="button"
             accessibilityLabel={assinaturasCopy.detail.cta}
             style={styles.ctaGradient}
@@ -193,7 +192,7 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => startPremiumCheckout(plan.slug)}
+            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
             accessibilityRole="button"
             accessibilityLabel={assinaturasCopy.detail.cta}
             style={[styles.cta, { borderColor: t.btnBorder }]}

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
-// PlanoDetalheScreen tests. getPremiumPlan is mocked; the CTA fires the honest
-// contratação stub (showToast) — no purchase is made.
+// PlanoDetalheScreen tests. getPremiumPlan is mocked; the CTA navigates to the
+// contratação screen (which owns the real checkout seam) — no purchase is
+// made from this screen.
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -13,13 +14,12 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-const showToast = vi.fn();
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlan>>();
+const routerPush = vi.fn();
 
 vi.mock('~/api/premium-catalog', () => ({
   getPremiumPlan: (slug: string) => getPremiumPlan(slug),
 }));
-vi.mock('~/lib/toast', () => ({ showToast }));
 
 vi.mock('react-native', async () => {
   const ReactMod = await import('react');
@@ -100,7 +100,7 @@ vi.mock('lucide-react-native', async () => {
 });
 
 vi.mock('expo-router', () => ({
-  router: { canGoBack: () => true, back: vi.fn(), replace: vi.fn(), push: vi.fn() },
+  router: { canGoBack: () => true, back: vi.fn(), replace: vi.fn(), push: routerPush },
 }));
 
 const SAMPLE: PremiumPlan = {
@@ -127,7 +127,7 @@ describe('PlanoDetalheScreen', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    showToast.mockClear();
+    routerPush.mockClear();
     getPremiumPlan.mockReset();
     getPremiumPlan.mockResolvedValue(SAMPLE);
   });
@@ -158,7 +158,7 @@ describe('PlanoDetalheScreen', () => {
     expect(text.indexOf('Acesso 24h')).toBeLessThan(text.indexOf('Concierge dedicado'));
   });
 
-  it('fires the contratação stub toast (no purchase) when Assinar is tapped', async () => {
+  it('navigates to the contratação screen (no purchase here) when Assinar is tapped', async () => {
     await renderScreen();
     const cta = container.querySelector('[data-testid="detalhe-assinar"]') as HTMLElement | null;
     if (!cta) throw new Error('CTA not rendered');
@@ -166,8 +166,8 @@ describe('PlanoDetalheScreen', () => {
       cta.click();
       await flush();
     });
-    expect(showToast).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith('Contratação em breve.');
+    expect(routerPush).toHaveBeenCalledTimes(1);
+    expect(routerPush).toHaveBeenCalledWith('/assinaturas/contratar?slug=fundador');
   });
 
   it('shows a not-found state when the plan is missing', async () => {

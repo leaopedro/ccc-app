@@ -282,17 +282,35 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       });
 
       // A stale open session holds the previous package. Expire it so the member
-      // is not pushed back into a selection they abandoned.
+      // is not pushed back into a selection they abandoned. This is best-effort
+      // housekeeping, not a precondition for minting a new session: Stripe 400s
+      // (invalid_request) if the session already closed between our list call
+      // and this expire (e.g. the member paid in another tab), and any outage
+      // here must not block a member who otherwise has a valid checkout ahead
+      // of them. Swallow and log per session instead of letting it escape to a
+      // raw 500.
       const openSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
       for (const open of openSessions) {
-        await app.stripe.expireCheckoutSession(open.id);
+        try {
+          await app.stripe.expireCheckoutSession(open.id);
+        } catch (err) {
+          request.log.warn(
+            { err, sessionId: open.id },
+            'me-premium: failed to expire a stale checkout session; continuing anyway',
+          );
+        }
       }
 
-      // The key must cover the whole package: same garage + cadence with a
-      // different plan or module set is a genuinely different session, and
-      // Stripe rejects a reused key carrying different params.
+      // The key must cover the RESOLVED line items, not the client-supplied
+      // selection: an operator rotating a catalog/env stripePriceId between two
+      // attempts by the same garage inside Stripe's 24h idempotency window (or,
+      // with no planSlug, the non-deterministic findFirst plan-price lookup
+      // above resolving a different row) must mint a genuinely new session, not
+      // replay a stale one — and must never let Stripe's 400 idempotency_error
+      // (same key, different params) surface as a 503 to a member who did
+      // nothing wrong.
       const packageDigest = createHash('sha1')
-        .update([planSlug ?? tier, ...selectedAddonKeys].join('|'))
+        .update([priceId, ...addonPriceIds].join('|'))
         .digest('hex')
         .slice(0, 12);
       const idempotencyKey = `checkout_sub_${garage.id}_${cadence}_${packageDigest}`;

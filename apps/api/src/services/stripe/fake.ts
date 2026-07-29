@@ -65,6 +65,8 @@ export type FakeStripe = StripeClient & {
   nextOpenSubscriptionCheckoutSessions: OpenSubscriptionCheckoutSession[];
   /** When set, createSubscriptionCheckoutSession throws this error. */
   nextCreateSubscriptionCheckoutSessionError: Error | null;
+  /** When set, expireCheckoutSession throws this error (provider-failure path). */
+  nextExpireCheckoutSessionError: Error | null;
   /**
    * When set, overrides the auto-incrementing subscription-item id returned by
    * addSubscriptionItem. Leave null to get deterministic `si_fake_N` ids.
@@ -105,6 +107,7 @@ export const buildFakeStripe = (): FakeStripe => {
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
     nextOpenSubscriptionCheckoutSessions: [],
     nextCreateSubscriptionCheckoutSessionError: null,
+    nextExpireCheckoutSessionError: null,
     nextRetrievedPrice: null,
     nextSubscriptionItemId: null,
     nextAddSubscriptionItemError: null,
@@ -210,6 +213,9 @@ export const buildFakeStripe = (): FakeStripe => {
     // eslint-disable-next-line @typescript-eslint/require-await
     expireCheckoutSession: async (sessionId: string): Promise<void> => {
       fake.calls.push({ kind: 'expireCheckoutSession', payload: { sessionId } });
+      if (fake.nextExpireCheckoutSessionError) {
+        throw fake.nextExpireCheckoutSessionError;
+      }
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     retrievePrice: async (priceId: string): Promise<Stripe.Price> => {

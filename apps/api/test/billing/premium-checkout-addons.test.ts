@@ -1,10 +1,21 @@
 import { prisma } from '@ccc/db';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 
 const env = loadEnv();
+
+// GROWTH_PREMIUM_BILLING_ENABLED is a process-wide flag other test files
+// toggle directly (and at least two of them never restore it on 'false' —
+// a separate, already-flagged issue). Force it here so this file is
+// deterministic regardless of run order, matching the pattern used by
+// premium-checkout-catalog.test.ts / me-premium.test.ts.
+const originalFlag = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+const restoreEnv = () => {
+  if (originalFlag === undefined) delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+  else process.env.GROWTH_PREMIUM_BILLING_ENABLED = originalFlag;
+};
 
 const resetCatalog = async () => {
   await prisma.premiumAddonModule.deleteMany();
@@ -47,8 +58,13 @@ const seedModule = (key: string, stripePriceId: string | null) =>
 
 describe('POST /api/me/premium/checkout with add-ons', () => {
   beforeEach(async () => {
+    process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'true';
     await resetDatabase();
     await resetCatalog();
+  });
+
+  afterEach(() => {
+    restoreEnv();
   });
 
   afterAll(async () => {
@@ -166,6 +182,36 @@ describe('POST /api/me/premium/checkout with add-ons', () => {
     await app.close();
   });
 
+  it('derives a different idempotency key when the resolved stripePriceId changes for the same selection', async () => {
+    // Regression guard: the digest must cover the RESOLVED price ids, not the
+    // client-supplied selection. An operator rotating the catalog price
+    // between two attempts (same garage, cadence, planSlug, add-ons) must
+    // still mint a fresh idempotency key, or Stripe answers the reused key
+    // carrying different params with a 400 idempotency_error.
+    const { app, stripe } = await makeAppWithFakeStripe();
+    const plan = await seedPlan('price_plan_gold_v1');
+    const { user } = await createUser({ email: 'rotate@jdm.test' });
+    const auth = { authorization: bearer(env, user.id) };
+    const payload = { cadence: 'monthly' as const, planSlug: 'fundador', addonKeys: [] };
+
+    await app.inject({ method: 'POST', url: '/api/me/premium/checkout', headers: auth, payload });
+
+    await prisma.premiumPlanPrice.updateMany({
+      where: { planId: plan.id, cadence: 'monthly' },
+      data: { stripePriceId: 'price_plan_gold_v2' },
+    });
+
+    await app.inject({ method: 'POST', url: '/api/me/premium/checkout', headers: auth, payload });
+
+    const calls = stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession');
+    const keys = calls.map((c) => (c.payload as { idempotencyKey: string }).idempotencyKey);
+    const priceIds = calls.map((c) => (c.payload as { priceIds: string[] }).priceIds[0]);
+    expect(priceIds).toEqual(['price_plan_gold_v1', 'price_plan_gold_v2']);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+    await app.close();
+  });
+
   it('expires the open session before creating a new one', async () => {
     const { app, stripe } = await makeAppWithFakeStripe();
     await seedPlan('price_plan_gold');
@@ -184,6 +230,37 @@ describe('POST /api/me/premium/checkout with add-ons', () => {
     expect(res.statusCode).toBe(201);
     const expireCall = stripe.calls.find((c) => c.kind === 'expireCheckoutSession');
     expect(expireCall?.payload).toEqual({ sessionId: 'cs_stale_1' });
+    await app.close();
+  });
+
+  it('still mints a new session when expiring the stale one fails (best-effort housekeeping)', async () => {
+    // Regression guard for the expire-is-not-a-precondition decision: Stripe
+    // 400s (invalid_request) when the session already closed between our list
+    // call and the expire call (e.g. the member paid in another tab), and any
+    // outage on this call must not block a member who otherwise has a valid
+    // checkout ahead of them.
+    const { app, stripe } = await makeAppWithFakeStripe();
+    await seedPlan('price_plan_gold');
+    const { user } = await createUser({ email: 'expirefails@jdm.test' });
+    stripe.nextOpenSubscriptionCheckoutSessions = [
+      { id: 'cs_stale_2', url: 'https://checkout.stripe.com/pay/cs_stale_2' },
+    ];
+    stripe.nextExpireCheckoutSessionError = new Error(
+      'No such checkout.session (already expired or completed)',
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout',
+      headers: { authorization: bearer(env, user.id) },
+      payload: { cadence: 'monthly', planSlug: 'fundador', addonKeys: [] },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const expireCall = stripe.calls.find((c) => c.kind === 'expireCheckoutSession');
+    expect(expireCall?.payload).toEqual({ sessionId: 'cs_stale_2' });
+    const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
+    expect(subCall).toBeDefined();
     await app.close();
   });
 

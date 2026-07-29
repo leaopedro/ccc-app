@@ -41,7 +41,7 @@ describe('premiumStatusSchema shape', () => {
     expect(() =>
       premiumStatusSchema.parse({
         active: true,
-        tier: 'bronze',
+        tier: 'platinum',
         cadence: 'monthly',
         provider: 'stripe',
         currentPeriodEnd: '2026-06-26T00:00:00.000Z',

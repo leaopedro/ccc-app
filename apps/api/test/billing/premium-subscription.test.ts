@@ -194,6 +194,30 @@ describe('premium subscription + add-ons', () => {
     expect(body.totalAmountCents).toBe(2990 + 1990);
   });
 
+  it('returns the plan benefits ordered by sortOrder and the plan description', async () => {
+    const plan = await seedGoldPlan();
+    await prisma.premiumPlan.update({
+      where: { id: plan.id },
+      data: { description: 'O nivel mais alto da Casa.' },
+    });
+    await prisma.premiumPlanBenefit.createMany({
+      data: [
+        { planId: plan.id, label: 'Segundo', sortOrder: 2 },
+        { planId: plan.id, label: 'Primeiro', sortOrder: 1 },
+      ],
+    });
+    const { user } = await createUser({ email: 'benefits@jdm.test' });
+    const garage = await garageOf(user.id);
+    await seedMembership(garage.id);
+
+    const res = await getSubscription(user.id);
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { benefits: string[]; planDescription: string | null };
+    expect(body.benefits).toEqual(['Benefício', 'Primeiro', 'Segundo']);
+    expect(body.planDescription).toBe('O nivel mais alto da Casa.');
+  });
+
   // --- POST /addons ----------------------------------------------------------
 
   it('attach happy path: creates add-on + usage cycle + recomputes total', async () => {

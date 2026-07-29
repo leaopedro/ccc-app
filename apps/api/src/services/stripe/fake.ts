@@ -4,6 +4,8 @@ import type {
   AddSubscriptionItemInput,
   AddSubscriptionItemResult,
   BillingPortalSessionResult,
+  CancelSubscriptionAtPeriodEndInput,
+  CancelSubscriptionAtPeriodEndResult,
   CheckoutSessionResult,
   CreateBillingPortalSessionInput,
   CreateCheckoutSessionInput,
@@ -33,7 +35,8 @@ type FakeCall = {
     | 'listOpenSubscriptionCheckoutSessions'
     | 'retrievePrice'
     | 'addSubscriptionItem'
-    | 'removeSubscriptionItem';
+    | 'removeSubscriptionItem'
+    | 'cancelSubscriptionAtPeriodEnd';
   payload: unknown;
 };
 
@@ -68,6 +71,8 @@ export type FakeStripe = StripeClient & {
   nextAddSubscriptionItemError: Error | null;
   /** When set, removeSubscriptionItem throws this error (provider-failure path). */
   nextRemoveSubscriptionItemError: Error | null;
+  /** Next payload returned by cancelSubscriptionAtPeriodEnd. */
+  nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
@@ -100,6 +105,10 @@ export const buildFakeStripe = (): FakeStripe => {
     nextSubscriptionItemId: null,
     nextAddSubscriptionItemError: null,
     nextRemoveSubscriptionItemError: null,
+    nextCancelledSubscription: {
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
+    },
     // eslint-disable-next-line @typescript-eslint/require-await
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -217,6 +226,13 @@ export const buildFakeStripe = (): FakeStripe => {
       if (fake.nextRemoveSubscriptionItemError) {
         throw fake.nextRemoveSubscriptionItemError;
       }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    cancelSubscriptionAtPeriodEnd: async (
+      input: CancelSubscriptionAtPeriodEndInput,
+    ): Promise<CancelSubscriptionAtPeriodEndResult> => {
+      fake.calls.push({ kind: 'cancelSubscriptionAtPeriodEnd', payload: input });
+      return fake.nextCancelledSubscription;
     },
   };
   return fake;

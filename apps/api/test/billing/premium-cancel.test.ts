@@ -1,0 +1,122 @@
+import { prisma } from '@ccc/db';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { loadEnv } from '../../src/env.js';
+import { bearer, createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
+
+const env = loadEnv();
+
+const seedMembership = async (
+  garageId: string,
+  overrides: Partial<{ provider: 'stripe' | 'apple_revenuecat'; status: string }> = {},
+) =>
+  prisma.premiumMembership.create({
+    data: {
+      garageId,
+      provider: overrides.provider ?? 'stripe',
+      providerCustomerRef: 'cus_cancel_1',
+      providerSubRef: 'sub_cancel_1',
+      tier: 'gold',
+      cadence: 'monthly',
+      status: (overrides.status ?? 'active') as 'active',
+      currentPeriodStart: new Date('2026-07-01T00:00:00.000Z'),
+      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
+      cancelAtPeriodEnd: false,
+      baseAmountCents: 149000,
+      devFeePercent: 10,
+      devFeeAmountCents: 14900,
+      grossAmountCents: 163900,
+      currency: 'BRL',
+    },
+  });
+
+describe('POST /api/me/premium/cancel', () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const { app } = await makeAppWithFakeStripe();
+    const res = await app.inject({ method: 'POST', url: '/api/me/premium/cancel' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('404s when there is no live membership', async () => {
+    const { app } = await makeAppWithFakeStripe();
+    const { user } = await createUser({ email: 'nolive@jdm.test' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/cancel',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('calls Stripe with cancel_at_period_end and does NOT write the DB', async () => {
+    const { app, stripe } = await makeAppWithFakeStripe();
+    const { user } = await createUser({ email: 'cancel@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await seedMembership(garage.id);
+    stripe.nextCancelledSubscription = {
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/cancel',
+      headers: { authorization: bearer(env, user.id) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: '2026-08-01T00:00:00.000Z',
+    });
+
+    const call = stripe.calls.find((c) => c.kind === 'cancelSubscriptionAtPeriodEnd');
+    expect(call?.payload).toEqual({
+      subscriptionId: 'sub_cancel_1',
+      idempotencyKey: `cancel_sub_${membership.id}`,
+    });
+
+    // Invariant: only the verified webhook mutates subscription state.
+    const after = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membership.id },
+    });
+    expect(after.status).toBe('active');
+    expect(after.cancelAtPeriodEnd).toBe(false);
+    expect(after.cancelledAt).toBeNull();
+
+    await app.close();
+  });
+
+  it('409s with the App Store manage url for an Apple membership', async () => {
+    const { app, stripe } = await makeAppWithFakeStripe();
+    const { user } = await createUser({ email: 'apple@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id, { provider: 'apple_revenuecat' });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/cancel',
+      headers: { authorization: bearer(env, user.id) },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({
+      error: 'NotStripeSubscription',
+      provider: 'apple_revenuecat',
+      manageUrl: 'https://apps.apple.com/account/subscriptions',
+    });
+    expect(stripe.calls.some((c) => c.kind === 'cancelSubscriptionAtPeriodEnd')).toBe(false);
+
+    await app.close();
+  });
+});

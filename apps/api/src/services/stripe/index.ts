@@ -93,6 +93,21 @@ export type RemoveSubscriptionItemInput = {
   idempotencyKey: string;
 };
 
+/**
+ * Schedule cancellation at the end of the current paid period. Never cancels
+ * immediately: canon §F8.10 keeps entitlement alive until periodEnd. The DB is
+ * written by the resulting customer.subscription.updated webhook, not here.
+ */
+export type CancelSubscriptionAtPeriodEndInput = {
+  subscriptionId: string;
+  idempotencyKey: string;
+};
+
+export type CancelSubscriptionAtPeriodEndResult = {
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: Date;
+};
+
 export type StripeClient = {
   createPaymentIntent: (input: CreatePaymentIntentInput) => Promise<PaymentIntentResult>;
   createCheckoutSession: (input: CreateCheckoutSessionInput) => Promise<CheckoutSessionResult>;
@@ -152,6 +167,9 @@ export type StripeClient = {
    * for the proration-behavior choice.
    */
   removeSubscriptionItem: (input: RemoveSubscriptionItemInput) => Promise<void>;
+  cancelSubscriptionAtPeriodEnd: (
+    input: CancelSubscriptionAtPeriodEndInput,
+  ) => Promise<CancelSubscriptionAtPeriodEndResult>;
 };
 
 export type OpenSubscriptionCheckoutSession = {
@@ -420,6 +438,26 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         { proration_behavior: 'create_prorations' },
         { idempotencyKey },
       );
+    },
+    cancelSubscriptionAtPeriodEnd: async ({ subscriptionId, idempotencyKey }) => {
+      const sub = await stripe.subscriptions.update(
+        subscriptionId,
+        { cancel_at_period_end: true },
+        { idempotencyKey },
+      );
+      // Stripe SDK 2026-04-22 dahlia exposes current_period_end on
+      // SubscriptionItem, not Subscription (see billing-reconcile.ts). Read
+      // the first item's bracket, matching the reconcile worker's pattern.
+      const item = sub.items.data[0];
+      const itemPeriodEnd =
+        item && typeof item.current_period_end === 'number' ? item.current_period_end : null;
+      if (itemPeriodEnd === null) {
+        throw new Error(`stripe subscription ${subscriptionId} missing item current_period_end`);
+      }
+      return {
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        currentPeriodEnd: new Date(itemPeriodEnd * 1000),
+      };
     },
   };
 };

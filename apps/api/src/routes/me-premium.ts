@@ -342,6 +342,59 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
   );
 
   /**
+   * POST /api/me/premium/cancel
+   *
+   * Schedules cancellation at period end on Stripe and returns immediately.
+   * Deliberately does NOT touch the DB: the resulting
+   * customer.subscription.updated webhook normalizes to subscription.cancelled
+   * and handleCancelled writes the row. Keeps the invariant that subscription
+   * state only changes through a verified webhook.
+   */
+  app.post('/api/me/premium/cancel', { preHandler: [app.authenticate] }, async (request, reply) => {
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+    }
+
+    const { sub } = requireUser(request);
+
+    const garage = await prisma.garage.findUnique({
+      where: { userId: sub },
+      select: { id: true },
+    });
+    if (!garage) {
+      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+    }
+
+    const membership = await prisma.premiumMembership.findFirst({
+      where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
+      select: { id: true, provider: true, providerSubRef: true },
+    });
+    if (!membership) {
+      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+    }
+
+    if (membership.provider !== 'stripe') {
+      return reply.status(409).send({
+        error: 'NotStripeSubscription',
+        provider: membership.provider,
+        manageUrl: APPLE_MANAGE_URL,
+      });
+    }
+
+    const result = await app.stripe.cancelSubscriptionAtPeriodEnd({
+      subscriptionId: membership.providerSubRef,
+      idempotencyKey: `cancel_sub_${membership.id}`,
+    });
+
+    return reply.status(200).send({
+      cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+      currentPeriodEnd: result.currentPeriodEnd.toISOString(),
+    });
+  });
+
+  /**
    * GET /api/me/premium/status (F8.11)
    *
    * Returns the current premium entitlement state for the requesting user's

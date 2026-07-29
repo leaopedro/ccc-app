@@ -191,6 +191,10 @@ describe('normalizeStripeEvent', () => {
       expect(result.provider).toBe('stripe');
       expect(result.providerSubRef).toBe('sub_test_001');
       expect(result.cadence).toBe('monthly');
+      // priceMetadata carries the new price's raw Stripe metadata so the route
+      // can resolve devFeePercent for a tier change exactly as it does for
+      // activation/renewal (Fix round 1, finding 2 — this must never be {}).
+      expect(result.priceMetadata).toEqual({ baseAmountCents: '4536', devFeePercent: '10' });
     });
   });
 

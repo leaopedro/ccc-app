@@ -492,6 +492,12 @@ describe('POST /webhooks/stripe-billing', () => {
       where: { garageId, providerSubRef: 'sub_test_001' },
     });
     expect(membership!.cadence).toBe('monthly');
+    // Regression guard: the synthetic line built for tier_changed resolution
+    // must carry the new price's real metadata, not a hardcoded {}. A
+    // hardcoded {} would zero devFeePercent/devFeeAmountCents on every tier
+    // change (Fix round 1, finding 2).
+    expect(membership!.devFeePercent).toBe(10);
+    expect(membership!.devFeeAmountCents).toBe(454);
   });
 
   // -------------------------------------------------------------------------
@@ -670,6 +676,16 @@ describe('POST /webhooks/stripe-billing', () => {
 });
 
 describe('multi-line invoice resolution', () => {
+  // Fix round 1, finding 7: this describe has its own catalog fixtures and
+  // must reset the DB between tests like every other catalog-touching test
+  // file (matching the pattern the other describe above uses). Without this,
+  // once a later task makes handleActivated write PremiumMembershipAddon
+  // rows, the next test's seedCatalog() → premiumAddonModule.deleteMany()
+  // would hit the FK Restrict on PremiumMembershipAddon.module.
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
   const seedCatalog = async () => {
     await prisma.premiumAddonModule.deleteMany();
     await prisma.premiumPlanPrice.deleteMany();
@@ -823,6 +839,319 @@ describe('multi-line invoice resolution', () => {
       where: { provider_providerEventId: { provider: 'stripe', providerEventId: 'evt_ml_miss' } },
     });
     expect(evtRow.processedAt).not.toBeNull();
+
+    await app.close();
+  });
+
+  // Fix round 1, finding 1 (CRITICAL): the catalog-miss guard must also cover
+  // renewals, not just activation. Without it, a renewal whose price was
+  // retired from the catalog would patch baseAmountCents/devFeePercent/
+  // devFeeAmountCents to zero and silently overwrite a previously-correct
+  // membership snapshot — 200 OK, no log, no alert.
+  it('refuses a renewal when the invoice price is not in the catalog, without zeroing the membership snapshot', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'renewalmiss@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ren_miss', { garageId: garage.id });
+
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_ren_miss',
+        providerSubRef: 'sub_ren_miss',
+        tier: 'silver',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date(1748300000 * 1000),
+        currentPeriodEnd: new Date(1750892000 * 1000),
+        cancelAtPeriodEnd: false,
+        baseAmountCents: 89000,
+        devFeePercent: 10,
+        devFeeAmountCents: 8900,
+        grossAmountCents: 97900,
+        currency: 'BRL',
+      },
+    });
+
+    stripe.nextEvent = {
+      id: 'evt_renewal_miss_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_renewal_miss_1',
+          subscription: 'sub_ren_miss',
+          customer: 'cus_ren_miss',
+          billing_reason: 'subscription_cycle',
+          amount_paid: 97900,
+          currency: 'brl',
+          period_start: 1750892000,
+          period_end: 1753484000,
+          status_transitions: { paid_at: 1750892100 },
+          lines: {
+            data: [
+              {
+                // An operator retired this price from the admin catalog while
+                // subscribers are still billed on it — the exact scenario the
+                // catalog-miss guard exists to catch on renewal too.
+                price: { id: 'price_plan_retired', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_plan_retired',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ignored: true, reason: 'unknown-plan-price' });
+
+    // The membership snapshot must NOT be zeroed by the refused renewal.
+    const reloaded = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membership.id },
+    });
+    expect(reloaded.baseAmountCents).toBe(89000);
+    expect(reloaded.devFeePercent).toBe(10);
+    expect(reloaded.devFeeAmountCents).toBe(8900);
+
+    // No invoice recorded for the refused renewal.
+    const invoiceCount = await prisma.premiumMembershipInvoice.count({
+      where: { membershipId: membership.id },
+    });
+    expect(invoiceCount).toBe(0);
+
+    const evtRow = await prisma.subscriptionWebhookEvent.findUniqueOrThrow({
+      where: {
+        provider_providerEventId: { provider: 'stripe', providerEventId: 'evt_renewal_miss_1' },
+      },
+    });
+    expect(evtRow.processedAt).not.toBeNull();
+
+    await app.close();
+  });
+
+  // Fix round 1, finding 3: an invoice with two lines that each match a
+  // PremiumPlanPrice (e.g. a plan-change proration credit for the old price
+  // alongside the new price's line) must not silently pick "whichever line
+  // is first" — Stripe does not contract line ordering. Treat it as
+  // ambiguous and refuse, exactly like a zero-match miss.
+  it('refuses activation when more than one invoice line matches a catalog plan price (ambiguous)', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const goldPlan = await prisma.premiumPlan.create({
+      data: { tier: 'gold', slug: 'fundador', name: 'Fundador', active: true, sortOrder: 1 },
+    });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: goldPlan.id,
+        cadence: 'monthly',
+        baseAmountCents: 149000,
+        currency: 'BRL',
+        stripePriceId: 'price_plan_gold',
+        active: true,
+      },
+    });
+
+    const { user } = await createUser({ email: 'ambiguous@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ambig_1', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ambig_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ambig_1',
+          subscription: 'sub_ambig_1',
+          customer: 'cus_ambig_1',
+          billing_reason: 'subscription_create',
+          amount_paid: 60000,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                // Proration credit for the old (silver) price.
+                price: { id: 'price_plan_silver', metadata: {} },
+                amount: -89000,
+                subscription_item: 'si_credit',
+              },
+              {
+                price: { id: 'price_plan_gold', metadata: { devFeePercent: '10' } },
+                amount: 149000,
+                subscription_item: 'si_new',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ignored: true, reason: 'unknown-plan-price' });
+
+    const membership = await prisma.premiumMembership.findUnique({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ambig_1' } },
+    });
+    expect(membership).toBeNull();
+
+    await app.close();
+  });
+
+  // Fix round 1, finding 4: cadence must come from the resolved
+  // PremiumPlanPrice row, not from invoice lines.data[0].price.recurring —
+  // an add-on line sorting first must not misrecord an annual plan as
+  // monthly.
+  it('resolves cadence from the catalog, not from invoice line order', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const plan = await prisma.premiumPlan.findUniqueOrThrow({ where: { tier: 'silver' } });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: plan.id,
+        cadence: 'annual',
+        baseAmountCents: 890000,
+        currency: 'BRL',
+        stripePriceId: 'price_plan_silver_annual',
+        active: true,
+      },
+    });
+
+    const { user } = await createUser({ email: 'cadenceorder@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_cad_1', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_cad_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_cad_1',
+          subscription: 'sub_cad_1',
+          customer: 'cus_cad_1',
+          billing_reason: 'subscription_create',
+          amount_paid: 905000,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1798761600,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              // The add-on line sorts first. If cadence were still read from
+              // lines.data[0].price.recurring.interval (monthly), an annual
+              // plan would be misrecorded as monthly.
+              {
+                price: {
+                  id: 'price_addon_detailing',
+                  metadata: {},
+                  recurring: { interval: 'month' },
+                },
+                amount: 15000,
+                subscription_item: 'si_addon_1',
+              },
+              {
+                price: {
+                  id: 'price_plan_silver_annual',
+                  metadata: { devFeePercent: '10' },
+                  recurring: { interval: 'year' },
+                },
+                amount: 890000,
+                subscription_item: 'si_plan_1',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_cad_1' } },
+    });
+    expect(membership.cadence).toBe('annual');
+    expect(membership.baseAmountCents).toBe(890000);
+
+    await app.close();
+  });
+
+  // Fix round 1, finding 5: a malformed devFeePercent (e.g. an operator typo
+  // in Stripe Price metadata) must not crash the route. NaN would otherwise
+  // reach the Prisma Int write, 500, and poison the SubscriptionWebhookEvent
+  // row (already inserted with processedAt: null) into an endless 503-retry
+  // loop.
+  it('rejects a non-numeric devFeePercent instead of writing NaN, and does not crash', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'baddevfee@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_baddevfee_1', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_baddevfee_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_baddevfee_1',
+          subscription: 'sub_baddevfee_1',
+          customer: 'cus_baddevfee_1',
+          billing_reason: 'subscription_create',
+          amount_paid: 89000,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                price: {
+                  id: 'price_plan_silver',
+                  metadata: { devFeePercent: 'ten' },
+                  recurring: { interval: 'month' },
+                },
+                amount: 89000,
+                subscription_item: 'si_plan_1',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_baddevfee_1' } },
+    });
+    expect(membership.devFeePercent).toBe(0);
+    expect(membership.devFeeAmountCents).toBe(0);
 
     await app.close();
   });

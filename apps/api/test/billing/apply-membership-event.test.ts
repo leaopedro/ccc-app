@@ -406,6 +406,7 @@ describe('applyMembershipEvent', () => {
         provider: 'stripe',
         providerSubRef: 'sub_test001',
         priceRef: 'price_test_annual_gold',
+        priceMetadata: { devFeePercent: '10' },
         tier: 'gold',
         cadence: 'annual',
         pricing: ANNUAL_PRICING,

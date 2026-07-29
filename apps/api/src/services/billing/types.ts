@@ -107,6 +107,13 @@ export type BillingEvent =
       providerSubRef: string;
       /** The new price id, so the route can tell a plan swap from an add-on swap. */
       priceRef: string;
+      /**
+       * Raw Stripe Price.metadata of the new price. The normalizer has no DB
+       * access, so it cannot resolve devFeePercent itself — the route reads it
+       * from here when it resolves this line against the catalog, exactly as
+       * it does for the plan line on activation/renewal (canon §F8.1).
+       */
+      priceMetadata: Record<string, string>;
       tier: GaragePremiumTier;
       cadence: PremiumCadence;
       pricing: BillingPricing;

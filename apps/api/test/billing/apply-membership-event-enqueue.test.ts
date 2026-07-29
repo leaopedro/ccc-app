@@ -178,6 +178,7 @@ describe('enqueuePremiumTicketBackfillIfActivated', () => {
       provider: 'stripe',
       providerSubRef: 'sub_test_enq_001',
       priceRef: 'price_test_enq_annual_gold',
+      priceMetadata: { devFeePercent: '10' },
       tier: 'gold',
       cadence: 'annual',
       pricing: BASE_PRICING,

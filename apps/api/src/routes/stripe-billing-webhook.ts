@@ -41,12 +41,45 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * inside the same transaction. This route is the lock owner.
  */
 /**
+ * Parses devFeePercent from the plan line's Stripe Price metadata (canon
+ * §F8.1 — the one value still read from metadata, never the catalog).
+ * Malformed input must never reach the Prisma Int write: by the time this
+ * runs, the SubscriptionWebhookEvent row is already inserted with
+ * processedAt: null, so a thrown error here would poison every Stripe retry
+ * into the 503 branch forever — a poison-pill event that never applies and
+ * never alerts beyond a replay-stale warning. Reject anything that isn't a
+ * finite value in [0, 100], fall back to 0, and alert so an operator can fix
+ * the Stripe Price metadata.
+ */
+const parseDevFeePercent = (raw: string | undefined): number => {
+  if (raw === undefined) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    Sentry.captureMessage('stripe-billing webhook: invalid devFeePercent in Price metadata', {
+      level: 'warning',
+      tags: { kind: 'billing-devfee-invalid', provider: 'stripe' },
+      extra: { raw },
+    });
+    return 0;
+  }
+  return Math.trunc(n);
+};
+
+/**
  * Resolve raw provider invoice lines against the DB catalog.
  *
- * The catalog is the source of truth for tier and base amount — NOT Stripe
- * Price metadata, which cannot be trusted to stay in sync and which the old
- * tierFromPrice() hardcoded to 'gold'. devFeePercent is the one value still
- * read from metadata (canon §F8.1), and only from the plan line.
+ * The catalog is the source of truth for tier, cadence, and base amount —
+ * NOT Stripe Price metadata, which cannot be trusted to stay in sync and
+ * which the old tierFromPrice() hardcoded to 'gold'. devFeePercent is the one
+ * value still read from metadata (canon §F8.1), and only from the plan line.
+ *
+ * `plan` is null both when zero lines match a PremiumPlanPrice (unknown
+ * price — an operator forgot to register it) AND when more than one line
+ * matches (ambiguous — e.g. a plan-change invoice carries a proration credit
+ * line for the old price alongside the new price's line; Stripe does not
+ * contract line ordering, so picking "the first match" would silently
+ * provision whichever tier happens to sort first). Both cases must refuse
+ * and alert rather than guess — the caller checks `!resolved.plan`.
  */
 const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
   const priceRefs = lines.map((l) => l.priceRef);
@@ -54,7 +87,12 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
   const [planPrices, addonModules] = await Promise.all([
     prisma.premiumPlanPrice.findMany({
       where: { stripePriceId: { in: priceRefs } },
-      select: { stripePriceId: true, baseAmountCents: true, plan: { select: { tier: true } } },
+      select: {
+        stripePriceId: true,
+        baseAmountCents: true,
+        cadence: true,
+        plan: { select: { tier: true } },
+      },
     }),
     prisma.premiumAddonModule.findMany({
       where: { stripePriceId: { in: priceRefs } },
@@ -69,7 +107,10 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
     }),
   ]);
 
-  const planLine = lines.find((l) => planPrices.some((p) => p.stripePriceId === l.priceRef));
+  const matchingPlanLines = lines.filter((l) =>
+    planPrices.some((p) => p.stripePriceId === l.priceRef),
+  );
+  const planLine = matchingPlanLines.length === 1 ? matchingPlanLines[0] : undefined;
   const planPrice = planLine
     ? planPrices.find((p) => p.stripePriceId === planLine.priceRef)
     : undefined;
@@ -90,11 +131,11 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
     addonsAmountCents += line.amountCents;
   }
 
-  const devFeePercent = parseInt(planLine?.metadata.devFeePercent ?? '0', 10);
+  const devFeePercent = parseDevFeePercent(planLine?.metadata.devFeePercent);
   const baseAmountCents = planPrice?.baseAmountCents ?? 0;
 
   return {
-    tier: planPrice?.plan.tier ?? null,
+    plan: planPrice ? { tier: planPrice.plan.tier, cadence: planPrice.cadence } : null,
     baseAmountCents,
     devFeePercent,
     devFeeAmountCents: Math.round((baseAmountCents * devFeePercent) / 100),
@@ -332,42 +373,57 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
 
     // Patch the catalog-resolved values into the event before dispatch, in the
     // same spirit as the garageId patch below.
-    if (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') {
+    if (
+      billingEvt.kind === 'subscription.activated' ||
+      billingEvt.kind === 'subscription.renewed'
+    ) {
       const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+
+      // The normalizer's tier placeholder is a VALID enum value ('bronze') and
+      // its pricing placeholders are all zero, so a silent fall-through is
+      // dangerous on BOTH kinds: activation would provision a paying gold
+      // customer as bronze, and renewal would zero out a previously-correct
+      // membership's baseAmountCents/devFeePercent (e.g. an operator retiring a
+      // Stripe Price that subscribers are still billed on). Refuse and alert on
+      // both rather than write zeros over — or under — a real charge.
+      // Decision 2026-07-29: 200 + ignored. Stripe must NOT redeliver, because
+      // the fix is an operator action in the admin catalog, not a transient
+      // error.
+      if (!resolved.plan) {
+        await prisma.subscriptionWebhookEvent.update({
+          where: { id: webhookEventId },
+          data: { processedAt: new Date() },
+        });
+        request.log.error(
+          {
+            eventId: event.id,
+            kind: billingEvt.kind,
+            priceRefs: billingEvt.lines.map((l) => l.priceRef),
+          },
+          'stripe-billing webhook: no single catalog plan price matched the invoice, refusing to apply',
+        );
+        Sentry.captureMessage(
+          'stripe-billing webhook: invoice.paid with no unambiguous matching PremiumPlanPrice, apply refused',
+          {
+            level: 'error',
+            tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
+            extra: {
+              eventId: event.id,
+              billingKind: billingEvt.kind,
+              priceRefs: billingEvt.lines.map((l) => l.priceRef),
+            },
+          },
+        );
+        return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
+      }
 
       billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
       billingEvt.pricing.devFeePercent = resolved.devFeePercent;
       billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
 
       if (billingEvt.kind === 'subscription.activated') {
-        // The normalizer's tier placeholder is a VALID enum value ('bronze'), so a
-        // silent fall-through would provision a paying gold customer as bronze and
-        // nothing would fail. Refuse to activate on an unresolved plan line instead.
-        // Decision 2026-07-29: ignore + alert. Stripe must NOT redeliver, because
-        // the fix is an operator action in the admin catalog, not a transient error.
-        if (!resolved.tier) {
-          await prisma.subscriptionWebhookEvent.update({
-            where: { id: webhookEventId },
-            data: { processedAt: new Date() },
-          });
-          request.log.error(
-            { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
-            'stripe-billing webhook: no catalog plan price matched the invoice, refusing to activate',
-          );
-          Sentry.captureMessage(
-            'stripe-billing webhook: invoice.paid with no matching PremiumPlanPrice, activation refused',
-            {
-              level: 'error',
-              tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
-              extra: { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
-            },
-          );
-          return reply
-            .status(200)
-            .send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
-        }
-
-        billingEvt.tier = resolved.tier;
+        billingEvt.tier = resolved.plan.tier;
+        billingEvt.cadence = resolved.plan.cadence;
         billingEvt.addons = resolved.addons;
         billingEvt.addonsAmountCents = resolved.addonsAmountCents;
       }
@@ -377,9 +433,14 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // all: reconcileMembershipAddonsAmount above already handled it.
     if (billingEvt.kind === 'subscription.tier_changed') {
       const resolved = await resolveLinesAgainstCatalog([
-        { priceRef: billingEvt.priceRef, amountCents: 0, subscriptionItemRef: null, metadata: {} },
+        {
+          priceRef: billingEvt.priceRef,
+          amountCents: 0,
+          subscriptionItemRef: null,
+          metadata: billingEvt.priceMetadata,
+        },
       ]);
-      if (!resolved.tier) {
+      if (!resolved.plan) {
         await prisma.subscriptionWebhookEvent.update({
           where: { id: webhookEventId },
           data: { processedAt: new Date() },
@@ -390,7 +451,8 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
         );
         return reply.status(200).send({ ok: true, ignored: true, reason: 'addon-item-swap' });
       }
-      billingEvt.tier = resolved.tier;
+      billingEvt.tier = resolved.plan.tier;
+      billingEvt.cadence = resolved.plan.cadence;
       billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
       billingEvt.pricing.devFeePercent = resolved.devFeePercent;
       billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;

@@ -163,6 +163,7 @@ describe('BillingEvent type narrowing', () => {
       provider: 'apple_revenuecat',
       providerSubRef: 'sub_rc_test',
       priceRef: 'gold_annual_rc',
+      priceMetadata: {},
       tier: 'gold',
       cadence: 'annual',
       pricing: {

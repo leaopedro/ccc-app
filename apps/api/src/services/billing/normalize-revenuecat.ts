@@ -148,6 +148,11 @@ export function normalizeRevenueCatEvent(rawEvent: unknown): NormalizeRCResult {
         // tier below (RevenueCat, unlike Stripe, can map its own product to a
         // tier without a route-side catalog lookup).
         priceRef: product_id,
+        // Genuinely empty: RC's tier_changed never goes through the
+        // Stripe-only catalog resolution in the webhook route (this function
+        // already resolves the real tier above), so there is no Stripe Price
+        // metadata to carry. Kept only for type parity with the Stripe variant.
+        priceMetadata: {},
         tier: 'gold',
         cadence,
         pricing,

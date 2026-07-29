@@ -212,6 +212,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         provider: 'stripe',
         providerSubRef: sub.id,
         priceRef: currentPrice.id,
+        priceMetadata: currentPrice.metadata,
         // Placeholders — the route resolves tier + pricing from the catalog and
         // drops the event entirely when the swapped price is an add-on.
         tier: 'bronze',

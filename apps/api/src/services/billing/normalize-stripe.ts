@@ -97,6 +97,15 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
 
     const pricing = pricingFromInvoice(invoice);
     const lines = linesFromInvoice(invoice.lines.data);
+    // `cadence` here is ALSO effectively a placeholder, same as `tier` below:
+    // it reads lines.data[0]'s recurring.interval, which is invoice-line-order
+    // dependent (an add-on line could sort before the plan line). The route
+    // unconditionally overwrites it from the resolved PremiumPlanPrice's own
+    // `cadence` column before dispatch (subscription.activated only — renewed
+    // does not carry a cadence field). `tier` gets the explicit placeholder
+    // comment below because it additionally carries the load-bearing safety
+    // risk of being a valid enum value ('bronze') on its own; a wrong cadence
+    // just gets silently corrected downstream, a wrong tier would not.
     const cadence = cadenceFromInterval(linePrice.recurring?.interval);
     // Placeholder — the route patches this from the catalog, like garageId.
     const tier = 'bronze' as const;
@@ -206,6 +215,10 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
     const prevPriceId = prev.items?.data[0]?.price.id;
     if (prevPriceId && currentPriceId && prevPriceId !== currentPriceId) {
       const currentPrice = sub.items.data[0]!.price;
+      // cadence here is also a placeholder, same reasoning as the invoice.paid
+      // branch above: the route overwrites it from the resolved
+      // PremiumPlanPrice's own `cadence` column, since items.data[0] is a
+      // single-item read that still shouldn't be trusted over the catalog.
       const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
       return {
         kind: 'subscription.tier_changed',
@@ -213,8 +226,9 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         providerSubRef: sub.id,
         priceRef: currentPrice.id,
         priceMetadata: currentPrice.metadata,
-        // Placeholders — the route resolves tier + pricing from the catalog and
-        // drops the event entirely when the swapped price is an add-on.
+        // Placeholders — the route resolves tier + cadence + pricing from the
+        // catalog and drops the event entirely when the swapped price is an
+        // add-on.
         tier: 'bronze',
         cadence,
         pricing: {

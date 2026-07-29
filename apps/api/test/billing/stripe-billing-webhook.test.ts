@@ -1015,6 +1015,73 @@ describe('multi-line invoice resolution', () => {
     await app.close();
   });
 
+  // Fix round 2, finding: the SAME price appearing on two invoice lines
+  // (a proration credit for a partial period, plus the full charge) is NOT
+  // ambiguous — both lines resolve to the same PremiumPlanPrice row. Counting
+  // raw lines instead of distinct matched prices would have wrongly refused
+  // this as ambiguous. This is the other side of the boundary from the
+  // "ambiguous" test above (two DIFFERENT prices, which must still refuse).
+  it('resolves a single catalog plan price even when it appears on two invoice lines (credit + charge)', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'sameprice@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_sameprice_1', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_sameprice_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_sameprice_1',
+          subscription: 'sub_sameprice_1',
+          customer: 'cus_sameprice_1',
+          billing_reason: 'subscription_create',
+          amount_paid: 44500,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                // A proration credit for a partial period at the same price,
+                // then the full charge for the new period — both reference
+                // the SAME registered price. Not ambiguous.
+                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+                amount: -44500,
+                subscription_item: 'si_credit',
+              },
+              {
+                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_charge',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: {
+        provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_sameprice_1' },
+      },
+    });
+    expect(membership.tier).toBe('silver');
+    expect(membership.baseAmountCents).toBe(89000);
+    expect(membership.devFeePercent).toBe(10);
+
+    await app.close();
+  });
+
   // Fix round 1, finding 4: cadence must come from the resolved
   // PremiumPlanPrice row, not from invoice lines.data[0].price.recurring —
   // an add-on line sorting first must not misrecord an annual plan as

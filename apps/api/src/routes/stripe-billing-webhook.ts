@@ -74,12 +74,19 @@ const parseDevFeePercent = (raw: string | undefined): number => {
  * value still read from metadata (canon §F8.1), and only from the plan line.
  *
  * `plan` is null both when zero lines match a PremiumPlanPrice (unknown
- * price — an operator forgot to register it) AND when more than one line
- * matches (ambiguous — e.g. a plan-change invoice carries a proration credit
- * line for the old price alongside the new price's line; Stripe does not
- * contract line ordering, so picking "the first match" would silently
- * provision whichever tier happens to sort first). Both cases must refuse
- * and alert rather than guess — the caller checks `!resolved.plan`.
+ * price — an operator forgot to register it) AND when lines match MORE THAN
+ * ONE DISTINCT PremiumPlanPrice (genuinely ambiguous — e.g. a plan-change
+ * invoice carries a proration credit line for the old price alongside the
+ * new price's line; Stripe does not contract line ordering, so picking "the
+ * first match" would silently provision whichever tier happens to sort
+ * first). Both cases must refuse and alert rather than guess — the caller
+ * checks `!resolved.plan`.
+ *
+ * Ambiguity is judged by DISTINCT matched price refs, not by raw line count:
+ * an invoice can legitimately carry two lines for the very same price (e.g.
+ * a proration credit plus a charge for the same price across a cycle
+ * boundary) without that being ambiguous at all — both resolve to the same
+ * PremiumPlanPrice row and must activate/renew normally.
  */
 const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
   const priceRefs = lines.map((l) => l.priceRef);
@@ -110,7 +117,15 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
   const matchingPlanLines = lines.filter((l) =>
     planPrices.some((p) => p.stripePriceId === l.priceRef),
   );
-  const planLine = matchingPlanLines.length === 1 ? matchingPlanLines[0] : undefined;
+  // Count DISTINCT catalog rows matched, not raw lines: two lines for the
+  // same price (proration credit + charge) are one match, not two. Two
+  // lines for two DIFFERENT registered prices are genuinely ambiguous and
+  // must still refuse — deliberately not excluding negative-amount (credit)
+  // lines from this count, since doing so would let a real plan-change
+  // invoice (old price credited, new price charged) resolve to "just the new
+  // price" instead of correctly refusing as ambiguous.
+  const distinctPlanPriceRefs = new Set(matchingPlanLines.map((l) => l.priceRef));
+  const planLine = distinctPlanPriceRefs.size === 1 ? matchingPlanLines[0] : undefined;
   const planPrice = planLine
     ? planPrices.find((p) => p.stripePriceId === planLine.priceRef)
     : undefined;

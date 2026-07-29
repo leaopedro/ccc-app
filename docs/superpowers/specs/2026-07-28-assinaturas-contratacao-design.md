@@ -337,7 +337,21 @@ Vitest já existe e testa módulos puros, não telas. Seguir o padrão de `src/c
 **`package-total.test.ts`**
 - função pura de soma: base mais módulos selecionados
 
-Sem teste de tela. Não existe React Native Testing Library configurado e o CLAUDE.md pede a solução mais simples.
+**CORRIGIDO em 2026-07-29 depois de medir.** A frase original aqui — "sem teste de tela, não existe React Native Testing Library configurado" — era **falsa**. Veio de um `find` com `-maxdepth 3` que não enxergou os diretórios `__tests__`.
+
+O app tem 73 arquivos de teste. Testes de tela existem e rodam em jsdom com `react-dom/client` mais um mock do módulo `react-native`, sem RNTL. O cabeçalho do padrão é `// @vitest-environment jsdom`.
+
+Testes existentes que as tasks de mobile deste plano vão quebrar e precisam atualizar:
+
+| Arquivo | Quem quebra |
+|---|---|
+| `src/api/__tests__/premium.test.ts` | Task 10, muda o client |
+| `src/screens/assinaturas/__tests__/PlanoDetalheScreen.test.tsx` | Tasks 11 e 12, o CTA passa a navegar |
+| `src/screens/assinaturas/__tests__/PlanosScreen.test.tsx` | Task 14, ganha redirect de assinante |
+| `src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx` | Task 15, ganha benefícios, histórico e cancelamento |
+| `src/screens/settings/__tests__/ios-stripe-isolation.test.ts` | Task 11, mexe no guard de iOS |
+
+Atualizar asserção cuja intenção mudou é correção. Apagar teste não é.
 
 ---
 

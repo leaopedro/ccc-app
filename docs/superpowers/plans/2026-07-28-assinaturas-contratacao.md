@@ -16,6 +16,8 @@
 - Branch de trabalho: `feat/rebrand-ccc-app-sweep`. Nunca commitar em `production`.
 - Zero migrations. Nenhuma alteração em `packages/db/prisma/schema.prisma`.
 - Depois de qualquer mudança em `packages/shared`: `pnpm --filter @ccc/shared build`. Canon §F8.13.
+- **Uma mudança em `packages/shared` exige typecheck dos DOIS consumidores: `pnpm --filter @ccc/api typecheck` E `pnpm --filter @ccc/mobile typecheck`.** A Task 8 ampliou `mySubscriptionResponseSchema` e deixou o typecheck do mobile vermelho por quinze commits, porque toda task de backend só rodava o da API. Fixtures de teste no mobile consomem o mesmo tipo.
+- **O mobile TEM testes de tela**, 73 arquivos no total, em jsdom com `react-dom/client` e mock do módulo `react-native`, sem RNTL. O plano afirmava o contrário e estava errado. Os testes de assinaturas afetados estão listados na seção de testes do spec. Cada task de mobile roda os testes dos arquivos que toca.
 - Nunca `npx turbo run build --force`. Buildar sequencialmente: `design` → `db` → `shared` → `api` → `admin`.
 - `pnpm lint` na raiz estoura heap. Lintar por pacote.
 - **O CI roda `pnpm lint` E `pnpm format:check` (`.github/workflows/ci.yml:60,62`).** Typecheck e teste verdes não bastam: um arquivo fora do padrão do prettier reprova o build. Rodar `pnpm --filter <pacote> lint` e `npx prettier --check <arquivos tocados>` antes de cada commit. Descoberto na Task 6, quando um commit verde em teste e typecheck quebrou o CI.

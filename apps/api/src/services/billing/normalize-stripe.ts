@@ -1,6 +1,6 @@
 import type { WebhookEvent } from '../stripe/index.js';
 
-import type { BillingEvent } from './types.js';
+import type { BillingEvent, BillingLine } from './types.js';
 
 /** Returned by normalizeStripeEvent for charge.refunded on a subscription invoice.
  * This is NOT a BillingEvent — the route handles it separately (canon §F8.10). */
@@ -18,39 +18,39 @@ function cadenceFromInterval(interval: string | undefined): 'monthly' | 'annual'
   return interval === 'year' ? 'annual' : 'monthly';
 }
 
-/** Derive tier from Price metadata. v1 only has 'gold'; extend if tiers expand. */
-function tierFromPrice(_priceMetadata: Record<string, string>): 'gold' {
-  // v1 single tier. When additional tiers ship, read `priceMetadata.tier`.
-  return 'gold';
-}
-
-type StripeInvoiceLineForPricing = {
-  price: { metadata: Record<string, string>; recurring?: { interval?: string } };
+type StripeInvoiceLine = {
+  price: { id: string; metadata?: Record<string, string>; recurring?: { interval?: string } };
+  amount?: number;
+  subscription_item?: string | null;
 };
 
-/** Build pricing snapshot from Stripe invoice + Price.
+/**
+ * Pricing shell from the invoice itself.
  *
- * §F8.1 — devFeePercent is snapshotted from Price.metadata.devFeePercent.
- * grossAmountCents = invoice.amount_paid (what the customer was charged).
- * devFeeAmountCents = Math.round(baseAmountCents * devFeePercent / 100).
+ * baseAmountCents / devFeePercent / devFeeAmountCents are PLACEHOLDERS — with a
+ * multi-line subscription the normalizer cannot tell which line is the plan.
+ * The webhook route resolves the plan line against PremiumPlanPrice and patches
+ * these three, exactly as it already patches garageId (see the header comment
+ * on normalizeStripeEvent). grossAmountCents and currency are real.
  */
-function pricingFromInvoice(invoice: {
-  amount_paid: number;
-  currency: string;
-  lines: { data: StripeInvoiceLineForPricing[] };
-}) {
-  const linePrice = invoice.lines.data[0]?.price;
-  const meta = linePrice?.metadata ?? {};
-  const baseAmountCents = parseInt(meta.baseAmountCents ?? '0', 10);
-  const devFeePercent = parseInt(meta.devFeePercent ?? '0', 10);
-  const devFeeAmountCents = Math.round((baseAmountCents * devFeePercent) / 100);
+function pricingFromInvoice(invoice: { amount_paid: number; currency: string }) {
   return {
-    baseAmountCents,
-    devFeePercent,
-    devFeeAmountCents,
+    baseAmountCents: 0,
+    devFeePercent: 0,
+    devFeeAmountCents: 0,
     grossAmountCents: invoice.amount_paid,
     currency: (invoice.currency ?? 'brl').toUpperCase(),
   };
+}
+
+/** Map raw Stripe invoice lines to the provider-neutral BillingLine shape. */
+function linesFromInvoice(lines: StripeInvoiceLine[]): BillingLine[] {
+  return lines.map((line) => ({
+    priceRef: line.price.id,
+    amountCents: line.amount ?? 0,
+    subscriptionItemRef: line.subscription_item ?? null,
+    metadata: line.price.metadata ?? {},
+  }));
 }
 
 /**
@@ -87,7 +87,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       period_start: number;
       period_end: number;
       status_transitions?: { paid_at?: number | null };
-      lines: { data: StripeInvoiceLineForPricing[] };
+      lines: { data: StripeInvoiceLine[] };
     };
 
     if (!invoice.subscription) return null;
@@ -96,8 +96,10 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
     if (!linePrice) return null;
 
     const pricing = pricingFromInvoice(invoice);
+    const lines = linesFromInvoice(invoice.lines.data);
     const cadence = cadenceFromInterval(linePrice.recurring?.interval);
-    const tier = tierFromPrice(linePrice.metadata ?? {});
+    // Placeholder — the route patches this from the catalog, like garageId.
+    const tier = 'bronze' as const;
     const paidAt = invoice.status_transitions?.paid_at
       ? new Date(invoice.status_transitions.paid_at * 1000)
       : new Date();
@@ -123,6 +125,9 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         currentPeriodEnd: new Date(invoice.period_end * 1000),
         pricing,
         invoice: invoiceShape,
+        lines,
+        addons: [],
+        addonsAmountCents: 0,
       } satisfies BillingEvent & { kind: 'subscription.activated' };
     }
 
@@ -135,6 +140,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         currentPeriodEnd: new Date(invoice.period_end * 1000),
         pricing,
         invoice: invoiceShape,
+        lines,
       } satisfies BillingEvent & { kind: 'subscription.renewed' };
     }
 
@@ -201,21 +207,20 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
     if (prevPriceId && currentPriceId && prevPriceId !== currentPriceId) {
       const currentPrice = sub.items.data[0]!.price;
       const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
-      const tier = tierFromPrice(currentPrice.metadata ?? {});
-      const baseAmountCents = parseInt(currentPrice.metadata?.baseAmountCents ?? '0', 10);
-      const devFeePercent = parseInt(currentPrice.metadata?.devFeePercent ?? '0', 10);
-      const devFeeAmountCents = Math.round((baseAmountCents * devFeePercent) / 100);
       return {
         kind: 'subscription.tier_changed',
         provider: 'stripe',
         providerSubRef: sub.id,
-        tier,
+        priceRef: currentPrice.id,
+        // Placeholders — the route resolves tier + pricing from the catalog and
+        // drops the event entirely when the swapped price is an add-on.
+        tier: 'bronze',
         cadence,
         pricing: {
-          baseAmountCents,
-          devFeePercent,
-          devFeeAmountCents,
-          grossAmountCents: baseAmountCents + devFeeAmountCents,
+          baseAmountCents: 0,
+          devFeePercent: 0,
+          devFeeAmountCents: 0,
+          grossAmountCents: 0,
           currency: 'BRL',
         },
       } satisfies BillingEvent & { kind: 'subscription.tier_changed' };

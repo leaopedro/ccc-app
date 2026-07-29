@@ -1222,4 +1222,160 @@ describe('multi-line invoice resolution', () => {
 
     await app.close();
   });
+
+  it('creates the add-on and its usage cycle in the activation transaction', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'addontx@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ml_2', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_2',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_2',
+          subscription: 'sub_ml_2',
+          customer: 'cus_ml_2',
+          billing_reason: 'subscription_create',
+          amount_paid: 113900,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_plan_2',
+              },
+              {
+                price: { id: 'price_addon_detailing', metadata: {} },
+                amount: 15000,
+                subscription_item: 'si_addon_2',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_2' } },
+    });
+    expect(membership.addonsAmountCents).toBe(15000);
+
+    const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
+      where: { membershipId_addonKey: { membershipId: membership.id, addonKey: 'detailing' } },
+    });
+    expect(addon.status).toBe('active');
+    expect(addon.providerItemRef).toBe('si_addon_2');
+    expect(addon.monthlyDeltaCents).toBe(15000);
+    expect(addon.quotaPerCycle).toBe(3);
+
+    const usage = await prisma.premiumAddonUsage.findFirstOrThrow({
+      where: { membershipAddonId: addon.id },
+    });
+    expect(usage.quotaTotal).toBe(3);
+    expect(usage.quotaUsed).toBe(0);
+    expect(usage.cycleStart.toISOString()).toBe(membership.currentPeriodStart.toISOString());
+
+    await app.close();
+  });
+
+  it('reactivates a previously cancelled add-on instead of violating the unique', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'readd@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+    const stale = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_ml_3',
+        providerSubRef: 'sub_ml_3',
+        tier: 'silver',
+        cadence: 'monthly',
+        status: 'expired',
+        currentPeriodStart: new Date('2026-01-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-02-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+        baseAmountCents: 89000,
+        devFeePercent: 10,
+        devFeeAmountCents: 8900,
+        grossAmountCents: 97900,
+        currency: 'BRL',
+      },
+    });
+    await prisma.premiumMembershipAddon.create({
+      data: {
+        membershipId: stale.id,
+        addonKey: 'detailing',
+        status: 'cancelled',
+        providerItemRef: 'si_old',
+        monthlyDeltaCents: 15000,
+        quotaPerCycle: 3,
+        quotaUnit: 'access',
+        currency: 'BRL',
+      },
+    });
+
+    stripe.customers.set('cus_ml_3', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_3',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_3',
+          subscription: 'sub_ml_3',
+          customer: 'cus_ml_3',
+          billing_reason: 'subscription_create',
+          amount_paid: 113900,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_plan_3',
+              },
+              {
+                price: { id: 'price_addon_detailing', metadata: {} },
+                amount: 15000,
+                subscription_item: 'si_addon_3',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
+      where: { membershipId_addonKey: { membershipId: stale.id, addonKey: 'detailing' } },
+    });
+    expect(addon.status).toBe('active');
+    expect(addon.providerItemRef).toBe('si_addon_3');
+    await app.close();
+  });
 });

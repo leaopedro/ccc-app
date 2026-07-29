@@ -65,6 +65,8 @@ async function handleActivated(
     currentPeriodEnd,
     pricing,
     invoice,
+    addons,
+    addonsAmountCents,
   } = evt;
 
   // Stripe webhooks are NOT order-guaranteed: a delayed activation can arrive
@@ -96,6 +98,7 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        addonsAmountCents,
       },
     });
     didAdvancePeriod = true;
@@ -114,6 +117,7 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        addonsAmountCents,
       },
     });
     didAdvancePeriod = true;
@@ -162,6 +166,57 @@ async function handleActivated(
     await tx.$executeRawUnsafe('RELEASE SAVEPOINT invoice_insert');
     if (!isUniqueConstraintError(e)) throw e;
     // Replay: invoice already exists; continue to snapshot + XP.
+  }
+
+  // Add-ons ride the SAME transaction as the activation — no partial state and
+  // no external call inside the tx. The route resolved these against the
+  // catalog; price/quota here are snapshots.
+  //
+  // Upsert, not create: @@unique([membershipId, addonKey]) has no status filter,
+  // so re-subscribing a module that was previously cancelled would otherwise
+  // violate the constraint.
+  for (const addon of addons) {
+    const addonRow = await tx.premiumMembershipAddon.upsert({
+      where: {
+        membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
+      },
+      create: {
+        membershipId: membership.id,
+        addonKey: addon.addonKey,
+        status: 'active',
+        providerItemRef: addon.providerItemRef,
+        monthlyDeltaCents: addon.monthlyDeltaCents,
+        quotaPerCycle: addon.quotaPerCycle,
+        quotaUnit: addon.quotaUnit,
+        currency: addon.currency,
+      },
+      update: {
+        status: 'active',
+        providerItemRef: addon.providerItemRef,
+        monthlyDeltaCents: addon.monthlyDeltaCents,
+        quotaPerCycle: addon.quotaPerCycle,
+        quotaUnit: addon.quotaUnit,
+        currency: addon.currency,
+      },
+    });
+
+    // One usage row per cycle. Upsert keeps an activation replay idempotent
+    // without clobbering quotaUsed.
+    await tx.premiumAddonUsage.upsert({
+      where: {
+        membershipAddonId_cycleStart: {
+          membershipAddonId: addonRow.id,
+          cycleStart: currentPeriodStart,
+        },
+      },
+      create: {
+        membershipAddonId: addonRow.id,
+        cycleStart: currentPeriodStart,
+        cycleEnd: currentPeriodEnd,
+        quotaTotal: addon.quotaPerCycle,
+      },
+      update: {},
+    });
   }
 
   // Garage snapshot — max() rule (canon §F8.3).

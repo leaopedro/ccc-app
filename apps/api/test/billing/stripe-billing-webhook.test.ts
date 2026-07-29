@@ -165,6 +165,26 @@ describe('POST /webhooks/stripe-billing', () => {
 
   beforeEach(async () => {
     await resetDatabase();
+    // These fixtures were written in the gold-only tierFromPrice() era and never
+    // seeded a catalog. Now that the route resolves tier/baseAmountCents against
+    // PremiumPlanPrice, 'price_monthly_test' (used by every fixture below) must
+    // exist in the catalog or the catalog-miss guard refuses activation.
+    await prisma.premiumAddonModule.deleteMany();
+    await prisma.premiumPlanPrice.deleteMany();
+    await prisma.premiumPlan.deleteMany();
+    const goldPlan = await prisma.premiumPlan.create({
+      data: { tier: 'gold', slug: 'fundador', name: 'Fundador', active: true, sortOrder: 0 },
+    });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: goldPlan.id,
+        cadence: 'monthly',
+        baseAmountCents: 4536,
+        currency: 'BRL',
+        stripePriceId: 'price_monthly_test',
+        active: true,
+      },
+    });
   });
 
   afterEach(async () => {
@@ -646,5 +666,164 @@ describe('POST /webhooks/stripe-billing', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.payload).toMatch(/concurrent or stale/i);
+  });
+});
+
+describe('multi-line invoice resolution', () => {
+  const seedCatalog = async () => {
+    await prisma.premiumAddonModule.deleteMany();
+    await prisma.premiumPlanPrice.deleteMany();
+    await prisma.premiumPlan.deleteMany();
+    const plan = await prisma.premiumPlan.create({
+      data: { tier: 'silver', slug: 'estrada', name: 'Estrada', active: true, sortOrder: 0 },
+    });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: plan.id,
+        cadence: 'monthly',
+        baseAmountCents: 89000,
+        currency: 'BRL',
+        stripePriceId: 'price_plan_silver',
+        active: true,
+      },
+    });
+    await prisma.premiumAddonModule.create({
+      data: {
+        key: 'detailing',
+        name: 'Detailing',
+        description: 'Lavagem detalhada',
+        monthlyDeltaCents: 15000,
+        currency: 'BRL',
+        quotaPerCycle: 3,
+        quotaUnit: 'access',
+        active: true,
+        stripePriceId: 'price_addon_detailing',
+      },
+    });
+  };
+
+  it('takes tier and baseAmountCents from the catalog, not from price metadata', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'multiline@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ml_1', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_1',
+          subscription: 'sub_ml_1',
+          customer: 'cus_ml_1',
+          billing_reason: 'subscription_create',
+          amount_paid: 113900,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                price: {
+                  id: 'price_plan_silver',
+                  metadata: { devFeePercent: '10' },
+                  recurring: { interval: 'month' },
+                },
+                amount: 89000,
+                subscription_item: 'si_plan_1',
+              },
+              {
+                price: {
+                  id: 'price_addon_detailing',
+                  metadata: {},
+                  recurring: { interval: 'month' },
+                },
+                amount: 15000,
+                subscription_item: 'si_addon_1',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_1' } },
+    });
+    expect(membership.tier).toBe('silver');
+    expect(membership.baseAmountCents).toBe(89000);
+    expect(membership.devFeePercent).toBe(10);
+    expect(membership.devFeeAmountCents).toBe(8900);
+    await app.close();
+  });
+
+  it('refuses to activate when no catalog plan price matches the invoice', async () => {
+    const { app, stripe } = await buildBillingApp(true);
+    await seedCatalog();
+    const { user } = await createUser({ email: 'catalogmiss@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    stripe.customers.set('cus_ml_miss', { garageId: garage.id });
+    stripe.nextEvent = {
+      id: 'evt_ml_miss',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_ml_miss',
+          subscription: 'sub_ml_miss',
+          customer: 'cus_ml_miss',
+          billing_reason: 'subscription_create',
+          amount_paid: 89000,
+          currency: 'brl',
+          period_start: 1767225600,
+          period_end: 1769904000,
+          status_transitions: { paid_at: 1767225600 },
+          lines: {
+            data: [
+              {
+                // Not in the catalog: an operator forgot to paste this price id.
+                price: { id: 'price_never_registered', metadata: { devFeePercent: '10' } },
+                amount: 89000,
+                subscription_item: 'si_orphan',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    // 200 on purpose: Stripe must NOT redeliver, the fix is an operator action.
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ignored: true, reason: 'unknown-plan-price' });
+
+    // The placeholder tier is a valid enum value, so the real assertion is that
+    // NO membership was created rather than that some tier was written.
+    const membership = await prisma.premiumMembership.findUnique({
+      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_miss' } },
+    });
+    expect(membership).toBeNull();
+
+    // The event is marked processed so a replay short-circuits instead of 503ing.
+    const evtRow = await prisma.subscriptionWebhookEvent.findUniqueOrThrow({
+      where: { provider_providerEventId: { provider: 'stripe', providerEventId: 'evt_ml_miss' } },
+    });
+    expect(evtRow.processedAt).not.toBeNull();
+
+    await app.close();
   });
 });

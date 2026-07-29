@@ -15,7 +15,7 @@ import type {
   NormalizeStripeResult,
   StripeRefundMarker,
 } from '../services/billing/normalize-stripe.js';
-import type { BillingEvent } from '../services/billing/types.js';
+import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/billing/types.js';
 
 /**
  * POST /webhooks/stripe-billing — Stripe subscription webhook (F8.04).
@@ -40,6 +40,69 @@ import type { BillingEvent } from '../services/billing/types.js';
  * REQUIRE the caller to hold `SELECT id FROM "Garage" WHERE id = $garageId FOR UPDATE`
  * inside the same transaction. This route is the lock owner.
  */
+/**
+ * Resolve raw provider invoice lines against the DB catalog.
+ *
+ * The catalog is the source of truth for tier and base amount — NOT Stripe
+ * Price metadata, which cannot be trusted to stay in sync and which the old
+ * tierFromPrice() hardcoded to 'gold'. devFeePercent is the one value still
+ * read from metadata (canon §F8.1), and only from the plan line.
+ */
+const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
+  const priceRefs = lines.map((l) => l.priceRef);
+
+  const [planPrices, addonModules] = await Promise.all([
+    prisma.premiumPlanPrice.findMany({
+      where: { stripePriceId: { in: priceRefs } },
+      select: { stripePriceId: true, baseAmountCents: true, plan: { select: { tier: true } } },
+    }),
+    prisma.premiumAddonModule.findMany({
+      where: { stripePriceId: { in: priceRefs } },
+      select: {
+        key: true,
+        stripePriceId: true,
+        monthlyDeltaCents: true,
+        quotaPerCycle: true,
+        quotaUnit: true,
+        currency: true,
+      },
+    }),
+  ]);
+
+  const planLine = lines.find((l) => planPrices.some((p) => p.stripePriceId === l.priceRef));
+  const planPrice = planLine
+    ? planPrices.find((p) => p.stripePriceId === planLine.priceRef)
+    : undefined;
+
+  const addons: BillingAddonLine[] = [];
+  let addonsAmountCents = 0;
+  for (const line of lines) {
+    const mod = addonModules.find((m) => m.stripePriceId === line.priceRef);
+    if (!mod) continue;
+    addons.push({
+      addonKey: mod.key,
+      providerItemRef: line.subscriptionItemRef,
+      monthlyDeltaCents: mod.monthlyDeltaCents,
+      quotaPerCycle: mod.quotaPerCycle,
+      quotaUnit: mod.quotaUnit,
+      currency: mod.currency,
+    });
+    addonsAmountCents += line.amountCents;
+  }
+
+  const devFeePercent = parseInt(planLine?.metadata.devFeePercent ?? '0', 10);
+  const baseAmountCents = planPrice?.baseAmountCents ?? 0;
+
+  return {
+    tier: planPrice?.plan.tier ?? null,
+    baseAmountCents,
+    devFeePercent,
+    devFeeAmountCents: Math.round((baseAmountCents * devFeePercent) / 100),
+    addons,
+    addonsAmountCents,
+  };
+};
+
 // eslint-disable-next-line @typescript-eslint/require-await
 export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
   // Raw body parser is shared with the existing stripe-webhook.ts route; Fastify
@@ -266,6 +329,73 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // Resolve garageId for membership events
     // -----------------------------------------------------------------------
     const billingEvt: BillingEvent = normalized;
+
+    // Patch the catalog-resolved values into the event before dispatch, in the
+    // same spirit as the garageId patch below.
+    if (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') {
+      const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+
+      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+
+      if (billingEvt.kind === 'subscription.activated') {
+        // The normalizer's tier placeholder is a VALID enum value ('bronze'), so a
+        // silent fall-through would provision a paying gold customer as bronze and
+        // nothing would fail. Refuse to activate on an unresolved plan line instead.
+        // Decision 2026-07-29: ignore + alert. Stripe must NOT redeliver, because
+        // the fix is an operator action in the admin catalog, not a transient error.
+        if (!resolved.tier) {
+          await prisma.subscriptionWebhookEvent.update({
+            where: { id: webhookEventId },
+            data: { processedAt: new Date() },
+          });
+          request.log.error(
+            { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+            'stripe-billing webhook: no catalog plan price matched the invoice, refusing to activate',
+          );
+          Sentry.captureMessage(
+            'stripe-billing webhook: invoice.paid with no matching PremiumPlanPrice, activation refused',
+            {
+              level: 'error',
+              tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
+              extra: { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+            },
+          );
+          return reply
+            .status(200)
+            .send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
+        }
+
+        billingEvt.tier = resolved.tier;
+        billingEvt.addons = resolved.addons;
+        billingEvt.addonsAmountCents = resolved.addonsAmountCents;
+      }
+    }
+
+    // A tier_changed whose swapped price is an add-on is not a tier change at
+    // all: reconcileMembershipAddonsAmount above already handled it.
+    if (billingEvt.kind === 'subscription.tier_changed') {
+      const resolved = await resolveLinesAgainstCatalog([
+        { priceRef: billingEvt.priceRef, amountCents: 0, subscriptionItemRef: null, metadata: {} },
+      ]);
+      if (!resolved.tier) {
+        await prisma.subscriptionWebhookEvent.update({
+          where: { id: webhookEventId },
+          data: { processedAt: new Date() },
+        });
+        request.log.info(
+          { eventId: event.id, priceRef: billingEvt.priceRef },
+          'stripe-billing webhook: item swap is an add-on, not a tier change',
+        );
+        return reply.status(200).send({ ok: true, ignored: true, reason: 'addon-item-swap' });
+      }
+      billingEvt.tier = resolved.tier;
+      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+      billingEvt.pricing.grossAmountCents = resolved.baseAmountCents + resolved.devFeeAmountCents;
+    }
 
     let garageId: string;
 

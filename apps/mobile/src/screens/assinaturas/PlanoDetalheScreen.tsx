@@ -8,7 +8,6 @@
 import type { PremiumPlan } from '@ccc/shared/premium-catalog';
 import { ArrowLeft, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -16,6 +15,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { formatBRL } from '~/lib/format';
+import { TierCta } from '~/screens/assinaturas/TierCta';
 import {
   c,
   monthlyPriceCents,
@@ -172,37 +172,12 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
 
       {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam). */}
       <View style={styles.ctaBar}>
-        {t.btnBg === 'gradient' ? (
-          <Pressable
-            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
-            accessibilityRole="button"
-            accessibilityLabel={assinaturasCopy.detail.cta}
-            style={styles.ctaGradient}
-            testID="detalhe-assinar"
-          >
-            <LinearGradient
-              colors={[c.goldLight, c.goldDeep]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>
-              {assinaturasCopy.detail.cta}
-            </Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
-            accessibilityRole="button"
-            accessibilityLabel={assinaturasCopy.detail.cta}
-            style={[styles.cta, { borderColor: t.btnBorder }]}
-            testID="detalhe-assinar"
-          >
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>
-              {assinaturasCopy.detail.cta}
-            </Text>
-          </Pressable>
-        )}
+        <TierCta
+          tier={plan.tier}
+          label={assinaturasCopy.detail.cta}
+          onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
+          testID="detalhe-assinar"
+        />
       </View>
     </View>
   );
@@ -336,19 +311,4 @@ const styles = StyleSheet.create({
     borderTopColor: c.hairline,
     backgroundColor: c.bg,
   },
-  cta: {
-    borderRadius: 11,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  ctaGradient: {
-    borderRadius: 11,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  ctaText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, letterSpacing: 2.4 },
 });

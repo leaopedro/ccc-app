@@ -20,6 +20,7 @@ import {
   premiumCheckoutResponseSchema,
   premiumStatusSchema,
 } from '@ccc/shared/premium';
+import { premiumInvoicesResponseSchema } from '@ccc/shared/premium-subscription';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
@@ -397,6 +398,60 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       cancelAtPeriodEnd: result.cancelAtPeriodEnd,
       currentPeriodEnd: membership.currentPeriodEnd.toISOString(),
     });
+  });
+
+  /**
+   * GET /api/me/premium/invoices
+   *
+   * Billing history as the member sees it. Reads every membership row of the
+   * user's garage (expired rows accumulate as history), newest first, capped
+   * at 24. Provider refs are never serialized.
+   */
+  app.get('/api/me/premium/invoices', { preHandler: [app.authenticate] }, async (request, reply) => {
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+    }
+
+    const { sub } = requireUser(request);
+
+    const garage = await prisma.garage.findUnique({
+      where: { userId: sub },
+      select: { id: true },
+    });
+    if (!garage) {
+      return reply.status(200).send(premiumInvoicesResponseSchema.parse({ invoices: [] }));
+    }
+
+    const rows = await prisma.premiumMembershipInvoice.findMany({
+      where: { membership: { garageId: garage.id } },
+      orderBy: { periodStart: 'desc' },
+      take: 24,
+      select: {
+        periodStart: true,
+        periodEnd: true,
+        paidAt: true,
+        grossAmountCents: true,
+        currency: true,
+        status: true,
+        refundedAt: true,
+      },
+    });
+
+    return reply.status(200).send(
+      premiumInvoicesResponseSchema.parse({
+        invoices: rows.map((r) => ({
+          periodStart: r.periodStart.toISOString(),
+          periodEnd: r.periodEnd.toISOString(),
+          paidAt: r.paidAt.toISOString(),
+          grossAmountCents: r.grossAmountCents,
+          currency: r.currency,
+          status: r.status,
+          refundedAt: r.refundedAt ? r.refundedAt.toISOString() : null,
+        })),
+      }),
+    );
   });
 
   /**

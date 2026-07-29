@@ -69,6 +69,9 @@ describe('BillingEvent type narrowing', () => {
         periodEnd: new Date('2026-02-01'),
         paidAt: new Date('2026-01-01'),
       },
+      lines: [],
+      addons: [],
+      addonsAmountCents: 0,
     };
     expect(extractKind(evt)).toBe('subscription.activated');
     // Type narrowing — these fields only exist on this arm.
@@ -99,6 +102,7 @@ describe('BillingEvent type narrowing', () => {
         periodEnd: new Date('2026-03-01'),
         paidAt: new Date('2026-02-01'),
       },
+      lines: [],
     };
     expect(extractKind(evt)).toBe('subscription.renewed');
     // @ts-expect-error — garageId does NOT exist on 'renewed'; TS must error here.
@@ -158,6 +162,7 @@ describe('BillingEvent type narrowing', () => {
       kind: 'subscription.tier_changed',
       provider: 'apple_revenuecat',
       providerSubRef: 'sub_rc_test',
+      priceRef: 'gold_annual_rc',
       tier: 'gold',
       cadence: 'annual',
       pricing: {

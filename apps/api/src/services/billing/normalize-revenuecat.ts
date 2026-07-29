@@ -113,6 +113,15 @@ export function normalizeRevenueCatEvent(rawEvent: unknown): NormalizeRCResult {
         currentPeriodEnd,
         pricing,
         invoice,
+        // Genuinely empty, not a placeholder: Apple invoices have no Stripe
+        // price lines to decompose, so there is nothing for a route to
+        // resolve here (unlike Stripe's `lines`, which the webhook route
+        // still has to walk against the catalog).
+        lines: [],
+        // Genuinely empty: recurring add-on modules are a Stripe-only
+        // feature by product decision. Apple memberships never carry them.
+        addons: [],
+        addonsAmountCents: 0,
       } satisfies BillingEvent;
 
     case 'RENEWAL':
@@ -124,6 +133,9 @@ export function normalizeRevenueCatEvent(rawEvent: unknown): NormalizeRCResult {
         currentPeriodEnd,
         pricing,
         invoice,
+        // Genuinely empty: no Stripe price lines exist on an Apple renewal
+        // to decompose; nothing is deferred to a route.
+        lines: [],
       } satisfies BillingEvent;
 
     case 'PRODUCT_CHANGE':
@@ -131,6 +143,11 @@ export function normalizeRevenueCatEvent(rawEvent: unknown): NormalizeRCResult {
         kind: 'subscription.tier_changed',
         provider: 'apple_revenuecat',
         providerSubRef: original_transaction_id,
+        // Real value, not a placeholder: product_id is RevenueCat's analogue
+        // of Stripe's price.id, and this function already resolves the real
+        // tier below (RevenueCat, unlike Stripe, can map its own product to a
+        // tier without a route-side catalog lookup).
+        priceRef: product_id,
         tier: 'gold',
         cadence,
         pricing,

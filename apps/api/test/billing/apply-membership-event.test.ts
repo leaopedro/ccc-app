@@ -46,6 +46,9 @@ const buildActivatedEvt = (
   currentPeriodEnd: new Date('2026-07-01'),
   pricing: BASE_PRICING,
   invoice: BASE_INVOICE,
+  lines: [],
+  addons: [],
+  addonsAmountCents: 0,
   ...overrides,
 });
 
@@ -65,6 +68,7 @@ const buildRenewedEvt = (
     periodStart: new Date('2026-07-01'),
     periodEnd: new Date('2026-08-01'),
   },
+  lines: [],
   ...overrides,
 });
 
@@ -401,6 +405,7 @@ describe('applyMembershipEvent', () => {
         kind: 'subscription.tier_changed',
         provider: 'stripe',
         providerSubRef: 'sub_test001',
+        priceRef: 'price_test_annual_gold',
         tier: 'gold',
         cadence: 'annual',
         pricing: ANNUAL_PRICING,

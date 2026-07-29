@@ -46,6 +46,9 @@ const makeActivatedEvt = (
     periodEnd: new Date('2026-07-01'),
     paidAt: new Date('2026-06-01'),
   },
+  lines: [],
+  addons: [],
+  addonsAmountCents: 0,
 });
 
 /** Helper: simulate the admin-grant path's XP award call (same sourceRef contract). */

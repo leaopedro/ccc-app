@@ -41,6 +41,7 @@ export const mySubscriptionResponseSchema = z.object({
   tier: z.enum(['bronze', 'silver', 'gold']).nullable(),
   planSlug: z.string().nullable(),
   planName: z.string().nullable(),
+  planDescription: z.string().nullable(),
   cadence: z.enum(['monthly', 'annual']).nullable(),
   currentPeriodEnd: z.string().datetime().nullable(),
   cancelAtPeriodEnd: z.boolean(),
@@ -49,6 +50,7 @@ export const mySubscriptionResponseSchema = z.object({
   totalAmountCents: z.number().int().nonnegative(),
   currency: z.string(),
   addons: z.array(mySubscriptionAddonSchema),
+  benefits: z.array(z.string()),
 });
 
 export type MySubscriptionResponse = z.infer<typeof mySubscriptionResponseSchema>;
@@ -90,3 +92,27 @@ export const redeemAddonResponseSchema = z.object({
 });
 
 export type RedeemAddonResponse = z.infer<typeof redeemAddonResponseSchema>;
+
+/**
+ * GET /api/me/premium/invoices — one billing charge as the member sees it.
+ * Provider refs (providerInvoiceRef / providerTransactionRef) are NEVER
+ * serialized here. `status` mirrors the free-form DB column.
+ */
+export const premiumInvoiceSchema = z.object({
+  periodStart: z.string().datetime(),
+  periodEnd: z.string().datetime(),
+  paidAt: z.string().datetime(),
+  grossAmountCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  status: z.string(),
+  refundedAt: z.string().datetime().nullable(),
+});
+
+export type PremiumInvoice = z.infer<typeof premiumInvoiceSchema>;
+
+/** GET /api/me/premium/invoices — response. Newest first, capped at 24. */
+export const premiumInvoicesResponseSchema = z.object({
+  invoices: z.array(premiumInvoiceSchema),
+});
+
+export type PremiumInvoicesResponse = z.infer<typeof premiumInvoicesResponseSchema>;

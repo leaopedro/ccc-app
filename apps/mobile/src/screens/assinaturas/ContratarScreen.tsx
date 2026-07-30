@@ -9,7 +9,7 @@
 import type { PremiumPlan } from '@ccc/shared/premium-catalog';
 import { ArrowLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -97,6 +97,12 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<'form' | 'confirming' | 'pending'>('form');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // `submitting` state does not apply synchronously, so a rapid second tap
+  // can read it as stale `false` in its own closure before the first tap's
+  // re-render lands. Gate on a ref instead — checked and set in the same
+  // tick, before any `await` — and keep `submitting` purely for the visual
+  // label/disabled/loading props on the CTA.
+  const submittingRef = useRef(false);
 
   if (loading) {
     return (
@@ -172,7 +178,8 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
   const totals = packageTotalCents(priceCents, modules, selected);
 
   const onSubmit = async () => {
-    if (submitting) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setErrorMsg(null);
     try {
@@ -198,6 +205,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
       // 'dismissed'  → stay on the form untouched.
       // 'ios_unsupported' → unreachable, the CTA is not rendered on iOS.
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

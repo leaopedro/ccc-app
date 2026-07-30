@@ -1251,8 +1251,14 @@ describe('multi-line invoice resolution', () => {
                 subscription_item: 'si_plan_2',
               },
               {
+                // Fix round (Task 22): deliberately DIFFERENT from the catalog's
+                // monthlyDeltaCents (15000) — simulates a prorated invoice line.
+                // Every other fixture in this file happens to set these equal,
+                // which would hide a regression back to summing invoice-line
+                // amounts instead of the catalog. See addonsAmountCents assertion
+                // below: it must reflect the catalog sum (15000), not this 7500.
                 price: { id: 'price_addon_detailing', metadata: {} },
-                amount: 15000,
+                amount: 7500,
                 subscription_item: 'si_addon_2',
               },
             ],
@@ -1272,6 +1278,7 @@ describe('multi-line invoice resolution', () => {
     const membership = await prisma.premiumMembership.findUniqueOrThrow({
       where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_2' } },
     });
+    // Must be the catalog sum (15000), NOT the invoice-line sum (7500) above.
     expect(membership.addonsAmountCents).toBe(15000);
 
     const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({

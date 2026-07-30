@@ -186,9 +186,11 @@ Never commit any `sk_` or `whsec_` values. They live in Railway Variables only.
 
 5. Verify by calling `GET /api/plans` that all three plan tiers appear with their
    prices. If any `stripePriceId` field is empty on a plan, the checkout endpoint
-   will return 503 with a list of exactly which fields are missing. For add-ons, an
-   empty `stripePriceId` also returns 503 (only add-on modules selected by the member
-   are validated at checkout time).
+   will return 503 `ServiceUnavailable` with message `"billing price not configured"`;
+   the response body does not name the missing field — check the API error logs for
+   the `tier`, `cadence`, and `planSlug` that failed. For add-ons, an empty
+   `stripePriceId` also returns 503, but that response includes `missingAddonKeys` in
+   the body (only add-on modules selected by the member are validated at checkout time).
 
 ### 6.2 Common operator mistakes and their error symptoms
 
@@ -200,13 +202,15 @@ config problem.
 **Missing plan or add-on price ID:** If the catalog references a Stripe Price ID that
 no longer exists in Stripe, or if a plan or active add-on module has no `stripePriceId`
 configured, the checkout returns 503 ServiceUnavailable. This signals an operator
-misconfiguration. For add-ons, include the missing keys in the response; for plans, the
-error message lists the missing field names.
+misconfiguration. For add-ons, the response includes `missingAddonKeys` in the body;
+for plans, the response is generic (`"billing price not configured"`) and the missing
+field names appear only in the API error logs.
 
 **Mixed intervals or currencies:** If the plan price and any selected add-on price have
 different billing intervals (e.g., monthly vs. annual) or different currencies, Stripe
-rejects the Checkout Session creation with a 503. Ensure every Price — plan and all
-add-ons in the catalog — uses the same interval and currency (monthly recurring, BRL).
+rejects the Checkout Session creation request. The API translates any such failure to
+a 503 ServiceUnavailable. Ensure every Price — plan and all add-ons in the catalog —
+uses the same interval and currency (monthly recurring, BRL).
 
 ### 6.3 Webhook behavior when invoice lines do not match the catalog
 

@@ -17,6 +17,8 @@ export const profileCopy = {
     saved: 'Perfil atualizado.',
     saveFailed: 'Não foi possível salvar.',
     loadFailed: 'Não foi possível carregar o perfil.',
+    memberTier: (tier: 'bronze' | 'silver' | 'gold') =>
+      tier === 'gold' ? 'Membro Ouro' : tier === 'silver' ? 'Membro Prata' : 'Membro Bronze',
   },
   menu: {
     subtitle: 'Gerencie seus dados, endereços e sua garagem.',

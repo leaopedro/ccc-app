@@ -9,12 +9,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PremiumAddonModule, PremiumPlan } from '@ccc/shared/premium-catalog';
+import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 const push = vi.fn();
+const replace = vi.fn();
 
 const hookState = vi.hoisted(() => ({
   plans: {
@@ -29,11 +31,18 @@ const hookState = vi.hoisted(() => ({
     error: false,
     refresh: () => Promise.resolve(),
   },
+  subscription: {
+    subscription: null as MySubscriptionResponse | null,
+    loading: false,
+  },
 }));
 
 vi.mock('~/hooks/usePremiumPlans', () => ({ usePremiumPlans: () => hookState.plans }));
 vi.mock('~/hooks/usePremiumAddonModules', () => ({
   usePremiumAddonModules: () => hookState.modules,
+}));
+vi.mock('~/hooks/usePremiumSubscription', () => ({
+  usePremiumSubscription: () => hookState.subscription,
 }));
 
 vi.mock('react-native', async () => {
@@ -115,7 +124,7 @@ vi.mock('lucide-react-native', async () => {
 });
 
 vi.mock('expo-router', () => ({
-  router: { canGoBack: () => true, back: vi.fn(), replace: vi.fn(), push },
+  router: { canGoBack: () => true, back: vi.fn(), replace, push },
 }));
 
 const plan = (
@@ -167,6 +176,7 @@ describe('PlanosScreen', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     push.mockClear();
+    replace.mockClear();
     hookState.plans = {
       plans: SAMPLE_PLANS,
       loading: false,
@@ -190,6 +200,7 @@ describe('PlanosScreen', () => {
       error: false,
       refresh: () => Promise.resolve(),
     };
+    hookState.subscription = { subscription: null, loading: false };
   });
 
   afterEach(async () => {
@@ -200,10 +211,10 @@ describe('PlanosScreen', () => {
     container.remove();
   });
 
-  const renderScreen = async () => {
+  const renderScreen = async (showAll = false) => {
     const { default: PlanosScreen } = await import('../PlanosScreen');
     await act(async () => {
-      root.render(<PlanosScreen />);
+      root.render(<PlanosScreen showAll={showAll} />);
       await flush();
     });
   };
@@ -270,5 +281,62 @@ describe('PlanosScreen', () => {
       await flush();
     });
     expect(push).toHaveBeenCalledWith('/assinaturas/fundador');
+  });
+
+  const ACTIVE_SUBSCRIPTION: MySubscriptionResponse = {
+    active: true,
+    tier: 'gold',
+    planSlug: 'fundador',
+    planName: 'Fundador',
+    planDescription: null,
+    cadence: 'monthly',
+    currentPeriodEnd: '2026-08-22T00:00:00.000Z',
+    cancelAtPeriodEnd: false,
+    baseAmountCents: 149000,
+    addonsAmountCents: 0,
+    totalAmountCents: 149000,
+    currency: 'BRL',
+    addons: [],
+    benefits: [],
+  };
+
+  it('redirects an active subscriber to Minha Assinatura instead of showing plans', async () => {
+    hookState.subscription = { subscription: ACTIVE_SUBSCRIPTION, loading: false };
+    await renderScreen();
+    expect(replace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+  });
+
+  it('does not redirect and still shows the plan list when ?all=1 is set', async () => {
+    hookState.subscription = { subscription: ACTIVE_SUBSCRIPTION, loading: false };
+    await renderScreen(true);
+    expect(replace).not.toHaveBeenCalled();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Ingresso');
+    expect(text).toContain('Fundador');
+  });
+
+  it('does not redirect a member without an active subscription', async () => {
+    hookState.subscription = {
+      subscription: { ...ACTIVE_SUBSCRIPTION, active: false },
+      loading: false,
+    };
+    await renderScreen();
+    expect(replace).not.toHaveBeenCalled();
+    expect(container.textContent ?? '').toContain('Ingresso');
+  });
+
+  it('does not flash the plan list while the subscription status is still loading', async () => {
+    // Plans have already resolved (loading: false) but subscription status has
+    // not — the screen must keep showing the spinner, not the list, until both
+    // are known. Regresses the exact defect this task fixes: gating the
+    // screen's loading state on `loading` alone (dropping `subLoading`) would
+    // let this render the list one frame before any redirect could happen.
+    hookState.subscription = { subscription: null, loading: true };
+    await renderScreen();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Carregando');
+    expect(text).not.toContain('Ingresso');
+    expect(text).not.toContain('BRONZE');
+    expect(replace).not.toHaveBeenCalled();
   });
 });

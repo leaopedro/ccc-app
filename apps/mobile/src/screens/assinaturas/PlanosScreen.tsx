@@ -14,12 +14,14 @@ import type { PremiumAddonModule, PremiumPlan } from '@ccc/shared/premium-catalo
 import { ArrowLeft, Check, SprayCan, Wrench } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
+import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import {
   c,
@@ -189,11 +191,20 @@ function Header() {
   );
 }
 
-export default function PlanosScreen() {
+export default function PlanosScreen({ showAll = false }: { showAll?: boolean }) {
   const { plans, loading, error, refresh } = usePremiumPlans();
   const { modules } = usePremiumAddonModules();
+  const { subscription, loading: subLoading } = usePremiumSubscription();
 
-  if (loading) {
+  // A member with a live subscription lands on "Minha assinatura", not on the
+  // sales page. `?all=1` opts out so the upgrade path stays reachable from
+  // inside Minha Assinatura.
+  useEffect(() => {
+    if (showAll || subLoading) return;
+    if (subscription?.active) router.replace('/assinaturas/minha-assinatura');
+  }, [showAll, subLoading, subscription?.active]);
+
+  if (loading || subLoading) {
     return (
       <View style={styles.screen}>
         <View style={styles.centerFill}>

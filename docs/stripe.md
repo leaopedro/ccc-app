@@ -28,48 +28,50 @@ smoke; live mode for production).
 
 While still on the product detail page, click **Add price**.
 
-| Field          | Value                                                          |
-| -------------- | -------------------------------------------------------------- |
-| Pricing model  | Standard pricing                                               |
-| Billing period | Monthly                                                        |
-| Price          | R$ XX,XX (set by product/pricing decision; not a code concern) |
-| Currency       | BRL                                                            |
-| Lookup key     | `premium_gold_monthly`                                         |
+| Field          | Value                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| Pricing model  | Standard pricing                                                                         |
+| Billing period | Monthly                                                                                  |
+| Price          | R$ XX,XX (your catalog base price; this is what Stripe charges and what the member pays) |
+| Currency       | BRL                                                                                      |
+| Lookup key     | `premium_gold_monthly`                                                                   |
 
 Under **Additional options → Metadata**, add:
 
-| Key               | Value                                              |
-| ----------------- | -------------------------------------------------- |
-| `baseAmountCents` | `<price_in_cents_excluding_devfee>`                |
-| `devFeePercent`   | `10` (or whatever `DEV_FEE_PERCENT` env is set to) |
+| Key               | Value                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| `baseAmountCents` | The Price above in cents (e.g., `49000` for R$ 490,00). Must equal your Stripe Price `unit_amount`. |
+| `devFeePercent`   | `10` (or whatever `DEV_FEE_PERCENT` env is set to)                                                  |
 
 These two metadata keys are **load-bearing** (spec §F8.1). The webhook
-handler reads them at time-of-charge to populate
-`PremiumMembershipInvoice.devFeePercent` + `devFeeAmountCents`. They are
-never re-derived from env at read time — the snapshot in the invoice row is
-the source of truth for historical accounting.
+handler reads them at time-of-charge to compute the member's charge and an
+internal revenue split.
 
-Keep `baseAmountCents + ceil(baseAmountCents * devFeePercent/100) = grossAmountCents`
-(the gross price the customer sees). Verify the math before going live.
+The member is charged only `baseAmountCents`. `devFeePercent` is **not** added
+to the member's charge. Instead, it is read from the Price metadata and used
+to compute `devFeeAmountCents = ceil(baseAmountCents * devFeePercent/100)`,
+an internal split recorded on `PremiumMembership` and `PremiumMembershipInvoice`
+for revenue-share accounting between the platform and the operator. The snapshot
+in the invoice row is the source of truth and is never re-derived from env.
 
 ### 1.3 Create the annual Price
 
 Click **Add price** again on the same product.
 
-| Field          | Value                              |
-| -------------- | ---------------------------------- |
-| Pricing model  | Standard pricing                   |
-| Billing period | Yearly                             |
-| Price          | R$ YY,YY (set by pricing decision) |
-| Currency       | BRL                                |
-| Lookup key     | `premium_gold_annual`              |
+| Field          | Value                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| Pricing model  | Standard pricing                                                                         |
+| Billing period | Yearly                                                                                   |
+| Price          | R$ YY,YY (your catalog base price; this is what Stripe charges and what the member pays) |
+| Currency       | BRL                                                                                      |
+| Lookup key     | `premium_gold_annual`                                                                    |
 
 Under **Additional options → Metadata**, add the same keys:
 
-| Key               | Value                                                         |
-| ----------------- | ------------------------------------------------------------- |
-| `baseAmountCents` | `<annual_price_in_cents_excluding_devfee>`                    |
-| `devFeePercent`   | `10` (match the monthly value unless intentionally different) |
+| Key               | Value                                                                 |
+| ----------------- | --------------------------------------------------------------------- |
+| `baseAmountCents` | The Price above in cents. Must equal your Stripe Price `unit_amount`. |
+| `devFeePercent`   | `10` (match the monthly value unless intentionally different)         |
 
 ### 1.4 Stripe Tax — Brazilian VAT behavior
 

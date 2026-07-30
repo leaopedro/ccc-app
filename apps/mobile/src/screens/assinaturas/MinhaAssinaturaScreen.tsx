@@ -111,8 +111,8 @@ function InvoiceHistory() {
         <Text style={styles.historyEmpty}>{copy.historico.empty}</Text>
       ) : (
         <View style={styles.historyList}>
-          {invoices.map((inv) => (
-            <View key={`${inv.periodStart}-${inv.paidAt}`} style={styles.historyRow}>
+          {invoices.map((inv, index) => (
+            <View key={`${inv.periodStart}-${inv.paidAt}-${index}`} style={styles.historyRow}>
               <View style={styles.historyRowText}>
                 <Text style={styles.historyPeriod}>
                   {dateFmt.format(new Date(inv.periodStart))}
@@ -347,16 +347,18 @@ function CenteredState({
   cta,
   onPress,
   testID,
+  danger,
 }: {
   title: string;
   subcopy?: string;
   cta?: string;
   onPress?: () => void;
   testID?: string;
+  danger?: boolean;
 }) {
   return (
     <View style={styles.centerFill}>
-      <Text style={styles.stateTitle}>{title}</Text>
+      <Text style={[styles.stateTitle, danger && styles.stateTitleDanger]}>{title}</Text>
       {subcopy ? <Text style={styles.stateSubcopy}>{subcopy}</Text> : null}
       {cta && onPress ? (
         <Pressable
@@ -399,6 +401,7 @@ export default function MinhaAssinaturaScreen() {
         cta={copy.errorRetry}
         onPress={() => void refresh()}
         testID="assinatura-retry"
+        danger
       />
     );
   } else if (subscription && subscription.active) {
@@ -439,6 +442,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: c.cream,
     textAlign: 'center',
+  },
+  // Fix round (Task 22): the top-level load-failure state rendered in
+  // c.cream, same weight as ordinary body text. Applied only to the error
+  // CenteredState (see `danger` prop) — the empty/unavailable states keep
+  // c.cream since they are not error conditions.
+  stateTitleDanger: {
+    color: c.danger,
   },
   stateSubcopy: {
     fontFamily: 'Inter_400Regular',

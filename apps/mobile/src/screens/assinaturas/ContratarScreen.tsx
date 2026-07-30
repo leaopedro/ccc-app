@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'Inter_400Regular',
     fontSize: 12.5,
-    color: c.cream,
+    color: c.danger,
     textAlign: 'center',
   },
 

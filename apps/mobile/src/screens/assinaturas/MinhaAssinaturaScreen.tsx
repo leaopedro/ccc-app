@@ -5,18 +5,34 @@
 // or a friendly empty state linking back to the plans. The 503 "billing off"
 // case is surfaced as an informative state, never a crash.
 
+import { SheetShell } from '@ccc/ui';
 import type { MySubscriptionAddon, MySubscriptionResponse } from '@ccc/shared/premium-subscription';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
+import { ApiError } from '~/api/client';
+import { cancelPremiumSubscription } from '~/api/premium';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { usePremiumInvoices } from '~/hooks/usePremiumInvoices';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
+import { showToast } from '~/lib/toast';
 import { c, TIER_VISUAL, type ApiTier } from '~/screens/assinaturas/tier-visual';
 
 const copy = assinaturasCopy.minhaAssinatura;
+
+const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
 
 const dateFmt = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -80,7 +96,52 @@ function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
   );
 }
 
-function ActiveSubscription({ sub }: { sub: MySubscriptionResponse }) {
+function InvoiceHistory() {
+  const { invoices, loading, error } = usePremiumInvoices();
+
+  if (loading) return null;
+  // A history failure must never take the screen down — the subscription card
+  // is the important part.
+  if (error) return <Text style={styles.historyError}>{copy.historico.error}</Text>;
+
+  return (
+    <View style={styles.historySection}>
+      <Text style={styles.sectionTitle}>{copy.historico.title}</Text>
+      {invoices.length === 0 ? (
+        <Text style={styles.historyEmpty}>{copy.historico.empty}</Text>
+      ) : (
+        <View style={styles.historyList}>
+          {invoices.map((inv) => (
+            <View key={`${inv.periodStart}-${inv.paidAt}`} style={styles.historyRow}>
+              <View style={styles.historyRowText}>
+                <Text style={styles.historyPeriod}>
+                  {dateFmt.format(new Date(inv.periodStart))}
+                </Text>
+                <Text style={styles.historyPaidAt}>
+                  {copy.historico.paidAt(dateFmt.format(new Date(inv.paidAt)))}
+                </Text>
+              </View>
+              <View style={styles.historyRowAmount}>
+                <Text style={styles.historyAmount}>{formatBRL(inv.grossAmountCents)}</Text>
+                {inv.refundedAt ? (
+                  <Text style={styles.historyRefunded}>{copy.historico.refunded}</Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ActiveSubscription({
+  sub,
+  refresh,
+}: {
+  sub: MySubscriptionResponse;
+  refresh: () => Promise<void>;
+}) {
   const visual = sub.tier ? TIER_VISUAL[sub.tier as ApiTier] : null;
   const periodEnd = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null;
   const periodText = periodEnd
@@ -89,51 +150,175 @@ function ActiveSubscription({ sub }: { sub: MySubscriptionResponse }) {
       : copy.renewsAt(dateFmt.format(periodEnd))
     : null;
 
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [isApple, setIsApple] = useState(false);
+  // `cancelling` state does not apply synchronously, so a rapid second tap can
+  // read it as stale `false` in its own closure before the first tap's
+  // re-render lands. Gate on a ref instead — checked and set in the same
+  // tick, before any `await` — and keep `cancelling` purely for the visual
+  // label/disabled/busy props on the CTA.
+  const cancellingRef = useRef(false);
+
+  const onConfirmCancel = async () => {
+    if (cancellingRef.current) return;
+    cancellingRef.current = true;
+    setCancelling(true);
+    try {
+      await cancelPremiumSubscription();
+      setCancelOpen(false);
+      showToast(copy.cancelar.successToast);
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setIsApple(true);
+        return;
+      }
+      setCancelError(copy.cancelar.error);
+    } finally {
+      cancellingRef.current = false;
+      setCancelling(false);
+    }
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.planCard}>
-        <Text style={styles.planEyebrow}>{copy.planLabel}</Text>
-        <View style={styles.tierRow}>
-          {visual ? (
-            <View
-              style={[
-                styles.tierDot,
-                { backgroundColor: visual.accent, shadowColor: visual.accent },
-              ]}
-            />
-          ) : null}
-          <Text style={styles.planName}>{sub.planName ?? visual?.label ?? '—'}</Text>
-        </View>
-        {periodText ? <Text style={styles.periodText}>{periodText}</Text> : null}
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.planCard}>
+          <Text style={styles.planEyebrow}>{copy.planLabel}</Text>
+          <View style={styles.tierRow}>
+            {visual ? (
+              <View
+                style={[
+                  styles.tierDot,
+                  { backgroundColor: visual.accent, shadowColor: visual.accent },
+                ]}
+              />
+            ) : null}
+            <Text style={styles.planName}>{sub.planName ?? visual?.label ?? '—'}</Text>
+          </View>
+          {periodText ? <Text style={styles.periodText}>{periodText}</Text> : null}
 
-        <View style={styles.amountsBlock}>
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>{copy.baseLabel}</Text>
-            <Text style={styles.amountValue}>{formatBRL(sub.baseAmountCents)}</Text>
-          </View>
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>{copy.addonsLabel}</Text>
-            <Text style={styles.amountValue}>{formatBRL(sub.addonsAmountCents)}</Text>
-          </View>
-          <View style={styles.amountDivider} />
-          <View style={styles.amountRow}>
-            <Text style={styles.totalLabel}>{copy.totalLabel}</Text>
-            <Text style={styles.totalValue}>{formatBRL(sub.totalAmountCents)}</Text>
+          <View style={styles.amountsBlock}>
+            <View style={styles.amountRow}>
+              <Text style={styles.amountLabel}>{copy.baseLabel}</Text>
+              <Text style={styles.amountValue}>{formatBRL(sub.baseAmountCents)}</Text>
+            </View>
+            <View style={styles.amountRow}>
+              <Text style={styles.amountLabel}>{copy.addonsLabel}</Text>
+              <Text style={styles.amountValue}>{formatBRL(sub.addonsAmountCents)}</Text>
+            </View>
+            <View style={styles.amountDivider} />
+            <View style={styles.amountRow}>
+              <Text style={styles.totalLabel}>{copy.totalLabel}</Text>
+              <Text style={styles.totalValue}>{formatBRL(sub.totalAmountCents)}</Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      {sub.addons.length > 0 ? (
-        <View style={styles.addonsSection}>
-          <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
-          <View style={styles.addons}>
-            {sub.addons.map((addon) => (
-              <AddonRow key={addon.key} addon={addon} />
-            ))}
+        {sub.benefits.length > 0 ? (
+          <View style={styles.benefitsSection}>
+            <Text style={styles.sectionTitle}>{copy.benefitsTitle}</Text>
+            <View style={styles.benefits}>
+              {sub.benefits.map((benefit) => (
+                <View key={benefit} style={styles.benefitRow}>
+                  <Check color={c.goldLight} size={18} strokeWidth={2} style={styles.benefitIcon} />
+                  <Text style={styles.benefitText}>{benefit}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
-      ) : null}
-    </ScrollView>
+        ) : null}
+
+        {sub.addons.length > 0 ? (
+          <View style={styles.addonsSection}>
+            <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
+            <View style={styles.addons}>
+              {sub.addons.map((addon) => (
+                <AddonRow key={addon.key} addon={addon} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <InvoiceHistory />
+
+        <Pressable
+          onPress={() => router.push('/assinaturas?all=1')}
+          accessibilityRole="button"
+          accessibilityLabel={copy.seeAllPlans}
+          style={styles.seeAllPlans}
+        >
+          <Text style={styles.seeAllPlansText}>{copy.seeAllPlans}</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setCancelOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={copy.cancelar.trigger}
+          style={styles.cancelTrigger}
+          testID="assinatura-cancelar"
+        >
+          <Text style={styles.cancelTriggerText}>{copy.cancelar.trigger}</Text>
+        </Pressable>
+      </ScrollView>
+
+      <SheetShell
+        visible={cancelOpen}
+        title={isApple ? copy.cancelar.appleTitle : copy.cancelar.sheetTitle}
+        onClose={() => setCancelOpen(false)}
+        theme={{
+          surface: c.surface,
+          border: c.hairline,
+          titleColor: c.cream,
+          titleFontFamily: 'Inter_600SemiBold',
+        }}
+        testID="assinatura-cancelar-sheet"
+      >
+        {isApple ? (
+          <View style={styles.sheetBody}>
+            <Text style={styles.sheetText}>{copy.cancelar.appleBody}</Text>
+            <Pressable
+              onPress={() => void Linking.openURL(APPLE_MANAGE_URL)}
+              accessibilityRole="button"
+              accessibilityLabel={copy.cancelar.appleCta}
+              style={styles.sheetKeep}
+            >
+              <Text style={styles.sheetKeepText}>{copy.cancelar.appleCta}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.sheetBody}>
+            <Text style={styles.sheetText}>
+              {periodEnd ? copy.cancelar.body(dateFmt.format(periodEnd)) : copy.cancelar.sheetTitle}
+            </Text>
+            {cancelError ? <Text style={styles.sheetError}>{cancelError}</Text> : null}
+            <Pressable
+              onPress={() => setCancelOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel={copy.cancelar.keep}
+              style={styles.sheetKeep}
+            >
+              <Text style={styles.sheetKeepText}>{copy.cancelar.keep}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void onConfirmCancel()}
+              disabled={cancelling}
+              accessibilityRole="button"
+              accessibilityLabel={copy.cancelar.confirm}
+              accessibilityState={{ disabled: cancelling, busy: cancelling }}
+              style={[styles.sheetConfirm, cancelling && styles.dimmed]}
+              testID="assinatura-cancelar-confirmar"
+            >
+              <Text style={styles.sheetConfirmText}>
+                {cancelling ? copy.cancelar.loading : copy.cancelar.confirm}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </SheetShell>
+    </View>
   );
 }
 
@@ -198,7 +383,7 @@ export default function MinhaAssinaturaScreen() {
       />
     );
   } else if (subscription && subscription.active) {
-    body = <ActiveSubscription sub={subscription} />;
+    body = <ActiveSubscription sub={subscription} refresh={refresh} />;
   } else {
     body = (
       <CenteredState
@@ -360,4 +545,123 @@ const styles = StyleSheet.create({
     color: c.goldLight,
     marginTop: 3,
   },
+
+  // Shared section title (benefits + history)
+  sectionTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 2.8,
+    color: c.goldDeep,
+  },
+
+  // Benefits
+  benefitsSection: { marginTop: 30 },
+  benefits: { marginTop: 14, gap: 13 },
+  benefitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  benefitIcon: { marginTop: 1 },
+  benefitText: {
+    flex: 1,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    lineHeight: 19,
+    color: c.cream,
+  },
+
+  // Billing history
+  historySection: { marginTop: 30 },
+  historyError: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: c.cream,
+    marginTop: 30,
+  },
+  historyEmpty: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: c.muted55,
+    marginTop: 14,
+  },
+  historyList: { marginTop: 14, gap: 12 },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.hairline,
+    borderRadius: 16,
+    padding: 16,
+  },
+  historyRowText: { flex: 1, minWidth: 0 },
+  historyPeriod: { fontFamily: 'Inter_600SemiBold', fontSize: 13.5, color: c.cream },
+  historyPaidAt: { fontFamily: 'Inter_400Regular', fontSize: 12, color: c.muted55, marginTop: 3 },
+  historyRowAmount: { alignItems: 'flex-end', gap: 3 },
+  historyAmount: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: c.cream },
+  historyRefunded: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 0.5,
+    color: c.muted50,
+  },
+
+  // See all plans
+  seeAllPlans: {
+    marginTop: 30,
+    borderRadius: 11,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: c.tileBorder,
+  },
+  seeAllPlansText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.4,
+    color: c.goldLight,
+  },
+
+  // Cancel trigger + sheet
+  cancelTrigger: { marginTop: 16, alignItems: 'center', paddingVertical: 10 },
+  cancelTriggerText: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    color: c.muted55,
+  },
+  sheetBody: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
+  sheetText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, color: c.cream },
+  // The handoff palette has no error/danger colour; previous work (see
+  // ContratarScreen.tsx errorText) settled on c.cream for error copy rather
+  // than inventing a hex — followed here for consistency.
+  sheetError: { fontFamily: 'Inter_400Regular', fontSize: 13, color: c.cream },
+  sheetKeep: {
+    borderRadius: 11,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: c.tileBorder,
+  },
+  sheetKeepText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.4,
+    color: c.goldLight,
+  },
+  // No danger colour in the palette either — a quieter neutral border/text
+  // keeps this destructive action visually distinct from "manter" without a
+  // hex value.
+  sheetConfirm: {
+    borderRadius: 11,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: c.hairline,
+  },
+  sheetConfirmText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.4,
+    color: c.cream,
+  },
+  dimmed: { opacity: 0.6 },
 });

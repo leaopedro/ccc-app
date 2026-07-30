@@ -3,7 +3,7 @@ export { Text, type TextProps } from './Text.js';
 export { Card, type CardProps } from './Card.js';
 export { Badge, type BadgeProps } from './Badge.js';
 export { PremiumBadge, type PremiumBadgeProps } from './PremiumBadge.js';
-export { SheetShell, type SheetShellProps } from './SheetShell.js';
+export { SheetShell, type SheetShellProps, type SheetShellTheme } from './SheetShell.js';
 export { PremiumSheet, type PremiumSheetProps } from './PremiumSheet.js';
 export {
   garageTokens,

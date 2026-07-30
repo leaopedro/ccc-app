@@ -44,65 +44,84 @@ const runEslint = (fixtureFile: string): string => {
   }
 };
 
+// Fix round (Task 22): every test below spawns a real ESLint subprocess.
+// Under full mobile-suite load (many concurrent test files) the spawn can
+// lose the CPU/IO race and exceed vitest's 5s default timeout, even though it
+// passes fine in isolation. Explicit generous per-test timeout instead of
+// racing the default.
+const ESLINT_SPAWN_TIMEOUT_MS = 15000;
+
 describe('no-stripe-on-ios ESLint rule', () => {
-  it('reports an error when stripe:// appears outside a Platform.OS guard', () => {
-    const fixtureFile = join(fixtureDir, 'bad-fixture.tsx');
-    writeFileSync(
-      fixtureFile,
-      `
+  it(
+    'reports an error when stripe:// appears outside a Platform.OS guard',
+    () => {
+      const fixtureFile = join(fixtureDir, 'bad-fixture.tsx');
+      writeFileSync(
+        fixtureFile,
+        `
 // fixture: forbidden Stripe token outside any guard
 const url = 'stripe://payment';
 export default function BadComponent() { return null; }
 `,
-    );
+      );
 
-    const output = runEslint(fixtureFile);
-    const results = JSON.parse(output) as Array<{
-      filePath: string;
-      messages: Array<{ ruleId: string; message: string }>;
-    }>;
-    const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
-    expect(ruleHit).toBe(true);
-  });
+      const output = runEslint(fixtureFile);
+      const results = JSON.parse(output) as Array<{
+        filePath: string;
+        messages: Array<{ ruleId: string; message: string }>;
+      }>;
+      const messages = results.flatMap((r) => r.messages);
+      const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
+      expect(ruleHit).toBe(true);
+    },
+    ESLINT_SPAWN_TIMEOUT_MS,
+  );
 
-  it('does NOT report an error when a Stripe token is guarded by Platform.OS !== "ios"', () => {
-    const fixtureFile = join(fixtureDir, 'ok-fixture.tsx');
-    writeFileSync(
-      fixtureFile,
-      `
+  it(
+    'does NOT report an error when a Stripe token is guarded by Platform.OS !== "ios"',
+    () => {
+      const fixtureFile = join(fixtureDir, 'ok-fixture.tsx');
+      writeFileSync(
+        fixtureFile,
+        `
 import { Platform } from 'react-native';
 // Android-only guard: rule must NOT fire here.
 const url = Platform.OS !== 'ios' ? 'checkout.stripe.com/pay/session_1' : null;
 export default function OkComponent() { return null; }
 `,
-    );
+      );
 
-    const output = runEslint(fixtureFile);
-    const results = JSON.parse(output) as Array<{
-      messages: Array<{ ruleId: string }>;
-    }>;
-    const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
-    expect(ruleHit).toBe(false);
-  });
+      const output = runEslint(fixtureFile);
+      const results = JSON.parse(output) as Array<{
+        messages: Array<{ ruleId: string }>;
+      }>;
+      const messages = results.flatMap((r) => r.messages);
+      const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
+      expect(ruleHit).toBe(false);
+    },
+    ESLINT_SPAWN_TIMEOUT_MS,
+  );
 
-  it('reports an error when EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY appears without a guard', () => {
-    const fixtureFile = join(fixtureDir, 'bad-env-fixture.tsx');
-    writeFileSync(
-      fixtureFile,
-      `
+  it(
+    'reports an error when EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY appears without a guard',
+    () => {
+      const fixtureFile = join(fixtureDir, 'bad-env-fixture.tsx');
+      writeFileSync(
+        fixtureFile,
+        `
 const key = 'EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY';
 export default function BadEnvComponent() { return null; }
 `,
-    );
+      );
 
-    const output = runEslint(fixtureFile);
-    const results = JSON.parse(output) as Array<{
-      messages: Array<{ ruleId: string }>;
-    }>;
-    const messages = results.flatMap((r) => r.messages);
-    const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
-    expect(ruleHit).toBe(true);
-  });
+      const output = runEslint(fixtureFile);
+      const results = JSON.parse(output) as Array<{
+        messages: Array<{ ruleId: string }>;
+      }>;
+      const messages = results.flatMap((r) => r.messages);
+      const ruleHit = messages.some((m) => m.ruleId === 'ccc-mobile/no-stripe-on-ios');
+      expect(ruleHit).toBe(true);
+    },
+    ESLINT_SPAWN_TIMEOUT_MS,
+  );
 });

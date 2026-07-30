@@ -3,7 +3,7 @@
 // ContratarScreen tests. This screen is the highest-risk surface in the
 // assinaturas module: it owns package-total math driven by mutable Set
 // state, the anti-double-submit guard around a real payment call, and the
-// branching over all five startPremiumCheckout outcomes plus the iOS seam.
+// branching over all four startPremiumCheckout outcomes plus the iOS seam.
 // Everything a real member's money depends on is pinned here rather than
 // left to hand-tracing.
 //
@@ -246,9 +246,11 @@ describe('ContratarScreen', () => {
 
     expect(startPremiumCheckout).toHaveBeenCalledTimes(1);
 
-    // Let the pending call resolve so the component settles cleanly.
+    // Let the pending call resolve so the component settles cleanly. Any
+    // outcome that doesn't trigger further async work (poll-subscription)
+    // does; 'error' is the simplest such settle.
     await act(async () => {
-      resolveOutcome({ kind: 'dismissed' });
+      resolveOutcome({ kind: 'error', message: 'boom' });
       await flush();
     });
   });

@@ -202,7 +202,6 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         }
       }
       // 'redirected' → the web page is already navigating away.
-      // 'dismissed'  → stay on the form untouched.
       // 'ios_unsupported' → unreachable, the CTA is not rendered on iOS.
     } finally {
       submittingRef.current = false;

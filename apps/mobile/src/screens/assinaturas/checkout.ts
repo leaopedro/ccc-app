@@ -11,13 +11,9 @@ import { Platform } from 'react-native';
 
 import { createPremiumCheckout } from '~/api/premium';
 
-/** Deep link the Android auth session returns to. Mirrors the legacy PremiumScreen. */
-const DEEP_LINK_RETURN = 'ccc://premium/return';
-
 export type CheckoutOutcome =
   | { kind: 'redirected' }
   | { kind: 'returned' }
-  | { kind: 'dismissed' }
   | { kind: 'ios_unsupported' }
   | { kind: 'error'; message: string };
 
@@ -40,6 +36,13 @@ export async function startPremiumCheckout(input: {
     return { kind: 'redirected' };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(url, DEEP_LINK_RETURN);
-  return result.type === 'success' ? { kind: 'returned' } : { kind: 'dismissed' };
+  // Stripe's success_url is a fixed https URL (apps/api me-premium.ts), never
+  // the app's deep link, so an auth-session's "did it come back via deep
+  // link?" signal can never fire here. openBrowserAsync has no notion of a
+  // successful close either way; it only resolves once the tab is dismissed,
+  // for any reason. So any close is treated the same: go poll
+  // pollSubscriptionActive, the only thing that actually knows whether the
+  // payment went through.
+  await WebBrowser.openBrowserAsync(url);
+  return { kind: 'returned' };
 }

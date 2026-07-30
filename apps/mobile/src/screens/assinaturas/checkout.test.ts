@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const openAuthSessionAsync = vi.fn();
+const openBrowserAsync = vi.fn();
 const createPremiumCheckout = vi.fn();
 const platform = { OS: 'android' as string };
 
 vi.mock('react-native', () => ({ Platform: platform }));
-vi.mock('expo-web-browser', () => ({ openAuthSessionAsync }));
+vi.mock('expo-web-browser', () => ({ openBrowserAsync }));
 vi.mock('~/api/premium', () => ({ createPremiumCheckout }));
 
 const load = async () => import('./checkout');
@@ -13,7 +13,7 @@ const load = async () => import('./checkout');
 describe('startPremiumCheckout', () => {
   beforeEach(() => {
     vi.resetModules();
-    openAuthSessionAsync.mockReset();
+    openBrowserAsync.mockReset();
     createPremiumCheckout.mockReset();
     platform.OS = 'android';
   });
@@ -32,28 +32,37 @@ describe('startPremiumCheckout', () => {
     expect(createPremiumCheckout).not.toHaveBeenCalled();
   });
 
-  it('returns "returned" when the Android browser closes with success', async () => {
+  // Stripe's success_url is a fixed https URL, never the app's deep link, so
+  // there is no "success" signal openBrowserAsync could ever observe here.
+  // Any close of the Android tab must produce 'returned' so the caller goes
+  // and polls pollSubscriptionActive to learn the real outcome. This is the
+  // regression test for the original bug: it fails if the Android branch
+  // goes back to openAuthSessionAsync (never called here) or if it starts
+  // inspecting the openBrowserAsync result instead of ignoring it.
+  it('returns "returned" when the Android tab closes, regardless of how the browser result reads', async () => {
     createPremiumCheckout.mockResolvedValue({ url: 'https://stripe.test/s', sessionId: 'cs_1' });
-    openAuthSessionAsync.mockResolvedValue({ type: 'success' });
+    openBrowserAsync.mockResolvedValue({ type: 'cancel' });
     const { startPremiumCheckout } = await load();
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: ['detailing'] });
     expect(createPremiumCheckout).toHaveBeenCalledWith({
       planSlug: 'fundador',
       addonKeys: ['detailing'],
     });
-    expect(openAuthSessionAsync).toHaveBeenCalledWith(
-      'https://stripe.test/s',
-      'ccc://premium/return',
-    );
+    expect(openBrowserAsync).toHaveBeenCalledWith('https://stripe.test/s');
     expect(out).toEqual({ kind: 'returned' });
   });
 
-  it('returns "dismissed" when the user closes the browser', async () => {
+  // Same tab-close event, opposite reported browser result — must still
+  // produce the identical outcome. Fails if the code branches on
+  // openBrowserAsync's resolved value at all (e.g. `result.type === 'success'
+  // ? 'returned' : 'dismissed'`), since openBrowserAsync never reports
+  // 'success' in the first place.
+  it('returns "returned" even when the browser result reports "dismiss"', async () => {
     createPremiumCheckout.mockResolvedValue({ url: 'https://stripe.test/s', sessionId: 'cs_1' });
-    openAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
+    openBrowserAsync.mockResolvedValue({ type: 'dismiss' });
     const { startPremiumCheckout } = await load();
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
-    expect(out).toEqual({ kind: 'dismissed' });
+    expect(out).toEqual({ kind: 'returned' });
   });
 
   it('maps an API failure to an error outcome', async () => {
@@ -78,6 +87,6 @@ describe('startPremiumCheckout', () => {
 
     expect(out).toEqual({ kind: 'redirected' });
     expect(win.location.href).toBe('https://stripe.test/s');
-    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(openBrowserAsync).not.toHaveBeenCalled();
   });
 });

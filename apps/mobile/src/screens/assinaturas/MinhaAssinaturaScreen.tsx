@@ -630,10 +630,9 @@ const styles = StyleSheet.create({
   },
   sheetBody: { paddingHorizontal: 20, paddingTop: 16, gap: 12 },
   sheetText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, color: c.cream },
-  // The handoff palette has no error/danger colour; previous work (see
-  // ContratarScreen.tsx errorText) settled on c.cream for error copy rather
-  // than inventing a hex — followed here for consistency.
-  sheetError: { fontFamily: 'Inter_400Regular', fontSize: 13, color: c.cream },
+  // Fix round 1: was c.cream (same as body text — a member could miss that
+  // this was an error). Now uses c.danger, added to tier-visual.ts for this.
+  sheetError: { fontFamily: 'Inter_400Regular', fontSize: 13, color: c.danger },
   sheetKeep: {
     borderRadius: 11,
     paddingVertical: 14,
@@ -647,21 +646,22 @@ const styles = StyleSheet.create({
     letterSpacing: 2.4,
     color: c.goldLight,
   },
-  // No danger colour in the palette either — a quieter neutral border/text
-  // keeps this destructive action visually distinct from "manter" without a
-  // hex value.
+  // Fix round 1: border/text were c.hairline/c.cream — the same visual
+  // weight as "manter assinatura" above, so the destructive action didn't
+  // read as destructive. Now uses c.danger/c.dangerBorder so the two
+  // buttons are clearly different.
   sheetConfirm: {
     borderRadius: 11,
     paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: c.hairline,
+    borderColor: c.dangerBorder,
   },
   sheetConfirmText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
     letterSpacing: 2.4,
-    color: c.cream,
+    color: c.danger,
   },
   dimmed: { opacity: 0.6 },
 });

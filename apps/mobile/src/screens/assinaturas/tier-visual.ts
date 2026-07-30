@@ -24,6 +24,16 @@ export const c = {
   muted40: 'rgba(242,232,216,0.4)',
   hairline: 'rgba(212,175,55,0.14)',
   tileBorder: 'rgba(212,175,55,0.22)',
+  // Design change (Task 15 fix round 1): the handoff palette had no danger
+  // colour, so the cancel-subscription confirm action and its error copy
+  // rendered with the same weight as the safe "manter" action — a member
+  // could tap the destructive button believing it was the safe one. Added
+  // with product sign-off; matches packages/design/src/tokens.ts `danger`
+  // (#EF4444), the same red already used elsewhere in the app. Border
+  // follows this file's existing convention (rgba of the base colour at the
+  // same low alpha as `tileBorder`).
+  danger: '#EF4444',
+  dangerBorder: 'rgba(239,68,68,0.22)',
 };
 
 // Content-neutral per-tier presentation: uppercase label, accent color, and the

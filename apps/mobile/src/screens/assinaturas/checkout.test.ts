@@ -34,7 +34,7 @@ describe('startPremiumCheckout', () => {
 
   // Regression test for the original bug. Stripe's success_url is a fixed
   // https URL, never a deep link, so on real Android devices
-  // openAuthSessionAsync's `result.type` is never actually 'success' —
+  // openAuthSessionAsync's `result.type` is never actually 'success',
   // nothing ever produces it. This test deliberately mocks 'success' anyway
   // and asserts the outcome is 'returned' regardless: it goes RED if the
   // implementation is changed back to `result.type === 'success' ?
@@ -54,7 +54,7 @@ describe('startPremiumCheckout', () => {
   });
 
   // Same call, the result.type Android's AppState polyfill actually produces
-  // once the tab is closed without a matching redirect ('dismiss') — must
+  // once the tab is closed without a matching redirect ('dismiss'), must
   // still map to the identical outcome. Fails if the code branches on
   // `result.type` at all, in either direction.
   it('returns "returned" regardless of which result.type openAuthSessionAsync resolves with', async () => {

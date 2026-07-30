@@ -206,14 +206,25 @@ describe('ProfileMenuScreen (app/(app)/profile/index.tsx)', () => {
 
   // Fails if the `subscription?.active && subscription.tier` guard is
   // dropped, if PremiumBadge stops receiving the tier, or if memberTier()
-  // stops mapping 'gold' → 'Membro Ouro'.
-  it('renders the badge and "Membro Ouro" label for an active gold subscription', async () => {
-    hookState.value = hookResult({ subscription: { active: true, tier: 'gold' } });
+  // stops mapping a given tier to its label. Pinned per-tier (not just
+  // 'gold') so swapping any two of the three labels in memberTier() makes
+  // the corresponding case fail — a prior round only asserted 'gold' and a
+  // silver/bronze swap in the mapping still passed all 4 tests.
+  it.each<[Tier, string]>([
+    ['gold', 'Membro Ouro'],
+    ['silver', 'Membro Prata'],
+    ['bronze', 'Membro Bronze'],
+  ])('renders the badge and "%s" label for an active %s subscription', async (tier, label) => {
+    hookState.value = hookResult({ subscription: { active: true, tier } });
     await renderScreen();
     const badge = container.querySelector('[data-testid="premium-badge"]');
     expect(badge).not.toBeNull();
-    expect(badge!.getAttribute('data-tier')).toBe('gold');
-    expect(text()).toContain('Membro Ouro');
+    expect(badge!.getAttribute('data-tier')).toBe(tier);
+    expect(text()).toContain(label);
+    // Guard against the swap mutation only tripping a `toContain` on a
+    // substring collision — none of the other two labels should be present.
+    const others = ['Membro Ouro', 'Membro Prata', 'Membro Bronze'].filter((l) => l !== label);
+    for (const other of others) expect(text()).not.toContain(other);
   });
 
   // `subscription` is null when billing is off (the hook's 503-safe path) —

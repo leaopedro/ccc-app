@@ -180,7 +180,9 @@ Never commit any `sk_` or `whsec_` values. They live in Railway Variables only.
 3. On each **plan price** (Bronze, Silver, Gold), fill the metadata field
    `devFeePercent` with a number like `10`. **This field is mandatory.** If omitted,
    the fee is recorded as `0` on both the invoice row and the membership — silently
-   undercharging the customer. Add-on module prices do not need this metadata.
+   zeroing the platform's revenue-share cut for that plan. The member's charge is
+   unaffected either way, since it is always `baseAmountCents` (see §1.2). Add-on
+   module prices do not need this metadata.
 
 4. Copy the `price_...` ID from each Price (both plan and add-on) and paste it into
    the admin portal at `/premium/catalogo`, matching the plan tier or add-on key to

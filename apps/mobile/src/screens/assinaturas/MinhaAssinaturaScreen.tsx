@@ -165,17 +165,31 @@ function ActiveSubscription({
     if (cancellingRef.current) return;
     cancellingRef.current = true;
     setCancelling(true);
+    // Fresh attempt, fresh error state — otherwise a prior failure's message
+    // survives a reopen (or a subsequent successful attempt) undisturbed.
+    setCancelError(null);
     try {
-      await cancelPremiumSubscription();
-      setCancelOpen(false);
-      showToast(copy.cancelar.successToast);
-      await refresh();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setIsApple(true);
+      try {
+        await cancelPremiumSubscription();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          setIsApple(true);
+        } else {
+          setCancelError(copy.cancelar.error);
+        }
         return;
       }
-      setCancelError(copy.cancelar.error);
+      setCancelOpen(false);
+      showToast(copy.cancelar.successToast);
+      // The cancel itself already succeeded at this point — the route
+      // deliberately does not write the DB (only the Stripe webhook flips
+      // the membership to cancel_scheduled), so this refresh is best-effort.
+      // A failure here must never be reported as a failed cancel.
+      try {
+        await refresh();
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
     } finally {
       cancellingRef.current = false;
       setCancelling(false);
@@ -254,7 +268,12 @@ function ActiveSubscription({
         </Pressable>
 
         <Pressable
-          onPress={() => setCancelOpen(true)}
+          onPress={() => {
+            // Clear any error left over from a previous attempt so reopening
+            // the sheet starts clean instead of showing stale copy.
+            setCancelError(null);
+            setCancelOpen(true);
+          }}
           accessibilityRole="button"
           accessibilityLabel={copy.cancelar.trigger}
           style={styles.cancelTrigger}

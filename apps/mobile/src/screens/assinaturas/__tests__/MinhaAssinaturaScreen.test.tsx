@@ -249,15 +249,41 @@ const inactiveSub: MySubscriptionResponse = {
   addons: [],
 };
 
+// Amounts are deliberately distinct from `activeSub.totalAmountCents`
+// (164000) so a row assertion can't be satisfied by the subscription card
+// instead of the history section (that collision is what let a previous
+// version of this test pass with the history body replaced by an empty
+// `<View />` — see Finding 1, fix round 2).
 const invoice: PremiumInvoice = {
   periodStart: '2026-06-22T00:00:00.000Z',
   periodEnd: '2026-07-22T00:00:00.000Z',
   paidAt: '2026-06-23T00:00:00.000Z',
-  grossAmountCents: 164000,
+  grossAmountCents: 25000,
   currency: 'BRL',
   status: 'paid',
   refundedAt: null,
 };
+
+const refundedInvoice: PremiumInvoice = {
+  periodStart: '2026-05-22T00:00:00.000Z',
+  periodEnd: '2026-06-22T00:00:00.000Z',
+  paidAt: '2026-05-23T00:00:00.000Z',
+  grossAmountCents: 30000,
+  currency: 'BRL',
+  status: 'refunded',
+  refundedAt: '2026-05-25T00:00:00.000Z',
+};
+
+// Same formatter as the screen's own `dateFmt` — used to compute the exact
+// expected row text rather than hardcoding a locale-dependent string.
+const dateFmt = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const occurrences = (haystack: string, needle: string): number =>
+  needle === '' ? 0 : haystack.split(needle).length - 1;
 
 const result = (over: Partial<HookResult>): HookResult => ({
   subscription: null,
@@ -358,15 +384,34 @@ describe('MinhaAssinaturaScreen', () => {
   });
 
   // 2. The history section renders rows when invoices exist, and the empty
-  // copy otherwise. Fails if the empty/non-empty branch is inverted or the
-  // row fields (period/paidAt/amount) stop reading from the invoice.
+  // copy otherwise. Every assertion below reads a value that can ONLY come
+  // from a row (period date, "Pago em …", the row's own amount, "Estornado"
+  // exactly once) — none of it is satisfiable by the subscription card, so
+  // this fails if InvoiceHistory's row body is gutted, its fields stop
+  // reading from the invoice, or the refundedAt conditional is dropped or
+  // inverted. (Round 1 version asserted '1.640,00', which is also the
+  // subscription total — a reviewer mutation that replaced the entire row
+  // body with an empty `<View />` still passed. Confirmed by mutation this
+  // round: see "Fix round 2" in the task report.)
   it('renders history rows when invoices exist', async () => {
     hookState.value = result({ subscription: activeSub });
-    invoicesState.value = invoicesResult({ invoices: [invoice] });
+    invoicesState.value = invoicesResult({ invoices: [invoice, refundedInvoice] });
     await renderScreen();
+
     expect(text()).toContain(copy.historico.title);
-    expect(text()).toContain('1.640,00');
     expect(text()).not.toContain(copy.historico.empty);
+
+    // Row 1 (no refund): period, "Pago em …", amount — all row-only content.
+    expect(text()).toContain(dateFmt.format(new Date(invoice.periodStart)));
+    expect(text()).toContain(copy.historico.paidAt(dateFmt.format(new Date(invoice.paidAt))));
+    expect(text()).toContain('250,00');
+
+    // Row 2 (refunded): its own distinct period/amount, plus the refunded
+    // label appearing exactly once (not zero — dropped conditional; not on
+    // every row — inverted conditional).
+    expect(text()).toContain(dateFmt.format(new Date(refundedInvoice.periodStart)));
+    expect(text()).toContain('300,00');
+    expect(occurrences(text(), copy.historico.refunded)).toBe(1);
   });
 
   it('renders the empty history copy when there are no invoices', async () => {
@@ -444,7 +489,9 @@ describe('MinhaAssinaturaScreen', () => {
 
   // 5. A 409 from cancel switches the sheet to the Apple wording instead of a
   // generic error. Fails if the `err.status === 409` branch is dropped or if
-  // it sets the generic error message instead of `isApple`.
+  // it sets the generic error message instead of `isApple`. On its own this
+  // test does not prove 409 is being distinguished from "any failure" — test
+  // 6 is the other half of that pair.
   it('switches to Apple wording on a 409 NotStripeSubscription response', async () => {
     const { ApiError } = (await import('~/api/client')) as unknown as {
       ApiError: new (status: number, message: string, body?: unknown) => Error;
@@ -475,5 +522,38 @@ describe('MinhaAssinaturaScreen', () => {
 
     expect(text()).toContain(copy.cancelar.appleBody);
     expect(text()).not.toContain(copy.cancelar.error);
+  });
+
+  // 6. A non-409 failure (500) shows the generic error and NOT the Apple
+  // wording — the companion of test 5. Together they pin the discrimination
+  // itself: fails if `err.status === 409` is weakened to just
+  // `err instanceof ApiError` (every failure would then take the Apple
+  // branch, and this test's `toContain(copy.cancelar.error)` would fail
+  // while `not.toContain(appleBody)` would also fail). Confirmed by mutation
+  // this round: see "Fix round 2" in the task report.
+  it('shows the generic error (not Apple wording) on a non-409 cancel failure', async () => {
+    const { ApiError } = (await import('~/api/client')) as unknown as {
+      ApiError: new (status: number, message: string, body?: unknown) => Error;
+    };
+    cancelMock.fn.mockRejectedValue(new ApiError(500, 'internal error'));
+    hookState.value = result({ subscription: activeSub });
+    await renderScreen();
+
+    const trigger = container.querySelector('[data-testid="assinatura-cancelar"]') as HTMLElement;
+    await act(async () => {
+      trigger.click();
+      await flush();
+    });
+
+    const confirm = container.querySelector(
+      '[data-testid="assinatura-cancelar-confirmar"]',
+    ) as HTMLElement;
+    await act(async () => {
+      confirm.click();
+      await flush();
+    });
+
+    expect(text()).toContain(copy.cancelar.error);
+    expect(text()).not.toContain(copy.cancelar.appleBody);
   });
 });

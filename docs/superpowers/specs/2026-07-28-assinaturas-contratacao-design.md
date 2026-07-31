@@ -29,17 +29,17 @@ Este spec cobre o fechamento do módulo:
 
 ## 2. Decisões travadas
 
-| # | Decisão | Escolha |
-|---|---|---|
-| 1 | Meios de pagamento | Só cartão via Stripe, em Android e web. iOS mostra aviso para contratar pela web |
-| 2 | Histórico | Só histórico de cobranças, lendo `PremiumMembershipInvoice`. Sem model novo |
-| 3 | Tela legada `/profile/premium` | Remover só a entrada do menu do Perfil. Arquivos e rota permanecem |
-| 4 | Validação | Testes automatizados com `FakeStripe`. O usuário cadastra os price IDs pelo painel admin. Não chamar a conta Stripe real |
-| 5 | Add-ons no checkout | Checkout multi-line-item. Uma sessão em `mode: 'subscription'` com `line_items = [plano, ...módulos]` |
-| 6 | Cancelamento | Rota própria que chama `cancel_at_period_end: true`. O webhook escreve no banco |
-| 7 | Retorno web do Stripe | Trocar `successUrl`/`cancelUrl` no backend para o módulo novo. Sem parâmetro vindo do cliente |
-| 8 | `devFeePercent` | Continua saindo só de `Price.metadata`. Metadata ausente grava 0. **A metadata passa a ser obrigatória em cada price de plano** |
-| 9 | Confirmação de cancelamento | `SheetShell` com props de tema aditivas. Não usar `confirmDestructive()` |
+| #   | Decisão                        | Escolha                                                                                                                         |
+| --- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Meios de pagamento             | Só cartão via Stripe, em Android e web. iOS mostra aviso para contratar pela web                                                |
+| 2   | Histórico                      | Só histórico de cobranças, lendo `PremiumMembershipInvoice`. Sem model novo                                                     |
+| 3   | Tela legada `/profile/premium` | Remover só a entrada do menu do Perfil. Arquivos e rota permanecem                                                              |
+| 4   | Validação                      | Testes automatizados com `FakeStripe`. O usuário cadastra os price IDs pelo painel admin. Não chamar a conta Stripe real        |
+| 5   | Add-ons no checkout            | Checkout multi-line-item. Uma sessão em `mode: 'subscription'` com `line_items = [plano, ...módulos]`                           |
+| 6   | Cancelamento                   | Rota própria que chama `cancel_at_period_end: true`. O webhook escreve no banco                                                 |
+| 7   | Retorno web do Stripe          | Trocar `successUrl`/`cancelUrl` no backend para o módulo novo. Sem parâmetro vindo do cliente                                   |
+| 8   | `devFeePercent`                | Continua saindo só de `Price.metadata`. Metadata ausente grava 0. **A metadata passa a ser obrigatória em cada price de plano** |
+| 9   | Confirmação de cancelamento    | `SheetShell` com props de tema aditivas. Não usar `confirmDestructive()`                                                        |
 
 ---
 
@@ -47,12 +47,12 @@ Este spec cobre o fechamento do módulo:
 
 Verificado requisito por requisito contra `packages/db/prisma/schema.prisma`.
 
-| Requisito | Tabela existente que atende |
-|---|---|
-| Módulos no checkout | `PremiumMembershipAddon` + `PremiumAddonUsage` |
-| Cancelamento | `PremiumMembership.cancelAtPeriodEnd`, `.cancelledAt`, status `cancel_scheduled` |
-| Histórico de cobranças | `PremiumMembershipInvoice` |
-| Benefícios em Minha Assinatura | `PremiumPlanBenefit` |
+| Requisito                      | Tabela existente que atende                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| Módulos no checkout            | `PremiumMembershipAddon` + `PremiumAddonUsage`                                   |
+| Cancelamento                   | `PremiumMembership.cancelAtPeriodEnd`, `.cancelledAt`, status `cancel_scheduled` |
+| Histórico de cobranças         | `PremiumMembershipInvoice`                                                       |
+| Benefícios em Minha Assinatura | `PremiumPlanBenefit`                                                             |
 
 O agente de Banco de Dados não tem trabalho estrutural. A entrega dele é a confirmação escrita disso, campo a campo. Não inventar tabela, não propor migration.
 
@@ -140,11 +140,11 @@ GET    /api/me/premium/subscription  ALTERADA
 
 Nenhuma rota premium tem rate limit hoje. Adicionar:
 
-| Rota | Limite |
-|---|---|
-| `POST /api/me/premium/checkout` | 5/min |
-| `POST /api/me/premium/cancel` | 5/min |
-| `POST /api/me/premium/addons` | 20/min |
+| Rota                            | Limite |
+| ------------------------------- | ------ |
+| `POST /api/me/premium/checkout` | 5/min  |
+| `POST /api/me/premium/cancel`   | 5/min  |
+| `POST /api/me/premium/addons`   | 20/min |
 
 Padrão obrigatório, com escopo encapsulado e `hook: 'preHandler'` porque a chave usa `request.user`:
 
@@ -152,7 +152,9 @@ Padrão obrigatório, com escopo encapsulado e `hook: 'preHandler'` porque a cha
 await app.register(async (scoped) => {
   scoped.addHook('preHandler', app.authenticate);
   await scoped.register(rateLimit, {
-    max, timeWindow, hook: 'preHandler',
+    max,
+    timeWindow,
+    hook: 'preHandler',
     keyGenerator: (req) => `premium-checkout:${req.user?.sub ?? req.ip}`,
   });
   scoped.post('/rota', handler);
@@ -192,9 +194,9 @@ Tela e não sheet: o conteúdo é grande (módulos com descrição, quota, preç
 
 ```ts
 export type CheckoutOutcome =
-  | { kind: 'redirected' }        // web navegou para o Stripe
-  | { kind: 'returned' }          // Android: browser fechou com sucesso
-  | { kind: 'dismissed' }         // usuário desistiu
+  | { kind: 'redirected' } // web navegou para o Stripe
+  | { kind: 'returned' } // Android: browser fechou com sucesso
+  | { kind: 'dismissed' } // usuário desistiu
   | { kind: 'ios_unsupported' }
   | { kind: 'error'; message: string };
 
@@ -216,13 +218,13 @@ O webhook é assíncrono. O retorno do browser não prova pagamento.
 
 Depois de `returned`, a tela entra em "Confirmando pagamento...". Polling de `getMyPremiumSubscription()` a cada 2s, máximo 15 tentativas. Mesmo padrão de `app/(app)/events/buy/checkout-return.tsx`.
 
-| Resultado | Tela faz |
-|---|---|
-| `redirected` | Nada. A página já navegou para o Stripe. O retorno entra por `checkout-return` |
-| `active === true` | `router.replace('/assinaturas/minha-assinatura')` e toast de sucesso |
-| Esgotou as 15 tentativas | Estado "Pagamento em processamento", CTA "Ver minha assinatura". Não é erro |
-| `dismissed` | Volta ao formulário intacto |
-| `error` | Mensagem inline acima do CTA e botão para tentar de novo |
+| Resultado                | Tela faz                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `redirected`             | Nada. A página já navegou para o Stripe. O retorno entra por `checkout-return` |
+| `active === true`        | `router.replace('/assinaturas/minha-assinatura')` e toast de sucesso           |
+| Esgotou as 15 tentativas | Estado "Pagamento em processamento", CTA "Ver minha assinatura". Não é erro    |
+| `dismissed`              | Volta ao formulário intacto                                                    |
+| `error`                  | Mensagem inline acima do CTA e botão para tentar de novo                       |
 
 Rota nova `app/(app)/assinaturas/checkout-return.tsx`, só usada na web. Executa o mesmo polling e redireciona. No Android ela nunca abre, o deep link resolve antes.
 
@@ -238,12 +240,12 @@ Isso também resolve a rota órfã: hoje nenhum `router.push` aponta para `/assi
 
 O módulo assinaturas não usa `@ccc/ui` em lugar nenhum. Tem paleta própria `c` em `tier-visual.ts:13`, marcada como autoritativa no cabeçalho do arquivo.
 
-| Componente | Decisão | Motivo |
-|---|---|---|
-| `SheetShell` | Usar, com props opcionais de tema (surface, border, cor e fonte do título) | Hoje usa `garageTokens.surface.sheet` e fonte de sistema. Props aditivas evitam componente novo e duplicação |
-| `Button` de `@ccc/ui` | Não usar | O CTA precisa do gradiente por tier. Extrair `TierCta` local do bloco duplicado em `PlanoDetalheScreen.tsx:176-206` |
-| `PremiumBadge` | Usar, só no Perfil | Mesmo padrão de `src/screens/garage/IdentityCard.tsx:49` |
-| `tier-visual.ts` | Usar em tudo | Já é a fonte de estilo por tier |
+| Componente            | Decisão                                                                    | Motivo                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `SheetShell`          | Usar, com props opcionais de tema (surface, border, cor e fonte do título) | Hoje usa `garageTokens.surface.sheet` e fonte de sistema. Props aditivas evitam componente novo e duplicação        |
+| `Button` de `@ccc/ui` | Não usar                                                                   | O CTA precisa do gradiente por tier. Extrair `TierCta` local do bloco duplicado em `PlanoDetalheScreen.tsx:176-206` |
+| `PremiumBadge`        | Usar, só no Perfil                                                         | Mesmo padrão de `src/screens/garage/IdentityCard.tsx:49`                                                            |
+| `tier-visual.ts`      | Usar em tudo                                                               | Já é a fonte de estilo por tier                                                                                     |
 
 ### 5.6 Card premium no Perfil
 
@@ -273,17 +275,17 @@ Tudo em `src/copy/assinaturas.ts`. Chaves novas em `checkout`, `minhaAssinatura.
 
 ## 6. Riscos e mitigações
 
-| # | Risco | Mitigação |
-|---|---|---|
-| R1 | Checkout multi-line exige o mesmo `interval` e a mesma `currency` em todos os prices | Sem pré-validação, que custaria um roundtrip Stripe por checkout. O erro do Stripe vira 503 com mensagem clara. Teste com `FakeStripe` cobrindo o caminho |
-| R2 | `pricingFromInvoice` lê `invoice.lines.data[0]` (`normalize-stripe.ts:42`), o que deixa de ser confiável com multi-line | `baseAmountCents` e `tier` viram placeholder. A rota resolve pela linha que casa com `PremiumPlanPrice.stripePriceId` |
-| R3 | `devFeePercent` vem de `Price.metadata` e ausente grava 0 silenciosamente | Comportamento mantido por decisão. Consequência: a metadata `devFeePercent` é **obrigatória** em cada price de plano, e isso está no passo de ops |
-| R4 | Idempotency key `checkout_sub_{garageId}_{cadence}` (`me-premium.ts:253`) não inclui plano nem módulos | A key passa a incluir `planSlug` e um digest curto dos `addonKeys` ordenados |
-| R5 | Guard de sessão aberta devolve 409 com a URL do pacote antigo | `expireCheckoutSession` antes de criar a nova sessão |
-| R6 | Discriminador de `tier_changed` usa `items.data[0]` (`normalize-stripe.ts:199-201`). Adicionar módulo dispara `customer.subscription.updated` e pode virar `tier_changed` com tier errado | `tier` vira placeholder também nesse ramo. A rota resolve contra o catálogo e descarta quando o price trocado for de módulo |
-| R7 | `PremiumMembershipAddon.@@unique([membershipId, addonKey])` não filtra status. Recontratar módulo antes cancelado viola o unique | Upsert por `[membershipId, addonKey]` com status voltando para `active`. Sem migration |
-| R8 | `premiumStatusSchema.tier = z.enum(['gold'])` (`premium.ts:65`). Membership bronze ou prata derruba `GET /api/me/premium/status` no `parse` | Virar `z.enum(['bronze','silver','gold'])` e rodar `pnpm --filter @ccc/shared build` |
-| R9 | `resetDatabase()` não limpa `PremiumPlan` nem `PremiumAddonModule` | Seguir o padrão existente: `resetCatalog()` local em cada arquivo de teste. Não mexer no helper |
+| #   | Risco                                                                                                                                                                                     | Mitigação                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Checkout multi-line exige o mesmo `interval` e a mesma `currency` em todos os prices                                                                                                      | Sem pré-validação, que custaria um roundtrip Stripe por checkout. O erro do Stripe vira 503 com mensagem clara. Teste com `FakeStripe` cobrindo o caminho |
+| R2  | `pricingFromInvoice` lê `invoice.lines.data[0]` (`normalize-stripe.ts:42`), o que deixa de ser confiável com multi-line                                                                   | `baseAmountCents` e `tier` viram placeholder. A rota resolve pela linha que casa com `PremiumPlanPrice.stripePriceId`                                     |
+| R3  | `devFeePercent` vem de `Price.metadata` e ausente grava 0 silenciosamente                                                                                                                 | Comportamento mantido por decisão. Consequência: a metadata `devFeePercent` é **obrigatória** em cada price de plano, e isso está no passo de ops         |
+| R4  | Idempotency key `checkout_sub_{garageId}_{cadence}` (`me-premium.ts:253`) não inclui plano nem módulos                                                                                    | A key passa a incluir `planSlug` e um digest curto dos `addonKeys` ordenados                                                                              |
+| R5  | Guard de sessão aberta devolve 409 com a URL do pacote antigo                                                                                                                             | `expireCheckoutSession` antes de criar a nova sessão                                                                                                      |
+| R6  | Discriminador de `tier_changed` usa `items.data[0]` (`normalize-stripe.ts:199-201`). Adicionar módulo dispara `customer.subscription.updated` e pode virar `tier_changed` com tier errado | `tier` vira placeholder também nesse ramo. A rota resolve contra o catálogo e descarta quando o price trocado for de módulo                               |
+| R7  | `PremiumMembershipAddon.@@unique([membershipId, addonKey])` não filtra status. Recontratar módulo antes cancelado viola o unique                                                          | Upsert por `[membershipId, addonKey]` com status voltando para `active`. Sem migration                                                                    |
+| R8  | `premiumStatusSchema.tier = z.enum(['gold'])` (`premium.ts:65`). Membership bronze ou prata derruba `GET /api/me/premium/status` no `parse`                                               | Virar `z.enum(['bronze','silver','gold'])` e rodar `pnpm --filter @ccc/shared build`                                                                      |
+| R9  | `resetDatabase()` não limpa `PremiumPlan` nem `PremiumAddonModule`                                                                                                                        | Seguir o padrão existente: `resetCatalog()` local em cada arquivo de teste. Não mexer no helper                                                           |
 
 ---
 
@@ -294,6 +296,7 @@ Tudo em `src/copy/assinaturas.ts`. Chaves novas em `checkout`, `minhaAssinatura.
 Testcontainers com Postgres real e `FakeStripe`, conforme `apps/api/test/global-setup.ts`. Arquivos em `apps/api/test/billing/`.
 
 **`premium-cancel.test.ts`**
+
 - 401 sem auth, 503 com a flag off, 404 sem membership viva
 - 409 com `manageUrl` para membership `apple_revenuecat`
 - 200 chama o Stripe com `cancel_at_period_end` e a idempotency key correta
@@ -301,12 +304,14 @@ Testcontainers com Postgres real e `FakeStripe`, conforme `apps/api/test/global-
 - sexta chamada dentro do minuto retorna 429
 
 **`premium-invoices.test.ts`**
+
 - ordem `periodStart desc` e `take 24`
 - a resposta nunca contém `providerInvoiceRef` nem `providerTransactionRef`
 - sem faturas retorna lista vazia
 - isolamento: usuário A não vê fatura de B
 
 **`premium-checkout-addons.test.ts`**
+
 - `line_items` na ordem `[plano, ...módulos]`
 - módulo ativo sem `stripePriceId` retorna 503 listando as chaves faltantes
 - mais de 10 `addonKeys` retorna 422 (falha de schema, mesmo código já usado pela rota)
@@ -315,12 +320,14 @@ Testcontainers com Postgres real e `FakeStripe`, conforme `apps/api/test/global-
 - a sessão aberta é expirada antes de criar a nova (R5)
 
 **`stripe-billing-webhook.test.ts`** (estender)
+
 - `invoice.paid` multi-line cria membership, `PremiumMembershipAddon` e `PremiumAddonUsage` na mesma transação
 - `tier` vem do catálogo e não da metadata: regressão direta do `tierFromPrice` (R2)
 - módulo antes cancelado é reativado por upsert, sem violar o unique (R7)
 - `customer.subscription.updated` trocando item de módulo não gera `tier_changed` (R6)
 
 **Unit do normalizer**
+
 - `lines[]` populado a partir de `invoice.lines.data`
 - `tier` e `baseAmountCents` como placeholder
 
@@ -329,12 +336,14 @@ Testcontainers com Postgres real e `FakeStripe`, conforme `apps/api/test/global-
 Vitest já existe e testa módulos puros, não telas. Seguir o padrão de `src/cart/web-stripe-redirect.test.ts`.
 
 **`checkout.test.ts`**
+
 - iOS retorna `ios_unsupported` sem chamar a API
 - web usa `window.location.href`
 - Android mapeia o resultado do `WebBrowser` para `returned` ou `dismissed`
 - erro da API vira `{ kind: 'error' }`
 
 **`package-total.test.ts`**
+
 - função pura de soma: base mais módulos selecionados
 
 **CORRIGIDO em 2026-07-29 depois de medir.** A frase original aqui — "sem teste de tela, não existe React Native Testing Library configurado" — era **falsa**. Veio de um `find` com `-maxdepth 3` que não enxergou os diretórios `__tests__`.
@@ -343,13 +352,13 @@ O app tem 73 arquivos de teste. Testes de tela existem e rodam em jsdom com `rea
 
 Testes existentes que as tasks de mobile deste plano vão quebrar e precisam atualizar:
 
-| Arquivo | Quem quebra |
-|---|---|
-| `src/api/__tests__/premium.test.ts` | Task 10, muda o client |
-| `src/screens/assinaturas/__tests__/PlanoDetalheScreen.test.tsx` | Tasks 11 e 12, o CTA passa a navegar |
-| `src/screens/assinaturas/__tests__/PlanosScreen.test.tsx` | Task 14, ganha redirect de assinante |
+| Arquivo                                                            | Quem quebra                                         |
+| ------------------------------------------------------------------ | --------------------------------------------------- |
+| `src/api/__tests__/premium.test.ts`                                | Task 10, muda o client                              |
+| `src/screens/assinaturas/__tests__/PlanoDetalheScreen.test.tsx`    | Tasks 11 e 12, o CTA passa a navegar                |
+| `src/screens/assinaturas/__tests__/PlanosScreen.test.tsx`          | Task 14, ganha redirect de assinante                |
 | `src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx` | Task 15, ganha benefícios, histórico e cancelamento |
-| `src/screens/settings/__tests__/ios-stripe-isolation.test.ts` | Task 11, mexe no guard de iOS |
+| `src/screens/settings/__tests__/ios-stripe-isolation.test.ts`      | Task 11, mexe no guard de iOS                       |
 
 Atualizar asserção cuja intenção mudou é correção. Apagar teste não é.
 
@@ -359,12 +368,12 @@ Atualizar asserção cuja intenção mudou é correção. Apagar teste não é.
 
 Orquestrador coordena agentes especialistas nesta ordem obrigatória. Backend-first: nenhuma tela antes da infra existir.
 
-| Ordem | Agente | Entrega | Gate para o próximo |
-|---|---|---|---|
-| 1 | Banco de dados | Confirmação escrita de zero migrations, verificada campo a campo contra a seção 3 | Confirmação registrada |
-| 2 | Backend | Shared schemas primeiro, depois `pnpm --filter @ccc/shared build`. Então normalizer, rota do webhook, `apply-membership-event`, rotas novas, rate limit, `successUrl`. Testes escritos junto | `pnpm --filter @ccc/api test` verde |
-| 3 | Frontend | Só depois do gate 2. Ordem: copy, api clients, hooks, seam de checkout com teste, `ContratarScreen`, `checkout-return`, Minha Assinatura, Perfil, remoção do item de menu legado | `pnpm typecheck` verde |
-| 4 | Revisor | Diff contra este spec, canon §F8.5, §F8.6, §F8.10 e §F8.13, e a invariante de que estado de assinatura só muda por webhook verificado | Aprovação |
+| Ordem | Agente         | Entrega                                                                                                                                                                                      | Gate para o próximo                 |
+| ----- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| 1     | Banco de dados | Confirmação escrita de zero migrations, verificada campo a campo contra a seção 3                                                                                                            | Confirmação registrada              |
+| 2     | Backend        | Shared schemas primeiro, depois `pnpm --filter @ccc/shared build`. Então normalizer, rota do webhook, `apply-membership-event`, rotas novas, rate limit, `successUrl`. Testes escritos junto | `pnpm --filter @ccc/api test` verde |
+| 3     | Frontend       | Só depois do gate 2. Ordem: copy, api clients, hooks, seam de checkout com teste, `ContratarScreen`, `checkout-return`, Minha Assinatura, Perfil, remoção do item de menu legado             | `pnpm typecheck` verde              |
+| 4     | Revisor        | Diff contra este spec, canon §F8.5, §F8.6, §F8.10 e §F8.13, e a invariante de que estado de assinatura só muda por webhook verificado                                                        | Aprovação                           |
 
 Regras para todos os agentes: não criar arquitetura paralela, não duplicar, reutilizar o que já existe, justificar tecnicamente qualquer mudança estrutural.
 
@@ -383,10 +392,10 @@ Feito pelo usuário no painel do Stripe, seguindo `docs/stripe.md`.
 
 Valores semeados hoje (`packages/db/prisma/seed.ts`, `seedPremiumCatalog`):
 
-| tier | slug | nome | mensal |
-|---|---|---|---|
-| bronze | `ingresso` | Ingresso | R$ 490,00 |
-| silver | `estrada` | Estrada | R$ 890,00 |
-| gold | `fundador` | Fundador | R$ 1.490,00 |
+| tier   | slug       | nome     | mensal      |
+| ------ | ---------- | -------- | ----------- |
+| bronze | `ingresso` | Ingresso | R$ 490,00   |
+| silver | `estrada`  | Estrada  | R$ 890,00   |
+| gold   | `fundador` | Fundador | R$ 1.490,00 |
 
 Módulos: `detailing` (R$ 150,00, 3 acessos por mês) e `oficina` (R$ 500,00, 5 horas por mês). Só a cadência `monthly` é semeada. Os `stripePriceId` ficam `null` de propósito.

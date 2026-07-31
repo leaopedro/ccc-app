@@ -39,6 +39,7 @@
 ## Estrutura de arquivos
 
 **Criar**
+
 - `apps/api/test/billing/premium-cancel.test.ts`
 - `apps/api/test/billing/premium-invoices.test.ts`
 - `apps/api/test/billing/premium-checkout-addons.test.ts`
@@ -54,6 +55,7 @@
 - `apps/mobile/app/(app)/assinaturas/checkout-return.tsx`
 
 **Modificar**
+
 - `packages/shared/src/premium.ts` — `addonKeys`, enum de tier
 - `packages/shared/src/premium-subscription.ts` — `benefits`, `planDescription`, schema de invoices
 - `apps/api/src/services/stripe/index.ts` — `priceIds`, `cancelSubscriptionAtPeriodEnd`, `expireCheckoutSession`
@@ -81,9 +83,11 @@
 ## Task 0: Confirmação de banco
 
 **Files:**
+
 - Nenhum. Esta task não escreve código.
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: confirmação escrita de que nenhuma migration é necessária.
 
@@ -91,12 +95,12 @@
 
 Ler `packages/db/prisma/schema.prisma` e confirmar que cada requisito abaixo já tem tabela:
 
-| Requisito | Tabela |
-|---|---|
-| Módulos no checkout | `PremiumMembershipAddon` + `PremiumAddonUsage` |
-| Cancelamento | `PremiumMembership.cancelAtPeriodEnd`, `.cancelledAt`, status `cancel_scheduled` |
-| Histórico de cobranças | `PremiumMembershipInvoice` |
-| Benefícios em Minha Assinatura | `PremiumPlanBenefit` |
+| Requisito                      | Tabela                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| Módulos no checkout            | `PremiumMembershipAddon` + `PremiumAddonUsage`                                   |
+| Cancelamento                   | `PremiumMembership.cancelAtPeriodEnd`, `.cancelledAt`, status `cancel_scheduled` |
+| Histórico de cobranças         | `PremiumMembershipInvoice`                                                       |
+| Benefícios em Minha Assinatura | `PremiumPlanBenefit`                                                             |
 
 Confirmar também que `PremiumMembershipAddon` tem `@@unique([membershipId, addonKey])` sem filtro de status. Esse é o motivo do upsert da Task 7.
 
@@ -114,10 +118,12 @@ Expected: vazio.
 ## Task 1: Schemas compartilhados
 
 **Files:**
+
 - Modify: `packages/shared/src/premium.ts:15-18`, `packages/shared/src/premium.ts:65`
 - Modify: `packages/shared/src/premium-subscription.ts:39-52`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `premiumCheckoutRequestSchema` com `addonKeys?: string[]`; `premiumStatusSchema.tier` aceitando os três tiers; `mySubscriptionResponseSchema` com `benefits: string[]` e `planDescription: string | null`; `premiumInvoiceSchema` e `premiumInvoicesResponseSchema` exportados de `@ccc/shared/premium-subscription`.
 
@@ -214,12 +220,14 @@ git commit -m "feat(shared): addonKeys no checkout, tier multi-valor e schema de
 ## Task 2: Rota de cancelamento
 
 **Files:**
+
 - Modify: `apps/api/src/services/stripe/index.ts` (tipos + `StripeClient` + impl real)
 - Modify: `apps/api/src/services/stripe/fake.ts`
 - Modify: `apps/api/src/routes/me-premium.ts`
 - Test: `apps/api/test/billing/premium-cancel.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LIVE_STATUSES` e `APPLE_MANAGE_URL` de `me-premium.ts:34,40`.
 - Produces: `StripeClient.cancelSubscriptionAtPeriodEnd(input: { subscriptionId: string; idempotencyKey: string }) => Promise<{ cancelAtPeriodEnd: boolean; currentPeriodEnd: Date }>`; `FakeStripe.nextCancelledSubscription`; rota `POST /api/me/premium/cancel`.
 
@@ -381,9 +389,8 @@ export type CancelSubscriptionAtPeriodEndResult = {
 Dentro de `StripeClient`, depois de `retrieveSubscription`:
 
 ```ts
-  cancelSubscriptionAtPeriodEnd: (
-    input: CancelSubscriptionAtPeriodEndInput,
-  ) => Promise<CancelSubscriptionAtPeriodEndResult>;
+cancelSubscriptionAtPeriodEnd: (input: CancelSubscriptionAtPeriodEndInput) =>
+  Promise<CancelSubscriptionAtPeriodEndResult>;
 ```
 
 Na implementação real de `buildStripe`, junto das outras funções de subscription:
@@ -407,8 +414,8 @@ Na implementação real de `buildStripe`, junto das outras funções de subscrip
 Em `apps/api/src/services/stripe/fake.ts`, acrescentar `'cancelSubscriptionAtPeriodEnd'` à união `FakeCall['kind']`, importar os dois tipos novos de `./index.js` e adicionar ao tipo `FakeStripe`:
 
 ```ts
-  /** Next payload returned by cancelSubscriptionAtPeriodEnd. */
-  nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
+/** Next payload returned by cancelSubscriptionAtPeriodEnd. */
+nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
 ```
 
 No objeto `fake`, junto dos outros defaults:
@@ -437,58 +444,58 @@ E o método:
 Em `apps/api/src/routes/me-premium.ts`, depois do handler de `billing-portal`:
 
 ```ts
-  /**
-   * POST /api/me/premium/cancel
-   *
-   * Schedules cancellation at period end on Stripe and returns immediately.
-   * Deliberately does NOT touch the DB: the resulting
-   * customer.subscription.updated webhook normalizes to subscription.cancelled
-   * and handleCancelled writes the row. Keeps the invariant that subscription
-   * state only changes through a verified webhook.
-   */
-  app.post('/api/me/premium/cancel', { preHandler: [app.authenticate] }, async (request, reply) => {
-    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-      return reply
-        .status(503)
-        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
-    }
+/**
+ * POST /api/me/premium/cancel
+ *
+ * Schedules cancellation at period end on Stripe and returns immediately.
+ * Deliberately does NOT touch the DB: the resulting
+ * customer.subscription.updated webhook normalizes to subscription.cancelled
+ * and handleCancelled writes the row. Keeps the invariant that subscription
+ * state only changes through a verified webhook.
+ */
+app.post('/api/me/premium/cancel', { preHandler: [app.authenticate] }, async (request, reply) => {
+  if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+    return reply
+      .status(503)
+      .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+  }
 
-    const { sub } = requireUser(request);
+  const { sub } = requireUser(request);
 
-    const garage = await prisma.garage.findUnique({
-      where: { userId: sub },
-      select: { id: true },
-    });
-    if (!garage) {
-      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
-    }
-
-    const membership = await prisma.premiumMembership.findFirst({
-      where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-      select: { id: true, provider: true, providerSubRef: true },
-    });
-    if (!membership) {
-      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
-    }
-
-    if (membership.provider !== 'stripe') {
-      return reply.status(409).send({
-        error: 'NotStripeSubscription',
-        provider: membership.provider,
-        manageUrl: APPLE_MANAGE_URL,
-      });
-    }
-
-    const result = await app.stripe.cancelSubscriptionAtPeriodEnd({
-      subscriptionId: membership.providerSubRef,
-      idempotencyKey: `cancel_sub_${membership.id}`,
-    });
-
-    return reply.status(200).send({
-      cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-      currentPeriodEnd: result.currentPeriodEnd.toISOString(),
-    });
+  const garage = await prisma.garage.findUnique({
+    where: { userId: sub },
+    select: { id: true },
   });
+  if (!garage) {
+    return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+  }
+
+  const membership = await prisma.premiumMembership.findFirst({
+    where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
+    select: { id: true, provider: true, providerSubRef: true },
+  });
+  if (!membership) {
+    return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+  }
+
+  if (membership.provider !== 'stripe') {
+    return reply.status(409).send({
+      error: 'NotStripeSubscription',
+      provider: membership.provider,
+      manageUrl: APPLE_MANAGE_URL,
+    });
+  }
+
+  const result = await app.stripe.cancelSubscriptionAtPeriodEnd({
+    subscriptionId: membership.providerSubRef,
+    idempotencyKey: `cancel_sub_${membership.id}`,
+  });
+
+  return reply.status(200).send({
+    cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+    currentPeriodEnd: result.currentPeriodEnd.toISOString(),
+  });
+});
 ```
 
 - [ ] **Step 6: Rodar e ver passar**
@@ -508,10 +515,12 @@ git commit -m "feat(api): POST /api/me/premium/cancel agenda cancelamento no fim
 ## Task 3: Rota de histórico de cobranças
 
 **Files:**
+
 - Modify: `apps/api/src/routes/me-premium.ts`
 - Test: `apps/api/test/billing/premium-invoices.test.ts`
 
 **Interfaces:**
+
 - Consumes: `premiumInvoicesResponseSchema` de `@ccc/shared/premium-subscription` (Task 1).
 - Produces: rota `GET /api/me/premium/invoices`.
 
@@ -647,59 +656,59 @@ Expected: FAIL com 404 em todos os casos. A rota não existe.
 Em `apps/api/src/routes/me-premium.ts`, adicionar `premiumInvoicesResponseSchema` ao import de `@ccc/shared/premium-subscription` (criar o import se ainda não houver) e escrever o handler depois de `cancel`:
 
 ```ts
-  /**
-   * GET /api/me/premium/invoices
-   *
-   * Billing history as the member sees it. Reads every membership row of the
-   * user's garage (expired rows accumulate as history), newest first, capped
-   * at 24. Provider refs are never serialized.
-   */
-  app.get('/api/me/premium/invoices', { preHandler: [app.authenticate] }, async (request, reply) => {
-    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-      return reply
-        .status(503)
-        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
-    }
+/**
+ * GET /api/me/premium/invoices
+ *
+ * Billing history as the member sees it. Reads every membership row of the
+ * user's garage (expired rows accumulate as history), newest first, capped
+ * at 24. Provider refs are never serialized.
+ */
+app.get('/api/me/premium/invoices', { preHandler: [app.authenticate] }, async (request, reply) => {
+  if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+    return reply
+      .status(503)
+      .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+  }
 
-    const { sub } = requireUser(request);
+  const { sub } = requireUser(request);
 
-    const garage = await prisma.garage.findUnique({
-      where: { userId: sub },
-      select: { id: true },
-    });
-    if (!garage) {
-      return reply.status(200).send(premiumInvoicesResponseSchema.parse({ invoices: [] }));
-    }
-
-    const rows = await prisma.premiumMembershipInvoice.findMany({
-      where: { membership: { garageId: garage.id } },
-      orderBy: { periodStart: 'desc' },
-      take: 24,
-      select: {
-        periodStart: true,
-        periodEnd: true,
-        paidAt: true,
-        grossAmountCents: true,
-        currency: true,
-        status: true,
-        refundedAt: true,
-      },
-    });
-
-    return reply.status(200).send(
-      premiumInvoicesResponseSchema.parse({
-        invoices: rows.map((r) => ({
-          periodStart: r.periodStart.toISOString(),
-          periodEnd: r.periodEnd.toISOString(),
-          paidAt: r.paidAt.toISOString(),
-          grossAmountCents: r.grossAmountCents,
-          currency: r.currency,
-          status: r.status,
-          refundedAt: r.refundedAt ? r.refundedAt.toISOString() : null,
-        })),
-      }),
-    );
+  const garage = await prisma.garage.findUnique({
+    where: { userId: sub },
+    select: { id: true },
   });
+  if (!garage) {
+    return reply.status(200).send(premiumInvoicesResponseSchema.parse({ invoices: [] }));
+  }
+
+  const rows = await prisma.premiumMembershipInvoice.findMany({
+    where: { membership: { garageId: garage.id } },
+    orderBy: { periodStart: 'desc' },
+    take: 24,
+    select: {
+      periodStart: true,
+      periodEnd: true,
+      paidAt: true,
+      grossAmountCents: true,
+      currency: true,
+      status: true,
+      refundedAt: true,
+    },
+  });
+
+  return reply.status(200).send(
+    premiumInvoicesResponseSchema.parse({
+      invoices: rows.map((r) => ({
+        periodStart: r.periodStart.toISOString(),
+        periodEnd: r.periodEnd.toISOString(),
+        paidAt: r.paidAt.toISOString(),
+        grossAmountCents: r.grossAmountCents,
+        currency: r.currency,
+        status: r.status,
+        refundedAt: r.refundedAt ? r.refundedAt.toISOString() : null,
+      })),
+    }),
+  );
+});
 ```
 
 - [ ] **Step 4: Rodar e ver passar**
@@ -719,12 +728,14 @@ git commit -m "feat(api): GET /api/me/premium/invoices com historico de cobranca
 ## Task 4: Checkout multi-line-item com módulos
 
 **Files:**
+
 - Modify: `apps/api/src/services/stripe/index.ts` (`priceIds`, `expireCheckoutSession`)
 - Modify: `apps/api/src/services/stripe/fake.ts`
 - Modify: `apps/api/src/routes/me-premium.ts:242-262`
 - Test: `apps/api/test/billing/premium-checkout-addons.test.ts`
 
 **Interfaces:**
+
 - Consumes: `premiumCheckoutRequestSchema` com `addonKeys` (Task 1).
 - Produces: `CreateSubscriptionCheckoutSessionInput.priceIds: string[]` no lugar de `priceId`; `StripeClient.expireCheckoutSession(sessionId: string) => Promise<void>`; idempotency key no formato `checkout_sub_{garageId}_{cadence}_{digest}`, onde o digest cobre os price ids **resolvidos** (`[priceId, ...addonPriceIds]`), não as chaves pedidas pelo cliente. Digerir a seleção deixa a chave estável quando o operador roda um `stripePriceId` no catálogo, e aí o Stripe responde 400 `idempotency_error`.
 
@@ -984,12 +995,12 @@ Em `apps/api/src/services/stripe/index.ts`, no tipo `CreateSubscriptionCheckoutS
 Dentro de `StripeClient`, depois de `listOpenSubscriptionCheckoutSessions`:
 
 ```ts
-  /**
-   * Expire an open Checkout Session. Used before minting a new subscription
-   * session so a member who abandoned checkout and changed their package is
-   * not pushed back into the stale one.
-   */
-  expireCheckoutSession: (sessionId: string) => Promise<void>;
+/**
+ * Expire an open Checkout Session. Used before minting a new subscription
+ * session so a member who abandoned checkout and changed their package is
+ * not pushed back into the stale one.
+ */
+expireCheckoutSession: (sessionId: string) => Promise<void>;
 ```
 
 Na implementação real, o `line_items` de `createSubscriptionCheckoutSession` (hoje em `:341`) passa a mapear o array:
@@ -1020,16 +1031,16 @@ Em `apps/api/src/services/stripe/fake.ts`, acrescentar `'expireCheckoutSession'`
 Adicionar também o gancho de falha usado pelo teste do R1. No tipo `FakeStripe`:
 
 ```ts
-  /** When set, createSubscriptionCheckoutSession throws this error. */
-  nextCreateSubscriptionCheckoutSessionError: Error | null;
+/** When set, createSubscriptionCheckoutSession throws this error. */
+nextCreateSubscriptionCheckoutSessionError: Error | null;
 ```
 
 No objeto `fake`, `nextCreateSubscriptionCheckoutSessionError: null,` junto dos outros defaults, e no corpo de `createSubscriptionCheckoutSession`, logo depois do `calls.push`:
 
 ```ts
-      if (fake.nextCreateSubscriptionCheckoutSessionError) {
-        throw fake.nextCreateSubscriptionCheckoutSessionError;
-      }
+if (fake.nextCreateSubscriptionCheckoutSessionError) {
+  throw fake.nextCreateSubscriptionCheckoutSessionError;
+}
 ```
 
 - [ ] **Step 5: Reescrever o miolo do handler de checkout**
@@ -1043,97 +1054,97 @@ import { createHash } from 'node:crypto';
 Trocar a desestruturação em `:142` por:
 
 ```ts
-      const { cadence, planSlug, addonKeys } = parsed.data;
-      const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
+const { cadence, planSlug, addonKeys } = parsed.data;
+const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
 ```
 
 Depois do bloco que resolve `priceId` (que termina em `:189`), inserir a resolução dos módulos:
 
 ```ts
-      // Resolve add-on prices from the catalog. Unknown/inactive key is a client
-      // error (400); a known module with no stripePriceId is an operator
-      // misconfiguration (503).
-      const addonPriceIds: string[] = [];
-      if (selectedAddonKeys.length > 0) {
-        const modules = await prisma.premiumAddonModule.findMany({
-          where: { key: { in: selectedAddonKeys }, active: true },
-          select: { key: true, stripePriceId: true },
-        });
+// Resolve add-on prices from the catalog. Unknown/inactive key is a client
+// error (400); a known module with no stripePriceId is an operator
+// misconfiguration (503).
+const addonPriceIds: string[] = [];
+if (selectedAddonKeys.length > 0) {
+  const modules = await prisma.premiumAddonModule.findMany({
+    where: { key: { in: selectedAddonKeys }, active: true },
+    select: { key: true, stripePriceId: true },
+  });
 
-        const found = new Set(modules.map((m) => m.key));
-        const unknownAddonKeys = selectedAddonKeys.filter((k) => !found.has(k));
-        if (unknownAddonKeys.length > 0) {
-          return reply
-            .status(400)
-            .send({ error: 'BadRequest', message: 'unknown add-on key', unknownAddonKeys });
-        }
+  const found = new Set(modules.map((m) => m.key));
+  const unknownAddonKeys = selectedAddonKeys.filter((k) => !found.has(k));
+  if (unknownAddonKeys.length > 0) {
+    return reply
+      .status(400)
+      .send({ error: 'BadRequest', message: 'unknown add-on key', unknownAddonKeys });
+  }
 
-        const missingAddonKeys = modules.filter((m) => !m.stripePriceId).map((m) => m.key);
-        if (missingAddonKeys.length > 0) {
-          request.log.error(
-            { missingAddonKeys },
-            'me-premium: checkout requested but add-on stripePriceId not configured',
-          );
-          return reply.status(503).send({
-            error: 'ServiceUnavailable',
-            message: 'add-on price not configured',
-            missingAddonKeys,
-          });
-        }
+  const missingAddonKeys = modules.filter((m) => !m.stripePriceId).map((m) => m.key);
+  if (missingAddonKeys.length > 0) {
+    request.log.error(
+      { missingAddonKeys },
+      'me-premium: checkout requested but add-on stripePriceId not configured',
+    );
+    return reply.status(503).send({
+      error: 'ServiceUnavailable',
+      message: 'add-on price not configured',
+      missingAddonKeys,
+    });
+  }
 
-        // Preserve catalog order for a stable session; the plan price stays first.
-        for (const key of selectedAddonKeys) {
-          const found = modules.find((m) => m.key === key);
-          if (found?.stripePriceId) addonPriceIds.push(found.stripePriceId);
-        }
-      }
+  // Preserve catalog order for a stable session; the plan price stays first.
+  for (const key of selectedAddonKeys) {
+    const found = modules.find((m) => m.key === key);
+    if (found?.stripePriceId) addonPriceIds.push(found.stripePriceId);
+  }
+}
 ```
 
 Substituir o bloco `:242-262` por:
 
 ```ts
-      // A stale open session holds the previous package. Expire it so the member
-      // is not pushed back into a selection they abandoned.
-      const openSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
-      for (const open of openSessions) {
-        await app.stripe.expireCheckoutSession(open.id);
-      }
+// A stale open session holds the previous package. Expire it so the member
+// is not pushed back into a selection they abandoned.
+const openSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
+for (const open of openSessions) {
+  await app.stripe.expireCheckoutSession(open.id);
+}
 
-      // The key must cover the whole package: same garage + cadence with a
-      // different plan or module set is a genuinely different session, and
-      // Stripe rejects a reused key carrying different params.
-      const packageDigest = createHash('sha1')
-        .update([planSlug ?? tier, ...selectedAddonKeys].join('|'))
-        .digest('hex')
-        .slice(0, 12);
-      const idempotencyKey = `checkout_sub_${garage.id}_${cadence}_${packageDigest}`;
+// The key must cover the whole package: same garage + cadence with a
+// different plan or module set is a genuinely different session, and
+// Stripe rejects a reused key carrying different params.
+const packageDigest = createHash('sha1')
+  .update([planSlug ?? tier, ...selectedAddonKeys].join('|'))
+  .digest('hex')
+  .slice(0, 12);
+const idempotencyKey = `checkout_sub_${garage.id}_${cadence}_${packageDigest}`;
 
-      // R1: a multi-line subscription session requires every price to share the
-      // same interval and currency. Stripe rejects the mix, and that is an
-      // operator catalog problem, not a client error — surface it as 503.
-      let session;
-      try {
-        session = await app.stripe.createSubscriptionCheckoutSession({
-          customerId,
-          priceIds: [priceId, ...addonPriceIds],
-          successUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas/checkout-return`,
-          cancelUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas`,
-          metadata: { garageId: garage.id, userId: sub, cadence },
-          idempotencyKey,
-        });
-      } catch (err) {
-        request.log.error(
-          { err, priceIds: [priceId, ...addonPriceIds] },
-          'me-premium: stripe rejected the subscription checkout session',
-        );
-        return reply
-          .status(503)
-          .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
-      }
+// R1: a multi-line subscription session requires every price to share the
+// same interval and currency. Stripe rejects the mix, and that is an
+// operator catalog problem, not a client error — surface it as 503.
+let session;
+try {
+  session = await app.stripe.createSubscriptionCheckoutSession({
+    customerId,
+    priceIds: [priceId, ...addonPriceIds],
+    successUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas/checkout-return`,
+    cancelUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas`,
+    metadata: { garageId: garage.id, userId: sub, cadence },
+    idempotencyKey,
+  });
+} catch (err) {
+  request.log.error(
+    { err, priceIds: [priceId, ...addonPriceIds] },
+    'me-premium: stripe rejected the subscription checkout session',
+  );
+  return reply
+    .status(503)
+    .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+}
 
-      return reply
-        .status(201)
-        .send(premiumCheckoutResponseSchema.parse({ url: session.url, sessionId: session.id }));
+return reply
+  .status(201)
+  .send(premiumCheckoutResponseSchema.parse({ url: session.url, sessionId: session.id }));
 ```
 
 - [ ] **Step 6: Rodar e ver passar**
@@ -1158,11 +1169,13 @@ git commit -m "feat(api): checkout multi-line-item com modulos e retorno no modu
 ## Task 5: Normalizer devolve as linhas da fatura
 
 **Files:**
+
 - Modify: `apps/api/src/services/billing/types.ts`
 - Modify: `apps/api/src/services/billing/normalize-stripe.ts`
 - Test: `apps/api/test/billing/normalize-stripe-lines.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `BillingLine`, `BillingAddonLine` em `types.ts`; `subscription.activated` com `lines`, `addons`, `addonsAmountCents`; `subscription.renewed` com `lines`; `subscription.tier_changed` com `priceRef`. `tier`, `baseAmountCents` e `devFeePercent` saem do normalizer como placeholder.
 
@@ -1310,8 +1323,8 @@ No membro `subscription.renewed`, adicionar:
 No membro `subscription.tier_changed`, adicionar:
 
 ```ts
-      /** The new price id, so the route can tell a plan swap from an add-on swap. */
-      priceRef: string;
+/** The new price id, so the route can tell a plan swap from an add-on swap. */
+priceRef: string;
 ```
 
 - [ ] **Step 4: Reescrever o normalizer**
@@ -1364,14 +1377,14 @@ Adicionar `BillingLine` ao import de `./types.js`.
 No ramo `invoice.paid`, trocar o tipo de `lines` em ambos os lugares para `{ data: StripeInvoiceLine[] }`, e depois de `const pricing = pricingFromInvoice(invoice);` inserir:
 
 ```ts
-    const lines = linesFromInvoice(invoice.lines.data);
+const lines = linesFromInvoice(invoice.lines.data);
 ```
 
 Trocar `const tier = tierFromPrice(linePrice.metadata ?? {});` por:
 
 ```ts
-    // Placeholder — the route patches this from the catalog, like garageId.
-    const tier = 'bronze' as const;
+// Placeholder — the route patches this from the catalog, like garageId.
+const tier = 'bronze' as const;
 ```
 
 No objeto de `subscription.activated`, adicionar `lines,`, `addons: [],` e `addonsAmountCents: 0,`. No de `subscription.renewed`, adicionar `lines,`.
@@ -1379,25 +1392,25 @@ No objeto de `subscription.activated`, adicionar `lines,`, `addons: [],` e `addo
 No ramo `tier_changed` (`:198-222`), trocar as três linhas de metadata por placeholders e carregar o `priceRef`:
 
 ```ts
-      const currentPrice = sub.items.data[0]!.price;
-      const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
-      return {
-        kind: 'subscription.tier_changed',
-        provider: 'stripe',
-        providerSubRef: sub.id,
-        priceRef: currentPrice.id,
-        // Placeholders — the route resolves tier + pricing from the catalog and
-        // drops the event entirely when the swapped price is an add-on.
-        tier: 'bronze',
-        cadence,
-        pricing: {
-          baseAmountCents: 0,
-          devFeePercent: 0,
-          devFeeAmountCents: 0,
-          grossAmountCents: 0,
-          currency: 'BRL',
-        },
-      } satisfies BillingEvent & { kind: 'subscription.tier_changed' };
+const currentPrice = sub.items.data[0]!.price;
+const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
+return {
+  kind: 'subscription.tier_changed',
+  provider: 'stripe',
+  providerSubRef: sub.id,
+  priceRef: currentPrice.id,
+  // Placeholders — the route resolves tier + pricing from the catalog and
+  // drops the event entirely when the swapped price is an add-on.
+  tier: 'bronze',
+  cadence,
+  pricing: {
+    baseAmountCents: 0,
+    devFeePercent: 0,
+    devFeeAmountCents: 0,
+    grossAmountCents: 0,
+    currency: 'BRL',
+  },
+} satisfies BillingEvent & { kind: 'subscription.tier_changed' };
 ```
 
 - [ ] **Step 5: Rodar e ver passar**
@@ -1419,10 +1432,12 @@ Nota, **corrigida em 2026-07-29 depois de medir**: `pnpm --filter @ccc/api typec
 ## Task 6: Webhook resolve as linhas contra o catálogo
 
 **Files:**
+
 - Modify: `apps/api/src/routes/stripe-billing-webhook.ts:265-320`
 - Test: `apps/api/test/billing/stripe-billing-webhook.test.ts`
 
 **Interfaces:**
+
 - Consumes: `BillingLine`, `BillingAddonLine` (Task 5).
 - Produces: `BillingEvent` totalmente resolvido antes de `applyMembershipEvent`. Nenhuma exportação nova.
 
@@ -1678,71 +1693,69 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
 Logo depois de `const billingEvt: BillingEvent = normalized;` (`:268`), inserir:
 
 ```ts
-    // Patch the catalog-resolved values into the event before dispatch, in the
-    // same spirit as the garageId patch below.
-    if (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') {
-      const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+// Patch the catalog-resolved values into the event before dispatch, in the
+// same spirit as the garageId patch below.
+if (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') {
+  const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
 
-      // The normalizer's tier placeholder is a VALID enum value ('bronze'), so a
-      // silent fall-through would provision a paying gold customer as bronze and
-      // nothing would fail. Refuse to activate on an unresolved plan line instead.
-      // Decision 2026-07-29: ignore + alert. Stripe must NOT redeliver, because
-      // the fix is an operator action in the admin catalog, not a transient error.
-      if (billingEvt.kind === 'subscription.activated' && !resolved.tier) {
-        await prisma.subscriptionWebhookEvent.update({
-          where: { id: webhookEventId },
-          data: { processedAt: new Date() },
-        });
-        request.log.error(
-          { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
-          'stripe-billing webhook: no catalog plan price matched the invoice, refusing to activate',
-        );
-        Sentry.captureMessage(
-          'stripe-billing webhook: invoice.paid with no matching PremiumPlanPrice, activation refused',
-          {
-            level: 'error',
-            tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
-            extra: { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
-          },
-        );
-        return reply
-          .status(200)
-          .send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
-      }
+  // The normalizer's tier placeholder is a VALID enum value ('bronze'), so a
+  // silent fall-through would provision a paying gold customer as bronze and
+  // nothing would fail. Refuse to activate on an unresolved plan line instead.
+  // Decision 2026-07-29: ignore + alert. Stripe must NOT redeliver, because
+  // the fix is an operator action in the admin catalog, not a transient error.
+  if (billingEvt.kind === 'subscription.activated' && !resolved.tier) {
+    await prisma.subscriptionWebhookEvent.update({
+      where: { id: webhookEventId },
+      data: { processedAt: new Date() },
+    });
+    request.log.error(
+      { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+      'stripe-billing webhook: no catalog plan price matched the invoice, refusing to activate',
+    );
+    Sentry.captureMessage(
+      'stripe-billing webhook: invoice.paid with no matching PremiumPlanPrice, activation refused',
+      {
+        level: 'error',
+        tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
+        extra: { eventId: event.id, priceRefs: billingEvt.lines.map((l) => l.priceRef) },
+      },
+    );
+    return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
+  }
 
-      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
-      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
-      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
-      if (billingEvt.kind === 'subscription.activated') {
-        billingEvt.tier = resolved.tier;
-        billingEvt.addons = resolved.addons;
-        billingEvt.addonsAmountCents = resolved.addonsAmountCents;
-      }
-    }
+  billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+  billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+  billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+  if (billingEvt.kind === 'subscription.activated') {
+    billingEvt.tier = resolved.tier;
+    billingEvt.addons = resolved.addons;
+    billingEvt.addonsAmountCents = resolved.addonsAmountCents;
+  }
+}
 
-    // A tier_changed whose swapped price is an add-on is not a tier change at
-    // all: reconcileMembershipAddonsAmount above already handled it.
-    if (billingEvt.kind === 'subscription.tier_changed') {
-      const resolved = await resolveLinesAgainstCatalog([
-        { priceRef: billingEvt.priceRef, amountCents: 0, subscriptionItemRef: null, metadata: {} },
-      ]);
-      if (!resolved.tier) {
-        await prisma.subscriptionWebhookEvent.update({
-          where: { id: webhookEventId },
-          data: { processedAt: new Date() },
-        });
-        request.log.info(
-          { eventId: event.id, priceRef: billingEvt.priceRef },
-          'stripe-billing webhook: item swap is an add-on, not a tier change',
-        );
-        return reply.status(200).send({ ok: true, ignored: true, reason: 'addon-item-swap' });
-      }
-      billingEvt.tier = resolved.tier;
-      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
-      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
-      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
-      billingEvt.pricing.grossAmountCents = resolved.baseAmountCents + resolved.devFeeAmountCents;
-    }
+// A tier_changed whose swapped price is an add-on is not a tier change at
+// all: reconcileMembershipAddonsAmount above already handled it.
+if (billingEvt.kind === 'subscription.tier_changed') {
+  const resolved = await resolveLinesAgainstCatalog([
+    { priceRef: billingEvt.priceRef, amountCents: 0, subscriptionItemRef: null, metadata: {} },
+  ]);
+  if (!resolved.tier) {
+    await prisma.subscriptionWebhookEvent.update({
+      where: { id: webhookEventId },
+      data: { processedAt: new Date() },
+    });
+    request.log.info(
+      { eventId: event.id, priceRef: billingEvt.priceRef },
+      'stripe-billing webhook: item swap is an add-on, not a tier change',
+    );
+    return reply.status(200).send({ ok: true, ignored: true, reason: 'addon-item-swap' });
+  }
+  billingEvt.tier = resolved.tier;
+  billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+  billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+  billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+  billingEvt.pricing.grossAmountCents = resolved.baseAmountCents + resolved.devFeeAmountCents;
+}
 ```
 
 Nota de escopo: a renovação patcha só o `pricing`. Add-on que muda entre ciclos continua sendo reconciliado por `reconcileMembershipAddonsAmount` no `customer.subscription.updated`, que já roda em `:184-199`.
@@ -1766,10 +1779,12 @@ git commit -m "fix(api): webhook resolve tier e precos contra o catalogo do banc
 ## Task 7: Add-ons criados na transação de ativação
 
 **Files:**
+
 - Modify: `apps/api/src/services/billing/apply-membership-event.ts:53-195`
 - Test: `apps/api/test/billing/stripe-billing-webhook.test.ts`
 
 **Interfaces:**
+
 - Consumes: `BillingAddonLine` e `evt.addons` / `evt.addonsAmountCents` (Tasks 5 e 6).
 - Produces: `PremiumMembershipAddon` e `PremiumAddonUsage` escritos na mesma tx da ativação.
 
@@ -1778,161 +1793,161 @@ git commit -m "fix(api): webhook resolve tier e precos contra o catalogo do banc
 No mesmo `describe('multi-line invoice resolution')`, adicionar:
 
 ```ts
-  it('creates the add-on and its usage cycle in the activation transaction', async () => {
-    const { app, stripe } = await buildBillingApp(true);
-    await seedCatalog();
-    const { user } = await createUser({ email: 'addontx@jdm.test' });
-    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
-    stripe.customers.set('cus_ml_2', { garageId: garage.id });
-    stripe.nextEvent = {
-      id: 'evt_ml_2',
-      type: 'invoice.paid',
-      data: {
-        object: {
-          id: 'in_ml_2',
-          subscription: 'sub_ml_2',
-          customer: 'cus_ml_2',
-          billing_reason: 'subscription_create',
-          amount_paid: 113900,
-          currency: 'brl',
-          period_start: 1767225600,
-          period_end: 1769904000,
-          status_transitions: { paid_at: 1767225600 },
-          lines: {
-            data: [
-              {
-                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
-                amount: 89000,
-                subscription_item: 'si_plan_2',
-              },
-              {
-                price: { id: 'price_addon_detailing', metadata: {} },
-                amount: 15000,
-                subscription_item: 'si_addon_2',
-              },
-            ],
-          },
+it('creates the add-on and its usage cycle in the activation transaction', async () => {
+  const { app, stripe } = await buildBillingApp(true);
+  await seedCatalog();
+  const { user } = await createUser({ email: 'addontx@jdm.test' });
+  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+  stripe.customers.set('cus_ml_2', { garageId: garage.id });
+  stripe.nextEvent = {
+    id: 'evt_ml_2',
+    type: 'invoice.paid',
+    data: {
+      object: {
+        id: 'in_ml_2',
+        subscription: 'sub_ml_2',
+        customer: 'cus_ml_2',
+        billing_reason: 'subscription_create',
+        amount_paid: 113900,
+        currency: 'brl',
+        period_start: 1767225600,
+        period_end: 1769904000,
+        status_transitions: { paid_at: 1767225600 },
+        lines: {
+          data: [
+            {
+              price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+              amount: 89000,
+              subscription_item: 'si_plan_2',
+            },
+            {
+              price: { id: 'price_addon_detailing', metadata: {} },
+              amount: 15000,
+              subscription_item: 'si_addon_2',
+            },
+          ],
         },
       },
-    };
+    },
+  };
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/webhooks/stripe-billing',
-      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
-      payload: rawJson(stripe.nextEvent),
-    });
-    expect(res.statusCode).toBe(200);
+  const res = await app.inject({
+    method: 'POST',
+    url: '/webhooks/stripe-billing',
+    headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+    payload: rawJson(stripe.nextEvent),
+  });
+  expect(res.statusCode).toBe(200);
 
-    const membership = await prisma.premiumMembership.findUniqueOrThrow({
-      where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_2' } },
-    });
-    expect(membership.addonsAmountCents).toBe(15000);
+  const membership = await prisma.premiumMembership.findUniqueOrThrow({
+    where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_ml_2' } },
+  });
+  expect(membership.addonsAmountCents).toBe(15000);
 
-    const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
-      where: { membershipId_addonKey: { membershipId: membership.id, addonKey: 'detailing' } },
-    });
-    expect(addon.status).toBe('active');
-    expect(addon.providerItemRef).toBe('si_addon_2');
-    expect(addon.monthlyDeltaCents).toBe(15000);
-    expect(addon.quotaPerCycle).toBe(3);
+  const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
+    where: { membershipId_addonKey: { membershipId: membership.id, addonKey: 'detailing' } },
+  });
+  expect(addon.status).toBe('active');
+  expect(addon.providerItemRef).toBe('si_addon_2');
+  expect(addon.monthlyDeltaCents).toBe(15000);
+  expect(addon.quotaPerCycle).toBe(3);
 
-    const usage = await prisma.premiumAddonUsage.findFirstOrThrow({
-      where: { membershipAddonId: addon.id },
-    });
-    expect(usage.quotaTotal).toBe(3);
-    expect(usage.quotaUsed).toBe(0);
-    expect(usage.cycleStart.toISOString()).toBe(membership.currentPeriodStart.toISOString());
+  const usage = await prisma.premiumAddonUsage.findFirstOrThrow({
+    where: { membershipAddonId: addon.id },
+  });
+  expect(usage.quotaTotal).toBe(3);
+  expect(usage.quotaUsed).toBe(0);
+  expect(usage.cycleStart.toISOString()).toBe(membership.currentPeriodStart.toISOString());
 
-    await app.close();
+  await app.close();
+});
+
+it('reactivates a previously cancelled add-on instead of violating the unique', async () => {
+  const { app, stripe } = await buildBillingApp(true);
+  await seedCatalog();
+  const { user } = await createUser({ email: 'readd@jdm.test' });
+  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+  const stale = await prisma.premiumMembership.create({
+    data: {
+      garageId: garage.id,
+      provider: 'stripe',
+      providerCustomerRef: 'cus_ml_3',
+      providerSubRef: 'sub_ml_3',
+      tier: 'silver',
+      cadence: 'monthly',
+      status: 'expired',
+      currentPeriodStart: new Date('2026-01-01T00:00:00.000Z'),
+      currentPeriodEnd: new Date('2026-02-01T00:00:00.000Z'),
+      cancelAtPeriodEnd: false,
+      baseAmountCents: 89000,
+      devFeePercent: 10,
+      devFeeAmountCents: 8900,
+      grossAmountCents: 97900,
+      currency: 'BRL',
+    },
+  });
+  await prisma.premiumMembershipAddon.create({
+    data: {
+      membershipId: stale.id,
+      addonKey: 'detailing',
+      status: 'cancelled',
+      providerItemRef: 'si_old',
+      monthlyDeltaCents: 15000,
+      quotaPerCycle: 3,
+      quotaUnit: 'access',
+      currency: 'BRL',
+    },
   });
 
-  it('reactivates a previously cancelled add-on instead of violating the unique', async () => {
-    const { app, stripe } = await buildBillingApp(true);
-    await seedCatalog();
-    const { user } = await createUser({ email: 'readd@jdm.test' });
-    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
-
-    const stale = await prisma.premiumMembership.create({
-      data: {
-        garageId: garage.id,
-        provider: 'stripe',
-        providerCustomerRef: 'cus_ml_3',
-        providerSubRef: 'sub_ml_3',
-        tier: 'silver',
-        cadence: 'monthly',
-        status: 'expired',
-        currentPeriodStart: new Date('2026-01-01T00:00:00.000Z'),
-        currentPeriodEnd: new Date('2026-02-01T00:00:00.000Z'),
-        cancelAtPeriodEnd: false,
-        baseAmountCents: 89000,
-        devFeePercent: 10,
-        devFeeAmountCents: 8900,
-        grossAmountCents: 97900,
-        currency: 'BRL',
-      },
-    });
-    await prisma.premiumMembershipAddon.create({
-      data: {
-        membershipId: stale.id,
-        addonKey: 'detailing',
-        status: 'cancelled',
-        providerItemRef: 'si_old',
-        monthlyDeltaCents: 15000,
-        quotaPerCycle: 3,
-        quotaUnit: 'access',
-        currency: 'BRL',
-      },
-    });
-
-    stripe.customers.set('cus_ml_3', { garageId: garage.id });
-    stripe.nextEvent = {
-      id: 'evt_ml_3',
-      type: 'invoice.paid',
-      data: {
-        object: {
-          id: 'in_ml_3',
-          subscription: 'sub_ml_3',
-          customer: 'cus_ml_3',
-          billing_reason: 'subscription_create',
-          amount_paid: 113900,
-          currency: 'brl',
-          period_start: 1767225600,
-          period_end: 1769904000,
-          status_transitions: { paid_at: 1767225600 },
-          lines: {
-            data: [
-              {
-                price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
-                amount: 89000,
-                subscription_item: 'si_plan_3',
-              },
-              {
-                price: { id: 'price_addon_detailing', metadata: {} },
-                amount: 15000,
-                subscription_item: 'si_addon_3',
-              },
-            ],
-          },
+  stripe.customers.set('cus_ml_3', { garageId: garage.id });
+  stripe.nextEvent = {
+    id: 'evt_ml_3',
+    type: 'invoice.paid',
+    data: {
+      object: {
+        id: 'in_ml_3',
+        subscription: 'sub_ml_3',
+        customer: 'cus_ml_3',
+        billing_reason: 'subscription_create',
+        amount_paid: 113900,
+        currency: 'brl',
+        period_start: 1767225600,
+        period_end: 1769904000,
+        status_transitions: { paid_at: 1767225600 },
+        lines: {
+          data: [
+            {
+              price: { id: 'price_plan_silver', metadata: { devFeePercent: '10' } },
+              amount: 89000,
+              subscription_item: 'si_plan_3',
+            },
+            {
+              price: { id: 'price_addon_detailing', metadata: {} },
+              amount: 15000,
+              subscription_item: 'si_addon_3',
+            },
+          ],
         },
       },
-    };
+    },
+  };
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/webhooks/stripe-billing',
-      headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
-      payload: rawJson(stripe.nextEvent),
-    });
-    expect(res.statusCode).toBe(200);
-
-    const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
-      where: { membershipId_addonKey: { membershipId: stale.id, addonKey: 'detailing' } },
-    });
-    expect(addon.status).toBe('active');
-    expect(addon.providerItemRef).toBe('si_addon_3');
-    await app.close();
+  const res = await app.inject({
+    method: 'POST',
+    url: '/webhooks/stripe-billing',
+    headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+    payload: rawJson(stripe.nextEvent),
   });
+  expect(res.statusCode).toBe(200);
+
+  const addon = await prisma.premiumMembershipAddon.findUniqueOrThrow({
+    where: { membershipId_addonKey: { membershipId: stale.id, addonKey: 'detailing' } },
+  });
+  expect(addon.status).toBe('active');
+  expect(addon.providerItemRef).toBe('si_addon_3');
+  await app.close();
+});
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -1949,56 +1964,56 @@ Adicionar `addonsAmountCents,` ao `data` do `create` (`:82-99`) e ao `data` do u
 Depois do bloco de invoice e antes do snapshot do Garage (`:167`), inserir:
 
 ```ts
-  // Add-ons ride the SAME transaction as the activation — no partial state and
-  // no external call inside the tx. The route resolved these against the
-  // catalog; price/quota here are snapshots.
-  //
-  // Upsert, not create: @@unique([membershipId, addonKey]) has no status filter,
-  // so re-subscribing a module that was previously cancelled would otherwise
-  // violate the constraint.
-  for (const addon of addons) {
-    const addonRow = await tx.premiumMembershipAddon.upsert({
-      where: {
-        membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
-      },
-      create: {
-        membershipId: membership.id,
-        addonKey: addon.addonKey,
-        status: 'active',
-        providerItemRef: addon.providerItemRef,
-        monthlyDeltaCents: addon.monthlyDeltaCents,
-        quotaPerCycle: addon.quotaPerCycle,
-        quotaUnit: addon.quotaUnit,
-        currency: addon.currency,
-      },
-      update: {
-        status: 'active',
-        providerItemRef: addon.providerItemRef,
-        monthlyDeltaCents: addon.monthlyDeltaCents,
-        quotaPerCycle: addon.quotaPerCycle,
-        quotaUnit: addon.quotaUnit,
-        currency: addon.currency,
-      },
-    });
+// Add-ons ride the SAME transaction as the activation — no partial state and
+// no external call inside the tx. The route resolved these against the
+// catalog; price/quota here are snapshots.
+//
+// Upsert, not create: @@unique([membershipId, addonKey]) has no status filter,
+// so re-subscribing a module that was previously cancelled would otherwise
+// violate the constraint.
+for (const addon of addons) {
+  const addonRow = await tx.premiumMembershipAddon.upsert({
+    where: {
+      membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
+    },
+    create: {
+      membershipId: membership.id,
+      addonKey: addon.addonKey,
+      status: 'active',
+      providerItemRef: addon.providerItemRef,
+      monthlyDeltaCents: addon.monthlyDeltaCents,
+      quotaPerCycle: addon.quotaPerCycle,
+      quotaUnit: addon.quotaUnit,
+      currency: addon.currency,
+    },
+    update: {
+      status: 'active',
+      providerItemRef: addon.providerItemRef,
+      monthlyDeltaCents: addon.monthlyDeltaCents,
+      quotaPerCycle: addon.quotaPerCycle,
+      quotaUnit: addon.quotaUnit,
+      currency: addon.currency,
+    },
+  });
 
-    // One usage row per cycle. Upsert keeps an activation replay idempotent
-    // without clobbering quotaUsed.
-    await tx.premiumAddonUsage.upsert({
-      where: {
-        membershipAddonId_cycleStart: {
-          membershipAddonId: addonRow.id,
-          cycleStart: currentPeriodStart,
-        },
-      },
-      create: {
+  // One usage row per cycle. Upsert keeps an activation replay idempotent
+  // without clobbering quotaUsed.
+  await tx.premiumAddonUsage.upsert({
+    where: {
+      membershipAddonId_cycleStart: {
         membershipAddonId: addonRow.id,
         cycleStart: currentPeriodStart,
-        cycleEnd: currentPeriodEnd,
-        quotaTotal: addon.quotaPerCycle,
       },
-      update: {},
-    });
-  }
+    },
+    create: {
+      membershipAddonId: addonRow.id,
+      cycleStart: currentPeriodStart,
+      cycleEnd: currentPeriodEnd,
+      quotaTotal: addon.quotaPerCycle,
+    },
+    update: {},
+  });
+}
 ```
 
 - [ ] **Step 4: Rodar e ver passar**
@@ -2026,10 +2041,12 @@ git commit -m "feat(api): cria add-ons e ciclo de quota na transacao de ativacao
 ## Task 8: `subscription` devolve benefícios e descrição
 
 **Files:**
+
 - Modify: `apps/api/src/routes/me-premium-addons.ts:48`
 - Test: `apps/api/test/billing/premium-subscription.test.ts`
 
 **Interfaces:**
+
 - Consumes: `mySubscriptionResponseSchema` com `benefits` e `planDescription` (Task 1).
 - Produces: resposta de `GET /api/me/premium/subscription` com os dois campos.
 
@@ -2038,35 +2055,35 @@ git commit -m "feat(api): cria add-ons e ciclo de quota na transacao de ativacao
 Em `apps/api/test/billing/premium-subscription.test.ts`, adicionar um caso usando as fixtures que o arquivo já tem (`seedGoldPlan`, `seedMembership`):
 
 ```ts
-  it('returns the plan benefits ordered by sortOrder and the plan description', async () => {
-    const { app } = await makeAppWithFakeStripe();
-    const plan = await seedGoldPlan();
-    await prisma.premiumPlan.update({
-      where: { id: plan.id },
-      data: { description: 'O nivel mais alto da Casa.' },
-    });
-    await prisma.premiumPlanBenefit.createMany({
-      data: [
-        { planId: plan.id, label: 'Segundo', sortOrder: 2 },
-        { planId: plan.id, label: 'Primeiro', sortOrder: 1 },
-      ],
-    });
-    const { user } = await createUser({ email: 'benefits@jdm.test' });
-    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
-    await seedMembership(garage.id);
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/me/premium/subscription',
-      headers: { authorization: bearer(env, user.id) },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as { benefits: string[]; planDescription: string | null };
-    expect(body.benefits).toEqual(['Primeiro', 'Segundo']);
-    expect(body.planDescription).toBe('O nivel mais alto da Casa.');
-    await app.close();
+it('returns the plan benefits ordered by sortOrder and the plan description', async () => {
+  const { app } = await makeAppWithFakeStripe();
+  const plan = await seedGoldPlan();
+  await prisma.premiumPlan.update({
+    where: { id: plan.id },
+    data: { description: 'O nivel mais alto da Casa.' },
   });
+  await prisma.premiumPlanBenefit.createMany({
+    data: [
+      { planId: plan.id, label: 'Segundo', sortOrder: 2 },
+      { planId: plan.id, label: 'Primeiro', sortOrder: 1 },
+    ],
+  });
+  const { user } = await createUser({ email: 'benefits@jdm.test' });
+  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+  await seedMembership(garage.id);
+
+  const res = await app.inject({
+    method: 'GET',
+    url: '/api/me/premium/subscription',
+    headers: { authorization: bearer(env, user.id) },
+  });
+
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { benefits: string[]; planDescription: string | null };
+  expect(body.benefits).toEqual(['Primeiro', 'Segundo']);
+  expect(body.planDescription).toBe('O nivel mais alto da Casa.');
+  await app.close();
+});
 ```
 
 Se `seedGoldPlan` ou `seedMembership` tiverem outra assinatura no arquivo, adaptar a chamada ao que já existe ali. Não criar fixtures paralelas.
@@ -2111,11 +2128,13 @@ git commit -m "feat(api): subscription devolve beneficios e descricao do plano"
 ## Task 9: Rate limit nas rotas premium
 
 **Files:**
+
 - Modify: `apps/api/src/routes/me-premium.ts`
 - Modify: `apps/api/src/routes/me-premium-addons.ts`
 - Test: `apps/api/test/billing/premium-cancel.test.ts`
 
 **Interfaces:**
+
 - Consumes: as rotas das Tasks 2, 3, 4.
 - Produces: nenhuma exportação nova. `429` depois do limite.
 
@@ -2124,27 +2143,27 @@ git commit -m "feat(api): subscription devolve beneficios e descricao do plano"
 Em `apps/api/test/billing/premium-cancel.test.ts`, adicionar:
 
 ```ts
-  it('rate limits cancel at 5 requests per minute', async () => {
-    const { app, stripe } = await makeAppWithFakeStripe();
-    const { user } = await createUser({ email: 'rl@jdm.test' });
-    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
-    await seedMembership(garage.id);
-    stripe.nextCancelledSubscription = {
-      cancelAtPeriodEnd: true,
-      currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
-    };
-    const headers = { authorization: bearer(env, user.id) };
+it('rate limits cancel at 5 requests per minute', async () => {
+  const { app, stripe } = await makeAppWithFakeStripe();
+  const { user } = await createUser({ email: 'rl@jdm.test' });
+  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+  await seedMembership(garage.id);
+  stripe.nextCancelledSubscription = {
+    cancelAtPeriodEnd: true,
+    currentPeriodEnd: new Date('2026-08-01T00:00:00.000Z'),
+  };
+  const headers = { authorization: bearer(env, user.id) };
 
-    const codes: number[] = [];
-    for (let i = 0; i < 6; i += 1) {
-      const res = await app.inject({ method: 'POST', url: '/api/me/premium/cancel', headers });
-      codes.push(res.statusCode);
-    }
+  const codes: number[] = [];
+  for (let i = 0; i < 6; i += 1) {
+    const res = await app.inject({ method: 'POST', url: '/api/me/premium/cancel', headers });
+    codes.push(res.statusCode);
+  }
 
-    expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
-    expect(codes[5]).toBe(429);
-    await app.close();
-  });
+  expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+  expect(codes[5]).toBe(429);
+  await app.close();
+});
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -2163,27 +2182,27 @@ import rateLimit from '@fastify/rate-limit';
 Mover os handlers de `checkout` e `cancel` para dentro de escopos encapsulados. O `hook: 'preHandler'` é obrigatório porque a chave usa `request.user`, que só existe depois do `authenticate`. Padrão de referência: `apps/api/src/routes/orders.ts:369`.
 
 ```ts
-  await app.register(async (scoped) => {
-    scoped.addHook('preHandler', app.authenticate);
-    await scoped.register(rateLimit, {
-      max: 5,
-      timeWindow: '1 minute',
-      hook: 'preHandler',
-      keyGenerator: (req) => `premium-checkout:${req.user?.sub ?? req.ip}`,
-    });
-    scoped.post('/api/me/premium/checkout', checkoutHandler);
+await app.register(async (scoped) => {
+  scoped.addHook('preHandler', app.authenticate);
+  await scoped.register(rateLimit, {
+    max: 5,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `premium-checkout:${req.user?.sub ?? req.ip}`,
   });
+  scoped.post('/api/me/premium/checkout', checkoutHandler);
+});
 
-  await app.register(async (scoped) => {
-    scoped.addHook('preHandler', app.authenticate);
-    await scoped.register(rateLimit, {
-      max: 5,
-      timeWindow: '1 minute',
-      hook: 'preHandler',
-      keyGenerator: (req) => `premium-cancel:${req.user?.sub ?? req.ip}`,
-    });
-    scoped.post('/api/me/premium/cancel', cancelHandler);
+await app.register(async (scoped) => {
+  scoped.addHook('preHandler', app.authenticate);
+  await scoped.register(rateLimit, {
+    max: 5,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `premium-cancel:${req.user?.sub ?? req.ip}`,
   });
+  scoped.post('/api/me/premium/cancel', cancelHandler);
+});
 ```
 
 Extrair os corpos atuais dos dois handlers para `checkoutHandler` e `cancelHandler`, declarados como consts acima dos registros. Não duplicar a lógica: é um recorte, não uma reescrita. Remover o `{ preHandler: [app.authenticate] }` dos dois, porque o hook do escopo já cobre.
@@ -2214,12 +2233,14 @@ git commit -m "feat(api): rate limit em checkout, cancel e addons"
 ## Task 10: Copy, clientes de API e hook de invoices no mobile
 
 **Files:**
+
 - Modify: `apps/mobile/src/copy/assinaturas.ts`
 - Modify: `apps/mobile/src/api/premium.ts`
 - Modify: `apps/mobile/src/api/premium-catalog.ts`
 - Create: `apps/mobile/src/hooks/usePremiumInvoices.ts`
 
 **Interfaces:**
+
 - Consumes: `premiumInvoicesResponseSchema` de `@ccc/shared/premium-subscription`.
 - Produces: `assinaturasCopy.contratar`, `assinaturasCopy.minhaAssinatura.historico`, `assinaturasCopy.minhaAssinatura.cancelar`; `createPremiumCheckout(input)`, `cancelPremiumSubscription()`, `listPremiumInvoices()`; `usePremiumInvoices()`.
 
@@ -2294,8 +2315,7 @@ import {
   type PremiumInvoicesResponse,
 } from '@ccc/shared/premium-subscription';
 
-const invoicesSchema =
-  premiumInvoicesResponseSchema as z.ZodType<PremiumInvoicesResponse>;
+const invoicesSchema = premiumInvoicesResponseSchema as z.ZodType<PremiumInvoicesResponse>;
 
 export const listPremiumInvoices = (): Promise<PremiumInvoicesResponse> =>
   authedRequest('/api/me/premium/invoices', invoicesSchema);
@@ -2304,10 +2324,7 @@ export const listPremiumInvoices = (): Promise<PremiumInvoicesResponse> =>
 Em `apps/mobile/src/api/premium.ts`, acrescentar (seguir o estilo de `authedRequest` já usado no arquivo, incluindo `method` e `body` como o arquivo faz hoje para POSTs):
 
 ```ts
-import {
-  premiumCheckoutResponseSchema,
-  type PremiumCheckoutResponse,
-} from '@ccc/shared/premium';
+import { premiumCheckoutResponseSchema, type PremiumCheckoutResponse } from '@ccc/shared/premium';
 
 /** POST /api/me/premium/checkout — server resolves every price from the catalog. */
 export const createPremiumCheckout = (input: {
@@ -2408,12 +2425,14 @@ git commit -m "feat(mobile): copy, clientes de API e hook de historico de cobran
 ## Task 11: Seam de checkout
 
 **Files:**
+
 - Modify: `apps/mobile/src/screens/assinaturas/checkout.ts`
 - Create: `apps/mobile/src/screens/assinaturas/checkout.test.ts`
 - Create: `apps/mobile/src/screens/assinaturas/package-total.ts`
 - Create: `apps/mobile/src/screens/assinaturas/package-total.test.ts`
 
 **Interfaces:**
+
 - Consumes: `createPremiumCheckout` (Task 10).
 - Produces: `CheckoutOutcome`; `startPremiumCheckout(input: { planSlug: string; addonKeys: string[] }): Promise<CheckoutOutcome>`; `packageTotalCents(baseCents: number | null, modules: Array<{ key: string; monthlyDeltaCents: number }>, selected: Set<string>): { baseCents: number; addonsCents: number; totalCents: number }`.
 
@@ -2643,12 +2662,14 @@ git commit -m "feat(mobile): seam de checkout real com branch por plataforma"
 ## Task 12: Tela de contratação
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/assinaturas/TierCta.tsx`
 - Create: `apps/mobile/src/screens/assinaturas/ContratarScreen.tsx`
 - Create: `apps/mobile/app/(app)/assinaturas/contratar.tsx`
 - Modify: `apps/mobile/src/screens/assinaturas/PlanoDetalheScreen.tsx:174-207`
 
 **Interfaces:**
+
 - Consumes: `startPremiumCheckout`, `packageTotalCents` (Task 11), `usePremiumAddonModules`, `getPremiumPlan`, `assinaturasCopy.contratar` (Task 10).
 - Produces: `TierCta` (props `{ tier, label, onPress, disabled?, loading?, testID? }`); rota `/assinaturas/contratar?slug=`.
 
@@ -2737,14 +2758,14 @@ const styles = StyleSheet.create({
 Substituir o bloco `:175-207` de `PlanoDetalheScreen.tsx` por:
 
 ```tsx
-      <View style={styles.ctaBar}>
-        <TierCta
-          tier={plan.tier}
-          label={assinaturasCopy.detail.cta}
-          onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}`)}
-          testID="detalhe-assinar"
-        />
-      </View>
+<View style={styles.ctaBar}>
+  <TierCta
+    tier={plan.tier}
+    label={assinaturasCopy.detail.cta}
+    onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}`)}
+    testID="detalhe-assinar"
+  />
+</View>
 ```
 
 Remover de `PlanoDetalheScreen.tsx` os estilos `cta`, `ctaGradient` e `ctaText`, e o import de `LinearGradient` se ficar sem uso.
@@ -2768,36 +2789,36 @@ Criar `apps/mobile/src/screens/assinaturas/ContratarScreen.tsx`. Regras que o ar
 Handler do CTA:
 
 ```tsx
-  const onSubmit = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      const outcome = await startPremiumCheckout({
-        planSlug: plan.slug,
-        addonKeys: [...selected],
-      });
-      if (outcome.kind === 'error') {
-        setErrorMsg(assinaturasCopy.contratar.errorGeneric);
-        return;
-      }
-      if (outcome.kind === 'returned') {
-        setPhase('confirming');
-        const active = await pollSubscriptionActive();
-        if (active) {
-          showToast(assinaturasCopy.contratar.successToast);
-          router.replace('/assinaturas/minha-assinatura');
-        } else {
-          setPhase('pending');
-        }
-      }
-      // 'redirected' → the web page is already navigating away.
-      // 'dismissed'  → stay on the form untouched.
-      // 'ios_unsupported' → unreachable, the CTA is not rendered on iOS.
-    } finally {
-      setSubmitting(false);
+const onSubmit = async () => {
+  if (submitting) return;
+  setSubmitting(true);
+  setErrorMsg(null);
+  try {
+    const outcome = await startPremiumCheckout({
+      planSlug: plan.slug,
+      addonKeys: [...selected],
+    });
+    if (outcome.kind === 'error') {
+      setErrorMsg(assinaturasCopy.contratar.errorGeneric);
+      return;
     }
-  };
+    if (outcome.kind === 'returned') {
+      setPhase('confirming');
+      const active = await pollSubscriptionActive();
+      if (active) {
+        showToast(assinaturasCopy.contratar.successToast);
+        router.replace('/assinaturas/minha-assinatura');
+      } else {
+        setPhase('pending');
+      }
+    }
+    // 'redirected' → the web page is already navigating away.
+    // 'dismissed'  → stay on the form untouched.
+    // 'ios_unsupported' → unreachable, the CTA is not rendered on iOS.
+  } finally {
+    setSubmitting(false);
+  }
+};
 ```
 
 E o polling, num módulo próprio porque a Task 13 usa o mesmo. Criar `apps/mobile/src/screens/assinaturas/poll-subscription.ts`:
@@ -2873,9 +2894,11 @@ git commit -m "feat(mobile): tela de contratacao com montagem de pacote"
 ## Task 13: Retorno do checkout na web
 
 **Files:**
+
 - Create: `apps/mobile/app/(app)/assinaturas/checkout-return.tsx`
 
 **Interfaces:**
+
 - Consumes: `pollSubscriptionActive` de `~/screens/assinaturas/poll-subscription` (Task 12), `assinaturasCopy.contratar`.
 - Produces: rota `/assinaturas/checkout-return`, que é o `successUrl` configurado na Task 4.
 
@@ -2998,9 +3021,11 @@ git commit -m "feat(mobile): tela de retorno do checkout na web"
 ## Task 14: `/assinaturas` redireciona assinante
 
 **Files:**
+
 - Modify: `apps/mobile/src/screens/assinaturas/PlanosScreen.tsx`
 
 **Interfaces:**
+
 - Consumes: `usePremiumSubscription`.
 - Produces: redirect para `/assinaturas/minha-assinatura`, ignorado quando a rota recebe `?all=1`.
 
@@ -3009,15 +3034,15 @@ git commit -m "feat(mobile): tela de retorno do checkout na web"
 Em `PlanosScreen.tsx`, aceitar a prop `showAll` e adicionar:
 
 ```tsx
-  const { subscription, loading: subLoading } = usePremiumSubscription();
+const { subscription, loading: subLoading } = usePremiumSubscription();
 
-  // A member with a live subscription lands on "Minha assinatura", not on the
-  // sales page. `?all=1` opts out so the upgrade path stays reachable from
-  // inside Minha Assinatura.
-  useEffect(() => {
-    if (showAll || subLoading) return;
-    if (subscription?.active) router.replace('/assinaturas/minha-assinatura');
-  }, [showAll, subLoading, subscription?.active]);
+// A member with a live subscription lands on "Minha assinatura", not on the
+// sales page. `?all=1` opts out so the upgrade path stays reachable from
+// inside Minha Assinatura.
+useEffect(() => {
+  if (showAll || subLoading) return;
+  if (subscription?.active) router.replace('/assinaturas/minha-assinatura');
+}, [showAll, subLoading, subscription?.active]);
 ```
 
 A condição de loading da tela passa a incluir `subLoading`, para não piscar a lista de planos antes do redirect.
@@ -3025,8 +3050,8 @@ A condição de loading da tela passa a incluir `subLoading`, para não piscar a
 Em `apps/mobile/app/(app)/assinaturas/index.tsx`, ler o parâmetro e repassar:
 
 ```tsx
-  const { all } = useLocalSearchParams<{ all?: string }>();
-  return <PlanosScreen showAll={all === '1'} />;
+const { all } = useLocalSearchParams<{ all?: string }>();
+return <PlanosScreen showAll={all === '1'} />;
 ```
 
 - [ ] **Step 2: Verificar**
@@ -3050,10 +3075,12 @@ git commit -m "feat(mobile): assinante cai em Minha Assinatura ao abrir /assinat
 ## Task 15: Minha Assinatura ganha benefícios, histórico e cancelamento
 
 **Files:**
+
 - Modify: `packages/ui/src/SheetShell.tsx`
 - Modify: `apps/mobile/src/screens/assinaturas/MinhaAssinaturaScreen.tsx`
 
 **Interfaces:**
+
 - Consumes: `usePremiumInvoices` (Task 10), `cancelPremiumSubscription` (Task 10), `subscription.benefits` (Task 8).
 - Produces: `SheetShellProps` com `theme?: { surface?: string; border?: string; titleColor?: string; titleFontFamily?: string }`.
 
@@ -3089,9 +3116,9 @@ export interface SheetShellProps {
 No corpo, resolver os defaults e usar nos três lugares (container, borda do header, texto do título):
 
 ```tsx
-  const surface = theme?.surface ?? garageTokens.surface.sheet;
-  const border = theme?.border ?? garageTokens.surface.border;
-  const titleColor = theme?.titleColor ?? '#F5F5F5';
+const surface = theme?.surface ?? garageTokens.surface.sheet;
+const border = theme?.border ?? garageTokens.surface.border;
+const titleColor = theme?.titleColor ?? '#F5F5F5';
 ```
 
 `titleFontFamily` entra no style do `<Text>` do título apenas quando definido.
@@ -3106,19 +3133,21 @@ Expected: PASS.
 Em `MinhaAssinaturaScreen.tsx`, dentro de `ActiveSubscription`, depois do card do plano:
 
 ```tsx
-      {sub.benefits.length > 0 ? (
-        <View style={styles.benefitsSection}>
-          <Text style={styles.sectionTitle}>{copy.benefitsTitle}</Text>
-          <View style={styles.benefits}>
-            {sub.benefits.map((benefit) => (
-              <View key={benefit} style={styles.benefitRow}>
-                <Check color={c.goldLight} size={18} strokeWidth={2} style={styles.benefitIcon} />
-                <Text style={styles.benefitText}>{benefit}</Text>
-              </View>
-            ))}
+{
+  sub.benefits.length > 0 ? (
+    <View style={styles.benefitsSection}>
+      <Text style={styles.sectionTitle}>{copy.benefitsTitle}</Text>
+      <View style={styles.benefits}>
+        {sub.benefits.map((benefit) => (
+          <View key={benefit} style={styles.benefitRow}>
+            <Check color={c.goldLight} size={18} strokeWidth={2} style={styles.benefitIcon} />
+            <Text style={styles.benefitText}>{benefit}</Text>
           </View>
-        </View>
-      ) : null}
+        ))}
+      </View>
+    </View>
+  ) : null;
+}
 ```
 
 Importar `Check` de `lucide-react-native`. Copiar os estilos `benefitRow`, `benefitIcon` e `benefitText` de `PlanoDetalheScreen.tsx:320-329`, e reusar o `sectionTitle` no mesmo formato de `addonsTitle` (`:322-327`).
@@ -3175,74 +3204,74 @@ Renderizar `<InvoiceHistory />` depois da seção de módulos.
 Ainda em `ActiveSubscription`, um `Pressable` de texto em tom danger no fim do scroll, que abre o sheet:
 
 ```tsx
-      <Pressable
-        onPress={() => setCancelOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={copy.cancelar.trigger}
-        style={styles.cancelTrigger}
-        testID="assinatura-cancelar"
-      >
-        <Text style={styles.cancelTriggerText}>{copy.cancelar.trigger}</Text>
-      </Pressable>
+<Pressable
+  onPress={() => setCancelOpen(true)}
+  accessibilityRole="button"
+  accessibilityLabel={copy.cancelar.trigger}
+  style={styles.cancelTrigger}
+  testID="assinatura-cancelar"
+>
+  <Text style={styles.cancelTriggerText}>{copy.cancelar.trigger}</Text>
+</Pressable>
 ```
 
 E o sheet, fora do `ScrollView`:
 
 ```tsx
-      <SheetShell
-        visible={cancelOpen}
-        title={isApple ? copy.cancelar.appleTitle : copy.cancelar.sheetTitle}
-        onClose={() => setCancelOpen(false)}
-        theme={{
-          surface: c.surface,
-          border: c.hairline,
-          titleColor: c.cream,
-          titleFontFamily: 'Inter_600SemiBold',
-        }}
-        testID="assinatura-cancelar-sheet"
+<SheetShell
+  visible={cancelOpen}
+  title={isApple ? copy.cancelar.appleTitle : copy.cancelar.sheetTitle}
+  onClose={() => setCancelOpen(false)}
+  theme={{
+    surface: c.surface,
+    border: c.hairline,
+    titleColor: c.cream,
+    titleFontFamily: 'Inter_600SemiBold',
+  }}
+  testID="assinatura-cancelar-sheet"
+>
+  {isApple ? (
+    <View style={styles.sheetBody}>
+      <Text style={styles.sheetText}>{copy.cancelar.appleBody}</Text>
+      <Pressable
+        onPress={() => void Linking.openURL(APPLE_MANAGE_URL)}
+        accessibilityRole="button"
+        accessibilityLabel={copy.cancelar.appleCta}
+        style={styles.sheetKeep}
       >
-        {isApple ? (
-          <View style={styles.sheetBody}>
-            <Text style={styles.sheetText}>{copy.cancelar.appleBody}</Text>
-            <Pressable
-              onPress={() => void Linking.openURL(APPLE_MANAGE_URL)}
-              accessibilityRole="button"
-              accessibilityLabel={copy.cancelar.appleCta}
-              style={styles.sheetKeep}
-            >
-              <Text style={styles.sheetKeepText}>{copy.cancelar.appleCta}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.sheetBody}>
-            <Text style={styles.sheetText}>
-              {periodEnd ? copy.cancelar.body(dateFmt.format(periodEnd)) : copy.cancelar.sheetTitle}
-            </Text>
-            {cancelError ? <Text style={styles.sheetError}>{cancelError}</Text> : null}
-            <Pressable
-              onPress={() => setCancelOpen(false)}
-              accessibilityRole="button"
-              accessibilityLabel={copy.cancelar.keep}
-              style={styles.sheetKeep}
-            >
-              <Text style={styles.sheetKeepText}>{copy.cancelar.keep}</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void onConfirmCancel()}
-              disabled={cancelling}
-              accessibilityRole="button"
-              accessibilityLabel={copy.cancelar.confirm}
-              accessibilityState={{ disabled: cancelling, busy: cancelling }}
-              style={[styles.sheetConfirm, cancelling && styles.dimmed]}
-              testID="assinatura-cancelar-confirmar"
-            >
-              <Text style={styles.sheetConfirmText}>
-                {cancelling ? copy.cancelar.loading : copy.cancelar.confirm}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-      </SheetShell>
+        <Text style={styles.sheetKeepText}>{copy.cancelar.appleCta}</Text>
+      </Pressable>
+    </View>
+  ) : (
+    <View style={styles.sheetBody}>
+      <Text style={styles.sheetText}>
+        {periodEnd ? copy.cancelar.body(dateFmt.format(periodEnd)) : copy.cancelar.sheetTitle}
+      </Text>
+      {cancelError ? <Text style={styles.sheetError}>{cancelError}</Text> : null}
+      <Pressable
+        onPress={() => setCancelOpen(false)}
+        accessibilityRole="button"
+        accessibilityLabel={copy.cancelar.keep}
+        style={styles.sheetKeep}
+      >
+        <Text style={styles.sheetKeepText}>{copy.cancelar.keep}</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => void onConfirmCancel()}
+        disabled={cancelling}
+        accessibilityRole="button"
+        accessibilityLabel={copy.cancelar.confirm}
+        accessibilityState={{ disabled: cancelling, busy: cancelling }}
+        style={[styles.sheetConfirm, cancelling && styles.dimmed]}
+        testID="assinatura-cancelar-confirmar"
+      >
+        <Text style={styles.sheetConfirmText}>
+          {cancelling ? copy.cancelar.loading : copy.cancelar.confirm}
+        </Text>
+      </Pressable>
+    </View>
+  )}
+</SheetShell>
 ```
 
 `APPLE_MANAGE_URL` é a constante `'https://apps.apple.com/account/subscriptions'`, declarada no topo do arquivo. `Linking` vem de `react-native`.
@@ -3285,24 +3314,24 @@ Estilos novos:
 Handler:
 
 ```tsx
-  const onConfirmCancel = async () => {
-    if (cancelling) return;
-    setCancelling(true);
-    try {
-      await cancelPremiumSubscription();
-      setCancelOpen(false);
-      showToast(copy.cancelar.successToast);
-      await refresh();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setIsApple(true);
-        return;
-      }
-      setCancelError(copy.cancelar.error);
-    } finally {
-      setCancelling(false);
+const onConfirmCancel = async () => {
+  if (cancelling) return;
+  setCancelling(true);
+  try {
+    await cancelPremiumSubscription();
+    setCancelOpen(false);
+    showToast(copy.cancelar.successToast);
+    await refresh();
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      setIsApple(true);
+      return;
     }
-  };
+    setCancelError(copy.cancelar.error);
+  } finally {
+    setCancelling(false);
+  }
+};
 ```
 
 Estados novos na tela: `cancelOpen`, `cancelling`, `cancelError`, `isApple`. O `refresh` vem do `usePremiumSubscription` que a tela já usa (`:173`), então o card volta com "Cancela em {data}" sem UI nova.
@@ -3312,14 +3341,14 @@ Estados novos na tela: `cancelOpen`, `cancelling`, `cancelError`, `isApple`. O `
 No fim do scroll, antes do gatilho de cancelamento:
 
 ```tsx
-      <Pressable
-        onPress={() => router.push('/assinaturas?all=1')}
-        accessibilityRole="button"
-        accessibilityLabel={copy.seeAllPlans}
-        style={styles.seeAllPlans}
-      >
-        <Text style={styles.seeAllPlansText}>{copy.seeAllPlans}</Text>
-      </Pressable>
+<Pressable
+  onPress={() => router.push('/assinaturas?all=1')}
+  accessibilityRole="button"
+  accessibilityLabel={copy.seeAllPlans}
+  style={styles.seeAllPlans}
+>
+  <Text style={styles.seeAllPlansText}>{copy.seeAllPlans}</Text>
+</Pressable>
 ```
 
 - [ ] **Step 6: Verificar**
@@ -3344,9 +3373,11 @@ git commit -m "feat(mobile): beneficios, historico e cancelamento em Minha Assin
 ## Task 16: Card premium no Perfil e remoção do menu legado
 
 **Files:**
+
 - Modify: `apps/mobile/app/(app)/profile/index.tsx:168-175`, `:232-237`
 
 **Interfaces:**
+
 - Consumes: `usePremiumSubscription`, `PremiumBadge` de `@ccc/ui`.
 - Produces: nada exportado.
 
@@ -3355,18 +3386,20 @@ git commit -m "feat(mobile): beneficios, historico e cancelamento em Minha Assin
 Em `apps/mobile/app/(app)/profile/index.tsx`, dentro de `ProfileMenuScreen`:
 
 ```tsx
-  const { subscription } = usePremiumSubscription();
+const { subscription } = usePremiumSubscription();
 ```
 
 Dentro de `styles.heroText`, depois da linha de localização (`:171`):
 
 ```tsx
-          {subscription?.active && subscription.tier ? (
-            <View style={styles.premiumRow}>
-              <PremiumBadge isPremiumActive tier={subscription.tier} />
-              <Text style={styles.premiumLabel}>{profileCopy.profile.memberTier(subscription.tier)}</Text>
-            </View>
-          ) : null}
+{
+  subscription?.active && subscription.tier ? (
+    <View style={styles.premiumRow}>
+      <PremiumBadge isPremiumActive tier={subscription.tier} />
+      <Text style={styles.premiumLabel}>{profileCopy.profile.memberTier(subscription.tier)}</Text>
+    </View>
+  ) : null;
+}
 ```
 
 Em `apps/mobile/src/copy/profile.ts`, dentro de `profile`, adicionar:
@@ -3413,9 +3446,11 @@ git commit -m "feat(mobile): tier premium no perfil e remocao da entrada legada"
 ## Task 17: Documentar o passo de ops no `docs/stripe.md`
 
 **Files:**
+
 - Modify: `docs/stripe.md`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: seção de assinaturas multi-tier no doc que o operador segue.
 

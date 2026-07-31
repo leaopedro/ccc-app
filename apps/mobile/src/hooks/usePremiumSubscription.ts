@@ -1,16 +1,9 @@
 import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
-import Constants from 'expo-constants';
 import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError } from '~/api/client';
 import { getMyPremiumSubscription } from '~/api/premium-catalog';
-
-type Extra = { premiumBillingEnabled?: boolean };
-
-// Billing flag mirrors PremiumScreen — the subscription endpoint 503s when off,
-// so we skip the call entirely and surface an informative state instead.
-const billingEnabled =
-  (Constants.expoConfig?.extra as Extra | undefined)?.premiumBillingEnabled ?? false;
+import { PREMIUM_BILLING_ENABLED as billingEnabled } from '~/lib/premium-runtime';
 
 type UsePremiumSubscriptionResult = {
   subscription: MySubscriptionResponse | null;

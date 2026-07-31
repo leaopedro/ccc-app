@@ -13,7 +13,6 @@
 //   default / inactive           → "Inativo"
 
 import { brand } from '@ccc/design';
-import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -30,17 +29,13 @@ import {
 import { baseUrl } from '~/api/client';
 import type { PremiumStatusResponse } from '~/api/premium';
 import { getPremiumStatus } from '~/api/premium';
+import { PREMIUM_BILLING_ENABLED } from '~/lib/premium-runtime';
 import { fetchOfferings, purchasePackage } from '~/lib/revenuecat';
 import { theme } from '~/theme';
 
 // Deep-link return scheme for Android WebBrowser flow.
 // MUST match `scheme` in apps/mobile/app.config.ts.
 const DEEP_LINK_RETURN = `${brand.app.scheme}://premium/return`;
-
-type Extra = { premiumBillingEnabled?: boolean };
-
-const isPremiumBillingEnabled = (): boolean =>
-  (Constants.expoConfig?.extra as Extra | undefined)?.premiumBillingEnabled ?? false;
 
 function statusLabel(status: PremiumStatusResponse): string {
   if (status.active && !status.cancelAtPeriodEnd) return 'Membro Gold';
@@ -56,7 +51,7 @@ function formatPeriodEnd(iso: string | null): string | null {
 }
 
 export default function PremiumScreen() {
-  const enabled = isPremiumBillingEnabled();
+  const enabled = PREMIUM_BILLING_ENABLED;
   const [status, setStatus] = useState<PremiumStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

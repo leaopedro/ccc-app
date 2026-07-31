@@ -1,14 +1,9 @@
 import type { PremiumInvoicesResponse } from '@ccc/shared/premium-subscription';
-import Constants from 'expo-constants';
 import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError } from '~/api/client';
 import { listPremiumInvoices } from '~/api/premium-catalog';
-
-type Extra = { premiumBillingEnabled?: boolean };
-
-const billingEnabled =
-  (Constants.expoConfig?.extra as Extra | undefined)?.premiumBillingEnabled ?? false;
+import { PREMIUM_BILLING_ENABLED as billingEnabled } from '~/lib/premium-runtime';
 
 type UsePremiumInvoicesResult = {
   invoices: PremiumInvoicesResponse['invoices'];

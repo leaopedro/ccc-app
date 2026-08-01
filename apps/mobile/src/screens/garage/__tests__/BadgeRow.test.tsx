@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // BadgeRow tests. The component lives in `packages/ui/src/`, but the tests
-// live here so the mobile workspace's vitest picks them up — `@jdm/ui` has
+// live here so the mobile workspace's vitest picks them up — `@ccc/ui` has
 // no test runner of its own (verified via packages/ui/package.json). Same
 // mocking pattern as HexBadge / ParkingStallCard tests.
 //
@@ -9,7 +9,7 @@
 // be pressable and route to `onLockedPress(code)` so the upsell can be wired
 // in chunk 19 — never disabled / dead-tap.
 
-import type { GarageBadgesOwnerResponse } from '@jdm/shared/badges';
+import type { GarageBadgesOwnerResponse } from '@ccc/shared/badges';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,10 +152,10 @@ const CATALOG: GarageBadgesOwnerResponse['catalog'] = [
     premiumExclusive: false,
     icon: 'post',
   },
-  { code: 'JDM-001', category: 'jdm', rarity: 'common', premiumExclusive: false, icon: 'pin' },
+  { code: 'CCC-001', category: 'ccc', rarity: 'common', premiumExclusive: false, icon: 'pin' },
   {
-    code: 'JDM-003',
-    category: 'jdm',
+    code: 'CCC-003',
+    category: 'ccc',
     rarity: 'legendary',
     premiumExclusive: true,
     icon: 'founder',
@@ -191,7 +191,7 @@ describe('BadgeRow', () => {
   const textOf = (): string => container.textContent ?? '';
 
   it('returns null when enabled=false', async () => {
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     const data: GarageBadgesOwnerResponse = {
       enabled: false,
       catalog: CATALOG,
@@ -204,7 +204,7 @@ describe('BadgeRow', () => {
   });
 
   it('renders pinned badges first, then other earned, then locked', async () => {
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     const data: GarageBadgesOwnerResponse = {
       enabled: true,
       catalog: CATALOG,
@@ -243,7 +243,7 @@ describe('BadgeRow', () => {
   });
 
   it('shows the "+N" overflow chip when more than 4 badges would render', async () => {
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     // 6 earned badges → first 4 render as hexes, +2 chip.
     const data: GarageBadgesOwnerResponse = {
       enabled: true,
@@ -285,7 +285,7 @@ describe('BadgeRow', () => {
           pinnedAt: null,
         },
         {
-          code: 'JDM-001',
+          code: 'CCC-001',
           state: 'earned',
           earnedAt: '2026-02-15T00:00:00Z',
           pinned: false,
@@ -301,7 +301,7 @@ describe('BadgeRow', () => {
 
   it('fires onOpenSheet when an earned tile is tapped', async () => {
     const fn = vi.fn();
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     const data: GarageBadgesOwnerResponse = {
       enabled: true,
       catalog: CATALOG,
@@ -330,7 +330,7 @@ describe('BadgeRow', () => {
   it('fires onLockedPress (not onOpenSheet) when a locked tile is tapped', async () => {
     const openSheet = vi.fn();
     const lockedPress = vi.fn();
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     // No earned badges → row falls back to showing locked tiles. The first
     // catalog entry is EVT-001 (locked).
     const data: GarageBadgesOwnerResponse = {
@@ -338,7 +338,7 @@ describe('BadgeRow', () => {
       catalog: CATALOG,
       badges: [
         { code: 'EVT-001', state: 'locked' },
-        { code: 'JDM-003', state: 'locked_premium' },
+        { code: 'CCC-003', state: 'locked_premium' },
       ],
     };
     await renderEl(<BadgeRow data={data} onOpenSheet={openSheet} onLockedPress={lockedPress} />);
@@ -356,17 +356,17 @@ describe('BadgeRow', () => {
   });
 
   it('locked tiles are pressable (NOT aria-disabled) per §C11 precedent', async () => {
-    const { BadgeRow } = await import('@jdm/ui');
+    const { BadgeRow } = await import('@ccc/ui');
     const data: GarageBadgesOwnerResponse = {
       enabled: true,
       catalog: CATALOG,
-      badges: [{ code: 'JDM-003', state: 'locked_premium' }],
+      badges: [{ code: 'CCC-003', state: 'locked_premium' }],
     };
     await renderEl(
       <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
     );
     const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      (b.getAttribute('aria-label') ?? '').startsWith('Conquista JDM-003'),
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista CCC-003'),
     );
     expect(lockedBtn).not.toBeUndefined();
     expect(lockedBtn?.getAttribute('aria-disabled')).not.toBe('true');

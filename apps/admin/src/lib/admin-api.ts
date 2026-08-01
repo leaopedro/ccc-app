@@ -64,7 +64,18 @@ import {
   adminTicketTierSchema,
   type AdminAuditListResponse,
   adminAuditListResponseSchema,
-} from '@jdm/shared/admin';
+  adminPremiumAddonModuleSchema,
+  adminPremiumBenefitsReplaceResponseSchema,
+  adminPremiumCatalogResponseSchema,
+  adminPremiumPlanPriceSchema,
+  adminPremiumPlanSchema,
+  type AdminPremiumAddonModuleCreate,
+  type AdminPremiumAddonModuleUpdate,
+  type AdminPremiumBenefitsReplace,
+  type AdminPremiumPlanCreate,
+  type AdminPremiumPlanUpdate,
+  type AdminPremiumPriceUpsert,
+} from '@ccc/shared/admin';
 import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
@@ -79,7 +90,7 @@ import {
   type PickupVoucherClaimResponse,
   type TicketCheckInRequest,
   type TicketCheckInResponse,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 import {
   createFeedBanInputSchema,
   feedBanResponseSchema,
@@ -88,26 +99,26 @@ import {
   type CreateFeedBanInput,
   type ModerateCommentInput,
   type ModeratePostInput,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import {
   generalSettingsSchema,
   type GeneralSettings,
   type GeneralSettingsUpdate,
-} from '@jdm/shared/general-settings';
-import { publicProfileSchema } from '@jdm/shared/profile';
+} from '@ccc/shared/general-settings';
+import { publicProfileSchema } from '@ccc/shared/profile';
 import {
   storeSettingsSchema,
   type AdminStoreFulfillmentUpdate,
   type StoreSettings,
   type StoreSettingsUpdate,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import {
   adminSupportTicketDetailSchema,
   adminSupportTicketListResponseSchema,
   type AdminSupportTicketDetail,
   type AdminSupportTicketListResponse,
   type SupportTicketInternalStatus,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import { z } from 'zod';
 
 import {
@@ -234,6 +245,69 @@ export const deleteAdminProductType = (id: string) =>
   apiFetch(`/admin/store/product-types/${id}`, {
     method: 'DELETE',
     schema: adminProductTypeSchema, // 204
+  });
+
+// ── Admin premium catalog ──────────────────────────────────────────
+
+export const getAdminPremiumCatalog = () =>
+  apiFetch('/admin/premium/catalog', { schema: adminPremiumCatalogResponseSchema });
+
+export const createAdminPremiumPlan = (input: AdminPremiumPlanCreate) =>
+  apiFetch('/admin/premium/plans', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminPremiumPlanSchema,
+  });
+
+export const updateAdminPremiumPlan = (id: string, input: AdminPremiumPlanUpdate) =>
+  apiFetch(`/admin/premium/plans/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminPremiumPlanSchema,
+  });
+
+export const deleteAdminPremiumPlan = (id: string) =>
+  apiFetch(`/admin/premium/plans/${id}`, {
+    method: 'DELETE',
+    schema: adminPremiumPlanSchema,
+  });
+
+export const upsertAdminPremiumPrice = (
+  id: string,
+  cadence: 'monthly' | 'annual',
+  input: AdminPremiumPriceUpsert,
+) =>
+  apiFetch(`/admin/premium/plans/${id}/prices/${cadence}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    schema: adminPremiumPlanPriceSchema,
+  });
+
+export const replaceAdminPremiumBenefits = (id: string, input: AdminPremiumBenefitsReplace) =>
+  apiFetch(`/admin/premium/plans/${id}/benefits`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    schema: adminPremiumBenefitsReplaceResponseSchema,
+  });
+
+export const createAdminPremiumModule = (input: AdminPremiumAddonModuleCreate) =>
+  apiFetch('/admin/premium/addon-modules', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminPremiumAddonModuleSchema,
+  });
+
+export const updateAdminPremiumModule = (id: string, input: AdminPremiumAddonModuleUpdate) =>
+  apiFetch(`/admin/premium/addon-modules/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminPremiumAddonModuleSchema,
+  });
+
+export const deleteAdminPremiumModule = (id: string) =>
+  apiFetch(`/admin/premium/addon-modules/${id}`, {
+    method: 'DELETE',
+    schema: adminPremiumAddonModuleSchema,
   });
 
 export const listCheckInEvents = () =>

@@ -211,6 +211,17 @@ enum PremiumMembershipStatus {
   paused
 }
 
+enum PremiumAddonUnit {
+  access
+  hours
+}
+
+enum PremiumAddonStatus {
+  active
+  cancel_scheduled
+  cancelled
+}
+
 model Garage {
   id                  String             @id @default(cuid())
   userId              String             @unique
@@ -227,11 +238,11 @@ model Garage {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  user                       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  garageBadges               GarageBadge[]
-  xpEvents                   XpEvent[]
-  premiumMemberships         PremiumMembership[]
-  premiumTicketBackfillJobs  PremiumTicketBackfillJob[]
+  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  garageBadges              GarageBadge[]
+  xpEvents                  XpEvent[]
+  premiumMemberships        PremiumMembership[]
+  premiumTicketBackfillJobs PremiumTicketBackfillJob[]
 
   @@index([slug])
   @@index([premiumTier, premiumUntil])
@@ -241,7 +252,7 @@ enum BadgeCategory {
   eventos
   carros
   comunidade
-  jdm
+  ccc
 }
 
 enum BadgeRarity {
@@ -328,11 +339,15 @@ model PremiumMembership {
   grossAmountCents  Int
   currency          String @db.VarChar(3)
 
+  // Recurring add-on modules total (billing concern for a later phase).
+  addonsAmountCents Int @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   garage   Garage                     @relation(fields: [garageId], references: [id], onDelete: Cascade)
   invoices PremiumMembershipInvoice[]
+  addons   PremiumMembershipAddon[]
 
   @@unique([provider, providerSubRef])
   @@index([garageId, status])
@@ -351,6 +366,7 @@ model PremiumMembershipInvoice {
   devFeePercent          Int
   devFeeAmountCents      Int
   grossAmountCents       Int
+  addonsAmountCents      Int             @default(0)
   currency               String          @db.VarChar(3)
   paidAt                 DateTime
   refundedAt             DateTime?
@@ -403,6 +419,133 @@ model PremiumTicketBackfillJob {
 
   @@index([status, createdAt])
   @@index([garageId])
+}
+
+// Premium plan catalog — one plan per tier. Prices/benefits are display-facing;
+// provider price ids (Stripe/RC) are attached in a later billing phase.
+model PremiumPlan {
+  id          String            @id @default(cuid())
+  tier        GaragePremiumTier @unique
+  slug        String            @unique @db.VarChar(40)
+  name        String            @db.VarChar(80)
+  description String?           @db.VarChar(500)
+  active      Boolean           @default(true)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  prices   PremiumPlanPrice[]
+  benefits PremiumPlanBenefit[]
+
+  @@index([active, sortOrder])
+}
+
+model PremiumPlanPrice {
+  id              String         @id @default(cuid())
+  planId          String
+  cadence         PremiumCadence
+  baseAmountCents Int
+  currency        String         @default("BRL") @db.VarChar(3)
+  stripePriceId   String?        @db.VarChar(120)
+  rcProductId     String?        @db.VarChar(120)
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  plan PremiumPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, cadence])
+}
+
+model PremiumPlanBenefit {
+  id        String   @id @default(cuid())
+  planId    String
+  label     String   @db.VarChar(140)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan PremiumPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, sortOrder])
+}
+
+// Catalog of recurring add-on modules. quotaPerCycle/quotaUnit describe the
+// per-cycle allowance; monthlyDeltaCents is the recurring price delta.
+model PremiumAddonModule {
+  id                String           @id @default(cuid())
+  key               String           @unique @db.VarChar(40)
+  name              String           @db.VarChar(80)
+  description       String           @db.VarChar(240)
+  monthlyDeltaCents Int
+  currency          String           @default("BRL") @db.VarChar(3)
+  quotaPerCycle     Int
+  quotaUnit         PremiumAddonUnit
+  active            Boolean          @default(true)
+  sortOrder         Int              @default(0)
+  stripePriceId     String?          @db.VarChar(120)
+  rcProductId       String?          @db.VarChar(120)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  memberships PremiumMembershipAddon[]
+
+  @@index([active, sortOrder])
+}
+
+// Add-ons attached to a membership. Price/quota are snapshotted at attach time
+// so later catalog edits don't retroactively change an active add-on.
+model PremiumMembershipAddon {
+  id                String             @id @default(cuid())
+  membershipId      String
+  addonKey          String             @db.VarChar(40)
+  status            PremiumAddonStatus @default(active)
+  providerItemRef   String?            @db.VarChar(200)
+  monthlyDeltaCents Int
+  quotaPerCycle     Int
+  quotaUnit         PremiumAddonUnit
+  currency          String             @db.VarChar(3)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  membership PremiumMembership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  module     PremiumAddonModule  @relation(fields: [addonKey], references: [key], onDelete: Restrict)
+  usage      PremiumAddonUsage[]
+
+  @@unique([membershipId, addonKey])
+  @@index([membershipId, status])
+}
+
+// One row per billing cycle — the per-cycle quota reset lives here.
+model PremiumAddonUsage {
+  id                String   @id @default(cuid())
+  membershipAddonId String
+  cycleStart        DateTime
+  cycleEnd          DateTime
+  quotaTotal        Int
+  quotaUsed         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  membershipAddon PremiumMembershipAddon   @relation(fields: [membershipAddonId], references: [id], onDelete: Cascade)
+  redemptions     PremiumAddonRedemption[]
+
+  @@unique([membershipAddonId, cycleStart])
+  @@index([membershipAddonId, cycleEnd])
+}
+
+// Audit ledger of add-on consumption within a cycle.
+model PremiumAddonRedemption {
+  id               String   @id @default(cuid())
+  usageId          String
+  amount           Int      @default(1)
+  redeemedByUserId String?
+  note             String?  @db.VarChar(240)
+  createdAt        DateTime @default(now())
+
+  usage PremiumAddonUsage @relation(fields: [usageId], references: [id], onDelete: Cascade)
+
+  @@index([usageId])
 }
 
 model Car {

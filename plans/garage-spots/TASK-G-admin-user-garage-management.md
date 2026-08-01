@@ -18,7 +18,7 @@
 
 **Goal:** Build the admin user-detail "Garagem" panel and the admin endpoints behind it (list garage, edit car, delete car, delete empty spot, grant/revoke premium, override slug) so support can manage a user's cars, spots, and garage profile — all with AdminAudit traces.
 
-**Architecture:** New Fastify route file `apps/api/src/routes/admin/user-garage.ts` registered under the same `requireRole('organizer', 'admin')` scope as `adminUserRoutes`. New Zod schemas in `packages/shared/src/admin-garage.ts` (re-exported from `@jdm/shared/admin`). New admin-API client functions and a Next.js client-rendered Garage panel mounted on the existing user-detail page. All write endpoints idempotently emit AdminAudit entries with structured metadata.
+**Architecture:** New Fastify route file `apps/api/src/routes/admin/user-garage.ts` registered under the same `requireRole('organizer', 'admin')` scope as `adminUserRoutes`. New Zod schemas in `packages/shared/src/admin-garage.ts` (re-exported from `@ccc/shared/admin`). New admin-API client functions and a Next.js client-rendered Garage panel mounted on the existing user-detail page. All write endpoints idempotently emit AdminAudit entries with structured metadata.
 
 **Tech Stack:** Fastify + Prisma + Zod (api), Next.js App Router server components + client components (admin), Vitest (api integration tests against real Postgres via existing `helpers.ts`), React Testing Library (admin component tests).
 
@@ -33,7 +33,7 @@ This plan assumes TASK-A has already shipped and merged. From TASK-A you can rel
 - `adminAuditActionSchema` in `packages/shared/src/admin.ts` extended with the five literals: `car.admin_update`, `car.admin_delete`, `garage_spot.tier_override`, `garage_spot.delete`, `general_settings.garage_backfill`.
 - `RecordAuditInput.entityType` union in `apps/api/src/services/admin-audit.ts` extended with `'car'` and `'garage_spot'`.
 - `carSchema` in `packages/shared/src/cars.ts` extended with `tier: garageSpotTierSchema`.
-- `garageSpotTierSchema` exported from `@jdm/shared` (either in `cars.ts` or a `garage.ts`).
+- `garageSpotTierSchema` exported from `@ccc/shared` (either in `cars.ts` or a `garage.ts`).
 
 If TASK-A has not landed, STOP and ask. Do not duplicate those additions here.
 
@@ -359,10 +359,10 @@ grep -n "model GarageSpot" /Users/pedro/Projects/jdm-experience/packages/db/pris
 Expect a match. If missing → STOP.
 
 ```bash
-# 3. Rebuild @jdm/shared and typecheck the API against the live dist/
+# 3. Rebuild @ccc/shared and typecheck the API against the live dist/
 # (per feedback_rebuild_shared_after_schema_change: runtime resolves dist/ and a stale
 # build masks zod breaks that only typecheck catches)
-pnpm -F @jdm/shared build && pnpm -F @jdm/api typecheck
+pnpm -F @ccc/shared build && pnpm -F @ccc/api typecheck
 ```
 
 Expect clean exit on both commands. If typecheck fails, the TASK-A additions are incomplete or the build is stale. Fix before continuing.
@@ -373,7 +373,7 @@ Paste the full Zod schema block from the "Zod schemas" section above **with thes
 
 1. **Do NOT include `adminCarUpdateSchema`** in this file. TASK-A placed it in `packages/shared/src/admin.ts`. Including it here creates a duplicate export that will cause a compile conflict. The conflict check in Step 2 (grep for `adminCarUpdateSchema` in `admin.ts`) must pass before you write this file.
 
-2. **Check for duplicate tier/source schemas**: run `grep -n "garageSpotTierSchema" /Users/pedro/Projects/jdm-experience/packages/shared/src/cars.ts` (or `garage.ts`). If `garageSpotTierSchema` is already exported from another file in `@jdm/shared`, replace the local declaration with `export { garageSpotTierSchema, type GarageSpotTier } from './garage.js';` and remove the duplicate. Same check for `garageSpotSourceSchema`. TASK-A places both in `packages/shared/src/garage.ts` -- import from there.
+2. **Check for duplicate tier/source schemas**: run `grep -n "garageSpotTierSchema" /Users/pedro/Projects/jdm-experience/packages/shared/src/cars.ts` (or `garage.ts`). If `garageSpotTierSchema` is already exported from another file in `@ccc/shared`, replace the local declaration with `export { garageSpotTierSchema, type GarageSpotTier } from './garage.js';` and remove the duplicate. Same check for `garageSpotSourceSchema`. TASK-A places both in `packages/shared/src/garage.ts` -- import from there.
 
 - [ ] **Step 4: Re-export from index + package exports**
 
@@ -394,7 +394,7 @@ Edit `packages/shared/package.json` — add the entry inside the `exports` map (
 
 - [ ] **Step 5: Build shared package**
 
-Run: `pnpm -F @jdm/shared build`. Expect: clean exit. (Per `feedback_rebuild_shared_after_schema_change` memory — API runtime resolves the `dist/` build.)
+Run: `pnpm -F @ccc/shared build`. Expect: clean exit. (Per `feedback_rebuild_shared_after_schema_change` memory — API runtime resolves the `dist/` build.)
 
 - [ ] **Step 6: Commit**
 
@@ -418,8 +418,8 @@ git commit -m "feat(shared): admin garage Zod schemas (TASK-G)"
 Create `apps/api/test/admin/user-garage/get-garage.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminGarageReadSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminGarageReadSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -519,15 +519,15 @@ describe('GET /admin/users/:id/garage', () => {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/get-garage.test.ts`. Expect failures (route not registered → 404 on all paths, plus type errors if test path doesn't compile).
+Run: `pnpm -F @ccc/api test -- admin/user-garage/get-garage.test.ts`. Expect failures (route not registered → 404 on all paths, plus type errors if test path doesn't compile).
 
 - [ ] **Step 3: Implement the route**
 
 Create `apps/api/src/routes/admin/user-garage.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminGarageReadSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminGarageReadSchema } from '@ccc/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';
@@ -609,7 +609,7 @@ await scope.register(adminUserGarageRoutes);
 
 - [ ] **Step 5: Run the test and confirm it passes**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/get-garage.test.ts`. Expect all four cases PASS.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/get-garage.test.ts`. Expect all four cases PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -632,8 +632,8 @@ git commit -m "feat(api): GET /admin/users/:id/garage (TASK-G)"
 Create `apps/api/test/admin/user-garage/patch-car.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminGarageCarSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminGarageCarSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -768,14 +768,14 @@ describe('PATCH /admin/users/:id/cars/:carId', () => {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/patch-car.test.ts`. Expect 404s (route not yet added).
+Run: `pnpm -F @ccc/api test -- admin/user-garage/patch-car.test.ts`. Expect 404s (route not yet added).
 
 - [ ] **Step 3: Add the PATCH handler**
 
 Append inside the `adminUserGarageRoutes` plugin in `apps/api/src/routes/admin/user-garage.ts`. Add the imports at the top of the file:
 
 ```ts
-import { adminCarUpdateSchema, adminGarageCarSchema } from '@jdm/shared';
+import { adminCarUpdateSchema, adminGarageCarSchema } from '@ccc/shared';
 import type { Prisma } from '@prisma/client';
 import { recordAudit } from '../../services/admin-audit.js';
 ```
@@ -866,7 +866,7 @@ app.patch('/users/:id/cars/:carId', async (request, reply) => {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/patch-car.test.ts`. Expect all five cases PASS.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/patch-car.test.ts`. Expect all five cases PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -889,7 +889,7 @@ git commit -m "feat(api): PATCH /admin/users/:id/cars/:carId (TASK-G)"
 Create `apps/api/test/admin/user-garage/delete-car.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1000,7 +1000,7 @@ describe('DELETE /admin/users/:id/cars/:carId', () => {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/delete-car.test.ts`.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/delete-car.test.ts`.
 
 - [ ] **Step 3: Add the DELETE handler**
 
@@ -1046,7 +1046,7 @@ app.delete('/users/:id/cars/:carId', async (request, reply) => {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/delete-car.test.ts`. Expect all PASS.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/delete-car.test.ts`. Expect all PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1069,8 +1069,8 @@ git commit -m "feat(api): DELETE /admin/users/:id/cars/:carId (TASK-G)"
 Create `apps/api/test/admin/user-garage/tier-override.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { adminGarageCarSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { adminGarageCarSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1229,11 +1229,11 @@ describe('POST /admin/users/:id/cars/:carId/tier', () => {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/tier-override.test.ts`.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/tier-override.test.ts`.
 
 - [ ] **Step 3: Add the handler**
 
-Append the tier override handler inside `adminUserGarageRoutes` (also add the import `adminCarTierOverrideSchema` from `@jdm/shared` to the file header if not already present):
+Append the tier override handler inside `adminUserGarageRoutes` (also add the import `adminCarTierOverrideSchema` from `@ccc/shared` to the file header if not already present):
 
 ```ts
 app.post('/users/:id/cars/:carId/tier', async (request, reply) => {
@@ -1293,7 +1293,7 @@ app.post('/users/:id/cars/:carId/tier', async (request, reply) => {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/tier-override.test.ts`. Expect all five cases PASS.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/tier-override.test.ts`. Expect all five cases PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1316,7 +1316,7 @@ git commit -m "feat(api): POST /admin/users/:id/cars/:carId/tier (TASK-G)"
 Create `apps/api/test/admin/user-garage/delete-spot.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1431,7 +1431,7 @@ describe('DELETE /admin/users/:id/spots/:spotId', () => {
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/delete-spot.test.ts`.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/delete-spot.test.ts`.
 
 - [ ] **Step 3: Add the handler**
 
@@ -1480,11 +1480,11 @@ app.delete('/users/:id/spots/:spotId', async (request, reply) => {
 
 - [ ] **Step 4: Run the test and confirm it passes**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage/delete-spot.test.ts`. Expect all four cases PASS.
+Run: `pnpm -F @ccc/api test -- admin/user-garage/delete-spot.test.ts`. Expect all four cases PASS.
 
 - [ ] **Step 5: Run the full TASK-G API suite**
 
-Run: `pnpm -F @jdm/api test -- admin/user-garage`. Expect every test from Tasks 2-6 passes.
+Run: `pnpm -F @ccc/api test -- admin/user-garage`. Expect every test from Tasks 2-6 passes.
 
 - [ ] **Step 6: Commit**
 
@@ -1514,7 +1514,7 @@ import {
   type AdminCarTierOverride,
   type AdminCarUpdateInput,
   type AdminSpotDeleteBody,
-} from '@jdm/shared';
+} from '@ccc/shared';
 
 import { apiFetch } from './api';
 
@@ -1570,7 +1570,7 @@ import type {
   AdminCarUpdateInput,
   AdminGarageCar,
   AdminSpotDeleteBody,
-} from '@jdm/shared';
+} from '@ccc/shared';
 
 import {
   deleteAdminUserCar,
@@ -2527,7 +2527,7 @@ git commit -m "test(admin): garage panel component tests (TASK-G)"
 
 - [ ] **Step 1: Run the full API admin test suite**
 
-Run: `pnpm -F @jdm/api test -- admin/`. Expect all green (including pre-existing tests untouched).
+Run: `pnpm -F @ccc/api test -- admin/`. Expect all green (including pre-existing tests untouched).
 
 - [ ] **Step 2: Run the full admin test suite**
 
@@ -2544,12 +2544,12 @@ git push -u origin feat/garage-spots-task-g
 gh pr create --base main --title "feat: TASK-G admin user-detail garage management" --body "$(cat <<'EOF'
 ## Summary
 - Adds GET/PATCH/DELETE/POST endpoints under `/admin/users/:id/...` for managing a user's cars and garage spots.
-- Adds `adminCarUpdateSchema`, `adminCarTierOverrideSchema`, `adminGarageReadSchema` to `@jdm/shared`.
+- Adds `adminCarUpdateSchema`, `adminCarTierOverrideSchema`, `adminGarageReadSchema` to `@ccc/shared`.
 - Adds a "Garagem" panel to the admin user-detail page with edit modal, tier select, and delete confirmations.
 - All write paths emit AdminAudit entries with structured metadata. Refund recipe documented (DELETE empty extra spot → `garage_spot.delete` with `reason: manual_refund`).
 
 ## Test plan
-- [ ] `pnpm -F @jdm/api test -- admin/user-garage` (5 files) green
+- [ ] `pnpm -F @ccc/api test -- admin/user-garage` (5 files) green
 - [ ] `pnpm -F admin test` green
 - [ ] `pnpm -F admin build` green
 - [ ] Smoke: load user detail page in dev admin, edit a car, toggle tier, delete empty extra spot, confirm audit rows show up via `/admin/audit`
@@ -2623,7 +2623,7 @@ The endpoint refuses to delete a filled spot (409). To refund an in-use extra sp
 
 **`adminCarUpdateSchema` ownership (resolved):**
 
-TASK-A explicitly places `adminCarUpdateSchema` in `packages/shared/src/admin.ts` (TASK-A §7, file structure table, and at-a-glance summary). TASK-G must import from there, not redefine in `admin-garage.ts`. The "Zod schemas" section and Task 1 Step 3 have been updated to reflect this. The `admin-garage.ts` file re-exports `adminCarUpdateSchema` from `./admin.js` so downstream consumers of `@jdm/shared/admin-garage` still have a single import point.
+TASK-A explicitly places `adminCarUpdateSchema` in `packages/shared/src/admin.ts` (TASK-A §7, file structure table, and at-a-glance summary). TASK-G must import from there, not redefine in `admin-garage.ts`. The "Zod schemas" section and Task 1 Step 3 have been updated to reflect this. The `admin-garage.ts` file re-exports `adminCarUpdateSchema` from `./admin.js` so downstream consumers of `@ccc/shared/admin-garage` still have a single import point.
 
 **`garageSpotTierSchema` / `garageSpotSourceSchema` ownership (resolved):**
 

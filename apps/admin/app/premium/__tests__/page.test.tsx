@@ -5,7 +5,7 @@
  * SubscribeButton mocked. Tests route apiFetch calls by path so Promise.all
  * ordering does not matter.
  */
-import type { PremiumPricingResponse, PremiumStatus } from '@jdm/shared/premium';
+import type { PremiumPricingResponse, PremiumStatus } from '@ccc/shared/premium';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

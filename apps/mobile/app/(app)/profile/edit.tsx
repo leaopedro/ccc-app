@@ -3,8 +3,8 @@ import {
   BRAZIL_STATE_CODES,
   updateProfileSchema,
   type UpdateProfileInput,
-} from '@jdm/shared/profile';
-import { Button } from '@jdm/ui';
+} from '@ccc/shared/profile';
+import { Button } from '@ccc/ui';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';

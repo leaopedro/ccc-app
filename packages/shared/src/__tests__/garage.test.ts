@@ -234,7 +234,7 @@ describe('garageReadSchema', () => {
             pinned: true,
             pinnedAt: '2026-05-20T12:30:00.000Z',
           },
-          { code: 'JDM-003', state: 'locked' },
+          { code: 'CCC-003', state: 'locked' },
         ],
       },
       cars: [],
@@ -383,7 +383,7 @@ describe('garagePublicProfileSchema', () => {
       gamification: { enabled: true },
       badges: [
         { code: 'EVT-001', earnedAt: '2026-05-22T12:00:00.000Z' },
-        { code: 'JDM-003', earnedAt: '2026-04-01T09:00:00.000Z' },
+        { code: 'CCC-003', earnedAt: '2026-04-01T09:00:00.000Z' },
       ],
     });
     expect(parsed.badges).toHaveLength(2);

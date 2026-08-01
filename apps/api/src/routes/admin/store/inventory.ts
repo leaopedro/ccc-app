@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminStoreInventoryFilterSchema,
   adminStoreInventoryListResponseSchema,
   type AdminStoreInventoryRow,
   type AdminStoreInventoryStatus,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminTicketTier } from '@jdm/shared/admin';
+import type { AdminTicketTier } from '@ccc/shared/admin';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 

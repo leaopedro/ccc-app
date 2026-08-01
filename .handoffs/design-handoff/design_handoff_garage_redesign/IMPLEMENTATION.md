@@ -257,7 +257,7 @@ Lives in `packages/shared/src/garage-covers.ts`. Slug, label, premium-required f
   - 4 benefit rows (Capas personalizadas, Selo Premium, Garagem em destaque, Página pública premium).
   - Near-expiry warning slot — only renders when `daysLeftUntilExpiry !== null && daysLeftUntilExpiry <= 7`.
   - Footer disclaimer: "Premium **nunca** limita o uso da sua garagem." Important for product positioning + LGPD posture.
-- **Note for admin twin:** the admin badge follows the same V2 variant. The admin's `premium-badge.tsx` should re-export from the shared `@jdm/ui` build (per pivot orchestration's "no shared-tokens-via-copy" rule).
+- **Note for admin twin:** the admin badge follows the same V2 variant. The admin's `premium-badge.tsx` should re-export from the shared `@ccc/ui` build (per pivot orchestration's "no shared-tokens-via-copy" rule).
 
 ### 4.7 `N · Cover picker (premium)` + `O · Cover picker (free upsell)` → new `CoverPickerSheet`
 
@@ -292,7 +292,7 @@ Lives in `packages/shared/src/garage-covers.ts`. Slug, label, premium-required f
 
 ## 5. Component spec sheet
 
-### 5.1 `ParkingStallCard` — new `@jdm/ui` export
+### 5.1 `ParkingStallCard` — new `@ccc/ui` export
 
 ```ts
 type Props = {
@@ -345,7 +345,7 @@ type Props = {
 - `daysLeftUntilExpiry <= 7 && > 0` → renders near-expiry treatment (V2 adds `Nd` block; V1 adds pulsing dashed ring; V3 unchanged visual — expiry is communicated via PremiumSheet only).
 - `daysLeftUntilExpiry <= 0` → caller should not pass `isPremiumActive=true` (serializer-side flip).
 
-Admin twin: same component imported from `@jdm/ui`. No more separate `apps/admin/src/components/premium-badge.tsx` (UX-Audit F.1 fix — kill the drift).
+Admin twin: same component imported from `@ccc/ui`. No more separate `apps/admin/src/components/premium-badge.tsx` (UX-Audit F.1 fix — kill the drift).
 
 ### 5.3 `GarageCover` — new shared component
 
@@ -396,8 +396,8 @@ Branch each as `feat/jdma-garage-redesign-NN`. Convention matches the original w
 | 01  | **Tokens** — additive tier + paint tokens; cover-preset constant                            | —          | `packages/design/src/tokens/garage.ts`; `packages/shared/src/garage-covers.ts`                                              |
 | 02  | **Schema migration** — `coverPreset` + `coverImageUrl` columns + zod                        | 01         | `packages/db/prisma/...`; `packages/shared/src/garage.ts`                                                                   |
 | 03  | **API** — `PATCH /me/garage/cover` + `/cover/upload` + premium-gating in `applyGaragePatch` | 02         | `apps/api/src/routes/garage.ts`; `apps/api/src/services/garage/index.ts`                                                    |
-| 04  | **PremiumBadge v2** + `PremiumSheet` in `@jdm/ui`                                           | 01         | `packages/ui/src/PremiumBadge.tsx`; new `PremiumSheet.tsx`                                                                  |
-| 05  | **Admin twin removal** — admin imports `@jdm/ui` PremiumBadge directly                      | 04         | `apps/admin/src/components/premium-badge.tsx` (delete); call sites updated                                                  |
+| 04  | **PremiumBadge v2** + `PremiumSheet` in `@ccc/ui`                                           | 01         | `packages/ui/src/PremiumBadge.tsx`; new `PremiumSheet.tsx`                                                                  |
+| 05  | **Admin twin removal** — admin imports `@ccc/ui` PremiumBadge directly                      | 04         | `apps/admin/src/components/premium-badge.tsx` (delete); call sites updated                                                  |
 | 06  | **ParkingStallCard** + replaces `GarageSpotPlaceholderCard` family                          | 01         | `packages/ui/src/ParkingStallCard.tsx` (new); `apps/mobile/src/screens/garage/*` (call sites)                               |
 | 07  | **GarageCover** + cover-preset renderer (mobile)                                            | 02, 01     | `packages/ui/src/GarageCover.tsx`; `apps/mobile/src/screens/garage/GarageListView.tsx`                                      |
 | 08  | **IdentityCard + EditGarageSheet** — replaces inline edits on `GarageHeader`                | 04, 06     | `apps/mobile/src/screens/garage/GarageHeader.tsx`; `apps/mobile/src/screens/garage/EditGarageSheet.tsx` (new); copy updates |
@@ -436,7 +436,7 @@ These are scoped out and need a follow-up pass:
 | Inline edit affordances invisible                | MAJOR    | §4.5 — IdentityCard pencil glyph + explicit `[Editar]` button + `EditGarageSheet` |
 | Buy-spot is 5+ taps + manual return              | MAJOR    | §4.8 — `BuySpotSheet` in-context + deep-link return + highlight pulse             |
 | Free vs extra slot cards visually identical      | MINOR    | §1.2 / §4.3 — source-aware paint + tape labels                                    |
-| Mobile vs admin badge color drift                | MINOR    | §4.6 / chunk 05 — admin imports shared `@jdm/ui` PremiumBadge                     |
+| Mobile vs admin badge color drift                | MINOR    | §4.6 / chunk 05 — admin imports shared `@ccc/ui` PremiumBadge                     |
 | Share link is path-only (no domain)              | MAJOR    | §4.10 / chunk 11 — `PUBLIC_PROFILE_BASE_URL` + full URL                           |
 | Slug regex error shows "URL já está em uso" copy | MAJOR    | §4.5 / chunk 12 — distinguish `invalid_slug` vs `slug_taken`                      |
 | First-car CTA is muted text, not a button        | MAJOR    | §4.1 / chunk 14 — welcome banner + painted stalls as the empty UI                 |
@@ -586,7 +586,7 @@ Awarder is idempotent (the `@@unique([garageId, badgeCode])` constraint enforces
 | 15  | **Schema** — `Badge` + `GarageBadge` + enums + migration + seed                        | 01          | `packages/db/prisma/schema.prisma`; new migration; seed adds 12 codes     |
 | 16  | **Shared schemas + copy** — `badgeCodeSchema`, `garageBadgeSchema`; `~/copy/badges.ts` | 15          | `packages/shared/src/badges.ts` (new); `apps/mobile/src/copy/badges.ts`   |
 | 17  | **API** — `GET /me/garage/badges`, `PATCH .../pin`, `badges` in payloads               | 15          | `apps/api/src/routes/garage.ts`; `apps/api/src/services/garage/badges.ts` |
-| 18  | **HexBadge + BadgeRow + BadgesSheet + BadgeDetail** in `@jdm/ui`                       | 16, 18 (UI) | `packages/ui/src/HexBadge.tsx` etc                                        |
+| 18  | **HexBadge + BadgeRow + BadgesSheet + BadgeDetail** in `@ccc/ui`                       | 16, 18 (UI) | `packages/ui/src/HexBadge.tsx` etc                                        |
 | 19  | **GarageListView** integration — `BadgeRow` slot between header and stalls             | 18, 06      | `apps/mobile/src/screens/garage/GarageListView.tsx`                       |
 | 20  | **SSR public profile** picks up `badges` field                                         | 13, 17      | new Next.js components                                                    |
 | 21  | **Awarder service** — wired into check-in, car-create, post-create                     | 17          | `apps/api/src/services/garage/badges.ts`; call sites in events/cars/feed  |

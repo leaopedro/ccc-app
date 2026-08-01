@@ -1,6 +1,6 @@
-import { brand } from '@jdm/design';
-import type { EventSummary } from '@jdm/shared/events';
-import { Badge, Button, Card, Text } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import type { EventSummary } from '@ccc/shared/events';
+import { Badge, Button, Card, Text } from '@ccc/ui';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Bell, User } from 'lucide-react-native';
@@ -120,7 +120,7 @@ export default function Welcome() {
         <View className="flex-row items-center justify-between px-5 pt-4 pb-2">
           <Image
             // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-            source={require('@jdm/design/assets/logo-wordmark.webp')}
+            source={require('@ccc/design/assets/logo-wordmark.webp')}
             accessibilityLabel={brand.name}
             style={{ width: 84, height: 28, resizeMode: 'contain' }}
           />

@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add three `GET/POST /api/me/premium/*` endpoints — checkout-precheck (spec §5 duplicate-subscribe guard), Stripe Checkout session creation, and Stripe Billing Portal redirect — plus the three Stripe service helpers that back them, shared zod schemas in `@jdm/shared/premium`, and integration tests against real Postgres (Testcontainers).
+**Goal:** Add three `GET/POST /api/me/premium/*` endpoints — checkout-precheck (spec §5 duplicate-subscribe guard), Stripe Checkout session creation, and Stripe Billing Portal redirect — plus the three Stripe service helpers that back them, shared zod schemas in `@ccc/shared/premium`, and integration tests against real Postgres (Testcontainers).
 
 **Architecture:** New Fastify plugin `apps/api/src/routes/me-premium.ts` registered in `app.ts`. The plugin gate-checks `env.GROWTH_PREMIUM_BILLING_ENABLED` (canon §F8.11) on every request, returning `503` when disabled. The precheck queries `PremiumMembership` for a live row (`status IN ('active','past_due','cancel_scheduled')`). If found it returns `409 AlreadySubscribed` with the correct `manageUrl` branch (Stripe portal URL for `stripe` rows, App Store deep link for `apple_revenuecat` rows). The checkout POST resolves `priceId` from two new env vars (`STRIPE_PRICE_PREMIUM_GOLD_MONTHLY`, `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL`), calls `findOrCreateCustomer` then `createSubscriptionCheckoutSession` from an extended `services/stripe/index.ts`, and returns `{ url, sessionId }`. The billing-portal POST calls `createBillingPortalSession` and returns `{ url }`.
 
-**Tech Stack:** Fastify 4, Prisma 5, Stripe Node SDK (existing `buildStripe` client extended), zod 3, `@jdm/shared/premium` new subpath, vitest + Testcontainers Postgres.
+**Tech Stack:** Fastify 4, Prisma 5, Stripe Node SDK (existing `buildStripe` client extended), zod 3, `@ccc/shared/premium` new subpath, vitest + Testcontainers Postgres.
 
 ---
 
@@ -31,8 +31,8 @@ If F8.01 is missing, STOP and run that chunk first.
 ## Corrections + canon refs
 
 - **§F8.11 — Feature flag.** All three endpoints gate on `env.GROWTH_PREMIUM_BILLING_ENABLED`. Disabled → `503 { error: 'ServiceUnavailable', message: 'premium billing not available' }`. Do NOT return `404` (that would confuse clients that probe feature availability).
-- **§F8.12 — Filtered test command.** `pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts` — note `exec vitest run`, never `pnpm --filter @jdm/api test -- ...`.
-- **§F8.13 — Rebuild @jdm/shared.** After writing `packages/shared/src/premium.ts` + the subpath export, run `pnpm --filter @jdm/shared build` before running API tests.
+- **§F8.12 — Filtered test command.** `pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts` — note `exec vitest run`, never `pnpm --filter @ccc/api test -- ...`.
+- **§F8.13 — Rebuild @ccc/shared.** After writing `packages/shared/src/premium.ts` + the subpath export, run `pnpm --filter @ccc/shared build` before running API tests.
 - **Spec §5** — precheck returns `409 { error: 'AlreadySubscribed', provider, manageUrl }`. The `manageUrl` is:
   - Stripe: a live Stripe Billing Portal URL generated via `createBillingPortalSession` using the membership's `providerCustomerRef`.
   - Apple/RC: the static deep link `https://apps.apple.com/account/subscriptions`.
@@ -145,7 +145,7 @@ describe('premiumBillingPortalResponseSchema', () => {
 - [ ] **Step 1.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium.test.ts
 ```
 
 Expected FAIL: "Cannot find module '../premium.js'".
@@ -204,7 +204,7 @@ export type PremiumBillingPortalResponse = z.infer<typeof premiumBillingPortalRe
 - [ ] **Step 1.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium.test.ts
 ```
 
 Expected: 9 cases PASS.
@@ -220,10 +220,10 @@ Insert alphabetically after `"./profile"` and before `"./push"`:
     },
 ```
 
-- [ ] **Step 1.6 — Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 1.6 — Rebuild `@ccc/shared` (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: success. `dist/premium.js` and `dist/premium.d.ts` exist.
@@ -235,7 +235,7 @@ git add packages/shared/src/premium.ts packages/shared/src/__tests__/premium.tes
 git commit -m "$(cat <<'EOF'
 feat(shared): premiumCheckoutRequestSchema + precheck + portal response schemas (F8.09)
 
-New ./premium subpath in @jdm/shared with four zod schemas:
+New ./premium subpath in @ccc/shared with four zod schemas:
 premiumCheckoutRequestSchema (cadence enum), premiumCheckoutResponseSchema
 (url + sessionId), premiumCheckoutPrecheckResponseSchema (discriminated
 union on available), premiumBillingPortalResponseSchema (url).
@@ -286,7 +286,7 @@ Note: `envSchema` and `minimalValidEnv` must be exported from `apps/api/src/env.
 - [ ] **Step 2.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 Expected FAIL: properties not on `envSchema`.
@@ -303,7 +303,7 @@ Read the file first to confirm the existing pattern around `STRIPE_PUBLISHABLE_K
 - [ ] **Step 2.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 Expected: new `it` blocks PASS. All existing env tests still PASS.
@@ -311,7 +311,7 @@ Expected: new `it` blocks PASS. All existing env tests still PASS.
 - [ ] **Step 2.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN.
@@ -524,7 +524,7 @@ describe('createBillingPortalSession', () => {
 - [ ] **Step 3.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-service-helpers.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-service-helpers.test.ts
 ```
 
 Expected FAIL: "createSubscriptionCheckoutSession is not a function" (methods don't exist on `StripeClient` yet).
@@ -638,7 +638,7 @@ export type BillingPortalSessionResult = {
 - [ ] **Step 3.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-service-helpers.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-service-helpers.test.ts
 ```
 
 Expected: all tests PASS.
@@ -646,7 +646,7 @@ Expected: all tests PASS.
 - [ ] **Step 3.5 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN.
@@ -685,7 +685,7 @@ Create `apps/api/test/billing/me-premium.test.ts`.
 > This test file uses a Testcontainers Postgres database. Read `apps/api/test/helpers.ts` (or the global setup file listed in `vitest.config.ts`) before running to confirm the `makeApp`, `createUser`, `bearer`, and `resetDatabase` helper names match — they were confirmed matching in chunk-35, so the same patterns apply here.
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1144,7 +1144,7 @@ describe('POST /api/me/premium/billing-portal', () => {
 - [ ] **Step 4.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
 Expected FAIL: "Cannot find module '../../src/routes/me-premium.js'" or equivalent (route not registered yet so endpoints return 404).
@@ -1152,13 +1152,13 @@ Expected FAIL: "Cannot find module '../../src/routes/me-premium.js'" or equivale
 - [ ] **Step 4.3 — Implement `apps/api/src/routes/me-premium.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRequestSchema,
   premiumCheckoutResponseSchema,
-} from '@jdm/shared/premium';
+} from '@ccc/shared/premium';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -1434,7 +1434,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 - [ ] **Step 4.4 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN. If `app.stripe.createBillingPortalSession` or `app.stripe.findOrCreateCustomer` are missing from the TypeScript types (because Task 3 edits aren't in place), fix the import or revisit Task 3.
@@ -1442,7 +1442,7 @@ Expected: GREEN. If `app.stripe.createBillingPortalSession` or `app.stripe.findO
 - [ ] **Step 4.5 — Run the tests (expect most to pass, some may fail due to missing `app.ts` registration)**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
 If tests fail with 404 (route not found), that is expected — Task 5 registers the route. If tests fail for other reasons (compile error, missing method), fix those first.
@@ -1474,7 +1474,7 @@ await app.register(mePremiumRoutes);
 - [ ] **Step 5.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN.
@@ -1482,7 +1482,7 @@ Expected: GREEN.
 - [ ] **Step 5.4 — Run the full test suite for this chunk**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
 Expected: all tests PASS.
@@ -1526,17 +1526,17 @@ Stop and fix at the first failure.
 
 ```bash
 # 1. Shared
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared exec vitest run src/__tests__/premium.test.ts
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared exec vitest run src/__tests__/premium.test.ts
 
 # 2. API
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-service-helpers.test.ts
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-service-helpers.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
-`pnpm --filter @jdm/shared build` is required before API tests (CLAUDE.md `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only the new/touched files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
+`pnpm --filter @ccc/shared build` is required before API tests (CLAUDE.md `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only the new/touched files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
 
 - [ ] **Step 6.2 — Commit Task 6 if any fixes were needed**
 
@@ -1581,12 +1581,12 @@ gh pr create --title "feat(api): Stripe checkout + portal routes + duplicate-sub
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/shared build` — shared compiles with new `./premium` subpath
-- [ ] `pnpm --filter @jdm/shared exec vitest run src/__tests__/premium.test.ts` — 9 schema tests PASS
-- [ ] `pnpm --filter @jdm/api typecheck` — GREEN
-- [ ] `pnpm --filter @jdm/api exec vitest run test/env.test.ts` — env vars present, defaults undefined
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/stripe-service-helpers.test.ts` — 5 Stripe helper tests PASS
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts` — all precheck/checkout/portal tests PASS
+- [ ] `pnpm --filter @ccc/shared build` — shared compiles with new `./premium` subpath
+- [ ] `pnpm --filter @ccc/shared exec vitest run src/__tests__/premium.test.ts` — 9 schema tests PASS
+- [ ] `pnpm --filter @ccc/api typecheck` — GREEN
+- [ ] `pnpm --filter @ccc/api exec vitest run test/env.test.ts` — env vars present, defaults undefined
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/stripe-service-helpers.test.ts` — 5 Stripe helper tests PASS
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts` — all precheck/checkout/portal tests PASS
 
 ## Canon refs
 
@@ -1613,7 +1613,7 @@ PR opens against `main`. Never `production`.
 ## Self-review checklist (before requesting review)
 
 - [ ] Branch `feat/jdma-f8-billing-09`, cut from fresh `main`. `F8.01` (`PremiumMembership` model) is on `main`.
-- [ ] `packages/shared/package.json` has `./premium` subpath. `pnpm --filter @jdm/shared build` ran successfully; `dist/premium.js` exists.
+- [ ] `packages/shared/package.json` has `./premium` subpath. `pnpm --filter @ccc/shared build` ran successfully; `dist/premium.js` exists.
 - [ ] `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` + `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL` are in `apps/api/src/env.ts` as optional strings.
 - [ ] `StripeClient` type has the three new methods. `buildStripe` returns implementations for all three.
 - [ ] `findOrCreateCustomer` calls `stripe.customers.list({ email, limit: 1 })` first; creates only if `data.length === 0`.

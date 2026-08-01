@@ -1,14 +1,14 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminEventCreateSchema,
   adminEventDetailSchema,
   adminEventUpdateSchema,
-} from '@jdm/shared/admin';
-import { eventExtraPublicSchema } from '@jdm/shared/extras';
+} from '@ccc/shared/admin';
+import { eventExtraPublicSchema } from '@ccc/shared/extras';
 import {
   computeCapacityDisplay,
   defaultCapacityDisplaySurfaceSetting,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 import type {
   Event as DbEvent,
   TicketExtra as DbExtra,

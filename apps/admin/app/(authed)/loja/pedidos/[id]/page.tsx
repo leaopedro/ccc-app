@@ -1,4 +1,4 @@
-import type { StoreFulfillmentStatus } from '@jdm/shared/store';
+import type { StoreFulfillmentStatus } from '@ccc/shared/store';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 

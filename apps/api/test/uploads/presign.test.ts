@@ -1,4 +1,4 @@
-import { presignResponseSchema } from '@jdm/shared/uploads';
+import { presignResponseSchema } from '@ccc/shared/uploads';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

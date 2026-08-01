@@ -1,5 +1,5 @@
-import type { BadgeCatalogEntry, GarageBadgePublic } from '@jdm/shared/badges';
-import { BadgeRow } from '@jdm/ui/web';
+import type { BadgeCatalogEntry, GarageBadgePublic } from '@ccc/shared/badges';
+import { BadgeRow } from '@ccc/ui/web';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

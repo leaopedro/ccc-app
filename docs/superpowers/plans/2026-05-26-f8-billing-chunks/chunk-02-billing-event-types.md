@@ -6,7 +6,7 @@
 
 **Architecture:** New `apps/api/src/services/billing/` directory. `types.ts` owns the discriminated union and supporting sub-types. `normalize-stripe.ts` and `normalize-revenuecat.ts` each export one stub function that throws `Error('not implemented — F8.04/F8.05')`. `index.ts` re-exports everything. Tests are type-narrowing assertions via `switch`-on-`kind` plus stub-throws verification. No Testcontainers needed — this chunk produces no DB writes.
 
-**Tech Stack:** TypeScript 5, Vitest, `@prisma/client` enum types (`PremiumProvider`, `GaragePremiumTier`, `PremiumCadence`) imported from `packages/db` (landed in F8.01). `pnpm --filter @jdm/api typecheck` + `vitest run`.
+**Tech Stack:** TypeScript 5, Vitest, `@prisma/client` enum types (`PremiumProvider`, `GaragePremiumTier`, `PremiumCadence`) imported from `packages/db` (landed in F8.01). `pnpm --filter @ccc/api typecheck` + `vitest run`.
 
 **Branch:** `feat/jdma-f8-billing-02` from fresh `main`. Never branch from `production` (CLAUDE.md preflight).
 
@@ -22,7 +22,7 @@
 
 ## Dependencies (must be on `main` before this chunk)
 
-- **F8.01** — `PremiumProvider`, `PremiumCadence`, `GaragePremiumTier` Prisma enums exist in the generated client; `@jdm/shared` builds; `GROWTH_PREMIUM_BILLING_ENABLED` env var registered.
+- **F8.01** — `PremiumProvider`, `PremiumCadence`, `GaragePremiumTier` Prisma enums exist in the generated client; `@ccc/shared` builds; `GROWTH_PREMIUM_BILLING_ENABLED` env var registered.
 
 If F8.01 is not merged, STOP and dispatch it first.
 
@@ -187,7 +187,7 @@ export { normalizeRevenueCatEvent } from './normalize-revenuecat.js';
 - [ ] **1.2: Run typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: passes with no errors. If `PremiumProvider`, `GaragePremiumTier`, or `PremiumCadence` are not found, F8.01 migration has not been applied — STOP and merge F8.01 first.
@@ -435,7 +435,7 @@ describe('normalizeRevenueCatEvent stub', () => {
 - [ ] **2.2: Run test to verify it fails** (because `index.ts` does not exist yet)
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts
 ```
 
 Expected: FAIL — `Cannot find module '../../src/services/billing/index.js'`.
@@ -453,7 +453,7 @@ Expected: FAIL — `Cannot find module '../../src/services/billing/index.js'`.
 - [ ] **3.3: Run typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: PASS — stubs return `BillingEvent | null`; the thrown error is unreachable but valid TS.
@@ -477,7 +477,7 @@ git commit -m "feat(api): stub adapter signatures normalize-stripe + normalize-r
 - [ ] **4.2: Run tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts
 ```
 
 Expected: **PASS — 11 tests**:
@@ -494,7 +494,7 @@ Expected failure modes if something is wrong:
 - [ ] **4.3: Run typecheck one final time**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: PASS.
@@ -514,8 +514,8 @@ git commit -m "test(api): type-narrowing + stub-throws tests for BillingEvent (F
 - [ ] **5.1: Run verification suite**
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts
 ```
 
 Expected: typecheck PASS; **11 tests PASS, 0 fail**.
@@ -523,7 +523,7 @@ Expected: typecheck PASS; **11 tests PASS, 0 fail**.
 - [ ] **5.2: Lint**
 
 ```bash
-pnpm --filter @jdm/api exec eslint src/services/billing/types.ts \
+pnpm --filter @ccc/api exec eslint src/services/billing/types.ts \
   src/services/billing/normalize-stripe.ts \
   src/services/billing/normalize-revenuecat.ts \
   src/services/billing/index.ts \
@@ -559,8 +559,8 @@ git push -u origin feat/jdma-f8-billing-02
 ## Verification
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts
 ```
 
 Both must pass before opening the PR.
@@ -585,8 +585,8 @@ Both must pass before opening the PR.
 
 ### Test plan
 
-- [x] `pnpm --filter @jdm/api typecheck` — PASS.
-- [x] `pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts` — 11 tests PASS.
+- [x] `pnpm --filter @ccc/api typecheck` — PASS.
+- [x] `pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts` — 11 tests PASS.
 - [x] No full-suite local run (per `feedback_no_full_test_suite_locally.md`).
 
 ### Deviations from skeleton

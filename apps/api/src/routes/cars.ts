@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { addCarPhotoSchema, carInputSchema, carUpdateSchema } from '@jdm/shared/cars';
+import { prisma } from '@ccc/db';
+import { addCarPhotoSchema, carInputSchema, carUpdateSchema } from '@ccc/shared/cars';
 import { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

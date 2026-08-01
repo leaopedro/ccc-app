@@ -1,7 +1,11 @@
 import type Stripe from 'stripe';
 
 import type {
+  AddSubscriptionItemInput,
+  AddSubscriptionItemResult,
   BillingPortalSessionResult,
+  CancelSubscriptionAtPeriodEndInput,
+  CancelSubscriptionAtPeriodEndResult,
   CheckoutSessionResult,
   CreateBillingPortalSessionInput,
   CreateCheckoutSessionInput,
@@ -11,6 +15,7 @@ import type {
   FindOrCreateCustomerResult,
   OpenSubscriptionCheckoutSession,
   PaymentIntentResult,
+  RemoveSubscriptionItemInput,
   StripeClient,
   SubscriptionCheckoutSessionResult,
   WebhookEvent,
@@ -28,7 +33,11 @@ type FakeCall = {
     | 'findOrCreateCustomer'
     | 'createBillingPortalSession'
     | 'listOpenSubscriptionCheckoutSessions'
-    | 'retrievePrice';
+    | 'expireCheckoutSession'
+    | 'retrievePrice'
+    | 'addSubscriptionItem'
+    | 'removeSubscriptionItem'
+    | 'cancelSubscriptionAtPeriodEnd';
   payload: unknown;
 };
 
@@ -54,9 +63,27 @@ export type FakeStripe = StripeClient & {
   nextBillingPortalSession: BillingPortalSessionResult;
   /** Next list returned by listOpenSubscriptionCheckoutSessions. Defaults to []. */
   nextOpenSubscriptionCheckoutSessions: OpenSubscriptionCheckoutSession[];
+  /** When set, createSubscriptionCheckoutSession throws this error. */
+  nextCreateSubscriptionCheckoutSessionError: Error | null;
+  /** When set, expireCheckoutSession throws this error (provider-failure path). */
+  nextExpireCheckoutSessionError: Error | null;
+  /**
+   * When set, overrides the auto-incrementing subscription-item id returned by
+   * addSubscriptionItem. Leave null to get deterministic `si_fake_N` ids.
+   */
+  nextSubscriptionItemId: string | null;
+  /** When set, addSubscriptionItem throws this error (provider-failure path). */
+  nextAddSubscriptionItemError: Error | null;
+  /** When set, removeSubscriptionItem throws this error (provider-failure path). */
+  nextRemoveSubscriptionItemError: Error | null;
+  /** Next payload returned by cancelSubscriptionAtPeriodEnd. */
+  nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
+  // Auto-incrementing subscription-item id counter — deterministic per fake so
+  // tests can assert on `si_fake_1`, `si_fake_2`, ... unless overridden.
+  let subItemCounter = 0;
   const fake: FakeStripe = {
     calls: [],
     nextPaymentIntent: { id: 'pi_test_1', clientSecret: 'pi_test_1_secret_abc' },
@@ -79,7 +106,15 @@ export const buildFakeStripe = (): FakeStripe => {
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
     nextOpenSubscriptionCheckoutSessions: [],
+    nextCreateSubscriptionCheckoutSessionError: null,
+    nextExpireCheckoutSessionError: null,
     nextRetrievedPrice: null,
+    nextSubscriptionItemId: null,
+    nextAddSubscriptionItemError: null,
+    nextRemoveSubscriptionItemError: null,
+    nextCancelledSubscription: {
+      cancelAtPeriodEnd: true,
+    },
     // eslint-disable-next-line @typescript-eslint/require-await
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -149,6 +184,9 @@ export const buildFakeStripe = (): FakeStripe => {
       input: CreateSubscriptionCheckoutSessionInput,
     ): Promise<SubscriptionCheckoutSessionResult> => {
       fake.calls.push({ kind: 'createSubscriptionCheckoutSession', payload: input });
+      if (fake.nextCreateSubscriptionCheckoutSessionError) {
+        throw fake.nextCreateSubscriptionCheckoutSessionError;
+      }
       return fake.nextSubscriptionCheckoutSession;
     },
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -173,12 +211,44 @@ export const buildFakeStripe = (): FakeStripe => {
       return fake.nextOpenSubscriptionCheckoutSessions;
     },
     // eslint-disable-next-line @typescript-eslint/require-await
+    expireCheckoutSession: async (sessionId: string): Promise<void> => {
+      fake.calls.push({ kind: 'expireCheckoutSession', payload: { sessionId } });
+      if (fake.nextExpireCheckoutSessionError) {
+        throw fake.nextExpireCheckoutSessionError;
+      }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
     retrievePrice: async (priceId: string): Promise<Stripe.Price> => {
       fake.calls.push({ kind: 'retrievePrice', payload: { priceId } });
       if (!fake.nextRetrievedPrice) {
         throw new Error('FakeStripe.nextRetrievedPrice not set');
       }
       return fake.nextRetrievedPrice;
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    addSubscriptionItem: async (
+      input: AddSubscriptionItemInput,
+    ): Promise<AddSubscriptionItemResult> => {
+      fake.calls.push({ kind: 'addSubscriptionItem', payload: input });
+      if (fake.nextAddSubscriptionItemError) {
+        throw fake.nextAddSubscriptionItemError;
+      }
+      const subscriptionItemId = fake.nextSubscriptionItemId ?? `si_fake_${++subItemCounter}`;
+      return { subscriptionItemId };
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    removeSubscriptionItem: async (input: RemoveSubscriptionItemInput): Promise<void> => {
+      fake.calls.push({ kind: 'removeSubscriptionItem', payload: input });
+      if (fake.nextRemoveSubscriptionItemError) {
+        throw fake.nextRemoveSubscriptionItemError;
+      }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    cancelSubscriptionAtPeriodEnd: async (
+      input: CancelSubscriptionAtPeriodEndInput,
+    ): Promise<CancelSubscriptionAtPeriodEndResult> => {
+      fake.calls.push({ kind: 'cancelSubscriptionAtPeriodEnd', payload: input });
+      return fake.nextCancelledSubscription;
     },
   };
   return fake;

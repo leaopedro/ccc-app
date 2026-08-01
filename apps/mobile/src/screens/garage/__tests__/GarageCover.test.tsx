@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // GarageCover tests. The component lives in `apps/mobile/src/screens/garage/`
-// (RN-only; not in `@jdm/ui` because declaring `expo-linear-gradient` on the
+// (RN-only; not in `@ccc/ui` because declaring `expo-linear-gradient` on the
 // shared package broke admin's React resolution — see plan §C12 fallback).
 // Pattern mirrors ParkingStallCard.test.tsx: react-native + expo-linear-gradient
 // are mocked to jsdom-friendly tags so the renderer doesn't blow up under jsdom.

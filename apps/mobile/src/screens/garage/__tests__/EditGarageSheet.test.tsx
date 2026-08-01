@@ -8,7 +8,7 @@
 // react-native primitives are stubbed (Modal/ScrollView/Switch/TextInput
 // included because the sheet form uses them transitively through `SheetShell`).
 
-import type { GarageOwner } from '@jdm/shared/garage';
+import type { GarageOwner } from '@ccc/shared/garage';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

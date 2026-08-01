@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { garageReadSchema } from '@jdm/shared/garage';
+import { prisma } from '@ccc/db';
+import { garageReadSchema } from '@ccc/shared/garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';

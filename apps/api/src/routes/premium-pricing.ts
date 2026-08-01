@@ -24,7 +24,7 @@
  *   500 PricingMetadataMissing — Stripe Price metadata invalid / unparseable
  */
 
-import { premiumPricingResponseSchema } from '@jdm/shared/premium';
+import { premiumPricingResponseSchema } from '@ccc/shared/premium';
 import type { FastifyPluginAsync } from 'fastify';
 
 type Cadence = 'monthly' | 'annual';

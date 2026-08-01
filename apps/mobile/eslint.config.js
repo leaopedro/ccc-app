@@ -18,7 +18,7 @@ module.exports = defineConfig([
   {
     files: ['src/**/*.ts', 'src/**/*.tsx', 'app/**/*.ts', 'app/**/*.tsx'],
     ignores: ['**/ios-stripe-isolation.test.ts'],
-    plugins: { 'jdm-mobile': { rules: { 'no-stripe-on-ios': noStripeOnIos } } },
-    rules: { 'jdm-mobile/no-stripe-on-ios': 'error' },
+    plugins: { 'ccc-mobile': { rules: { 'no-stripe-on-ios': noStripeOnIos } } },
+    rules: { 'ccc-mobile/no-stripe-on-ios': 'error' },
   },
 ]);

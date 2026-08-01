@@ -1,4 +1,4 @@
-import type { StoreSettings } from '@jdm/shared/store';
+import type { StoreSettings } from '@ccc/shared/store';
 
 export type StoreHeroHeader = Pick<StoreSettings, 'storeHeaderTitle' | 'storeHeaderSubtitle'>;
 

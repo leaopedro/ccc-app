@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { awardBadge } from '../../src/services/garage/awarder.js';
@@ -15,7 +15,7 @@ const seedBadge = async (code: string, rarity: 'common' | 'rare' | 'legendary'):
           ? 'carros'
           : code.startsWith('COM')
             ? 'comunidade'
-            : 'jdm',
+            : 'ccc',
       rarity,
       icon: 'flag',
       premiumExclusive: false,

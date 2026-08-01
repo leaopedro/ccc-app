@@ -1,6 +1,6 @@
 'use server';
 
-import { adminEventCreateSchema, adminEventUpdateSchema } from '@jdm/shared/admin';
+import { adminEventCreateSchema, adminEventUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 

@@ -762,8 +762,8 @@ they pass regardless of the default.
 - [ ] **Step 4: Typecheck + run the env test**
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 Expected: 0 typecheck errors; env.test.ts all green.
@@ -805,7 +805,7 @@ Expected: one match — `premiumBillingEnabled: process.env.EXPO_PUBLIC_PREMIUM_
 If the match is present: this task is complete, no edit, no commit. Skip to Task 6.
 
 If (and only if) the match is ABSENT: add it to the `extra` block after
-`rcIosApiKey`, then `pnpm --filter @jdm/mobile typecheck` and commit with
+`rcIosApiKey`, then `pnpm --filter @ccc/mobile typecheck` and commit with
 `feat(mobile): add EXPO_PUBLIC_PREMIUM_BILLING_ENABLED to app.config extra (F8.19)`.
 
 The mobile app reads this from `Constants.expoConfig?.extra?.premiumBillingEnabled`
@@ -869,7 +869,7 @@ flipped to `true` in Railway production after F8.19 smoke evidence attached.
 - §F8.10: Refund honors period end — entitlement persists; invoice status flips only.
 - §F8.11: Feature flag `GROWTH_PREMIUM_BILLING_ENABLED` — now default `true` post-smoke.
 - §F8.12: Filtered test command shape (same as Phase 2 §10).
-- §F8.13: Rebuild `@jdm/shared` after schema/export changes.
+- §F8.13: Rebuild `@ccc/shared` after schema/export changes.
 - §F8.14: UI dep + harness in same chunk.
 - §F8.15: Webhook idempotency two-layer model.
 - §F8.16: iOS bundle isolation — no Stripe references in iOS-conditional code.
@@ -1000,8 +1000,8 @@ Canon refs: §F8.11 (feature flag gate), §F8.9 (non-BR RC), §F8.10 (refund),
 ## Verification summary (touched paths only)
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: 0 errors on both. No vitest runs — this chunk has no new test code.
@@ -1033,7 +1033,7 @@ Expected: 0 errors on both. No vitest runs — this chunk has no new test code.
    breaks `apps/api/test/env.test.ts:19-21` (`defaults to false`). Task 4 Step 3
    now handles this inline — flip the assertion to `.toBe(true)` and rename the
    test. The two explicit-parse tests stay untouched. Run
-   `pnpm --filter @jdm/api exec vitest run test/env.test.ts` before committing.
+   `pnpm --filter @ccc/api exec vitest run test/env.test.ts` before committing.
 
 6. **Task 5 is verify-only**: F8.18 (commit `ed13757a`) already added
    `premiumBillingEnabled` to `apps/mobile/app.config.ts:134`. Do not add a
@@ -1047,9 +1047,9 @@ Expected: 0 errors on both. No vitest runs — this chunk has no new test code.
 - [ ] `git checkout main && git pull --ff-only origin main`.
 - [ ] `git checkout -b feat/jdma-f8-billing-19`.
 - [ ] Tasks 1 → 6 in order; one commit per task using the subjects above.
-- [ ] `pnpm --filter @jdm/api typecheck` — 0 errors.
-- [ ] `pnpm --filter @jdm/mobile typecheck` — 0 errors.
-- [ ] `pnpm --filter @jdm/api exec vitest run test/env.test.ts` — update if default-value assertion fails (Deviation §5).
+- [ ] `pnpm --filter @ccc/api typecheck` — 0 errors.
+- [ ] `pnpm --filter @ccc/mobile typecheck` — 0 errors.
+- [ ] `pnpm --filter @ccc/api exec vitest run test/env.test.ts` — update if default-value assertion fails (Deviation §5).
 - [ ] `git push -u origin feat/jdma-f8-billing-19`.
 - [ ] Open PR to `main` only. Never push to `production`.
 - [ ] Request review on the PR per `CLAUDE.md`.

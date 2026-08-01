@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { mfaSetupResponseSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { mfaSetupResponseSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { TOTP, Secret } from 'otpauth';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

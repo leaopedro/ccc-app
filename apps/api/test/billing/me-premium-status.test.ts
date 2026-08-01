@@ -1,6 +1,6 @@
 // apps/api/test/billing/me-premium-status.test.ts
-import { prisma } from '@jdm/db';
-import { premiumStatusSchema } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import { premiumStatusSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -41,7 +41,7 @@ describe('premiumStatusSchema shape', () => {
     expect(() =>
       premiumStatusSchema.parse({
         active: true,
-        tier: 'bronze',
+        tier: 'platinum',
         cadence: 'monthly',
         provider: 'stripe',
         currentPeriodEnd: '2026-06-26T00:00:00.000Z',

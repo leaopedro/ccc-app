@@ -1,6 +1,6 @@
 'use server';
 
-import type { StoreSettings, StoreSettingsUpdate } from '@jdm/shared/store';
+import type { StoreSettings, StoreSettingsUpdate } from '@ccc/shared/store';
 
 import { getAdminStoreSettings, updateAdminStoreSettings } from './admin-api';
 import { ApiError } from './api';

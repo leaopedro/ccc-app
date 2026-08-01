@@ -1,4 +1,4 @@
-import type { AdminFinanceMembershipsItem } from '@jdm/shared/admin';
+import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 
 import { fetchFinanceMemberships } from '~/lib/finance-actions';

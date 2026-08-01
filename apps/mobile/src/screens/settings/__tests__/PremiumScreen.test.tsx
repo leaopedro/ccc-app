@@ -16,19 +16,26 @@ declare global {
 // ─── hoisted mock state (must come before vi.mock factories) ─────────────────
 const {
   platformMock,
-  extraMock,
   mockOpenAuthSession,
   mockGetPremiumStatus,
   mockFetchOfferings,
   mockPurchasePackage,
 } = vi.hoisted(() => ({
   platformMock: { OS: 'ios' as 'ios' | 'android' | 'web' },
-  extraMock: { premiumBillingEnabled: true },
   mockOpenAuthSession: vi.fn(),
   mockGetPremiumStatus: vi.fn(),
   mockFetchOfferings: vi.fn(),
   mockPurchasePackage: vi.fn(),
 }));
+
+// The billing flag (`~/lib/premium-runtime`) is a top-level const evaluated
+// from `process.env.EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` at module-load time —
+// not re-read per render. Vitest caches the module graph across tests in the
+// same file, so controlling the flag requires `vi.resetModules()` plus a
+// dynamic `import()` of the screen for every test (same pattern as
+// `screens/assinaturas/checkout.test.ts`). A static top-level import would
+// only ever observe whatever the env var was on the very first import.
+const FLAG_VAR = 'EXPO_PUBLIC_PREMIUM_BILLING_ENABLED';
 
 // ─── react-native mock ───────────────────────────────────────────────────────
 
@@ -79,18 +86,6 @@ vi.mock('react-native', async () => {
   };
 });
 
-// ─── expo-constants mock (feature flag on by default) ───────────────────────
-
-vi.mock('expo-constants', () => ({
-  default: {
-    expoConfig: {
-      get extra() {
-        return extraMock;
-      },
-    },
-  },
-}));
-
 // ─── expo-web-browser mock ───────────────────────────────────────────────────
 vi.mock('expo-web-browser', () => ({
   openAuthSessionAsync: mockOpenAuthSession,
@@ -111,11 +106,8 @@ vi.mock('~/api/client', () => ({
   authedRequest: vi.fn(),
 }));
 
-// ─── lucide-react-native stub (transitive via @jdm/ui if needed) ──────────────
+// ─── lucide-react-native stub (transitive via @ccc/ui if needed) ──────────────
 vi.mock('lucide-react-native', () => ({ default: {} }));
-
-// ─── import SUT ──────────────────────────────────────────────────────────────
-import PremiumScreen from '../PremiumScreen';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 let container: HTMLDivElement;
@@ -129,7 +121,8 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   platformMock.OS = 'ios';
-  extraMock.premiumBillingEnabled = true;
+  vi.resetModules();
+  process.env[FLAG_VAR] = 'true';
   mockGetPremiumStatus.mockReset();
   mockFetchOfferings.mockReset();
   mockPurchasePackage.mockReset();
@@ -139,9 +132,11 @@ beforeEach(() => {
 afterEach(() => {
   root.unmount();
   container.remove();
+  delete process.env[FLAG_VAR];
 });
 
 const mount = async () => {
+  const { default: PremiumScreen } = await import('../PremiumScreen');
   await act(async () => {
     root.render(<PremiumScreen />);
     for (let i = 0; i < 6; i++) await flush();
@@ -190,11 +185,34 @@ const pastDueStatus = {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('feature flag', () => {
-  it('shows maintenance banner when premiumBillingEnabled is false', async () => {
-    extraMock.premiumBillingEnabled = false;
+  it('shows maintenance banner when EXPO_PUBLIC_PREMIUM_BILLING_ENABLED is not "true"', async () => {
+    process.env[FLAG_VAR] = 'false';
     await mount();
     expect(container.querySelector('[data-testid="premium-maintenance"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="premium-status-badge"]')).toBeNull();
+    expect(mockGetPremiumStatus).not.toHaveBeenCalled();
+  });
+
+  // Regression test for the actual bug (Task 23): the flag used to be read
+  // from `Constants.expoConfig?.extra`, which is always empty on web (its
+  // web implementation resolves from `process.env.APP_MANIFEST`, never set
+  // in this app), so the whole premium module silently disabled itself on
+  // every web build regardless of the env var. This asserts the reverse
+  // direction of the test above: a truthy env var actually reaches the
+  // screen and lets the real status flow render. Fails if the flag reverts
+  // to reading `Constants` instead of `process.env.EXPO_PUBLIC_PREMIUM_BILLING_ENABLED`.
+  it('reads the flag from EXPO_PUBLIC_PREMIUM_BILLING_ENABLED=true and calls the status endpoint', async () => {
+    process.env[FLAG_VAR] = 'true';
+    mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus);
+    await mount();
+    expect(container.querySelector('[data-testid="premium-maintenance"]')).toBeNull();
+    expect(mockGetPremiumStatus).toHaveBeenCalledOnce();
+  });
+
+  it('treats an unset env var as disabled (not just the literal "false")', async () => {
+    delete process.env[FLAG_VAR];
+    await mount();
+    expect(container.querySelector('[data-testid="premium-maintenance"]')).not.toBeNull();
     expect(mockGetPremiumStatus).not.toHaveBeenCalled();
   });
 });

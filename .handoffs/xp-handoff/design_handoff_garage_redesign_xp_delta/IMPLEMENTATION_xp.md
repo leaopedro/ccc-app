@@ -146,7 +146,7 @@ Implementation note: keep the XP-awarder in its own service file so all rules li
 | 26  | **Progress service** — `getGarageProgress(garageId): GarageProgress` (rank derivation)             | 23         | `apps/api/src/services/garage/progress.ts` (new)                          |
 | 27  | **XP-awarder** — hooks into check-in, car-create, post-create, like, badge-award, premium-activate | 25–26      | new service + call-site injections; idempotency tests                     |
 | 28  | **API payload wiring** — `progress` + `stats` on `GET /me/garage` and `GET /g/:slug`               | 25–26      | `apps/api/src/routes/garage.ts`                                           |
-| 29  | **UI components** — `XPScoreboard`, `StatsRow`, `XPTooltip`, `ProfileStats` in `@jdm/ui`           | 24         | `packages/ui/src/XPScoreboard.tsx` etc                                    |
+| 29  | **UI components** — `XPScoreboard`, `StatsRow`, `XPTooltip`, `ProfileStats` in `@ccc/ui`           | 24         | `packages/ui/src/XPScoreboard.tsx` etc                                    |
 | 30  | **Owner integration** — `ProfileStats` slot between IdentityCard and BadgeRow                      | 29, 19     | `apps/mobile/src/screens/garage/GarageListView.tsx`                       |
 | 31  | **Public SSR integration** — same block on `/g/:slug` HTML view                                    | 29, 13     | new Next.js components                                                    |
 | 32  | **XP backfill** — one-shot migration computes xp for existing users from historical events         | 27         | `packages/db/prisma/migrations/...` (Postgres function or data migration) |

@@ -1,4 +1,4 @@
-import { Text } from '@jdm/ui';
+import { Text } from '@ccc/ui';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 

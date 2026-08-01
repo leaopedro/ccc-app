@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import { myTicketSchema, type MyTicket } from '@jdm/shared/tickets';
+import { brand } from '@ccc/design';
+import { myTicketSchema, type MyTicket } from '@ccc/shared/tickets';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { z } from 'zod';
 

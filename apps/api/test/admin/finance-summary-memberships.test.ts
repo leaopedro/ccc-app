@@ -5,7 +5,7 @@
 //
 // Every test uses Testcontainers Postgres via `makeApp` + `resetDatabase`.
 // No mocks.
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

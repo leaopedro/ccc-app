@@ -1,6 +1,6 @@
 import { PutObjectCommand, S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import type { Env } from '../env.js';
 
@@ -302,7 +302,7 @@ const uploadBundle = async (
       Key: objectKey,
       Body: body,
       ContentType: 'application/json',
-      ContentDisposition: `attachment; filename="jdm-data-export-${jobId}.json"`,
+      ContentDisposition: `attachment; filename="ccc-data-export-${jobId}.json"`,
     }),
   );
 
@@ -390,7 +390,7 @@ export const processExportJob = async (jobId: string, env: Env): Promise<Process
 export const createExportJob = async (
   userId: string,
 ): Promise<{ id: string; status: DataExportJobStatus }> => {
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 5;
   for (let attempt = 0; ; attempt++) {
     try {
       return await prisma.$transaction(
@@ -414,8 +414,16 @@ export const createExportJob = async (
         { isolationLevel: 'Serializable' },
       );
     } catch (err) {
-      const isSerializationError = err instanceof Error && err.message.includes('write conflict');
+      // Postgres serialization failure under Serializable isolation surfaces as
+      // Prisma P2034 ("write conflict or a deadlock"). Match on the code first,
+      // falling back to the message for older client versions.
+      const code = err instanceof Error ? (err as { code?: unknown }).code : undefined;
+      const isSerializationError =
+        code === 'P2034' || (err instanceof Error && err.message.includes('write conflict'));
       if (!isSerializationError || attempt >= MAX_RETRIES) throw err;
+      // Small incremental backoff: let the winning transaction commit and avoid
+      // an immediate retry stampede between the losing concurrent transactions.
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
     }
   }
 };

@@ -118,8 +118,8 @@ We deliberately **do NOT seed `COM-001`** here (fix-canon MAJOR — avoid collis
 Create `apps/api/test/garage/xp-post-create.test.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -351,7 +351,7 @@ Notes:
 - [ ] **Step 3: Verify test fails (red)**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-post-create.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-post-create.test.ts
 ```
 
 Expected: compile error on `awardXp` import OR specs 1, 2, 3 fail (no XP row), spec 5 fails (no awarder call → route still 201 → expected 500), spec 6 fails (second call still 201 → expected 500 + no second post). Spec 4 may pass for the wrong reason (no hook = no row regardless of killswitch). Compile error → return to Task 1 and confirm chunk 27's module path.
@@ -432,7 +432,7 @@ Rationale:
 - [ ] **Step 3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api exec tsc --noEmit
+pnpm --filter @ccc/api exec tsc --noEmit
 ```
 
 Expected: clean. If `awardXp` signature mismatch surfaces here → re-check fix-canon §4: `awardXp(tx, garageId, reason, opts)` positional 4-arg.
@@ -440,7 +440,7 @@ Expected: clean. If `awardXp` signature mismatch surfaces here → re-check fix-
 - [ ] **Step 4: Run the new test file (green)**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/xp-post-create.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-post-create.test.ts
 ```
 
 Expected: all 6 specs pass.
@@ -459,10 +459,10 @@ git commit -m "feat(api): splice awardXp(post_create, +2) into feed POST tx (chu
 Phase 1 + chunk 27 share the same surfaces. Confirm nothing perturbed.
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts
-pnpm --filter @jdm/api exec vitest run test/garage/xp-awarder.test.ts
-pnpm --filter @jdm/api exec vitest run test/garage/xp-revert-on-unlike.test.ts
-pnpm --filter @jdm/api exec vitest run test/feed/crud.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-awarder.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/xp-revert-on-unlike.test.ts
+pnpm --filter @ccc/api exec vitest run test/feed/crud.test.ts
 ```
 
 (Per fix-canon §11: chunk 27 canonical regression files are `xp-awarder.test.ts` and `xp-revert-on-unlike.test.ts`. The old `awarder.test.ts` reference is replaced.)
@@ -509,11 +509,11 @@ gh pr create --base main --title "feat(api): hook awardXp(+2) into feed-post cre
 - Canon: `/tmp/phase2-fix-canon.md` §4 §5 §8 §9 §11.
 
 ## Test plan
-- [x] `pnpm --filter @jdm/api exec tsc --noEmit`
-- [x] `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-create.test.ts`
-- [x] `pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts` (regression)
-- [x] `pnpm --filter @jdm/api exec vitest run test/garage/xp-awarder.test.ts` (regression)
-- [x] `pnpm --filter @jdm/api exec vitest run test/garage/xp-revert-on-unlike.test.ts` (regression)
+- [x] `pnpm --filter @ccc/api exec tsc --noEmit`
+- [x] `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-create.test.ts`
+- [x] `pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts` (regression)
+- [x] `pnpm --filter @ccc/api exec vitest run test/garage/xp-awarder.test.ts` (regression)
+- [x] `pnpm --filter @ccc/api exec vitest run test/garage/xp-revert-on-unlike.test.ts` (regression)
 - [ ] Main CI: full suite
 
 ## Risk
@@ -532,11 +532,11 @@ Do not request review until CI is green on the PR. Per `CLAUDE.md` git flow.
 
 Per fix-canon §10 — package-root-relative paths, `pnpm --filter <pkg> exec vitest run` (no `--` separator that swallows the path).
 
-- `pnpm --filter @jdm/api exec tsc --noEmit` — after every `feed.ts` edit. Clean.
-- `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-create.test.ts` — Task 2 red, Task 3 green.
-- `pnpm --filter @jdm/api exec vitest run test/garage/badges-write-hooks.test.ts` — Phase 1 regression. Green.
-- `pnpm --filter @jdm/api exec vitest run test/garage/xp-awarder.test.ts` — chunk 27 regression. Green.
-- `pnpm --filter @jdm/api exec vitest run test/garage/xp-revert-on-unlike.test.ts` — chunk 27 regression. Green.
+- `pnpm --filter @ccc/api exec tsc --noEmit` — after every `feed.ts` edit. Clean.
+- `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-create.test.ts` — Task 2 red, Task 3 green.
+- `pnpm --filter @ccc/api exec vitest run test/garage/badges-write-hooks.test.ts` — Phase 1 regression. Green.
+- `pnpm --filter @ccc/api exec vitest run test/garage/xp-awarder.test.ts` — chunk 27 regression. Green.
+- `pnpm --filter @ccc/api exec vitest run test/garage/xp-revert-on-unlike.test.ts` — chunk 27 regression. Green.
 
 Do NOT run `pnpm test` at repo root. Touched paths only. Trust main CI.
 
@@ -553,7 +553,7 @@ Fix-canon decisions applied:
 - **§5** — Call site does **not** wrap `awardXp` in `try/catch`. The awarder catches expected `P2002` + killswitch internally; unexpected throws propagate so the parent tx rolls back. Test 5 + test 6 verify this contract.
 - **§8** — Killswitch test uses `GENERAL_SETTINGS_SINGLETON_ID` constant. Never numeric `id: 1`.
 - **§9** — `seedEvent` mirrors `apps/api/test/feed/crud.test.ts` with `type`, `capacity`, published `status`, and `feedAccess: 'public'` (no ticket needed).
-- **§10** — Vitest + lint commands use `pnpm --filter @jdm/api exec vitest run <package-root-relative-path>`.
+- **§10** — Vitest + lint commands use `pnpm --filter @ccc/api exec vitest run <package-root-relative-path>`.
 - **§11** — Test file renamed to skeleton-canonical `xp-post-create.test.ts` (was `awarder-feed-post-create.test.ts`). Chunk 27 regression files are `xp-awarder.test.ts` + `xp-revert-on-unlike.test.ts` (replaces the old `awarder.test.ts` reference).
 
 No other corrections apply (§C2/C3/C4 cover likes; §C6+ unrelated).
@@ -581,7 +581,7 @@ No other corrections apply (§C2/C3/C4 cover likes; §C6+ unrelated).
 - [ ] `seedEvent` includes `type`, `capacity`, `status: 'published'`, `feedAccess: 'public'` (fix-canon §9).
 - [ ] Test filename is `xp-post-create.test.ts` (fix-canon §11).
 - [ ] No edits to schema, killswitch, awarder service, other routes.
-- [ ] `pnpm --filter @jdm/api exec tsc --noEmit` green.
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/xp-post-create.test.ts` green.
+- [ ] `pnpm --filter @ccc/api exec tsc --noEmit` green.
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/xp-post-create.test.ts` green.
 - [ ] Regression: `badges-write-hooks.test.ts`, `xp-awarder.test.ts`, `xp-revert-on-unlike.test.ts` still green.
 - [ ] PR opens against `main` (never `production`). Review requested only after PR + CI green.

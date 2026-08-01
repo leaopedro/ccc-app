@@ -1,5 +1,5 @@
-import type { ShippingAddressRecord } from '@jdm/shared/store';
-import { Button } from '@jdm/ui';
+import type { ShippingAddressRecord } from '@ccc/shared/store';
+import { Button } from '@ccc/ui';
 import { Link, Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useCallback, useState } from 'react';

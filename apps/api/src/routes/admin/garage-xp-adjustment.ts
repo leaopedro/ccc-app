@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 
+import { prisma } from '@ccc/db';
+import { adminXpAdjustmentSchema } from '@ccc/shared/admin-garage-xp';
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
-import { adminXpAdjustmentSchema } from '@jdm/shared/admin-garage-xp';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';

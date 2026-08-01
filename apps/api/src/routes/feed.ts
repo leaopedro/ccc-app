@@ -1,5 +1,4 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   feedCommentCreateInputSchema,
   feedCommentListResponseSchema,
@@ -9,7 +8,7 @@ import {
   feedPostPatchInputSchema,
   feedPostResponseSchema,
   feedReactionInputSchema,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
@@ -18,6 +17,7 @@ import { requireUser } from '../plugins/auth.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
+import rateLimit from '@fastify/rate-limit';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { awardXp, revertLikeXp } from '../services/garage/xp-awarder.js';
 import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';

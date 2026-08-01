@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { apiFetch } from '~/lib/api';
 
-// `PremiumCadence` is not exported from `@jdm/shared/premium`; use a local
+// `PremiumCadence` is not exported from `@ccc/shared/premium`; use a local
 // alias matching the cadence enum used by premiumCheckoutRequestSchema there.
 type PremiumCadence = 'monthly' | 'annual';
 

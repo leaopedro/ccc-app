@@ -6,7 +6,7 @@
 
 **Architecture:** Schema-only delta. No service code, no routes, no zod, no UI. Migration is additive — three statements in the order mandated by the outline (§366 of `2026-05-21-garage-progression-phase2-xp.md`): enum first, `Garage` columns second, `XpEvent` table third. **No backfill** — `xp = 0` and `likesReceived = 0` for every existing Garage row, accrual starts forward.
 
-**Tech Stack:** Prisma 5 + Postgres 16. Testcontainers-Postgres for migration integration tests. vitest. pnpm workspaces (`@jdm/db`, `@jdm/api`).
+**Tech Stack:** Prisma 5 + Postgres 16. Testcontainers-Postgres for migration integration tests. vitest. pnpm workspaces (`@ccc/db`, `@ccc/api`).
 
 ---
 
@@ -150,7 +150,7 @@ Notes for the engineer:
 - [ ] **Step 1.5 — Run `prisma format` (no commit yet)**
 
 ```bash
-pnpm --filter @jdm/db exec prisma format
+pnpm --filter @ccc/db exec prisma format
 ```
 
 Expected: no diff beyond whitespace alignment on the two new `Garage` columns and the new model/enum. If `format` reorders relations alphabetically, accept the reordering — Prisma's canonical formatting wins.
@@ -158,7 +158,7 @@ Expected: no diff beyond whitespace alignment on the two new `Garage` columns an
 - [ ] **Step 1.6 — Generate the Prisma client**
 
 ```bash
-pnpm --filter @jdm/db prisma generate
+pnpm --filter @ccc/db prisma generate
 ```
 
 Expected: success. Confirms the schema is valid before generating the migration.
@@ -174,7 +174,7 @@ Expected: success. Confirms the schema is valid before generating the migration.
 - [ ] **Step 2.1 — Generate the migration (no apply)**
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --create-only --name garage_xp
+pnpm --filter @ccc/db prisma migrate dev --create-only --name garage_xp
 ```
 
 `--create-only` produces the file without applying it to your local dev DB. Commit it as-is. Do NOT hand-edit unless the generated SQL deviates from the expected shape below — in which case STOP and reconcile.
@@ -220,7 +220,7 @@ If Prisma alphabetizes the two new `Garage` columns (`likesReceived` before `xp`
 - [ ] **Step 2.3 — Apply the migration to your local dev DB**
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev
+pnpm --filter @ccc/db prisma migrate dev
 ```
 
 Expected: applies cleanly. Local dev DB now has the column + enum + table. `prisma generate` is implicit at the tail.
@@ -244,7 +244,7 @@ No file edits here — just visual confirmation.
 
 - Create: `apps/api/test/garage/xp-schema.test.ts`
 
-The existing `test/global-setup.ts` spins up a single Postgres testcontainer once per vitest run and runs `prisma migrate deploy` against it. New migrations are picked up automatically. Use the shared `prisma` client from `@jdm/db`.
+The existing `test/global-setup.ts` spins up a single Postgres testcontainer once per vitest run and runs `prisma migrate deploy` against it. New migrations are picked up automatically. Use the shared `prisma` client from `@ccc/db`.
 
 **Why this lives under `apps/api/test/garage/` (not `apps/api/test/migrations/`):** `test/migrations/` carries one-off backfill DO-block re-runs. This test is a forward-going schema contract — defaults + uniqueness — which sits with the rest of the garage suite (`badges.test.ts`, `awarder.test.ts`, etc.). Reference: Phase 1 plan tone, where each schema-touching chunk ships a sibling test in the matching domain folder.
 
@@ -253,7 +253,7 @@ The existing `test/global-setup.ts` spins up a single Postgres testcontainer onc
 ```ts
 // apps/api/test/garage/xp-schema.test.ts
 import type { XpReason } from '@prisma/client';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createUser, resetDatabase } from '../helpers.js';
@@ -397,26 +397,26 @@ describe('schema: Garage XP columns + XpEvent table (chunk 23)', () => {
 
 Seven `it` blocks. Each one exercises a distinct contract: defaults, atomic increment, full enum coverage, DB-enforced unique (§C1), signed delta tolerance (forward-compat for §C8), FK cascade, raw-SQL default assertion (post-migration column-default contract).
 
-**Note on the `XpReason` import (per review BLOCK):** Prisma generates enums as top-level types, not as members of the `Prisma` namespace. Import `type { XpReason } from '@prisma/client'` rather than `Prisma.XpReason`. If chunk 24 later re-exports `XpReason` from `@jdm/db`, this import can switch to `@jdm/db` — but at chunk-23 scope, the direct `@prisma/client` type import is correct.
+**Note on the `XpReason` import (per review BLOCK):** Prisma generates enums as top-level types, not as members of the `Prisma` namespace. Import `type { XpReason } from '@prisma/client'` rather than `Prisma.XpReason`. If chunk 24 later re-exports `XpReason` from `@ccc/db`, this import can switch to `@ccc/db` — but at chunk-23 scope, the direct `@prisma/client` type import is correct.
 
 **Note on `createUser()` + Garage uniqueness (per review BLOCK):** `helpers.ts:createUser()` already creates a `Garage` row for the new user (the signup-hook invariant). `Garage.userId` is unique, so calling `prisma.garage.create({ data: { userId, … } })` a second time inside the test would throw P2002. Every test in this file fetches the helper-created garage via `garageFor(user.id)` (`findUniqueOrThrow({ where: { userId } })`) instead.
 
 - [ ] **Step 3.2 — Run the test against a fresh container**
 
 ```bash
-pnpm --filter @jdm/api test -- test/garage/xp-schema.test.ts
+pnpm --filter @ccc/api test -- test/garage/xp-schema.test.ts
 ```
 
 Expected on first run after Task 1/2: PASS — the testcontainer in `global-setup.ts` runs `prisma migrate deploy` which picks up the new migration.
 
-If you have stale compiled `@jdm/db` from a prior session, the test will fail with TS type errors on `prisma.xpEvent` / `Prisma.XpReason`. Fix:
+If you have stale compiled `@ccc/db` from a prior session, the test will fail with TS type errors on `prisma.xpEvent` / `Prisma.XpReason`. Fix:
 
 ```bash
-pnpm --filter @jdm/db build
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/db build
+pnpm --filter @ccc/api typecheck
 ```
 
-The user-memory rule `feedback_rebuild_shared_after_schema_change.md` calls out exactly this hazard for `@jdm/shared`; the same applies to `@jdm/db` after schema edits.
+The user-memory rule `feedback_rebuild_shared_after_schema_change.md` calls out exactly this hazard for `@ccc/shared`; the same applies to `@ccc/db` after schema edits.
 
 ---
 
@@ -426,18 +426,18 @@ Run these from repo root in order. **Stop and fix at the first failure.**
 
 ```bash
 # 1. Confirm Prisma can format + validate the schema (catches typos).
-pnpm --filter @jdm/db exec prisma format
-pnpm --filter @jdm/db prisma generate
+pnpm --filter @ccc/db exec prisma format
+pnpm --filter @ccc/db prisma generate
 
 # 2. Confirm the migration file is committed-shaped + applies forward cleanly
 #    on the dev DB. (--create-only was used in step 2.1; this applies it.)
-pnpm --filter @jdm/db prisma migrate dev
+pnpm --filter @ccc/db prisma migrate dev
 
 # 3. Typecheck the api package — Prisma client types must satisfy callers.
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 
 # 4. Targeted vitest run — only the new file.
-pnpm --filter @jdm/api test -- test/garage/xp-schema.test.ts
+pnpm --filter @ccc/api test -- test/garage/xp-schema.test.ts
 ```
 
 Per user-memory rule `feedback_no_full_test_suite_locally.md`: do NOT run the full `apps/api` suite locally. Trust CI for the cross-cutting sweep. Only the one new test file runs here.
@@ -507,11 +507,11 @@ Outline references: `docs/superpowers/plans/2026-05-21-garage-progression-phase2
 
 ## Test plan
 
-- [x] `pnpm --filter @jdm/db exec prisma format` — no parse errors
-- [x] `pnpm --filter @jdm/db prisma generate` — client builds
-- [x] `pnpm --filter @jdm/db prisma migrate dev` — migration applies forward on empty + on existing dev DB
-- [x] `pnpm --filter @jdm/api typecheck` — green
-- [x] `pnpm --filter @jdm/api test -- test/garage/xp-schema.test.ts` — 7 cases pass against testcontainer Postgres
+- [x] `pnpm --filter @ccc/db exec prisma format` — no parse errors
+- [x] `pnpm --filter @ccc/db prisma generate` — client builds
+- [x] `pnpm --filter @ccc/db prisma migrate dev` — migration applies forward on empty + on existing dev DB
+- [x] `pnpm --filter @ccc/api typecheck` — green
+- [x] `pnpm --filter @ccc/api test -- test/garage/xp-schema.test.ts` — 7 cases pass against testcontainer Postgres
 
 ## Reviewer checklist
 
@@ -536,7 +536,7 @@ PR opens against `main` only. Never against `production` (CLAUDE.md branch flow)
 - Outline corrections: same file, §C1 (line 43), §C6 (line 120), §C8 (line 148).
 - Phase 1 schema migration reference for tone + structure: `docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:4682–4920` (Conquistas chunk 15, step 15.1).
 - Existing migration SQL reference for SQL shape: `packages/db/prisma/migrations/20260522201214_garage_conquistas/migration.sql` (enum + table + unique-index + FK pattern is identical).
-- Existing schema-test pattern reference: `apps/api/test/garage/badges.test.ts` (shared `prisma` from `@jdm/db`, `resetDatabase()` between cases, testcontainer driven by `test/global-setup.ts`).
+- Existing schema-test pattern reference: `apps/api/test/garage/badges.test.ts` (shared `prisma` from `@ccc/db`, `resetDatabase()` between cases, testcontainer driven by `test/global-setup.ts`).
 - Testcontainers helper: `apps/api/test/global-setup.ts` — single shared Postgres container per vitest run; `prisma migrate deploy` runs at startup; no per-test container needed for this chunk.
 
 ## Self-review checklist (do before requesting review)

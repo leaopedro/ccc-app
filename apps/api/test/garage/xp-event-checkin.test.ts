@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';

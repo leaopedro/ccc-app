@@ -11,7 +11,7 @@ display type), then drops into a tight three-field form (`Nome`,
 terms-and-privacy consent toggle, and a single brand-red `Criar conta`
 CTA. Below the CTA, a muted line offers a brand-red `Entrar` link back
 to login. The screen is dark (`bg-bg #0A0A0A`) end-to-end and uses the
-shared `@jdm/ui` primitives (`Text`, `Button`) plus the local
+shared `@ccc/ui` primitives (`Text`, `Button`) plus the local
 `TextField`, all driven by NativeWind classes off the shared design
 tokens. All copy lives in `~/copy/auth`.
 

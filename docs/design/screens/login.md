@@ -9,7 +9,7 @@ tagline ("BEM-VINDO À CENA.") sets tone, and the form is intentionally
 minimal: e-mail, password, one brand-red CTA. Forgot-password lives as a
 muted right-aligned link below the password field; sign-up lives as a
 brand-red inline link at the bottom. The screen is dark (`bg-bg #0A0A0A`)
-end-to-end and uses the shared `@jdm/ui` primitives (`Text`, `Button`)
+end-to-end and uses the shared `@ccc/ui` primitives (`Text`, `Button`)
 plus the local `TextField`, all driven by NativeWind classes off the
 shared design tokens.
 
@@ -61,7 +61,7 @@ SafeAreaView (bg-bg)
 | UI element     | Primitive / Element                                                 |
 | -------------- | ------------------------------------------------------------------- |
 | Root           | `<SafeAreaView>` + `<KeyboardAvoidingView>` + `<ScrollView>`        |
-| Wordmark       | `<Image source={require('@jdm/design/assets/logo-wordmark.webp')}>` |
+| Wordmark       | `<Image source={require('@ccc/design/assets/logo-wordmark.webp')}>` |
 | Tagline        | `<Text variant="eyebrow" tone="muted">`                             |
 | Field labels   | `<Text variant="eyebrow" tone="secondary">` (inside TextField)      |
 | Inputs         | Local `<TextField>` (NativeWind variant)                            |

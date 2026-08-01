@@ -6,7 +6,7 @@
 
 **Architecture:** Two files land in this chunk. (1) `apps/api/src/workers/premium-event-publish-grant.ts` — the job consumer; it loads the event + first grantable tier via `pickPremiumGrantableTier` (shipped by F8.06), pages through `PremiumMembership WHERE status='active' AND cancelAtPeriodEnd=false AND currentPeriodEnd > event.startsAt` in batches of 500, inserts `Ticket { source: 'premium_grant', status: 'valid' }` per eligible member, relying on the partial-unique index (canon §F8.8) for race-safe idempotency. (2) `apps/api/src/routes/admin/events.ts` — extend the existing `POST /events/:id/publish` handler to enqueue the grant job **after the publish transaction commits** (never inside). The publish tx stays minimal: only `Event.status + publishedAt`.
 
-**Tech Stack:** Fastify + Prisma (`@prisma/client`), TypeScript, vitest with Testcontainers-Postgres (real DB — no mocks per CLAUDE.md). Workspace: `@jdm/api`. Existing worker-bus pattern: `node-cron`-style modules under `apps/api/src/workers/`; jobs are invoked directly (no queue broker in this codebase — see `event-reminders.ts` pattern). Existing ticket code: `apps/api/src/services/tickets/codes.ts::signTicketCode` (read-path only; `Ticket` DB row has no stored `code` column).
+**Tech Stack:** Fastify + Prisma (`@prisma/client`), TypeScript, vitest with Testcontainers-Postgres (real DB — no mocks per CLAUDE.md). Workspace: `@ccc/api`. Existing worker-bus pattern: `node-cron`-style modules under `apps/api/src/workers/`; jobs are invoked directly (no queue broker in this codebase — see `event-reminders.ts` pattern). Existing ticket code: `apps/api/src/services/tickets/codes.ts::signTicketCode` (read-path only; `Ticket` DB row has no stored `code` column).
 
 ---
 
@@ -124,7 +124,7 @@ No new exports from `events.ts` other than the side-effect of enqueueing the job
 
 Test design notes:
 
-- Use Testcontainers Postgres (see `test/global-setup.ts` + `test/setup.ts` for the harness). Import `prisma` from `@jdm/db` and `resetDatabase` + `createUser` from `../../test/helpers.js`.
+- Use Testcontainers Postgres (see `test/global-setup.ts` + `test/setup.ts` for the harness). Import `prisma` from `@ccc/db` and `resetDatabase` + `createUser` from `../../test/helpers.js`.
 - The worker function under test is `runPremiumEventPublishGrant({ eventId, publishedAt, log? })` — co-located with the worker file, exported for testability. Tests call it directly (no HTTP layer needed).
 - Seed helpers are defined locally per test pattern from `event-reminders.test.ts`.
 - The `PremiumMembership` model lands in F8.01 migration. If the test DB hasn't run F8.01 yet, tests will fail with "table does not exist" — that is an environment pre-flight issue, not a test-logic issue.
@@ -133,7 +133,7 @@ Test design notes:
 
 ```ts
 // apps/api/src/workers/premium-event-publish-grant.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { runPremiumEventPublishGrant } from './premium-event-publish-grant.js';
@@ -438,7 +438,7 @@ it('grants tickets to all 1000 active members across multiple batch pages', asyn
 - [ ] **Step 1.9 — Run the test file to confirm RED**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts
 ```
 
 Expected: all tests FAIL. Common failure modes:
@@ -468,7 +468,7 @@ git commit -m "test(api): failing tests for event-publish premium-grant worker (
 
 ```ts
 // apps/api/src/workers/premium-event-publish-grant.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -607,14 +607,14 @@ export const runPremiumEventPublishGrant = async (
 - [ ] **Step 2.2 — Run the tests to confirm GREEN**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts
 ```
 
 Expected: all 8 tests PASS.
 
 Failure modes:
 
-- `prisma.premiumMembership is undefined` — F8.01 migration not applied or Prisma client not regenerated. Run `pnpm --filter @jdm/db run db:migrate && pnpm --filter @jdm/db build`.
+- `prisma.premiumMembership is undefined` — F8.01 migration not applied or Prisma client not regenerated. Run `pnpm --filter @ccc/db run db:migrate && pnpm --filter @ccc/db build`.
 - `pickPremiumGrantableTier not found` — F8.06 not landed. Block on it.
 - 1 000-member test timeout — increase the `{ timeout: 60_000 }` option if needed; the batch loop is correct.
 - Idempotency test fails with count=2 — the `findFirst` skip check is not inside the `$transaction`. Re-check: `existing` lookup and `ticket.create` must both be on `tx`, not `prisma`.
@@ -622,7 +622,7 @@ Failure modes:
 - [ ] **Step 2.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: zero errors.
@@ -744,7 +744,7 @@ app.post('/events/:id/publish', async (request, reply) => {
 - [ ] **Step 3.3 — Typecheck after edit**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: zero errors.
@@ -783,7 +783,7 @@ Add to the appropriate test file:
 
 ```ts
 // apps/api/test/admin/events/publish-grant.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -953,13 +953,13 @@ describe('POST /events/:id/publish — grant job isolation', () => {
 - [ ] **Step 4.3 — Run the publish-grant tests to confirm GREEN**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts apps/api/test/admin/events/publish-grant.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts apps/api/test/admin/events/publish-grant.test.ts
 ```
 
 Wait — the test file paths above mix absolute and relative. Use the correct filtered form:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events/publish-grant.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events/publish-grant.test.ts
 ```
 
 Expected: all tests PASS.
@@ -979,7 +979,7 @@ Common failure mode for the mock test:
 - [ ] **Step 4.4 — Typecheck final**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: zero errors.
@@ -1000,7 +1000,7 @@ git commit -m "test(api): publish-grant isolation + happy-path integration tests
 Per CLAUDE.md "touched files only; trust main CI + PR CI for full sweep":
 
 ```bash
-pnpm --filter @jdm/api exec vitest run \
+pnpm --filter @ccc/api exec vitest run \
   src/workers/premium-event-publish-grant.test.ts \
   test/admin/events/publish-grant.test.ts
 ```
@@ -1010,7 +1010,7 @@ Expected: all green.
 - [ ] **Step 5.2 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: zero errors.
@@ -1018,7 +1018,7 @@ Expected: zero errors.
 - [ ] **Step 5.3 — Lint the new + modified files**
 
 ```bash
-pnpm --filter @jdm/api exec eslint \
+pnpm --filter @ccc/api exec eslint \
   src/workers/premium-event-publish-grant.ts \
   src/routes/admin/events.ts \
   src/workers/premium-event-publish-grant.test.ts \
@@ -1042,8 +1042,8 @@ Expected: zero errors or warnings.
 Branch: `feat/jdma-f8-billing-07` from fresh `main`.
 
 - [ ] `git branch --show-current` is not `production` (CLAUDE.md preflight).
-- [ ] `pnpm --filter @jdm/api typecheck` clean.
-- [ ] `pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events/publish-grant.test.ts` green.
+- [ ] `pnpm --filter @ccc/api typecheck` clean.
+- [ ] `pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events/publish-grant.test.ts` green.
 - [ ] Only two new files + one modified route file. No schema changes. No shared-package changes.
 - [ ] Worker function exported as `runPremiumEventPublishGrant` for testability.
 - [ ] Grant job is NOT awaited in the publish handler (fire-and-forget with `.catch`).

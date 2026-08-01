@@ -43,7 +43,7 @@ Generate `JWT_ACCESS_SECRET` and `REFRESH_TOKEN_PEPPER` with `openssl rand -base
 3. `cp apps/mobile/.env.example apps/mobile/.env`
 4. `cp packages/db/.env.example packages/db/.env`
 5. `docker compose up -d postgres`
-6. `pnpm install && pnpm --filter @jdm/db db:migrate && pnpm --filter @jdm/db db:generate`
+6. `pnpm install && pnpm --filter @ccc/db db:migrate && pnpm --filter @ccc/db db:generate`
 7. `pnpm dev` — runs all three apps via Turbo.
 8. Ask the team lead for dev values of any remaining secrets above (most can
    start empty for Phase 0).

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { Prisma } from '@prisma/client';
 
 import { sha256Hex } from './token-hash.js';

@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '~/brand';
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (

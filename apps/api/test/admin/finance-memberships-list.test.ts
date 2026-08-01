@@ -3,8 +3,8 @@
 //   GET /admin/finance/export       (new membership CSV columns + k-anonymity)
 //
 // Testcontainers Postgres via `makeApp` + `resetDatabase`. No mocks.
-import { prisma } from '@jdm/db';
-import { adminFinanceMembershipsResponseSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminFinanceMembershipsResponseSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -547,7 +547,7 @@ describe('GET /admin/finance/export — membership columns + k-anonymity', () =>
     expect(membershipRows).toHaveLength(0);
 
     // The suppressed-groups header should reflect the suppressed cohort.
-    const suppressed = Number(res.headers['x-jdm-k-anonymity-suppressed-groups']);
+    const suppressed = Number(res.headers['x-ccc-k-anonymity-suppressed-groups']);
     expect(suppressed).toBeGreaterThanOrEqual(1);
   });
 
@@ -596,7 +596,7 @@ describe('GET /admin/finance/export — membership columns + k-anonymity', () =>
     const membershipRows = lines.slice(1).filter((l) => l.includes(',true,'));
     expect(membershipRows).toHaveLength(0);
 
-    const suppressed = Number(res.headers['x-jdm-k-anonymity-suppressed-groups']);
+    const suppressed = Number(res.headers['x-ccc-k-anonymity-suppressed-groups']);
     expect(suppressed).toBeGreaterThanOrEqual(1);
   });
 

@@ -1,4 +1,4 @@
-import { scrubSentryEvent } from '@jdm/shared/sentry-scrubber';
+import { scrubSentryEvent } from '@ccc/shared/sentry-scrubber';
 import type { BrowserOptions } from '@sentry/nextjs';
 
 // Legal basis: strict-necessary / legitimate-interest (LGPD Art. 7 II + IX,

@@ -127,8 +127,8 @@ EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 
 ```bash
 docker compose up -d
-pnpm --filter @jdm/db prisma migrate deploy
-pnpm --filter @jdm/db db:seed
+pnpm --filter @ccc/db prisma migrate deploy
+pnpm --filter @ccc/db db:seed
 ```
 
 **Step 3 — Start Stripe CLI listener (terminal A)**
@@ -142,7 +142,7 @@ It prints `> Ready! Your webhook signing secret is whsec_XXXX` — copy that int
 **Step 4 — Start the API (terminal B)**
 
 ```bash
-pnpm --filter @jdm/api dev
+pnpm --filter @ccc/api dev
 ```
 
 Wait for `server listening on :4000`.
@@ -150,7 +150,7 @@ Wait for `server listening on :4000`.
 **Step 5 — Start the iOS dev client (terminal C)**
 
 ```bash
-pnpm --filter @jdm/mobile ios
+pnpm --filter @ccc/mobile ios
 ```
 
 First run builds the native project (~5 min). Subsequent runs are fast.
@@ -211,7 +211,7 @@ Expected: webhook returns `200 refunded:true`; `stripe listen` shows a refund ev
 | Symptom                                                  | Fix                                                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `webhook signature verification failed`                  | `STRIPE_WEBHOOK_SECRET` doesn't match `stripe listen` output. Re-copy and restart API.     |
-| `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set` in Metro | `.env.local` missing or Metro cache stale — run `pnpm --filter @jdm/mobile expo start -c`. |
+| `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set` in Metro | `.env.local` missing or Metro cache stale — run `pnpm --filter @ccc/mobile expo start -c`. |
 | "Merchant identifier is invalid" on Apple Pay            | Expected on simulator without provisioning profile; card path still works.                 |
 
 ### 3.2 Finance dashboard (`/financeiro`)
@@ -221,9 +221,9 @@ expandable-row details, CSV export, and responsive layout.
 
 **Prerequisites**
 
-- Local API running (`pnpm --filter @jdm/api dev`) with seeded orders
+- Local API running (`pnpm --filter @ccc/api dev`) with seeded orders
   in paid/refunded states across multiple events, providers, and methods.
-- Admin app running (`pnpm --filter @jdm/admin dev`).
+- Admin app running (`pnpm --filter @ccc/admin dev`).
 - Three browser sessions: one organizer, one admin, one staff account.
 
 **Step 1 — Permission gating (admin vs staff)**
@@ -311,7 +311,7 @@ xcrun simctl spawn booted log stream --level debug --predicate 'processImagePath
 In another terminal:
 
 ```bash
-APP_VARIANT=development pnpm --filter @jdm/mobile ios
+APP_VARIANT=development pnpm --filter @ccc/mobile ios
 ```
 
 Pass:
@@ -321,7 +321,7 @@ Pass:
 **Step 3 — Reproduce a release-like JS bundle locally**
 
 ```bash
-APP_VARIANT=preview pnpm --filter @jdm/mobile exec expo start --no-dev --minify --clear
+APP_VARIANT=preview pnpm --filter @ccc/mobile exec expo start --no-dev --minify --clear
 ```
 
 Then open the dev client or simulator build against that bundle.
@@ -333,7 +333,7 @@ Why:
 **Step 4 — Validate the embedded build config**
 
 ```bash
-APP_VARIANT=preview pnpm --filter @jdm/mobile exec expo config --type public
+APP_VARIANT=preview pnpm --filter @ccc/mobile exec expo config --type public
 ```
 
 Confirm:
@@ -570,12 +570,12 @@ the public `/store/*` API directly — that is the wire mobile will consume.
 - Migrations applied + seed loaded:
 
   ```bash
-  pnpm --filter @jdm/db prisma migrate deploy
-  pnpm --filter @jdm/db db:seed
+  pnpm --filter @ccc/db prisma migrate deploy
+  pnpm --filter @ccc/db db:seed
   ```
 
-- API running: `pnpm --filter @jdm/api dev` (port 4000).
-- Admin running: `pnpm --filter @jdm/admin dev` (port 3000).
+- API running: `pnpm --filter @ccc/api dev` (port 4000).
+- Admin running: `pnpm --filter @ccc/admin dev` (port 3000).
 - An admin user. The seed does not create one; sign up via the
   mobile/admin flow, then promote via Prisma Studio (or directly in
   Postgres):
@@ -1131,7 +1131,7 @@ reviewer) approves the merge.
     `Order.providerRef`).
 
 - **Test users:** seed at least one verified attendee, one organizer, one
-  admin in `pnpm --filter @jdm/db db:seed`. Use throwaway email aliases
+  admin in `pnpm --filter @ccc/db db:seed`. Use throwaway email aliases
   per smoke (e.g. `qa+stripe-2026-04-29@jdm.example`).
 - **Real devices:** keep one iOS + one Android dev build registered in
   EAS. Push smokes do not work on simulators reliably.

@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import type { MyTicket } from '@jdm/shared/tickets';
+import { brand } from '@ccc/design';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { forwardRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';

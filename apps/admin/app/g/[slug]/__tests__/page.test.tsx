@@ -42,7 +42,7 @@ const payloadWithBadges = {
   ...validPayload,
   garage: {
     ...validPayload.garage,
-    badges: [{ code: 'JDM-003', earnedAt: '2026-05-01T12:00:00.000Z' }],
+    badges: [{ code: 'CCC-003', earnedAt: '2026-05-01T12:00:00.000Z' }],
   },
 };
 

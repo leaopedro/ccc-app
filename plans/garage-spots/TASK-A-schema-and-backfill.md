@@ -25,7 +25,7 @@
 
 **Architecture:** One additive Prisma migration introduces the `GarageSpot` table, two new enums, three new columns on existing tables, and two enum-value additions. The migration's `migration.sql` carries an in-SQL backfill that runs in the same transaction Prisma wraps around it. The Prisma seed gains an idempotent block that creates a `garage_spot` `ProductType`, a singleton `Product` (virtual, hidden-from-store), and a single `Variant`. New Zod schemas in `packages/shared` describe enums and tier on the public `carSchema`, and extend `adminAuditActionSchema` + `recordAudit` entity-type union. No new endpoints. No settlement code changes. No UI.
 
-**Tech Stack:** Prisma 6 + PostgreSQL 16 (additive migration with raw-SQL `DO` block for backfill), `@jdm/db` Prisma seed (`tsx prisma/seed.ts`), `@jdm/shared` Zod 3 schemas, Vitest + Testcontainers for integration tests against a real Postgres (per `apps/api/test/global-setup.ts`).
+**Tech Stack:** Prisma 6 + PostgreSQL 16 (additive migration with raw-SQL `DO` block for backfill), `@ccc/db` Prisma seed (`tsx prisma/seed.ts`), `@ccc/shared` Zod 3 schemas, Vitest + Testcontainers for integration tests against a real Postgres (per `apps/api/test/global-setup.ts`).
 
 **Branch:** `feat/jdma-garage-task-a` off fresh `main`. Branch safety preflight from `CLAUDE.md` applies — confirm `git branch --show-current` is NOT `production` before the first edit.
 
@@ -103,7 +103,7 @@ packages/shared/src/__tests__/
   garage.test.ts                                                 create
 ```
 
-The new `packages/db/src/garage-spot-product.ts` keeps the singleton identifiers and the "do not delete / do not duplicate" guard in `@jdm/db` so both the seed (which lives in `@jdm/db`) and future admin code (TASK-H, in `apps/api`) can import the same source of truth. `apps/api/src/services` does NOT get a new file in this task.
+The new `packages/db/src/garage-spot-product.ts` keeps the singleton identifiers and the "do not delete / do not duplicate" guard in `@ccc/db` so both the seed (which lives in `@ccc/db`) and future admin code (TASK-H, in `apps/api`) can import the same source of truth. `apps/api/src/services` does NOT get a new file in this task.
 
 ---
 
@@ -433,7 +433,7 @@ Constraints and idempotency:
 ```ts
 import { Prisma } from '@prisma/client';
 
-// Singleton identifiers. Keep in @jdm/db so the seed (in this package) and any
+// Singleton identifiers. Keep in @ccc/db so the seed (in this package) and any
 // future admin guard (apps/api, TASK-H) share one source of truth.
 export const GARAGE_SPOT_PRODUCT_TYPE_NAME = 'garage_spot';
 export const GARAGE_SPOT_PRODUCT_SLUG = 'garage-spot';
@@ -488,7 +488,7 @@ export * from './garage-spot-product.js';
 
 ### 4. `packages/db/prisma/seed.ts`
 
-Add the imports at the top. The existing `seed.ts` uses only `@prisma/client` (no `@jdm/db` self-imports). Prefer the relative path to avoid any circular-resolution edge cases with `tsx`:
+Add the imports at the top. The existing `seed.ts` uses only `@prisma/client` (no `@ccc/db` self-imports). Prefer the relative path to avoid any circular-resolution edge cases with `tsx`:
 
 ```ts
 import {
@@ -502,7 +502,7 @@ import {
 } from '../src/garage-spot-product.js';
 ```
 
-Build `@jdm/db` before running the seed so `dist/` is current.
+Build `@ccc/db` before running the seed so `dist/` is current.
 
 Add a new function `seedGarageSpotProduct` before `main`:
 
@@ -639,7 +639,7 @@ export const garageSpotSchema = z.object({
 export type GarageSpot = z.infer<typeof garageSpotSchema>;
 
 // Singleton identifiers re-exported for cross-app use (mobile, admin) where importing
-// from @jdm/db is awkward. Keep in sync with packages/db/src/garage-spot-product.ts.
+// from @ccc/db is awkward. Keep in sync with packages/db/src/garage-spot-product.ts.
 export const GARAGE_SPOT_PRODUCT_SLUG = 'garage-spot';
 export const GARAGE_SPOT_PRODUCT_TYPE_NAME = 'garage_spot';
 ```
@@ -833,7 +833,7 @@ No other changes in `admin-audit.ts`. Callers will be added in TASK-G.
 
 ## Seed script behaviour (idempotent)
 
-Invocation: `pnpm --filter @jdm/db db:seed`.
+Invocation: `pnpm --filter @ccc/db db:seed`.
 
 | Run                                      | Effect                                                                                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -845,7 +845,7 @@ Invocation: `pnpm --filter @jdm/db db:seed`.
 
 The seed never deletes. The "cannot be deleted" rule is enforced at the data-level via:
 
-- The guard `assertVirtualSingletonProtected('delete', ...)` exported from `@jdm/db`. TASK-H will call this from the admin product DELETE handler.
+- The guard `assertVirtualSingletonProtected('delete', ...)` exported from `@ccc/db`. TASK-H will call this from the admin product DELETE handler.
 - This task does **not** implement an admin DELETE endpoint. None exists today.
 
 ---
@@ -1044,19 +1044,19 @@ describe('garage constants', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/shared test`.
+Run: `pnpm --filter @ccc/shared test`.
 
 ### B. API integration tests against real Postgres
 
 **B-1. Singleton seed idempotency — `apps/api/test/services/garage-spot-singleton.test.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   GARAGE_SPOT_PRODUCT_SLUG,
   GARAGE_SPOT_PRODUCT_TYPE_NAME,
   GARAGE_SPOT_VARIANT_NAME,
-} from '@jdm/db';
+} from '@ccc/db';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1146,7 +1146,7 @@ Note for the engineer: spawning `tsx prisma/seed.ts` from within Vitest is accep
 **B-2. Migration backfill — `apps/api/test/migrations/garage-spot-backfill.test.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
@@ -1331,10 +1331,10 @@ describe('garage spot FK on car delete', () => {
 
 ```bash
 # Shared Zod tests
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 
 # API integration tests (uses Testcontainers, spins up its own postgres)
-pnpm --filter @jdm/api test -- --run \
+pnpm --filter @ccc/api test -- --run \
   test/services/garage-spot-singleton.test.ts \
   test/migrations/garage-spot-backfill.test.ts
 ```
@@ -1354,7 +1354,7 @@ Create `packages/shared/src/__tests__/garage.test.ts` with the full content show
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: FAIL — `garage.ts` doesn't exist, `carSchema.tier`, `adminCarUpdateSchema`, and new audit literals are missing.
@@ -1369,10 +1369,10 @@ Expected: FAIL — `garage.ts` doesn't exist, `carSchema.tier`, `adminCarUpdateS
 
 - [ ] **Step 7: Modify `packages/shared/package.json`** — add `./garage` exports entry. Per §9.
 
-- [ ] **Step 8: Build shared (CLAUDE.md memory: "Rebuild @jdm/shared after schema changes")**
+- [ ] **Step 8: Build shared (CLAUDE.md memory: "Rebuild @ccc/shared after schema changes")**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: clean exit.
@@ -1380,7 +1380,7 @@ Expected: clean exit.
 - [ ] **Step 9: Run Zod tests — must now pass**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: PASS.
@@ -1410,15 +1410,15 @@ mkdir -p packages/db/prisma/migrations/20260520120100_garage_spots_tables
 - [ ] **Step 4: Generate Prisma client**
 
 ```bash
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:generate
 ```
 
 Expected: client regenerates without error. New types `GarageSpot`, `GarageSpotTier`, `GarageSpotSource` available, plus `Product.virtual`, `Product.visibleInStore`, `GeneralSettings.defaultFreeGarageSpots`.
 
-- [ ] **Step 5: Build `@jdm/db`**
+- [ ] **Step 5: Build `@ccc/db`**
 
 ```bash
-pnpm --filter @jdm/db build
+pnpm --filter @ccc/db build
 ```
 
 Expected: clean exit. Note: the new file `packages/db/src/garage-spot-product.ts` is added in Task 3 below — this build step ignores it for now.
@@ -1426,7 +1426,7 @@ Expected: clean exit. Note: the new file `packages/db/src/garage-spot-product.ts
 - [ ] **Step 6: Verify migration applies on a clean Postgres**
 
 ```bash
-DATABASE_URL=postgres://jdm:jdm@localhost:5432/jdm_local pnpm --filter @jdm/db db:deploy
+DATABASE_URL=postgres://jdm:jdm@localhost:5432/jdm_local pnpm --filter @ccc/db db:deploy
 ```
 
 (Or rely on the integration test in Task 5 if no local Postgres is available.)
@@ -1438,16 +1438,16 @@ git add packages/db/prisma
 git commit -m "feat(db): add GarageSpot, virtual product flags, defaultFreeGarageSpots + backfill migration (two files)"
 ```
 
-### Task 3: Singleton-product guard in `@jdm/db`
+### Task 3: Singleton-product guard in `@ccc/db`
 
 - [ ] **Step 1: Create `packages/db/src/garage-spot-product.ts`** per §3.
 
 - [ ] **Step 2: Modify `packages/db/src/index.ts`** to re-export it.
 
-- [ ] **Step 3: Build `@jdm/db`**
+- [ ] **Step 3: Build `@ccc/db`**
 
 ```bash
-pnpm --filter @jdm/db build
+pnpm --filter @ccc/db build
 ```
 
 Expected: clean exit; new symbols exported.
@@ -1476,7 +1476,7 @@ await prisma.garageSpot.deleteMany();
 - [ ] **Step 4: Run the seed test**
 
 ```bash
-pnpm --filter @jdm/api test -- --run test/services/garage-spot-singleton.test.ts
+pnpm --filter @ccc/api test -- --run test/services/garage-spot-singleton.test.ts
 ```
 
 Expected: PASS (single product / variant / type created; idempotency holds; price preserved; slug-squat throws).
@@ -1486,7 +1486,7 @@ Expected: PASS (single product / variant / type created; idempotency holds; pric
 - [ ] **Step 6: Re-run the test**
 
 ```bash
-pnpm --filter @jdm/api test -- --run test/services/garage-spot-singleton.test.ts
+pnpm --filter @ccc/api test -- --run test/services/garage-spot-singleton.test.ts
 ```
 
 Expected: PASS.
@@ -1505,7 +1505,7 @@ git commit -m "feat(db): seed singleton garage spot product + integration tests"
 - [ ] **Step 2: Run the backfill test**
 
 ```bash
-pnpm --filter @jdm/api test -- --run test/migrations/garage-spot-backfill.test.ts
+pnpm --filter @ccc/api test -- --run test/migrations/garage-spot-backfill.test.ts
 ```
 
 Expected: PASS. Two containers spin up, both verify backfill correctness and idempotency, both assert the AdminAudit row.
@@ -1524,7 +1524,7 @@ git commit -m "test(db): cover garage spot backfill correctness, idempotency, an
 - [ ] **Step 2: Typecheck the API**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -1581,8 +1581,8 @@ Master plan: plans/garage-spots/TASK-A-schema-and-backfill.md.
 
 ## Test plan
 
-- [x] `pnpm --filter @jdm/shared test` — Zod unit tests
-- [x] `pnpm --filter @jdm/api test` — singleton + backfill integration
+- [x] `pnpm --filter @ccc/shared test` — Zod unit tests
+- [x] `pnpm --filter @ccc/api test` — singleton + backfill integration
 - [x] `pnpm -r typecheck && pnpm -r lint`
 EOF
 )"
@@ -1600,7 +1600,7 @@ EOF
 
 3. **`AdminAudit.actorId='system'` for backfill.** The current schema has no FK on `actorId` (verified — see `schema.prisma` lines 314–326), so the synthetic `'system'` value is safe. If a future migration adds an FK from `AdminAudit.actorId → User.id`, this insert breaks. Mitigation: when that FK is introduced (not in scope here), update the backfill migration retroactively or insert a "system" user beforehand.
 
-4. **Seed import path.** The seed uses a relative import (`'../src/garage-spot-product.js'`) rather than `@jdm/db`. The existing `seed.ts` uses only `@prisma/client` — no `@jdm/db` self-imports exist. Relative path avoids any circular-resolution edge cases under `tsx`. Build `@jdm/db` before running the seed.
+4. **Seed import path.** The seed uses a relative import (`'../src/garage-spot-product.js'`) rather than `@ccc/db`. The existing `seed.ts` uses only `@prisma/client` — no `@ccc/db` self-imports exist. Relative path avoids any circular-resolution edge cases under `tsx`. Build `@ccc/db` before running the seed.
 
 5. **`gs_bf_<carId>` id length.** Car ids are cuids (~25 chars). Combined with the prefix the GarageSpot id stays at ~31 chars — well under the typical `TEXT` column limit. No issue, but worth a sanity check during code review.
 
@@ -1647,5 +1647,5 @@ No findings pushed back. All 8 reviewer findings were verified correct against t
 4. carSchema.tier required breaks existing serializers -- confirmed: `serializeCar` in `apps/api/src/routes/cars.ts` has no GarageSpot join; `apps/mobile/src/api/cars.ts` and three test files call `carSchema.parse(...)`. Making tier required here would break all of them immediately.
 5. TASK-C in unblock map omission -- confirmed: the table had no TASK-C row for settlement creating GarageSpot rows.
 6. TASK-C Zod schema gap -- confirmed: `fulfillmentStatusSchema` in `packages/shared/src/orders.ts` does not include `virtual_complete`; TASK-C must extend it.
-7. Seed relative import -- confirmed: existing `seed.ts` has zero `@jdm/db` imports; relative path is the correct primary.
+7. Seed relative import -- confirmed: existing `seed.ts` has zero `@ccc/db` imports; relative path is the correct primary.
 8. Dead throw after assertVirtualSingletonProtected -- confirmed: the guard always throws when slug matches; the subsequent `throw new Error(...)` was unreachable.

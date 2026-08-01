@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminStoreProductPhotoCreateSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminStoreProductPhotoCreateSchema } from '@ccc/shared/admin';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../../plugins/auth.js';

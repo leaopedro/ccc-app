@@ -6,7 +6,7 @@
 
 **Architecture:** dual-provider (Stripe direct + RevenueCat for iOS), single `PremiumMembership` table per garage (one live row enforced by partial unique index; expired rows persist as history), normalized `BillingEvent` adapter funneling both webhook surfaces into one `applyMembershipEvent(tx, evt)` service. Activation tx is atomic (Membership + Invoice + Garage snapshot + XP); ticket backfill runs post-commit via a background worker. Reconciliation sweep closes drift windows hourly. Admin financial dashboard adds membership KPIs, filters, payment-mix rows, and a new `/financeiro/membros` page.
 
-**Tech stack:** Prisma + Postgres (real DB in tests via Testcontainers), Fastify (api), Next.js App Router (admin), Expo RN (mobile), Stripe Node SDK + Stripe RN SDK, `react-native-purchases` (RevenueCat SDK), existing background worker infra in `apps/api/src/workers/`, existing devfee abstraction in `apps/api/src/services/pricing/dev-fee.ts`, zod schemas in `@jdm/shared`.
+**Tech stack:** Prisma + Postgres (real DB in tests via Testcontainers), Fastify (api), Next.js App Router (admin), Expo RN (mobile), Stripe Node SDK + Stripe RN SDK, `react-native-purchases` (RevenueCat SDK), existing background worker infra in `apps/api/src/workers/`, existing devfee abstraction in `apps/api/src/services/pricing/dev-fee.ts`, zod schemas in `@ccc/shared`.
 
 ## Status / readiness
 
@@ -41,9 +41,9 @@ All chunk plans MUST conform to these. Where spec inline text drifts, canon wins
 
 **§F8.11 — Feature flag.** All F8 routes + webhook handlers + background workers gate on `env.GROWTH_PREMIUM_BILLING_ENABLED` (default `false`). Disabled state: webhook routes return 200 OK + log + skip; mobile/web subscribe routes return 503 + maintenance message. Flag flips on AFTER all 19 chunks land + smoke passes (chunk F8.19). Add to `apps/api/src/env.ts` zod schema in chunk F8.01.
 
-**§F8.12 — Filtered test + lint commands.** Same as Phase 2 §10: `pnpm --filter <pkg> exec vitest run <PACKAGE-ROOT-RELATIVE>`. Mobile is `@jdm/mobile`. Never use `pnpm --filter X test -- ...` (drops args).
+**§F8.12 — Filtered test + lint commands.** Same as Phase 2 §10: `pnpm --filter <pkg> exec vitest run <PACKAGE-ROOT-RELATIVE>`. Mobile is `@ccc/mobile`. Never use `pnpm --filter X test -- ...` (drops args).
 
-**§F8.13 — Rebuild @jdm/shared after schema changes.** Schema migrations or new `packages/shared/src/*.ts` exports require `pnpm --filter @jdm/shared build` before any downstream package's tests are accurate. Phase 2 lesson recorded in handoff. Chunks F8.01, F8.02, F8.11 all touch shared exports.
+**§F8.13 — Rebuild @ccc/shared after schema changes.** Schema migrations or new `packages/shared/src/*.ts` exports require `pnpm --filter @ccc/shared build` before any downstream package's tests are accurate. Phase 2 lesson recorded in handoff. Chunks F8.01, F8.02, F8.11 all touch shared exports.
 
 **§F8.14 — UI dep + harness.** Any new mobile/UI dep (e.g. `react-native-purchases`) lands in both `apps/mobile/package.json` AND `pnpm-lock.yaml` in the same chunk. UI test harness reuses mobile mocks from `packages/ui/src/__tests__/BadgeRow.test.tsx`. (Phase 2 §13 carryover.)
 
@@ -140,18 +140,18 @@ If Phase 2D ever ships in parallel, coordinate the React-pin alignment timing wi
 - `packages/shared/src/premium.ts` (NEW) — zod skeletons (empty exports; chunk F8.11 populates).
 - `packages/shared/src/index.ts` — re-export `./premium`.
 
-**Done when:** Prisma client regenerates; `@jdm/shared` builds (canon §F8.13); migration applies cleanly on a test DB; both partial unique indexes created; env zod parses with new vars defaulted.
+**Done when:** Prisma client regenerates; `@ccc/shared` builds (canon §F8.13); migration applies cleanly on a test DB; both partial unique indexes created; env zod parses with new vars defaulted.
 
 **Tests:** `packages/db/test/schema.test.ts` (extend) — assert partial unique index existence via `pg_indexes` query; `apps/api/test/env.test.ts` (extend) — assert feature-flag default `false`.
 
 **Verification:**
 
 ```
-pnpm --filter @jdm/db run db:migrate
-pnpm --filter @jdm/db build
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/db exec vitest run test/schema.test.ts
-pnpm --filter @jdm/api exec vitest run test/env.test.ts
+pnpm --filter @ccc/db run db:migrate
+pnpm --filter @ccc/db build
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/db exec vitest run test/schema.test.ts
+pnpm --filter @ccc/api exec vitest run test/env.test.ts
 ```
 
 **Canon refs:** §F8.8, §F8.11, §F8.13. Spec §2 (full schema text), §9 (migration plan).
@@ -174,8 +174,8 @@ pnpm --filter @jdm/api exec vitest run test/env.test.ts
 **Verification:**
 
 ```
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/billing/billing-event-types.test.ts
 ```
 
 **Canon refs:** §F8.13. Spec §3.2, §3.3, §3.4.
@@ -197,7 +197,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/billing-event-types.test.ts
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts test/billing/premium-activation-idempotency.test.ts
 ```
 
 **Canon refs:** §F8.2, §F8.3, §F8.4, §F8.5, §F8.6, §F8.15. Spec §3, §4.1, §4.3, §4.4, §4.7.
@@ -220,7 +220,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts
 ```
 
 **Canon refs:** §F8.10, §F8.11, §F8.15. Spec §3.1, §3.3, §4.5.
@@ -241,7 +241,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/revenuecat-webhook.test.ts
 ```
 
 **Canon refs:** §F8.9, §F8.11, §F8.15. Spec §3.1, §3.4.
@@ -263,7 +263,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.ts src/workers/premium-ticket-backfill.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event.test.ts src/workers/premium-ticket-backfill.test.ts
 ```
 
 **Canon refs:** §F8.4, §F8.7, §F8.8. Spec §4.2.
@@ -283,7 +283,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event.test.
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-event-publish-grant.test.ts test/admin/events.test.ts
 ```
 
 **Canon refs:** §F8.7, §F8.8. Spec §4.6.
@@ -305,8 +305,8 @@ pnpm --filter @jdm/api exec vitest run src/workers/premium-event-publish-grant.t
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/admin/events.test.ts
-pnpm --filter @jdm/admin exec vitest run app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx
+pnpm --filter @ccc/api exec vitest run test/admin/events.test.ts
+pnpm --filter @ccc/admin exec vitest run app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx
 ```
 
 **Canon refs:** §F8.7. Spec §2.5.
@@ -330,7 +330,7 @@ pnpm --filter @jdm/admin exec vitest run app/\(authed\)/events/\[id\]/__tests__/
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium.test.ts
 ```
 
 **Canon refs:** §F8.11. Spec §5, §8.2.
@@ -351,7 +351,7 @@ pnpm --filter @jdm/api exec vitest run test/billing/me-premium.test.ts
 **Verification:**
 
 ```
-pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx
 ```
 
 **Canon refs:** §F8.14, §F8.16. Spec §8.1.
@@ -372,8 +372,8 @@ pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/billing/me-premium-status.test.ts
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/api exec vitest run test/billing/me-premium-status.test.ts
+pnpm --filter @ccc/shared build
 ```
 
 **Canon refs:** §F8.13. Spec §8.3.
@@ -396,7 +396,7 @@ pnpm --filter @jdm/shared build
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/billing-reconcile.test.ts
 ```
 
 **Canon refs:** §F8.4, §F8.11. Spec §6.
@@ -418,8 +418,8 @@ pnpm --filter @jdm/api exec vitest run src/workers/billing-reconcile.test.ts
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/admin/finance-summary-memberships.test.ts
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/api exec vitest run test/admin/finance-summary-memberships.test.ts
+pnpm --filter @ccc/shared build
 ```
 
 **Canon refs:** §F8.1, §F8.13. Spec §7.1, §7.3.
@@ -439,8 +439,8 @@ pnpm --filter @jdm/shared build
 **Verification:**
 
 ```
-pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts
+pnpm --filter @ccc/shared build
 ```
 
 **Canon refs:** §F8.13. Spec §7.1.
@@ -462,7 +462,7 @@ pnpm --filter @jdm/shared build
 **Verification:**
 
 ```
-pnpm --filter @jdm/admin exec vitest run app/\(authed\)/financeiro/components/__tests__/
+pnpm --filter @ccc/admin exec vitest run app/\(authed\)/financeiro/components/__tests__/
 ```
 
 **Canon refs:** Spec §7.2.
@@ -482,7 +482,7 @@ pnpm --filter @jdm/admin exec vitest run app/\(authed\)/financeiro/components/__
 **Verification:**
 
 ```
-pnpm --filter @jdm/admin exec vitest run app/\(authed\)/financeiro/membros/__tests__/ src/components/__tests__/garage-membership-history.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/\(authed\)/financeiro/membros/__tests__/ src/components/__tests__/garage-membership-history.test.tsx
 ```
 
 **Canon refs:** Spec §7.2.
@@ -505,7 +505,7 @@ pnpm --filter @jdm/admin exec vitest run app/\(authed\)/financeiro/membros/__tes
 **Verification:**
 
 ```
-pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/premium/__tests__/page.test.tsx
 ```
 
 **Canon refs:** §F8.11. Spec §8.2.
@@ -527,7 +527,7 @@ pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
 **Verification:**
 
 ```
-pnpm --filter @jdm/mobile exec vitest run src/screens/settings/PremiumScreen.test.tsx test/lint/ios-stripe-isolation.test.ts
+pnpm --filter @ccc/mobile exec vitest run src/screens/settings/PremiumScreen.test.tsx test/lint/ios-stripe-isolation.test.ts
 ```
 
 **Canon refs:** §F8.11, §F8.14, §F8.16. Spec §8.1.

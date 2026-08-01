@@ -51,7 +51,7 @@ grep -n "SubscriptionWebhookEvent\|PremiumMembershipInvoice\|PremiumProvider" \
   node_modules/@prisma/client/index.d.ts | head -10
 ```
 
-Expected: at least one match per model. If none: F8.01 migration did not regenerate the client — run `pnpm --filter @jdm/db run db:generate`.
+Expected: at least one match per model. If none: F8.01 migration did not regenerate the client — run `pnpm --filter @ccc/db run db:generate`.
 
 - [ ] **Pre-flight 4: Confirm env vars exist**
 
@@ -131,7 +131,7 @@ describe('constructWebhookEvent — secret override', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts`
 Expected: FAIL — `constructWebhookEvent` does not accept a third argument yet (TS error or runtime failure).
 
 - [ ] **Step 2: Update `StripeClient` type and `constructWebhookEvent` implementation**
@@ -180,12 +180,12 @@ const notification = stripe.parseEventNotification(
 
 - [ ] **Step 3: Run test to confirm pass**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts`
 Expected: 2 PASS.
 
 - [ ] **Step 4: Confirm existing stripe webhook tests still pass (no regression)**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/stripe-webhook.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/stripe-webhook.test.ts`
 Expected: all existing tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -476,7 +476,7 @@ describe('normalizeStripeEvent', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/normalize-stripe.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: failures — stub throws `Error('not implemented')` (per F8.02 spec).
 
 - [ ] **Step 2: Define the refund marker type and implement `normalizeStripeEvent`**
@@ -749,12 +749,12 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
 
 - [ ] **Step 3: Run normalizer tests; confirm all pass**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/normalize-stripe.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: all tests PASS.
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: 0 errors. If `satisfies` expressions fail, the `BillingEvent` type from F8.02 may have different field names — re-check `types.ts` and align the field names here.
 
 - [ ] **Step 5: Commit**
@@ -803,7 +803,7 @@ Write all route-level tests before creating the route. Tests hit a real Postgres
 
 import crypto from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1475,7 +1475,7 @@ function buildStripeTestOverride(customerId: string, garageId: string) {
 }
 ```
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts`
 Expected: compile errors and/or 12 failing tests — the route does not exist yet, `makeApp` does not accept `env` partial override, and `buildStripeTestOverride` shape differs from `StripeClient`. Confirm at least one failure per test to validate test grip.
 
 **Note on test helpers:** The tests above reference `makeApp({ env: {...}, stripe: ... })` and `makeApp` may not currently support partial env overrides. Check `apps/api/test/helpers.ts` to understand the exact signature; if it does not support env partial, you will adjust Task 4 to inject `STRIPE_BILLING_WEBHOOK_SECRET` as a test env var rather than a per-test override. The signature verification helper in the test (`buildStripeSignedPayload`) must use the same secret that the route reads. Adjust as needed when you inspect `helpers.ts`.
@@ -1525,7 +1525,7 @@ retrieveCustomer: async (customerId) => {
 
 ```ts
 // apps/api/src/routes/stripe-billing-webhook.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import type { FastifyPluginAsync } from 'fastify';
@@ -1776,12 +1776,12 @@ await app.register(abacatepayWebhookRoutes);
 
 - [ ] **Step 6: Typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: 0 errors. Common failure: `STRIPE_BILLING_WEBHOOK_SECRET` not yet on `Env` type — confirm F8.01 added it; if not, add it here. Also: `StripeClient.retrieveCustomer` may need to be added to the `declare module 'fastify'` block (it's on the `StripeClient` type, which is already declared; this should work automatically).
 
 - [ ] **Step 7: Run the route integration tests**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts`
 
 Expected: failing tests will identify mismatches between the test helpers and the implementation. Work through failures systematically:
 
@@ -1791,7 +1791,7 @@ Expected: failing tests will identify mismatches between the test helpers and th
 
 - [ ] **Step 8: Run the existing `stripe-webhook.test.ts` for regression**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/stripe-webhook.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/stripe-webhook.test.ts`
 Expected: all existing tests PASS.
 
 - [ ] **Step 9: Commit**
@@ -1808,24 +1808,24 @@ git commit -m "feat(api): POST /webhooks/stripe-billing route + applyInvoiceRefu
 
 ## Task 5 — Full verification sweep
 
-- [ ] **Step 1: Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 1: Rebuild `@ccc/shared` (canon §F8.13)**
 
-Run: `pnpm --filter @jdm/shared build`
+Run: `pnpm --filter @ccc/shared build`
 Expected: clean build. This chunk does not add shared types, but running it ensures nothing upstream regressed.
 
 - [ ] **Step 2: Typecheck all modified packages**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 3: Run all F8.04 tests**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts test/billing/normalize-stripe.test.ts test/billing/stripe-construct-webhook-event.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts test/billing/normalize-stripe.test.ts test/billing/stripe-construct-webhook-event.test.ts`
 Expected: all PASS.
 
 - [ ] **Step 4: Run the touched neighborhood for regression**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/stripe-webhook.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/stripe-webhook.test.ts`
 Expected: all existing tests PASS.
 
 > Do NOT run the full test suite locally (memory rule: "Never run full test suite locally"). CI on the PR covers the full sweep.
@@ -1860,12 +1860,12 @@ gh pr create --base main --title "feat(api): F8.04 — Stripe billing webhook ro
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/normalize-stripe.test.ts` (all pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts` (12 pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts` (2 pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/stripe-webhook.test.ts` (no regression)
-- [ ] `pnpm --filter @jdm/api typecheck` clean
-- [ ] `pnpm --filter @jdm/shared build` clean
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/normalize-stripe.test.ts` (all pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts` (12 pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/stripe-construct-webhook-event.test.ts` (2 pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/stripe-webhook.test.ts` (no regression)
+- [ ] `pnpm --filter @ccc/api typecheck` clean
+- [ ] `pnpm --filter @ccc/shared build` clean
 - [ ] CI green
 
 ## Canon compliance

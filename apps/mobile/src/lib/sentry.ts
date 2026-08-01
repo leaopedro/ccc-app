@@ -1,4 +1,4 @@
-import { scrubSentryEvent } from '@jdm/shared/sentry-scrubber';
+import { scrubSentryEvent } from '@ccc/shared/sentry-scrubber';
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
 

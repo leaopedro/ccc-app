@@ -5,7 +5,7 @@ import type {
   ClearCartResponse,
   GetCartResponse,
   UpsertCartItemResponse,
-} from '@jdm/shared/cart';
+} from '@ccc/shared/cart';
 import {
   beginCheckoutRequestSchema,
   beginCheckoutResponseSchema,
@@ -13,7 +13,7 @@ import {
   clearCartResponseSchema,
   getCartResponseSchema,
   upsertCartItemResponseSchema,
-} from '@jdm/shared/cart';
+} from '@ccc/shared/cart';
 
 import { authedRequest } from './client';
 

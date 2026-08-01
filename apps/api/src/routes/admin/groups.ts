@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminGroupAddMemberSchema,
   adminGroupCreateSchema,
@@ -6,7 +6,7 @@ import {
   adminGroupListResponseSchema,
   adminGroupMembersResponseSchema,
   adminGroupUpdateSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

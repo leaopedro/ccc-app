@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 
 type Tx = Prisma.TransactionClient;

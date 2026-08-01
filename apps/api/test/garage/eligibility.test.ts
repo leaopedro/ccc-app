@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -147,7 +147,7 @@ describe('eligibility/feed.checkEligibility', () => {
 });
 
 describe('eligibility/signup.checkEligibility', () => {
-  it('yields JDM-003 when User.createdAt is strictly before the cutoff', () => {
+  it('yields CCC-003 when User.createdAt is strictly before the cutoff', () => {
     const before = new Date(FOUNDER_CUTOFF.getTime() - 86_400_000);
     const codes = checkSignupEligibility(
       // tx isn't read by this helper.
@@ -155,10 +155,10 @@ describe('eligibility/signup.checkEligibility', () => {
       'u1',
       before,
     );
-    expect(codes).toEqual(['JDM-003']);
+    expect(codes).toEqual(['CCC-003']);
   });
 
-  it('does NOT yield JDM-003 when User.createdAt is exactly the cutoff', () => {
+  it('does NOT yield CCC-003 when User.createdAt is exactly the cutoff', () => {
     const codes = checkSignupEligibility(
       undefined as unknown as Parameters<typeof checkSignupEligibility>[0],
       'u2',
@@ -167,7 +167,7 @@ describe('eligibility/signup.checkEligibility', () => {
     expect(codes).toEqual([]);
   });
 
-  it('does NOT yield JDM-003 when User.createdAt is after the cutoff', () => {
+  it('does NOT yield CCC-003 when User.createdAt is after the cutoff', () => {
     const after = new Date(FOUNDER_CUTOFF.getTime() + 86_400_000);
     const codes = checkSignupEligibility(
       undefined as unknown as Parameters<typeof checkSignupEligibility>[0],
@@ -260,7 +260,7 @@ describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
     expect(codes).not.toContain('EVT-002');
   });
 
-  it('JDM-001 fires on Curitiba event', async () => {
+  it('CCC-001 fires on Curitiba event', async () => {
     const { user } = await createUser({ email: 'ctba@jdm.test', verified: true });
     const e = await makeEvent('curitiba-meet', new Date('2026-05-10T10:00:00Z'), {
       city: 'Curitiba',
@@ -268,10 +268,10 @@ describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
     const t = await makeTier(e.id, 'GA');
     const trigger = await makeUsedTicket(user.id, e.id, t.id, new Date('2026-05-10T11:00:00Z'));
     const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id));
-    expect(codes).toContain('JDM-001');
+    expect(codes).toContain('CCC-001');
   });
 
-  it('JDM-002 fires on drift-type event', async () => {
+  it('CCC-002 fires on drift-type event', async () => {
     const { user } = await createUser({ email: 'drift@jdm.test', verified: true });
     const e = await makeEvent('drift-meet', new Date('2026-05-10T10:00:00Z'), {
       type: 'drift',
@@ -279,6 +279,6 @@ describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
     const t = await makeTier(e.id, 'GA');
     const trigger = await makeUsedTicket(user.id, e.id, t.id, new Date('2026-05-10T11:00:00Z'));
     const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id));
-    expect(codes).toContain('JDM-002');
+    expect(codes).toContain('CCC-002');
   });
 });

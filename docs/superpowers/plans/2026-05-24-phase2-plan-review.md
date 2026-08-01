@@ -9,7 +9,7 @@
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-23-garage-xp-columns.md
 
 - Task 3.1: BLOCK: Each test calls `createUser()` then creates a second `Garage` for the same `userId`, but `Garage.userId` is unique. Fix: Reuse the helper-created garage via `findUniqueOrThrow({ where: { userId: user.id } })`.
-- Task 3.1: BLOCK: The test types `reasons` as `Prisma.XpReason[]`, but Prisma enums are top-level types and `@jdm/db` does not export `XpReason`. Fix: Import `type { XpReason }` from `@prisma/client` or re-export it from `@jdm/db`.
+- Task 3.1: BLOCK: The test types `reasons` as `Prisma.XpReason[]`, but Prisma enums are top-level types and `@ccc/db` does not export `XpReason`. Fix: Import `type { XpReason }` from `@prisma/client` or re-export it from `@ccc/db`.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-24-shared-zod-progress-stats.md
 
@@ -53,7 +53,7 @@
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-36-xp-scoreboard-component.md
 
-- File structure: BLOCK: The plan imports `expo-linear-gradient` from `@jdm/ui` but excludes `packages/ui/package.json`, so the package dependency remains undeclared. Fix: Add `packages/ui/package.json` and lockfile updates for `expo-linear-gradient`.
+- File structure: BLOCK: The plan imports `expo-linear-gradient` from `@ccc/ui` but excludes `packages/ui/package.json`, so the package dependency remains undeclared. Fix: Add `packages/ui/package.json` and lockfile updates for `expo-linear-gradient`.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-39-profile-stats-wrapper.md
 
@@ -98,8 +98,8 @@
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-26-garage-progress-service.md
 
 - Goal: MAJOR: `getGarageProgress(client, garageId)` drifts from chunk 28, which calls `getGarageProgress(garage.id)`, so route wiring will not typecheck. Fix: Standardize the contract, preferably `getGarageProgress(garageId, client = prisma)`, and update tests accordingly.
-- Verification: MAJOR: `pnpm --filter @jdm/api test -- apps/api/test/garage/progress.test.ts` uses a root-relative path while the filtered script runs from `apps/api`, so Vitest may find no tests. Fix: Use `pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts`.
-- Task 4: MAJOR: `pnpm --filter @jdm/api lint -- apps/api/test/garage/progress.test.ts apps/api/src/services/garage/progress.ts` is wrong for this package script and path base. Fix: Use `pnpm --filter @jdm/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts`.
+- Verification: MAJOR: `pnpm --filter @ccc/api test -- apps/api/test/garage/progress.test.ts` uses a root-relative path while the filtered script runs from `apps/api`, so Vitest may find no tests. Fix: Use `pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts`.
+- Task 4: MAJOR: `pnpm --filter @ccc/api lint -- apps/api/test/garage/progress.test.ts apps/api/src/services/garage/progress.ts` is wrong for this package script and path base. Fix: Use `pnpm --filter @ccc/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts`.
 - Branch + preflight: MAJOR: The plan omits the chunk 23 dependency check for `Garage.xp`, yet this chunk edits no Prisma schema and will fail before chunk 23 lands. Fix: Add a preflight that stops unless chunk 23 migration and generated Prisma `Garage.xp` are present.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-27-xp-awarder-service.md
@@ -149,19 +149,19 @@
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-36-xp-scoreboard-component.md
 
-- Task 3 — Tests: MAJOR: The mobile commands use nonexistent filter `@jdm/jdma-mobile`, so verification will not run. Fix: Replace it with `@jdm/mobile`.
-- Task 3 — Tests: MAJOR: `pnpm ... test -- XPScoreboard.test.tsx` runs the full mobile suite with the current script, violating touched-paths-only. Fix: Use `pnpm --filter @jdm/mobile exec vitest run XPScoreboard.test.tsx --passWithNoTests`.
+- Task 3 — Tests: MAJOR: The mobile commands use nonexistent filter `@ccc/jdma-mobile`, so verification will not run. Fix: Replace it with `@ccc/mobile`.
+- Task 3 — Tests: MAJOR: `pnpm ... test -- XPScoreboard.test.tsx` runs the full mobile suite with the current script, violating touched-paths-only. Fix: Use `pnpm --filter @ccc/mobile exec vitest run XPScoreboard.test.tsx --passWithNoTests`.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-37-stats-row-component.md
 
-- Task 1 — Helper `formatJoinedAt`: MAJOR: The proposed test mock does not mirror `BadgeRow.test.tsx`; importing `@jdm/ui` will also load exports that require `ActivityIndicator`, `Image`, `Modal`, `ScrollView`, and `react-native-svg`, so the tests can fail before reaching `StatsRow`. Fix: Copy the existing `BadgeRow.test.tsx` RN/SVG mocks and add `Platform` for `StatsRow`.
-- Task 1 — Helper `formatJoinedAt`: MAJOR: Every `pnpm --filter @jdm/mobile test -- apps/mobile/src/...` command uses a repo-root path, but filtered package scripts run from `apps/mobile`; with `--passWithNoTests`, Vitest exits 0 after running zero tests. Fix: Use `src/screens/garage/__tests__/StatsRow.test.tsx` in all filtered mobile test commands.
+- Task 1 — Helper `formatJoinedAt`: MAJOR: The proposed test mock does not mirror `BadgeRow.test.tsx`; importing `@ccc/ui` will also load exports that require `ActivityIndicator`, `Image`, `Modal`, `ScrollView`, and `react-native-svg`, so the tests can fail before reaching `StatsRow`. Fix: Copy the existing `BadgeRow.test.tsx` RN/SVG mocks and add `Platform` for `StatsRow`.
+- Task 1 — Helper `formatJoinedAt`: MAJOR: Every `pnpm --filter @ccc/mobile test -- apps/mobile/src/...` command uses a repo-root path, but filtered package scripts run from `apps/mobile`; with `--passWithNoTests`, Vitest exits 0 after running zero tests. Fix: Use `src/screens/garage/__tests__/StatsRow.test.tsx` in all filtered mobile test commands.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-38-xp-tooltip-component.md
 
 - Blur deviation (locked): MAJOR: It drops the required Phase 2 §2C.38 backdrop blur without a C1-C14 correction. Fix: Keep blur in scope, or amend the authoritative outline first.
 - File structure: MAJOR: The plan limits work to five paths, but Task 1 requires `pnpm-lock.yaml`. Fix: Add `pnpm-lock.yaml` to allowed paths, or remove new dependency installs.
-- Task 1 — Vitest harness for @jdm/ui: MAJOR: The proposed config does not mirror mobile and omits the `lucide-react-native` test stub needed by imported icons. Fix: Copy the relevant mobile Vitest alias setup into `@jdm/ui`.
+- Task 1 — Vitest harness for @ccc/ui: MAJOR: The proposed config does not mirror mobile and omits the `lucide-react-native` test stub needed by imported icons. Fix: Copy the relevant mobile Vitest alias setup into `@ccc/ui`.
 - Task 3 — Implement XP_RULES + XPRule (no component yet): MAJOR: The expected partial pass is impossible because tests statically import missing `XPTooltip`. Fix: Add a temporary export stub, split tests, or change the staged failure expectation.
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-40-owner-mobile-integration.md
@@ -214,7 +214,7 @@
 
 ### docs/superpowers/plans/2026-05-24-phase2-chunks/chunk-32-awarder-feed-post-like-unlike.md
 
-- Verification: MINOR: `pnpm --filter @jdm/api lint -- apps/api/src/routes/feed.ts apps/api/test/garage/awarder-feed-post-like.test.ts` passes package-root-relative paths to a script that already runs `eslint src`, so the test path and prefixed paths are wrong. Fix: Use `pnpm --filter @jdm/api exec eslint src/routes/feed.ts test/garage/awarder-feed-post-like.test.ts`.
+- Verification: MINOR: `pnpm --filter @ccc/api lint -- apps/api/src/routes/feed.ts apps/api/test/garage/awarder-feed-post-like.test.ts` passes package-root-relative paths to a script that already runs `eslint src`, so the test path and prefixed paths are wrong. Fix: Use `pnpm --filter @ccc/api exec eslint src/routes/feed.ts test/garage/awarder-feed-post-like.test.ts`.
 
 ## Cross-chunk consistency matrix
 
@@ -229,7 +229,7 @@
 | `sourceRef` idempotency relies on nullable schema.                                                   | Skeleton, `chunk-23`, `chunk-27`, `chunk-35`.                                                         | §C1/§C7 require DB-enforced idempotency; require non-null server-generated `sourceRef` for every awarder/admin write, even if schema remains nullable for migration compatibility.                          |
 | GeneralSettings singleton id is inconsistent.                                                        | `chunk-30`, `chunk-31`, `chunk-32`; chunk 28 uses the shared constant.                                | Use `GENERAL_SETTINGS_SINGLETON_ID` everywhere, never numeric `id: 1`.                                                                                                                                      |
 | Feed/event fixtures omit required event access fields.                                               | `chunk-31`, `chunk-32`.                                                                               | Mirror existing feed tests with valid `Event.type`, `capacity`, published status, and either `feedAccess: 'public'` or a valid ticket for attendee-only access.                                             |
-| Filtered package test and lint commands use repo-root paths or wrong package names.                  | `chunk-26`, `chunk-28`, `chunk-36`, `chunk-37`, `chunk-38`; `chunk-32` lint.                          | Use package-root-relative paths with `pnpm --filter <pkg> exec vitest run ...` and `pnpm --filter <pkg> exec eslint ...`; mobile package is `@jdm/mobile`.                                                  |
+| Filtered package test and lint commands use repo-root paths or wrong package names.                  | `chunk-26`, `chunk-28`, `chunk-36`, `chunk-37`, `chunk-38`; `chunk-32` lint.                          | Use package-root-relative paths with `pnpm --filter <pkg> exec vitest run ...` and `pnpm --filter <pkg> exec eslint ...`; mobile package is `@ccc/mobile`.                                                  |
 | XP regression test filenames drift from skeleton names.                                              | `chunk-29`, `chunk-30`, `chunk-31`, `chunk-32`.                                                       | Use skeleton names consistently: `xp-event-checkin.test.ts`, `xp-car-create.test.ts`, `xp-post-create.test.ts`, and the agreed post-like test filename.                                                     |
 | Tooltip interaction contract is not shared for mobile and SSR.                                       | Skeleton, `chunk-36`, `chunk-38`, `chunk-39`, `chunk-41`.                                             | Define a shared optional handler or `tooltipMode` contract; mobile can open modal, SSR/static web can render a non-interactive `?` without owning modal state.                                              |
 | UI package dependency and harness setup drift.                                                       | `chunk-36`, `chunk-38`, `chunk-37`.                                                                   | Any new UI dependency must update `packages/ui/package.json` and lockfile; UI tests should reuse mobile/RN/SVG mocks including `lucide-react-native` stubs.                                                 |

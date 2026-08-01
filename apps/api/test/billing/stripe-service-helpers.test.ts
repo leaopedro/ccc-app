@@ -88,7 +88,7 @@ describe('createSubscriptionCheckoutSession', () => {
     const client = buildStripe(testEnv);
     const result = await client.createSubscriptionCheckoutSession({
       customerId: 'cus_abc',
-      priceId: 'price_monthly',
+      priceIds: ['price_monthly'],
       successUrl: 'https://app.jdm.com/premium/success',
       cancelUrl: 'https://app.jdm.com/premium',
       metadata: { garageId: 'garage_1', userId: 'user_1' },
@@ -125,7 +125,7 @@ describe('createSubscriptionCheckoutSession', () => {
     await expect(
       client.createSubscriptionCheckoutSession({
         customerId: 'cus_abc',
-        priceId: 'price_monthly',
+        priceIds: ['price_monthly'],
         successUrl: 'https://app.jdm.com/premium/success',
         cancelUrl: 'https://app.jdm.com/premium',
         metadata: {},

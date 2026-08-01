@@ -29,7 +29,7 @@
 - The API key MUST be read from `Constants.expoConfig?.extra?.rcIosApiKey` (typed via a local `Extra` type), not from `process.env` directly at runtime. `app.config.ts` populates `extra.rcIosApiKey` from `process.env.EXPO_PUBLIC_RC_IOS_API_KEY`.
 - `react-native-purchases` MUST be added to `apps/mobile/package.json` AND the lock file updated in the same commit (canon §F8.14). The version pinned is `^10.1.2` (latest stable as of 2026-05-26 per npm registry).
 - This chunk does NOT write any screen code. `PremiumScreen` is F8.18's responsibility.
-- Tests run via `pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx` (canon §F8.12). Never run the full suite locally.
+- Tests run via `pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx` (canon §F8.12). Never run the full suite locally.
 - Do NOT reference Stripe URLs, `STRIPE_PUBLISHABLE_KEY`, or `checkout.stripe.com` anywhere in `apps/mobile/src/` (canon §F8.16).
 
 ---
@@ -345,7 +345,7 @@ In `apps/mobile/app.config.ts`, inside the `extra: { ... }` block (around line 1
 - [ ] **Step 4: install the new dep + update lock file**
 
 ```bash
-pnpm install --filter @jdm/mobile
+pnpm install --filter @ccc/mobile
 # Expected: react-native-purchases@10.x.x installed; pnpm-lock.yaml updated
 ```
 
@@ -378,7 +378,7 @@ Create `apps/mobile/src/lib/revenuecat.test.tsx` with the full content from §"C
 - [ ] **Step 2: run the tests — expect FAIL**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx
 # Expected: FAIL — "Cannot find module '../revenuecat'"
 ```
 
@@ -397,7 +397,7 @@ Create `apps/mobile/src/lib/revenuecat.ts` with the full content from §"Code sh
 - [ ] **Step 2: run the tests — expect PASS**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx
 # Expected: 10 passing (4 initRevenueCat + 3 fetchOfferings + 3 purchasePackage)
 ```
 
@@ -409,7 +409,7 @@ If any test fails, diagnose before moving on. Common failure modes:
 - [ ] **Step 3: typecheck the mobile workspace**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 # If 'react-native-purchases' types are not found: ensure the dep was installed
 # in Task 1. The package ships its own type declarations; no @types/* needed.
@@ -429,14 +429,14 @@ git commit -m "feat(mobile): revenuecat.ts iOS-only SDK wrapper + tests — init
 - [ ] **A. Run the touched test file**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx
 # Expected: 10 passing, 0 failing.
 ```
 
 - [ ] **B. Typecheck the mobile workspace**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
@@ -499,8 +499,8 @@ No "TBD", "TODO", "add appropriate error handling", or "similar to Task N" entri
 - [ ] Branch is `feat/jdma-f8-billing-10`, created from a fresh `main` (CLAUDE.md preflight).
 - [ ] Four files changed + lock file: `package.json`, `app.config.ts`, `revenuecat.ts`, `revenuecat.test.tsx`, `pnpm-lock.yaml`.
 - [ ] No edits outside the five touched paths.
-- [ ] `pnpm --filter @jdm/mobile exec vitest run src/lib/revenuecat.test.tsx` — 10 passing.
-- [ ] `pnpm --filter @jdm/mobile typecheck` — 0 errors.
+- [ ] `pnpm --filter @ccc/mobile exec vitest run src/lib/revenuecat.test.tsx` — 10 passing.
+- [ ] `pnpm --filter @ccc/mobile typecheck` — 0 errors.
 - [ ] `react-native-purchases` present in both `package.json` and `pnpm-lock.yaml` in the same commit (canon §F8.14).
 - [ ] Every function in `revenuecat.ts` guards on `Platform.OS !== 'ios'` as first statement (canon §F8.16).
 - [ ] `appUserID: garageId` — verified in test `'passes appUserID equal to the garageId argument'`.

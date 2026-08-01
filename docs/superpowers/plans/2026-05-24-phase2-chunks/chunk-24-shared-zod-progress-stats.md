@@ -14,7 +14,7 @@
 - `docs/superpowers/plans/2026-05-21-garage-progression-phase2-xp.md` §C10, §C12, §"API surface" (≈ line 370–404), §"Killswitch" (≈ line 502–515).
 - `/tmp/phase2-fix-canon.md` §1 (gamification top-level), §2 (progress/stats optional), §C10 review-MAJOR (response-level badges).
 - `CLAUDE.md` §"Branch safety preflight" + §"Git flow" (PR → `main`).
-- User memory: "Rebuild @jdm/shared after schema changes" — runtime resolves `dist/`; stale build masks zod break.
+- User memory: "Rebuild @ccc/shared after schema changes" — runtime resolves `dist/`; stale build masks zod break.
 
 ---
 
@@ -184,7 +184,7 @@ describe('garageStatsSchema', () => {
 - [ ] **Step 1.2: Run — must FAIL** with `Cannot find module '../garage-progress.js'`:
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage-progress.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage-progress.test.ts
 ```
 
 - [ ] **Step 1.3: Create `packages/shared/src/garage-progress.ts`:**
@@ -232,7 +232,7 @@ export type GarageStats = z.infer<typeof garageStatsSchema>;
 - [ ] **Step 1.4: Run — must PASS** (≈14 cases after `it.each` expansion):
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage-progress.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage-progress.test.ts
 ```
 
 - [ ] **Step 1.5: Commit:**
@@ -274,13 +274,13 @@ Replace with:
     "./feed": {
 ```
 
-Note: this uses §C12's canonical shape (`types: ./dist/.d.ts`, `import: ./dist/.js`) instead of the older source-pointing shape (`types: ./src/.ts`, `default: ./dist/.js`) used by neighboring entries. The new entry is correct per §C12; existing entries are not back-migrated in this chunk (out of scope). A `pnpm --filter @jdm/shared build` is required before any consumer can resolve the subpath because `types` now points at the emitted `.d.ts`.
+Note: this uses §C12's canonical shape (`types: ./dist/.d.ts`, `import: ./dist/.js`) instead of the older source-pointing shape (`types: ./src/.ts`, `default: ./dist/.js`) used by neighboring entries. The new entry is correct per §C12; existing entries are not back-migrated in this chunk (out of scope). A `pnpm --filter @ccc/shared build` is required before any consumer can resolve the subpath because `types` now points at the emitted `.d.ts`.
 
 - [ ] **Step 2.2: Verify JSON + rebuild + smoke** (CLAUDE.md memory rule — `dist/` MUST reflect new module):
 
 ```bash
 node -e "JSON.parse(require('fs').readFileSync('packages/shared/package.json','utf8'))"
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ls packages/shared/dist/garage-progress.{js,d.ts}
 ```
 
@@ -401,7 +401,7 @@ it('rejects owner read whose stats has bad joinedAt', () => {
 - [ ] **Step 3.2: Run — must FAIL** (`parsed.progress?.rank` is `undefined` — zod drops unknown keys on loose `.object`, and top-level `gamification` not yet declared):
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage.test.ts -t "owner read"
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage.test.ts -t "owner read"
 ```
 
 - [ ] **Step 3.3: Extend `packages/shared/src/garage.ts`** — add import alongside existing imports:
@@ -436,7 +436,7 @@ export const garageReadSchema = z.object({
 - [ ] **Step 3.4: Run — must PASS** (5 new + all existing):
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage.test.ts
 ```
 
 - [ ] **Step 3.5: Commit:**
@@ -554,7 +554,7 @@ describe('garagePublicResponseSchema (Phase 2 — progress + stats + top-level g
 - [ ] **Step 4.3: Run — must FAIL** on present-shape (unknown keys dropped, top-level fields not declared):
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage.test.ts -t "garagePublicResponseSchema (Phase 2"
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage.test.ts -t "garagePublicResponseSchema (Phase 2"
 ```
 
 - [ ] **Step 4.4: Extend `packages/shared/src/garage-public.ts`** — add imports alongside existing imports:
@@ -594,7 +594,7 @@ If `garageGamificationCapabilitySchema` is not already imported in `garage-publi
 - [ ] **Step 4.5: Run — must PASS** (no regressions):
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/garage.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/garage.test.ts
 ```
 
 - [ ] **Step 4.6: Commit:**
@@ -611,9 +611,9 @@ git commit -m "feat(shared): wire progress + stats + top-level gamification/badg
 - [ ] **Step 5.1: Final rebuild + typecheck + targeted vitest** (touched-files only per user memory; CI covers cross-package sweep). The barrel `src/index.ts` re-exports `garage.js` + `garage-public.js`; `garage-progress.js` is intentionally subpath-only (matches `garage-covers` precedent — do NOT add to the barrel).
 
 ```bash
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared typecheck
-pnpm --filter @jdm/shared exec vitest run \
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared typecheck
+pnpm --filter @ccc/shared exec vitest run \
   src/__tests__/garage-progress.test.ts \
   src/__tests__/garage.test.ts
 ```
@@ -637,7 +637,7 @@ gh pr create --base main --head feat/jdma-garage-phase2-24 \
 Phase 2 chunk 24 — pure-zod shared schemas for the new `progress` + `stats` payload blocks, plus the `./garage-progress` subpath export. Owner + public envelope schemas extended with both blocks as `.optional()` per §C10 so the killswitch-off branch still validates. Top-level `gamification` added to both envelopes per fix canon §1; top-level `badges` added to the public envelope per §C10 + plan review MAJOR.
 
 - New module `packages/shared/src/garage-progress.ts` — `garageProgressSchema` (xp / rank / nextRank / xpInTier / xpToNextRank / tierSpan) + `garageStatsSchema` (events / posts / likesReceived / joinedAt) + inferred TS types.
-- New subpath `@jdm/shared/garage-progress` in `packages/shared/package.json` `exports` (§C12 dist-pointing shape).
+- New subpath `@ccc/shared/garage-progress` in `packages/shared/package.json` `exports` (§C12 dist-pointing shape).
 - `garageReadSchema` carries `gamification`, `progress?`, `stats?`.
 - `garagePublicResponseSchema` carries `gamification`, `badges`, `progress?`, `stats?`.
 
@@ -658,9 +658,9 @@ No DB, no route, no UI. Chunks 25 / 26 / 28 wire them downstream.
 
 ## Verification
 
-- `pnpm --filter @jdm/shared build` — clean (CLAUDE.md memory rule).
-- `pnpm --filter @jdm/shared typecheck` — clean.
-- `pnpm --filter @jdm/shared exec vitest run src/__tests__/garage-progress.test.ts src/__tests__/garage.test.ts` — all green.
+- `pnpm --filter @ccc/shared build` — clean (CLAUDE.md memory rule).
+- `pnpm --filter @ccc/shared typecheck` — clean.
+- `pnpm --filter @ccc/shared exec vitest run src/__tests__/garage-progress.test.ts src/__tests__/garage.test.ts` — all green.
 
 ## Test plan
 
@@ -678,9 +678,9 @@ Expected: PR URL printed. CI on the PR runs the full cross-package sweep.
 
 ## Self-review
 
-- **Spec coverage:** all 5 acceptance criteria from skeleton §"Chunk 24" map to tasks — schema shapes (Task 1), envelope optional fields + top-level gamification + top-level badges (Tasks 3+4), subpath export (Task 2), `@jdm/shared` rebuild (Step 2.3 + 5.1).
+- **Spec coverage:** all 5 acceptance criteria from skeleton §"Chunk 24" map to tasks — schema shapes (Task 1), envelope optional fields + top-level gamification + top-level badges (Tasks 3+4), subpath export (Task 2), `@ccc/shared` rebuild (Step 2.3 + 5.1).
 - **Placeholders:** none — every step ships actual command + code.
 - **Type consistency:** the six `garageProgressSchema` fields are identical across Tasks 1 / 3 / 4; the four `garageStatsSchema` fields likewise. `.optional()` contract is identical on both envelopes. Top-level `gamification` schema reused (`garageGamificationCapabilitySchema`) on both envelopes.
 - **Deviation candidates:** three — listed in §"Deviations from the outline" and re-stated in the PR body.
 - **Integration test policy:** N/A — pure-zod, no Postgres needed.
-- **`@jdm/shared` rebuild gate:** Step 2.3 + Step 5.1 (CLAUDE.md memory rule). The §C12 export shape means consumers cannot resolve `./garage-progress` until `dist/garage-progress.d.ts` exists.
+- **`@ccc/shared` rebuild gate:** Step 2.3 + Step 5.1 (CLAUDE.md memory rule). The §C12 export shape means consumers cannot resolve `./garage-progress` until `dist/garage-progress.d.ts` exists.

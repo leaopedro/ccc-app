@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 
-// Singleton identifiers. Keep in @jdm/db so the seed (in this package) and any
+// Singleton identifiers. Keep in @ccc/db so the seed (in this package) and any
 // future admin guard (apps/api, TASK-H) share one source of truth.
 export const GARAGE_SPOT_PRODUCT_TYPE_NAME = 'garage_spot';
 export const GARAGE_SPOT_PRODUCT_SLUG = 'garage-spot';

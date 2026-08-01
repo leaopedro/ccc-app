@@ -3,7 +3,7 @@
 // with new garage primitives: parking-stall card, cover image, identity card,
 // 3 PremiumBadge directions, and the premium tier system (bronze/silver/gold).
 //
-// All components target the existing @jdm/ui surface. Style choices map 1:1
+// All components target the existing @ccc/ui surface. Style choices map 1:1
 // to either an existing token or a documented additive token in HANDOFF.md.
 
 const JDM = {
@@ -202,7 +202,7 @@ const SAMPLE_GARAGE = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Lucide-style icons (1.75 stroke, matches @jdm/ui Icon conventions)
+// Lucide-style icons (1.75 stroke, matches @ccc/ui Icon conventions)
 // ─────────────────────────────────────────────────────────────
 
 const Icon = {

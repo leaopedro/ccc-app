@@ -1,21 +1,17 @@
-import path from 'path';
+import { resolve } from 'node:path';
 
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
     alias: {
-      '~': path.resolve(__dirname, 'src'),
-      // Resolve @jdm/design from source so tests never depend on its built
-      // dist being present (the package ships dist for the Expo config loader,
-      // but vitest handles the TS source directly).
-      '@jdm/design': path.resolve(__dirname, '../../packages/design/src/index.ts'),
+      '~': resolve(__dirname, 'src'),
       // `lucide-react-native` ships ESM that vitest can't transform under
-      // jsdom. Once `BadgeGlyph` joined `@jdm/ui`'s barrel export, every
-      // mobile test that pulls anything from `@jdm/ui` started loading
+      // jsdom. Once `BadgeGlyph` joined `@ccc/ui`'s barrel export, every
+      // mobile test that pulls anything from `@ccc/ui` started loading
       // lucide transitively. The stub returns a Proxy-of-forwardRef so
       // the catalog can grow without revisiting this alias.
-      'lucide-react-native': path.resolve(__dirname, 'test-stubs/lucide-react-native.tsx'),
+      'lucide-react-native': resolve(__dirname, 'test-stubs/lucide-react-native.tsx'),
     },
   },
   // Test-only override: tsconfig sets jsx="react-native" for the Metro build,

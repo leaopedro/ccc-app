@@ -1,4 +1,4 @@
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

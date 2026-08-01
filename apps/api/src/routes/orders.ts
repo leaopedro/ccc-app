@@ -1,5 +1,4 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   createOrderRequestSchema,
   createOrderResponseSchema,
@@ -9,7 +8,7 @@ import {
   getOrderResponseSchema,
   resumeOrderResponseSchema,
   type TicketInput,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 import * as Sentry from '@sentry/node';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -24,6 +23,7 @@ import {
   PendingTicketOrderForEventError,
   findPendingTicketOrderForEvent,
 } from '../services/orders/pending-guard.js';
+import rateLimit from '@fastify/rate-limit';
 import { reserveExtras, validateTickets } from '../services/orders/validate-tickets.js';
 import { applyDevFee } from '../services/pricing/dev-fee.js';
 

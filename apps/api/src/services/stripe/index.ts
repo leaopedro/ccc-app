@@ -37,7 +37,11 @@ export type WebhookEvent = {
 
 export type CreateSubscriptionCheckoutSessionInput = {
   customerId: string;
-  priceId: string;
+  /**
+   * All recurring prices in the session, plan first. Every price MUST share the
+   * same interval and currency — Stripe rejects a mixed subscription session.
+   */
+  priceIds: string[];
   successUrl: string;
   cancelUrl: string;
   /**
@@ -70,6 +74,51 @@ export type CreateBillingPortalSessionInput = {
 
 export type BillingPortalSessionResult = {
   url: string;
+};
+
+/**
+ * Add a recurring add-on line to an existing subscription (P5 premium add-ons).
+ * priceId is resolved server-side from the add-on module catalog — never from a
+ * client-supplied value.
+ */
+export type AddSubscriptionItemInput = {
+  subscriptionId: string;
+  priceId: string;
+  idempotencyKey: string;
+};
+
+export type AddSubscriptionItemResult = {
+  subscriptionItemId: string;
+};
+
+/** Remove an add-on line from a subscription (P5 premium add-on detach). */
+export type RemoveSubscriptionItemInput = {
+  subscriptionItemId: string;
+  idempotencyKey: string;
+};
+
+/**
+ * Schedule cancellation at the end of the current paid period. Never cancels
+ * immediately: canon §F8.10 keeps entitlement alive until periodEnd. The DB is
+ * written by the resulting customer.subscription.updated webhook, not here.
+ *
+ * Deliberately does NOT return a period-end date. `current_period_end` is a
+ * per-SubscriptionItem field in Stripe SDK 2026-04-22.dahlia, not a
+ * subscription-wide one, and once a subscription carries add-on items
+ * (multi-item subscriptions, see addSubscriptionItem) there is no
+ * contractually-ordered "the plan item" to read it off safely. Scheduling a
+ * cancellation does not move the period boundary anyway, so callers that need
+ * the date should read `PremiumMembership.currentPeriodEnd` — the row this
+ * repo's canon already treats as the source of truth, kept in sync by the
+ * verified customer.subscription.updated webhook.
+ */
+export type CancelSubscriptionAtPeriodEndInput = {
+  subscriptionId: string;
+  idempotencyKey: string;
+};
+
+export type CancelSubscriptionAtPeriodEndResult = {
+  cancelAtPeriodEnd: boolean;
 };
 
 export type StripeClient = {
@@ -114,12 +163,32 @@ export type StripeClient = {
     customerId: string,
   ) => Promise<OpenSubscriptionCheckoutSession[]>;
   /**
+   * Expire an open Checkout Session. Used before minting a new subscription
+   * session so a member who abandoned checkout and changed their package is
+   * not pushed back into the stale one.
+   */
+  expireCheckoutSession: (sessionId: string) => Promise<void>;
+  /**
    * Retrieve a Stripe Price by ID. Used by the public pricing route (F8.20)
    * to read metadata (`baseAmountCents`, `devFeePercent`) at request time so
    * the UI shows whatever Stripe currently has configured, even if env
    * snapshot drift occurs.
    */
   retrievePrice: (priceId: string) => Promise<Stripe.Price>;
+  /**
+   * Add a recurring add-on item to an existing subscription (P5). Uses Stripe's
+   * default proration (`create_prorations`) so the customer is charged/credited
+   * the pro-rated delta immediately.
+   */
+  addSubscriptionItem: (input: AddSubscriptionItemInput) => Promise<AddSubscriptionItemResult>;
+  /**
+   * Remove an add-on item from a subscription (P5 detach). See the real impl
+   * for the proration-behavior choice.
+   */
+  removeSubscriptionItem: (input: RemoveSubscriptionItemInput) => Promise<void>;
+  cancelSubscriptionAtPeriodEnd: (
+    input: CancelSubscriptionAtPeriodEndInput,
+  ) => Promise<CancelSubscriptionAtPeriodEndResult>;
 };
 
 export type OpenSubscriptionCheckoutSession = {
@@ -289,7 +358,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     publishableKey: () => env.STRIPE_PUBLISHABLE_KEY ?? '',
     createSubscriptionCheckoutSession: async ({
       customerId,
-      priceId,
+      priceIds,
       successUrl,
       cancelUrl,
       metadata,
@@ -299,7 +368,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         {
           mode: 'subscription',
           customer: customerId,
-          line_items: [{ price: priceId, quantity: 1 }],
+          line_items: priceIds.map((price) => ({ price, quantity: 1 })),
           // subscription_data.metadata carries garageId so the F8.04 webhook
           // handler can resolve the garage on invoice.paid /
           // customer.subscription.* without an extra DB lookup. (Gap #15 in
@@ -356,8 +425,55 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         .filter((s) => s.mode === 'subscription')
         .map((s) => ({ id: s.id, url: s.url }));
     },
+    expireCheckoutSession: async (sessionId) => {
+      await stripe.checkout.sessions.expire(sessionId);
+    },
     retrievePrice: async (priceId) => {
       return stripe.prices.retrieve(priceId);
+    },
+    addSubscriptionItem: async ({ subscriptionId, priceId, idempotencyKey }) => {
+      // Stripe default proration_behavior for subscription-item create is
+      // 'create_prorations'; we set it explicitly so the pro-rated delta is
+      // charged/credited immediately when an add-on is attached mid-cycle.
+      const item = await stripe.subscriptionItems.create(
+        {
+          subscription: subscriptionId,
+          price: priceId,
+          quantity: 1,
+          proration_behavior: 'create_prorations',
+        },
+        { idempotencyKey },
+      );
+      return { subscriptionItemId: item.id };
+    },
+    removeSubscriptionItem: async ({ subscriptionItemId, idempotencyKey }) => {
+      // Proration-behavior choice (P5): we delete the item immediately with
+      // 'create_prorations' (Stripe's default for item delete). This issues a
+      // pro-rated credit for the unused portion of the current cycle. True
+      // "remove at period end" would require scheduling a subscription phase,
+      // which is materially more complex; the local DB row is still marked
+      // `cancel_scheduled` so the member keeps the add-on's quota through the
+      // period end while Stripe stops billing it. Documented as a deliberate
+      // simplification (see me-premium-addons.ts detach handler).
+      await stripe.subscriptionItems.del(
+        subscriptionItemId,
+        { proration_behavior: 'create_prorations' },
+        { idempotencyKey },
+      );
+    },
+    cancelSubscriptionAtPeriodEnd: async ({ subscriptionId, idempotencyKey }) => {
+      // Only cancel_at_period_end is read back. current_period_end is
+      // intentionally NOT sourced from Stripe here — see the doc comment on
+      // CancelSubscriptionAtPeriodEndResult for why (per-item field, no safe
+      // "the plan item" index once add-ons attach to the subscription).
+      const sub = await stripe.subscriptions.update(
+        subscriptionId,
+        { cancel_at_period_end: true },
+        { idempotencyKey },
+      );
+      return {
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+      };
     },
   };
 };

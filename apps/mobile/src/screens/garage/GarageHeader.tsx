@@ -5,12 +5,12 @@
 // the sheet's open/close state and passes the open-handler to `IdentityCard`.
 //
 // `GarageCover` import path note: it lives in `apps/mobile/src/screens/garage/`,
-// NOT in `@jdm/ui`. Declaring `expo-linear-gradient` on the shared package
+// NOT in `@ccc/ui`. Declaring `expo-linear-gradient` on the shared package
 // broke admin's React resolution — see chunk 07 round-3/4 and plan §C12 (now
 // resolved by colocating the cover with the mobile app).
 
-import { type GarageOwner } from '@jdm/shared/garage';
-import { PremiumSheet } from '@jdm/ui';
+import { type GarageOwner } from '@ccc/shared/garage';
+import { PremiumSheet } from '@ccc/ui';
 import { useState } from 'react';
 import { Share, View } from 'react-native';
 

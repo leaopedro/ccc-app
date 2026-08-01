@@ -1,7 +1,11 @@
 {
-  "extends": "@jdm/tsconfig/node.json",
+  "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
-    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ccc/shared": ["../shared/src/index.ts"],
+      "@ccc/shared/*": ["../shared/src/*"]
+    },
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },

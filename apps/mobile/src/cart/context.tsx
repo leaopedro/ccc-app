@@ -1,4 +1,4 @@
-import type { CartItemInput } from '@jdm/shared/cart';
+import type { CartItemInput } from '@ccc/shared/cart';
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react';
 import type { ReactNode } from 'react';
 

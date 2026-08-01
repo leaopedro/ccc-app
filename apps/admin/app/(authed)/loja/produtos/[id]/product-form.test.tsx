@@ -1,4 +1,4 @@
-import type { AdminProductType, AdminStoreProductDetail } from '@jdm/shared/admin';
+import type { AdminProductType, AdminStoreProductDetail } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';

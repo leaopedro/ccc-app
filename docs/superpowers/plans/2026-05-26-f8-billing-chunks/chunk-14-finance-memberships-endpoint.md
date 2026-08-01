@@ -4,9 +4,9 @@
 
 **Goal:** Add `GET /admin/finance/memberships` paginated list endpoint, extend `/finance/export` CSV with three new columns (`cadence`, `is_membership`, `membership_invoice_id`), and apply `MIN_FINANCE_EXPORT_COHORT_SIZE = 5` k-anonymity suppression to membership cohorts in the export.
 
-**Architecture:** New zod schemas (`adminFinanceMembershipsQuerySchema`, `adminFinanceMembershipsResponseSchema`) land in `packages/shared/src/admin.ts` alongside the existing `adminFinanceQuerySchema`. The endpoint and CSV extension live in `apps/api/src/routes/admin/finance.ts`, parallel to `findFinanceOrders`. Membership data is fetched via a new `findMembershipInvoices` helper that queries `PremiumMembershipInvoice` joined to `PremiumMembership` and `Garage`/`User`. CSV membership rows use the existing bucket-and-suppress pattern (`buildFinanceExportBucketKey` analogue for membership cohorts); the suppressed-groups header already emitted by `/finance/export` is incremented to include suppressed membership cohorts. Rebuild `@jdm/shared` per canon §F8.13.
+**Architecture:** New zod schemas (`adminFinanceMembershipsQuerySchema`, `adminFinanceMembershipsResponseSchema`) land in `packages/shared/src/admin.ts` alongside the existing `adminFinanceQuerySchema`. The endpoint and CSV extension live in `apps/api/src/routes/admin/finance.ts`, parallel to `findFinanceOrders`. Membership data is fetched via a new `findMembershipInvoices` helper that queries `PremiumMembershipInvoice` joined to `PremiumMembership` and `Garage`/`User`. CSV membership rows use the existing bucket-and-suppress pattern (`buildFinanceExportBucketKey` analogue for membership cohorts); the suppressed-groups header already emitted by `/finance/export` is incremented to include suppressed membership cohorts. Rebuild `@ccc/shared` per canon §F8.13.
 
-**Tech Stack:** Prisma + Postgres (Testcontainers for all integration tests), Fastify, zod in `@jdm/shared`, Vitest.
+**Tech Stack:** Prisma + Postgres (Testcontainers for all integration tests), Fastify, zod in `@ccc/shared`, Vitest.
 
 ---
 
@@ -17,7 +17,7 @@
 - `apps/api/src/routes/admin/finance.ts` — full file (already read). Study `findFinanceOrders`, `buildFinanceExportBucketKey`, `MIN_FINANCE_EXPORT_COHORT_SIZE`, and the `/finance/export` bucket-and-suppress loop.
 - `packages/shared/src/admin.ts` — full file (already read). Study `adminFinanceQuerySchema` + response schemas to follow naming conventions.
 - Canon §F8.12 (`pnpm --filter <pkg> exec vitest run <PACKAGE-ROOT-RELATIVE>`).
-- Canon §F8.13 (rebuild `@jdm/shared` after schema changes).
+- Canon §F8.13 (rebuild `@ccc/shared` after schema changes).
 
 ---
 
@@ -42,10 +42,10 @@ Expected: file exists. F8.03 (`applyMembershipEvent`) must be merged — it crea
 - [ ] **Pre-flight 3: Confirm Prisma client has F8 types**
 
 ```bash
-grep -c "PremiumMembership" node_modules/.pnpm/\@prisma+client*/node_modules/@prisma/client/index.d.ts 2>/dev/null || grep -c "PremiumMembership" packages/db/node_modules/.pnpm/\@prisma+client*/node_modules/@prisma/client/index.d.ts 2>/dev/null || pnpm --filter @jdm/db exec node -e "const {PrismaClient}=require('@prisma/client');console.log(typeof new PrismaClient().premiumMembership)"
+grep -c "PremiumMembership" node_modules/.pnpm/\@prisma+client*/node_modules/@prisma/client/index.d.ts 2>/dev/null || grep -c "PremiumMembership" packages/db/node_modules/.pnpm/\@prisma+client*/node_modules/@prisma/client/index.d.ts 2>/dev/null || pnpm --filter @ccc/db exec node -e "const {PrismaClient}=require('@prisma/client');console.log(typeof new PrismaClient().premiumMembership)"
 ```
 
-Expected: output is `object` (or `function`). If Prisma client doesn't have the F8 models, run `pnpm --filter @jdm/db run db:generate` first.
+Expected: output is `object` (or `function`). If Prisma client doesn't have the F8 models, run `pnpm --filter @ccc/db run db:generate` first.
 
 - [ ] **Pre-flight 4: Create branch from fresh main**
 
@@ -67,7 +67,7 @@ git checkout -b feat/jdma-f8-billing-14
 
 ---
 
-## Task 1 — Add zod schemas to `@jdm/shared`
+## Task 1 — Add zod schemas to `@ccc/shared`
 
 **Files:**
 
@@ -120,10 +120,10 @@ export const adminFinanceMembershipsResponseSchema = z.object({
 export type AdminFinanceMembershipsResponse = z.infer<typeof adminFinanceMembershipsResponseSchema>;
 ```
 
-- [ ] **Step 2: Build `@jdm/shared` and confirm it compiles**
+- [ ] **Step 2: Build `@ccc/shared` and confirm it compiles**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: build succeeds, `dist/` is updated. If TypeScript errors appear, check that the enum values exactly match the `PremiumMembershipStatus`, `PremiumCadence`, `GaragePremiumTier`, and `PremiumProvider` Prisma enums from the schema (spec §2.1).
@@ -149,8 +149,8 @@ Write all tests before any implementation. They WILL fail until Tasks 3 and 4 ad
 
 ```ts
 // apps/api/test/admin/finance-memberships-list.test.ts
-import { prisma } from '@jdm/db';
-import { adminFinanceMembershipsResponseSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminFinanceMembershipsResponseSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -635,7 +635,7 @@ describe('GET /finance/export — membership columns + k-anonymity', () => {
 - [ ] **Step 2: Run tests to confirm they all fail**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts
 ```
 
 Expected: all tests FAIL — `GET /finance/memberships` returns 404 (route not yet registered); CSV header does not yet include `cadence`/`is_membership`/`membership_invoice_id`. This validates test grip.
@@ -655,12 +655,12 @@ git commit -m "test(api): failing tests for GET /finance/memberships + CSV membe
 
 - Modify: `apps/api/src/routes/admin/finance.ts`
 
-- [ ] **Step 1: Add imports from `@jdm/shared` and Prisma for the new types**
+- [ ] **Step 1: Add imports from `@ccc/shared` and Prisma for the new types**
 
 In `apps/api/src/routes/admin/finance.ts`, extend the first import line:
 
 ```ts
-import { adminFinanceQuerySchema, adminFinanceMembershipsQuerySchema } from '@jdm/shared/admin';
+import { adminFinanceQuerySchema, adminFinanceMembershipsQuerySchema } from '@ccc/shared/admin';
 import {
   Prisma,
   type OrderStatus,
@@ -952,7 +952,7 @@ app.get('/finance/memberships', async (request) => {
 - [ ] **Step 4: Run list tests only; confirm they pass**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts -t "GET /finance/memberships"
+pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts -t "GET /finance/memberships"
 ```
 
 Expected: all `GET /finance/memberships` tests PASS. The CSV tests still fail — that's correct.
@@ -1195,7 +1195,7 @@ Also remove the old `const header = ...` and old `const rows = ...` and old `con
 - [ ] **Step 5: Run all tests in the file; confirm they all pass**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts
 ```
 
 Expected: ALL tests PASS (membership list + CSV membership columns + k-anonymity suppression).
@@ -1203,7 +1203,7 @@ Expected: ALL tests PASS (membership list + CSV membership columns + k-anonymity
 - [ ] **Step 6: Run the existing finance tests to confirm no regression**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance.test.ts
 ```
 
 Expected: PASS. (If this test file doesn't exist, skip. CI runs the full sweep.)
@@ -1217,12 +1217,12 @@ git commit -m "feat(api): extend /finance/export CSV with membership columns + k
 
 ---
 
-## Task 5 — Rebuild `@jdm/shared` and full verification sweep
+## Task 5 — Rebuild `@ccc/shared` and full verification sweep
 
-- [ ] **Step 1: Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 1: Rebuild `@ccc/shared` (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: clean build, `dist/` updated.
@@ -1230,7 +1230,7 @@ Expected: clean build, `dist/` updated.
 - [ ] **Step 2: Typecheck the API package**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 TypeScript errors. If errors appear, most likely the `GaragePremiumTier`, `PremiumCadence`, or `PremiumProvider` Prisma enum types differ from the zod schema string literals. Reconcile by inspecting `packages/db/prisma/schema.prisma` and matching the exact enum values.
@@ -1238,7 +1238,7 @@ Expected: 0 TypeScript errors. If errors appear, most likely the `GaragePremiumT
 - [ ] **Step 3: Run all new tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts
 ```
 
 Expected: all tests PASS.
@@ -1246,7 +1246,7 @@ Expected: all tests PASS.
 - [ ] **Step 4: Run the adjacent finance neighborhood**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/finance.test.ts test/admin/finance-summary-memberships.test.ts 2>/dev/null; true
+pnpm --filter @ccc/api exec vitest run test/admin/finance.test.ts test/admin/finance-summary-memberships.test.ts 2>/dev/null; true
 ```
 
 Expected: existing tests pass; `finance-summary-memberships.test.ts` may not exist yet (F8.13 chunk) — the `2>/dev/null; true` silences any "no file found" error.
@@ -1278,14 +1278,14 @@ gh pr create --base main \
 - Extends `GET /finance/export` CSV with three new columns: `cadence`, `is_membership`, `membership_invoice_id`.
 - Membership invoice rows are bucketed by `(cadence, tier, provider, status)` and suppressed when cohort size < `MIN_FINANCE_EXPORT_COHORT_SIZE = 5`. Suppressed count is added to the existing `x-jdm-k-anonymity-suppressed-groups` response header.
 - New zod schemas in `packages/shared/src/admin.ts`: `adminFinanceMembershipsQuerySchema`, `adminFinanceMembershipsItemSchema`, `adminFinanceMembershipsResponseSchema`.
-- `@jdm/shared` rebuilt per canon §F8.13.
+- `@ccc/shared` rebuilt per canon §F8.13.
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/admin/finance-memberships-list.test.ts` — all pass
-- [ ] `pnpm --filter @jdm/api typecheck` — 0 errors
-- [ ] `pnpm --filter @jdm/shared build` — clean
-- [ ] `pnpm --filter @jdm/api exec vitest run test/admin/finance.test.ts` — no regression (if file exists)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/admin/finance-memberships-list.test.ts` — all pass
+- [ ] `pnpm --filter @ccc/api typecheck` — 0 errors
+- [ ] `pnpm --filter @ccc/shared build` — clean
+- [ ] `pnpm --filter @ccc/api exec vitest run test/admin/finance.test.ts` — no regression (if file exists)
 - [ ] CI green
 
 ## Canon refs
@@ -1323,7 +1323,7 @@ EOF
 | CSV membership rows bucketed for k-anonymity                                               | Task 4 step 3 + Task 2 suppression test                                                      |
 | `MIN_FINANCE_EXPORT_COHORT_SIZE = 5` applied to membership cohorts                         | `aggregatedMembershipRows.filter(b => b.invoiceCount >= MIN_FINANCE_EXPORT_COHORT_SIZE)`     |
 | `x-jdm-k-anonymity-suppressed-groups` header incremented for suppressed membership cohorts | `suppressedGroups = suppressedOrderGroups + suppressedMembershipGroups` + Task 2 header test |
-| Rebuild `@jdm/shared` (canon §F8.13)                                                       | Task 5 step 1                                                                                |
+| Rebuild `@ccc/shared` (canon §F8.13)                                                       | Task 5 step 1                                                                                |
 
 **Placeholder scan:** none found. All code blocks are complete.
 

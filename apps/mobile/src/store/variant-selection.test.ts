@@ -1,4 +1,4 @@
-import type { StoreProductVariant } from '@jdm/shared/store';
+import type { StoreProductVariant } from '@ccc/shared/store';
 import { describe, expect, it } from 'vitest';
 
 import { resolveAddToCartVariantSelection } from './variant-selection';

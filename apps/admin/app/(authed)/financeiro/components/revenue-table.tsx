@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminFinanceEventRow } from '@jdm/shared/admin';
+import type { AdminFinanceEventRow } from '@ccc/shared/admin';
 import { useCallback, useMemo, useState } from 'react';
 
 const fmtCurrency = (cents: number) =>

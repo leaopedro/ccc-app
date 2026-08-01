@@ -1,12 +1,16 @@
 {
-  "extends": "@jdm/tsconfig/react-native.json",
+  "extends": "@ccc/tsconfig/react-native.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@jdm/design": ["../../packages/design/src/index.ts"],
-      "@jdm/design/*": ["../../packages/design/src/*"],
       "~/*": ["src/*"],
-      "@jdm/shared/legal": ["../../packages/shared/src/legal.ts"]
+      "@ccc/shared": ["../../packages/shared/src/index.ts"],
+      "@ccc/shared/*": ["../../packages/shared/src/*"],
+      "@ccc/design": ["../../packages/design/src/index.ts"],
+      "@ccc/design/*": ["../../packages/design/src/*"],
+      "@ccc/ui": ["../../packages/ui/src/index.ts"],
+      "@ccc/ui/*": ["../../packages/ui/src/*"],
+      "@ccc/shared/legal": ["../../packages/shared/src/legal.ts"]
     },
     "types": ["node"]
   },

@@ -14,7 +14,7 @@
 
 **Goal:** Surface garage-spot tier on every car payload, render a `PremiumBadge` next to car identity on every existing surface, and ship a tier picker on the mobile car-detail screen that downgrades premium → free via a new endpoint (`POST /me/cars/:id/tier`).
 
-**Architecture:** Add `tier: GarageSpotTier` to the shared `carSchema`, `publicCarProfileSchema`, `ConfirmedCar`, the ticket check-in car payload, and the moderation queue item. Build a shared `PremiumBadge` component per app (mobile via `@jdm/ui`, admin via a Tailwind component). Thread `tier` through every serializer in `apps/api`. Add `POST /me/cars/:id/tier` that downgrades a premium spot to extra; upgrade path is admin-only (TASK-G). MVP picker exposes only Free and Premium values; premium is selectable only when the underlying spot is already `premium`.
+**Architecture:** Add `tier: GarageSpotTier` to the shared `carSchema`, `publicCarProfileSchema`, `ConfirmedCar`, the ticket check-in car payload, and the moderation queue item. Build a shared `PremiumBadge` component per app (mobile via `@ccc/ui`, admin via a Tailwind component). Thread `tier` through every serializer in `apps/api`. Add `POST /me/cars/:id/tier` that downgrades a premium spot to extra; upgrade path is admin-only (TASK-G). MVP picker exposes only Free and Premium values; premium is selectable only when the underlying spot is already `premium`.
 
 **Tech Stack:** TypeScript, Zod 3, Prisma 5, React 19, Next.js 16, Expo Router 6, Fastify 4, Vitest 3, NativeWind, Tailwind 4.
 
@@ -31,7 +31,7 @@ git fetch origin
 git checkout main
 git pull --ff-only origin main
 git checkout -b feat/jdma-task-e-tier-picker
-node -e "console.log(require('@jdm/db').Prisma.GarageSpotTier)" \
+node -e "console.log(require('@ccc/db').Prisma.GarageSpotTier)" \
   | grep -q 'premium' && echo "TASK-A merged" || { echo "BLOCKED: TASK-A not merged"; exit 1; }
 ```
 
@@ -77,7 +77,7 @@ Out of scope (other tasks):
 
 Each entry is one **API touchpoint** that already returns car identity; the table is exhaustive for this task. Numbers are start-of-block references in the current `main` (e0fd9a8). If the line drifts, search by the schema/parser symbol shown.
 
-| #   | Endpoint                                                                  | Serializer file                                                                       | Schema in `@jdm/shared`                                                                | New field                                             |
+| #   | Endpoint                                                                  | Serializer file                                                                       | Schema in `@ccc/shared`                                                                | New field                                             |
 | --- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | 1   | `GET /me/cars`, `GET /me/cars/:id`, `POST /me/cars`, `PATCH /me/cars/:id` | `apps/api/src/routes/cars.ts:20-33` (`serializeCar`)                                  | `cars.ts` — `carSchema`                                                                | `tier`                                                |
 | 2   | `GET /events/:eventId/feed`                                               | `apps/api/src/routes/feed.ts:63-76` (`serializeCarProfile`)                           | `feed.ts` — `publicCarProfileSchema`                                                   | `tier`                                                |
@@ -125,10 +125,10 @@ For the **moderation queue**, the entire `car` may be `null` (posts can be autho
 
 ### Mobile (`packages/ui/src/PremiumBadge.tsx`)
 
-A wrapper around the existing `Badge` from `@jdm/ui` for type safety and copy centralisation.
+A wrapper around the existing `Badge` from `@ccc/ui` for type safety and copy centralisation.
 
 ```typescript
-import type { GarageSpotTier } from '@jdm/shared';
+import type { GarageSpotTier } from '@ccc/shared';
 import { Badge } from './Badge.js';
 
 export interface PremiumBadgeProps {
@@ -152,7 +152,7 @@ Exported from `packages/ui/src/index.ts`.
 Plain Tailwind span; no React Native imports.
 
 ```typescript
-import type { GarageSpotTier } from '@jdm/shared';
+import type { GarageSpotTier } from '@ccc/shared';
 
 export interface PremiumBadgeProps {
   tier: GarageSpotTier | null | undefined;
@@ -371,7 +371,7 @@ Task 4.
 Render badge next to `carLabel`. Wrap the existing `<View style={styles.carInfo}>` to a `flex-row` with the badge after the text. (Task 5.)
 
 ```tsx
-import { PremiumBadge } from '@jdm/ui';
+import { PremiumBadge } from '@ccc/ui';
 
 // inside header:
 <View style={styles.carInfo}>
@@ -517,7 +517,7 @@ In the queue map (line 162-167), append the badge after the author/car block. Th
 
 ---
 
-## Task 1: Verify TASK-A primitives and rebuild `@jdm/shared`
+## Task 1: Verify TASK-A primitives and rebuild `@ccc/shared`
 
 **Files:**
 
@@ -539,7 +539,7 @@ If either is missing, STOP — TASK-A is not merged. Do not proceed.
 - [ ] **Step 2: Rebuild shared so dist is current**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: exit 0; `packages/shared/dist/garage.js` exists.
@@ -547,7 +547,7 @@ Expected: exit 0; `packages/shared/dist/garage.js` exists.
 - [ ] **Step 3: Sanity-check the export surface**
 
 ```bash
-node -e "const s = require('@jdm/shared'); console.log(typeof s.garageSpotTierSchema, s.garageSpotTierSchema?.options)"
+node -e "const s = require('@ccc/shared'); console.log(typeof s.garageSpotTierSchema, s.garageSpotTierSchema?.options)"
 ```
 
 Expected output: `object [ 'free', 'extra', 'premium' ]`.
@@ -711,7 +711,7 @@ describe('ticketCheckInResponseSchema car.tier', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @jdm/shared test -- cars-tier
+pnpm --filter @ccc/shared test -- cars-tier
 ```
 
 Expected: all describe blocks fail with `Required` / `Unrecognized key` / `tier` missing.
@@ -820,7 +820,7 @@ car: z
 - [ ] **Step 7: Run test to verify pass**
 
 ```bash
-pnpm --filter @jdm/shared test -- cars-tier
+pnpm --filter @ccc/shared test -- cars-tier
 ```
 
 Expected: all green.
@@ -828,7 +828,7 @@ Expected: all green.
 - [ ] **Step 8: Rebuild shared**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: exit 0.
@@ -836,9 +836,9 @@ Expected: exit 0.
 - [ ] **Step 9: Typecheck across the repo to find break sites**
 
 ```bash
-pnpm --filter @jdm/api typecheck 2>&1 | tee /tmp/api-tc.log
-pnpm --filter @jdm/admin typecheck 2>&1 | tee /tmp/admin-tc.log
-pnpm --filter @jdm/mobile typecheck 2>&1 | tee /tmp/mobile-tc.log
+pnpm --filter @ccc/api typecheck 2>&1 | tee /tmp/api-tc.log
+pnpm --filter @ccc/admin typecheck 2>&1 | tee /tmp/admin-tc.log
+pnpm --filter @ccc/mobile typecheck 2>&1 | tee /tmp/mobile-tc.log
 ```
 
 Expected: API and admin and mobile **fail** with "Property 'tier' is missing" on every serializer site that builds a car payload literal. That list **is** the work for Task 3 and Task 5.
@@ -929,7 +929,7 @@ describe('GET /me/cars returns tier', () => {
   it('returns tier=free when spot is null (fallback)', async () => {
     const { userId, carId } = await seedUserWithCarAndSpot({ tier: 'free' });
     // Detach: simulate a transitional null
-    const { prisma } = await import('@jdm/db');
+    const { prisma } = await import('@ccc/db');
     await prisma.garageSpot.update({ where: { carId }, data: { carId: null } });
     const token = signJwt({ sub: userId });
     const res = await app.inject({
@@ -957,7 +957,7 @@ describe('GET /events/:eventId/confirmed-cars includes tier', () => {
 Helper `seedUserWithCarAndSpot` (new in `apps/api/test/helpers/garage.ts`):
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { GarageSpotTier } from '@prisma/client';
 
 export async function seedUserWithCarAndSpot({ tier }: { tier: GarageSpotTier }) {
@@ -979,7 +979,7 @@ If `signJwt` helper isn't already there, copy the pattern from an existing integ
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @jdm/api test -- cars-tier
+pnpm --filter @ccc/api test -- cars-tier
 ```
 
 Expected: fail with Zod parse error "Required" on `tier`, or 500.
@@ -1175,7 +1175,7 @@ This is needed so `scanner.tsx`'s `TicketResultCard` can read `data.car.tier` wi
 - [ ] **Step 8: Run the failing integration test**
 
 ```bash
-pnpm --filter @jdm/api test -- cars-tier
+pnpm --filter @ccc/api test -- cars-tier
 ```
 
 Expected: PASS.
@@ -1183,7 +1183,7 @@ Expected: PASS.
 - [ ] **Step 9: Run the full API test suite to catch regressions**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: PASS. Any existing test that constructs a `Car` literal in a fixture must be updated to include `tier`. Fix each one before continuing.
@@ -1191,8 +1191,8 @@ Expected: PASS. Any existing test that constructs a `Car` literal in a fixture m
 - [ ] **Step 10: Rebuild shared (no-op-safe) and run typecheck**
 
 ```bash
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: exit 0.
@@ -1260,7 +1260,7 @@ describe('PremiumBadge (mobile)', () => {
 });
 ```
 
-If `react-test-renderer` isn't installed in `packages/ui`, add it: `pnpm --filter @jdm/ui add -D react-test-renderer @types/react-test-renderer`.
+If `react-test-renderer` isn't installed in `packages/ui`, add it: `pnpm --filter @ccc/ui add -D react-test-renderer @types/react-test-renderer`.
 
 - [ ] **Step 2: Write the failing admin badge test**
 
@@ -1292,8 +1292,8 @@ describe('PremiumBadge (admin)', () => {
 - [ ] **Step 3: Run both tests to verify they fail**
 
 ```bash
-pnpm --filter @jdm/ui test
-pnpm --filter @jdm/admin test -- premium-badge
+pnpm --filter @ccc/ui test
+pnpm --filter @ccc/admin test -- premium-badge
 ```
 
 Expected: cannot find module errors for `../PremiumBadge.js` / `../premium-badge`.
@@ -1303,7 +1303,7 @@ Expected: cannot find module errors for `../PremiumBadge.js` / `../premium-badge
 Create `packages/ui/src/PremiumBadge.tsx`:
 
 ```typescript
-import type { GarageSpotTier } from '@jdm/shared';
+import type { GarageSpotTier } from '@ccc/shared';
 import { Badge } from './Badge.js';
 
 export interface PremiumBadgeProps {
@@ -1333,7 +1333,7 @@ export { PremiumBadge, type PremiumBadgeProps } from './PremiumBadge.js';
 Create `apps/admin/src/components/premium-badge.tsx`:
 
 ```typescript
-import type { GarageSpotTier } from '@jdm/shared';
+import type { GarageSpotTier } from '@ccc/shared';
 
 export interface PremiumBadgeProps {
   tier: GarageSpotTier | null | undefined;
@@ -1358,8 +1358,8 @@ export function PremiumBadge({ tier, className }: PremiumBadgeProps) {
 - [ ] **Step 6: Run tests**
 
 ```bash
-pnpm --filter @jdm/ui test
-pnpm --filter @jdm/admin test -- premium-badge
+pnpm --filter @ccc/ui test
+pnpm --filter @ccc/admin test -- premium-badge
 ```
 
 Expected: all green.
@@ -1367,7 +1367,7 @@ Expected: all green.
 - [ ] **Step 7: Build UI package**
 
 ```bash
-pnpm --filter @jdm/ui build || true  # build only if package emits dist
+pnpm --filter @ccc/ui build || true  # build only if package emits dist
 ```
 
 Inspect `packages/ui/package.json` for a `build` script. If absent (it's a source-direct workspace), skip.
@@ -1382,7 +1382,7 @@ git add packages/ui/src/PremiumBadge.tsx packages/ui/src/index.ts \
 git commit -m "$(cat <<'EOF'
 feat(ui,admin): add PremiumBadge component for car tier
 
-Mobile variant uses @jdm/ui Badge primitive; admin variant is a
+Mobile variant uses @ccc/ui Badge primitive; admin variant is a
 Tailwind span. Both render only for tier='premium' and return null
 otherwise.
 
@@ -1510,7 +1510,7 @@ describe('CarPickerPopover tier', () => {
 - [ ] **Step 3: Run the tests to verify they fail**
 
 ```bash
-pnpm --filter @jdm/mobile test -- tier
+pnpm --filter @ccc/mobile test -- tier
 ```
 
 Expected: every new test fails (either no "PREMIUM" found or import error).
@@ -1520,7 +1520,7 @@ Expected: every new test fails (either no "PREMIUM" found or import error).
 Add import:
 
 ```typescript
-import { PremiumBadge } from '@jdm/ui';
+import { PremiumBadge } from '@ccc/ui';
 ```
 
 Modify the header block (around line 51):
@@ -1545,7 +1545,7 @@ nameRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs },
 Add import:
 
 ```typescript
-import { PremiumBadge } from '@jdm/ui';
+import { PremiumBadge } from '@ccc/ui';
 ```
 
 Modify comment author (around line 119-122):
@@ -1705,7 +1705,7 @@ cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 - [ ] **Step 11: Run all mobile tests**
 
 ```bash
-pnpm --filter @jdm/mobile test
+pnpm --filter @ccc/mobile test
 ```
 
 Expected: all green. If any pre-existing test feeds a `Car` fixture without `tier`, update it to include `tier: 'free'`.
@@ -1713,7 +1713,7 @@ Expected: all green. If any pre-existing test feeds a `Car` fixture without `tie
 - [ ] **Step 12: Typecheck mobile**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: exit 0.
@@ -1763,7 +1763,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../helpers/app.js';
 import { seedUserWithCarAndSpot } from '../helpers/garage.js';
 import { signJwt } from '../helpers/jwt.js';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 describe('POST /me/cars/:id/tier', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -1854,7 +1854,7 @@ describe('POST /me/cars/:id/tier', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @jdm/api test -- cars-tier-downgrade
+pnpm --filter @ccc/api test -- cars-tier-downgrade
 ```
 
 Expected: 404 on every request (route not registered) or 500 on audit insertion.
@@ -1901,9 +1901,9 @@ If the action is a Prisma enum (not a free-form string column), append `garage_s
 Create the migration:
 
 ```bash
-pnpm --filter @jdm/db prisma migrate dev --name add_garage_spot_user_downgrade_audit_action --create-only
+pnpm --filter @ccc/db prisma migrate dev --name add_garage_spot_user_downgrade_audit_action --create-only
 # Edit the SQL to: ALTER TYPE "AdminAuditAction" ADD VALUE IF NOT EXISTS 'garage_spot_user_downgrade';
-pnpm --filter @jdm/db prisma migrate dev
+pnpm --filter @ccc/db prisma migrate dev
 ```
 
 - [ ] **Step 6: Implement the route**
@@ -1911,7 +1911,7 @@ pnpm --filter @jdm/db prisma migrate dev
 Add to `apps/api/src/routes/cars.ts` (below the existing `DELETE /me/cars/:id`):
 
 ```typescript
-import { carTierChangeInputSchema } from '@jdm/shared/cars';
+import { carTierChangeInputSchema } from '@ccc/shared/cars';
 import { recordAudit } from '../services/admin-audit.js';
 
 app.post('/me/cars/:id/tier', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -1962,7 +1962,7 @@ app.post('/me/cars/:id/tier', { preHandler: [app.authenticate] }, async (request
 - [ ] **Step 7: Run the failing test suite**
 
 ```bash
-pnpm --filter @jdm/api test -- cars-tier-downgrade
+pnpm --filter @ccc/api test -- cars-tier-downgrade
 ```
 
 Expected: all green.
@@ -1970,7 +1970,7 @@ Expected: all green.
 - [ ] **Step 8: Run full API test suite to catch fixture regressions**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: green.
@@ -1978,7 +1978,7 @@ Expected: green.
 - [ ] **Step 9: Rebuild shared (audit enum change)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 - [ ] **Step 10: Commit**
@@ -2081,7 +2081,7 @@ describe('CarTierPicker', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @jdm/mobile test -- CarTierPicker
+pnpm --filter @ccc/mobile test -- CarTierPicker
 ```
 
 Expected: cannot find module.
@@ -2110,8 +2110,8 @@ tierChangeFailed: 'Não foi possível alterar o tipo da vaga.',
 Create `apps/mobile/src/screens/garage/CarTierPicker.tsx`:
 
 ```typescript
-import type { GarageSpotTier } from '@jdm/shared';
-import { PremiumBadge } from '@jdm/ui';
+import type { GarageSpotTier } from '@ccc/shared';
+import { PremiumBadge } from '@ccc/ui';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { profileCopy } from '~/copy/profile';
@@ -2203,7 +2203,7 @@ const styles = StyleSheet.create({
 Edit `apps/mobile/src/api/cars.ts` (find next to `updateCar`):
 
 ```typescript
-import type { CarTierChangeInput } from '@jdm/shared/cars';
+import type { CarTierChangeInput } from '@ccc/shared/cars';
 
 export async function changeCarTier(carId: string, input: CarTierChangeInput): Promise<Car> {
   const res = await api.post<Car>(`/me/cars/${carId}/tier`, input);
@@ -2220,7 +2220,7 @@ export async function changeCarTier(carId: string, input: CarTierChangeInput): P
 Imports:
 
 ```typescript
-import { PremiumBadge } from '@jdm/ui';
+import { PremiumBadge } from '@ccc/ui';
 import { CarTierPicker } from '~/screens/garage/CarTierPicker';
 import { changeCarTier } from '~/api/cars';
 ```
@@ -2276,7 +2276,7 @@ titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 - [ ] **Step 7: Run the picker test**
 
 ```bash
-pnpm --filter @jdm/mobile test -- CarTierPicker
+pnpm --filter @ccc/mobile test -- CarTierPicker
 ```
 
 Expected: all green.
@@ -2284,8 +2284,8 @@ Expected: all green.
 - [ ] **Step 8: Run all mobile tests + typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile test
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile test
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: green.
@@ -2435,8 +2435,8 @@ The `CheckInActionResult` type in `apps/admin/lib/check-in-actions` already mirr
 - [ ] **Step 3: Run both admin tests; expect them to fail**
 
 ```bash
-pnpm --filter @jdm/admin test -- community-management
-pnpm --filter @jdm/admin test -- scanner.tier
+pnpm --filter @ccc/admin test -- community-management
+pnpm --filter @ccc/admin test -- scanner.tier
 ```
 
 - [ ] **Step 4: Wire badge into `scanner.tsx`**
@@ -2465,7 +2465,7 @@ Modify the car line in `TicketResultCard` (around line 251-256):
 }
 ```
 
-If `CheckInActionResult` is defined in `apps/admin/lib/check-in-actions.ts`, update its `car` shape to include `tier: GarageSpotTier`. Trace the source: it should re-use `TicketCheckInResponse` from `@jdm/shared`; if it does, Task 2's schema update flows through automatically.
+If `CheckInActionResult` is defined in `apps/admin/lib/check-in-actions.ts`, update its `car` shape to include `tier: GarageSpotTier`. Trace the source: it should re-use `TicketCheckInResponse` from `@ccc/shared`; if it does, Task 2's schema update flows through automatically.
 
 - [ ] **Step 5: Wire badge into `community-management.tsx`**
 
@@ -2503,7 +2503,7 @@ Modify the queue map (line 162-167):
 - [ ] **Step 6: Run the admin tests**
 
 ```bash
-pnpm --filter @jdm/admin test
+pnpm --filter @ccc/admin test
 ```
 
 Expected: green. If `community-management.test.tsx`'s old fixtures (line 27, 37) lack `tier`, update them to `tier: null`.
@@ -2511,7 +2511,7 @@ Expected: green. If `community-management.test.tsx`'s old fixtures (line 27, 37)
 - [ ] **Step 7: Typecheck admin**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: exit 0.
@@ -2543,11 +2543,11 @@ EOF
 - [ ] **Step 1: Run the entire workspace test matrix**
 
 ```bash
-pnpm --filter @jdm/shared test
-pnpm --filter @jdm/api test
-pnpm --filter @jdm/admin test
-pnpm --filter @jdm/mobile test
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/shared test
+pnpm --filter @ccc/api test
+pnpm --filter @ccc/admin test
+pnpm --filter @ccc/mobile test
+pnpm --filter @ccc/ui test
 ```
 
 Expected: all green.
@@ -2555,7 +2555,7 @@ Expected: all green.
 - [ ] **Step 2: Typecheck the entire workspace**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 pnpm -r typecheck
 ```
 
@@ -2571,7 +2571,7 @@ Task 6 already cover the full round-trip.
 If running manually:
 
 ```bash
-# In a separate terminal: pnpm --filter @jdm/api dev
+# In a separate terminal: pnpm --filter @ccc/api dev
 # Then, once running:
 TOKEN="<paste from seeded fixture>"
 curl -sS http://localhost:3001/me/cars -H "authorization: Bearer $TOKEN" | jq '.cars[0].tier'
@@ -2591,7 +2591,7 @@ git push -u origin feat/jdma-task-e-tier-picker
 gh pr create --title "feat: garage spot tier picker + Premium badge (TASK-E)" --body "$(cat <<'EOF'
 ## Summary
 - Threads `tier: GarageSpotTier` through `carSchema`, `publicCarProfileSchema`, `confirmedCarSchema`, `ticketCheckInResponseSchema`, and `moderationQueueItemSchema`.
-- Adds `PremiumBadge` (mobile via `@jdm/ui`, admin via Tailwind) and places it on every car-identity surface inventoried in master plan §3.
+- Adds `PremiumBadge` (mobile via `@ccc/ui`, admin via Tailwind) and places it on every car-identity surface inventoried in master plan §3.
 - Adds `POST /me/cars/:id/tier` user-facing downgrade (premium → extra). Admin grant route is reserved for TASK-G.
 - New mobile picker on the garage car detail screen.
 
@@ -2649,7 +2649,7 @@ Mobile picker:
 
 Mobile badge:
 
-- `Badge` (the `@jdm/ui` primitive) renders text "PREMIUM" — screen readers will announce it.
+- `Badge` (the `@ccc/ui` primitive) renders text "PREMIUM" — screen readers will announce it.
 - Position on `ConfirmedCarsSection`: absolute-positioned dot; we keep the text "PREMIUM" rendered so screen readers still pick it up. Do not rely on colour alone.
 
 Admin badge:
@@ -2705,8 +2705,8 @@ If an admin grants premium at the same instant a user downgrades, the last write
 
 # Glossary (for engineers new to this codebase)
 
-- **`@jdm/shared`** — workspace package with all Zod schemas. Built to `dist/` and imported as `@jdm/shared` or via deep paths like `@jdm/shared/cars`. After editing, always `pnpm --filter @jdm/shared build`.
-- **`@jdm/ui`** — mobile-only UI primitives (RN + NativeWind). Not imported by the admin app.
+- **`@ccc/shared`** — workspace package with all Zod schemas. Built to `dist/` and imported as `@ccc/shared` or via deep paths like `@ccc/shared/cars`. After editing, always `pnpm --filter @ccc/shared build`.
+- **`@ccc/ui`** — mobile-only UI primitives (RN + NativeWind). Not imported by the admin app.
 - **`apps/api`** — Fastify; integration tests run against a real Postgres via Testcontainers. Helpers live in `apps/api/test/helpers/`.
 - **`apps/admin`** — Next.js 16 (App Router, server components by default; client components require `'use client'`).
 - **`apps/mobile`** — Expo Router 6 mobile app; route files under `app/(app)/...`.

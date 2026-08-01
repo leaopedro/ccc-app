@@ -1,12 +1,12 @@
-# Chunk 37 — `StatsRow` component (`@jdm/ui`) — Implementation Plan
+# Chunk 37 — `StatsRow` component (`@ccc/ui`) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land `<StatsRow />` in `@jdm/ui`: a pure-presentational 4-column tile grid (`Eventos · Posts · Curtidas · Desde`) consuming a `GarageStats` prop. Numeric tiles render mono digits, the date tile renders sans 13px with a PT-BR abbreviated month string (`fev. 26` style).
+**Goal:** Land `<StatsRow />` in `@ccc/ui`: a pure-presentational 4-column tile grid (`Eventos · Posts · Curtidas · Desde`) consuming a `GarageStats` prop. Numeric tiles render mono digits, the date tile renders sans 13px with a PT-BR abbreviated month string (`fev. 26` style).
 
-**Architecture:** One new RN component file in `packages/ui/src/`, one new test in the mobile workspace's vitest tree (where the other `@jdm/ui` mobile tests already live — `packages/ui` has no test runner of its own, see `BadgeRow.test.tsx` for the precedent). Export added to `packages/ui/src/index.ts`. Zero state, zero context, zero side effects. The date string is computed in a tiny pure helper colocated in the same file and exported for direct unit testing.
+**Architecture:** One new RN component file in `packages/ui/src/`, one new test in the mobile workspace's vitest tree (where the other `@ccc/ui` mobile tests already live — `packages/ui` has no test runner of its own, see `BadgeRow.test.tsx` for the precedent). Export added to `packages/ui/src/index.ts`. Zero state, zero context, zero side effects. The date string is computed in a tiny pure helper colocated in the same file and exported for direct unit testing.
 
-**Tech Stack:** TypeScript, React Native (`View`, `Text`), `lucide-react-native` (icons via `@jdm/ui` `BadgeGlyph`), `@jdm/ui/garage-tokens`, `@jdm/shared/garage-progress` (consumes `GarageStats` from chunk 24). Tests: Vitest + jsdom + the existing `react-native` / `lucide-react-native` jsdom mocks from `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx`.
+**Tech Stack:** TypeScript, React Native (`View`, `Text`), `lucide-react-native` (icons via `@ccc/ui` `BadgeGlyph`), `@ccc/ui/garage-tokens`, `@ccc/shared/garage-progress` (consumes `GarageStats` from chunk 24). Tests: Vitest + jsdom + the existing `react-native` / `lucide-react-native` jsdom mocks from `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx`.
 
 **Spec references (read once, do not copy):**
 
@@ -16,7 +16,7 @@
   - §"Locked invariants" — public hide-on-empty is owned by `ProfileStats` (chunk 39), not this leaf.
   - §"Phase 2C — UI" / chunk 2C.37 (around line 300) — visual canon: 4-col grid, 12px radius, icon + mono number + uppercase mono label, "Desde" uses sans 13px with `'fev. 26'` PT-BR style.
   - §"`GarageStats`" (around line 395) — wire shape `{ events, posts, likesReceived, joinedAt: ISO string }`.
-- `docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md` §"File Structure" + §C12 — `@jdm/ui` conventions: pure-prop RN, JSDoc on the public component, design-canon link, no default exports.
+- `docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md` §"File Structure" + §C12 — `@ccc/ui` conventions: pure-prop RN, JSDoc on the public component, design-canon link, no default exports.
 - `CLAUDE.md` — branch safety preflight; PR to `main` only.
 - Design canon `.handoffs/xp-handoff/design_handoff_garage_redesign_xp_delta/jdma-garage/progress.jsx` lines 464–541.
 - Tone references: `packages/ui/src/BadgeRow.tsx`, `packages/ui/src/BadgeGlyph.tsx`, `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx` (mirror its `vi.mock` blocks verbatim).
@@ -42,8 +42,8 @@
 
 Two MAJOR findings were raised against this plan; both fixed in place.
 
-- **Canon §13 (MAJOR — UI test harness):** the original RN mock block omitted `ActivityIndicator`, `Image`, `Modal`, `ScrollView`, and the entire `react-native-svg` block. Importing `@jdm/ui` pulls in components (BadgesSheet, HexBadge, etc.) that touch these symbols at module-eval time, so the tests could explode before reaching `StatsRow`. Task 1 / Step 1.1 now mirrors `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx` verbatim for the RN + `react-native-svg` mock surface, with `Platform` retained on top for `Platform.select`. `lucide-react-native` mock kept (same Phase 1 pattern).
-- **Canon §10 (MAJOR — filtered package commands):** every `pnpm --filter @jdm/mobile test -- apps/mobile/src/...` instance passed a repo-root path through `--`; the mobile script runs from `apps/mobile`, so vitest saw zero matching tests and exited 0 with `--passWithNoTests` masking the gap. All six command instances (Steps 1.2, 1.5, 2.2, 3.2, 4.1, and the PR checklist) now use `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests [-t <pattern>]`, package-root-relative.
+- **Canon §13 (MAJOR — UI test harness):** the original RN mock block omitted `ActivityIndicator`, `Image`, `Modal`, `ScrollView`, and the entire `react-native-svg` block. Importing `@ccc/ui` pulls in components (BadgesSheet, HexBadge, etc.) that touch these symbols at module-eval time, so the tests could explode before reaching `StatsRow`. Task 1 / Step 1.1 now mirrors `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx` verbatim for the RN + `react-native-svg` mock surface, with `Platform` retained on top for `Platform.select`. `lucide-react-native` mock kept (same Phase 1 pattern).
+- **Canon §10 (MAJOR — filtered package commands):** every `pnpm --filter @ccc/mobile test -- apps/mobile/src/...` instance passed a repo-root path through `--`; the mobile script runs from `apps/mobile`, so vitest saw zero matching tests and exited 0 with `--passWithNoTests` masking the gap. All six command instances (Steps 1.2, 1.5, 2.2, 3.2, 4.1, and the PR checklist) now use `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests [-t <pattern>]`, package-root-relative.
 
 ---
 
@@ -55,7 +55,7 @@ packages/ui/src/index.ts                                              (MODIFY �
 apps/mobile/src/screens/garage/__tests__/StatsRow.test.tsx            (NEW)
 ```
 
-Touched-paths only. No edits to `apps/admin`, `apps/api`, `packages/db`, `packages/shared`, `garage-tokens.ts`, or other `@jdm/ui` files. **No web twin in this chunk** — chunk 41 consumes `ProfileStats` (chunk 39), which is the surface-agnostic wrapper; the SSR/web port lands there.
+Touched-paths only. No edits to `apps/admin`, `apps/api`, `packages/db`, `packages/shared`, `garage-tokens.ts`, or other `@ccc/ui` files. **No web twin in this chunk** — chunk 41 consumes `ProfileStats` (chunk 39), which is the surface-agnostic wrapper; the SSR/web port lands there.
 
 ---
 
@@ -83,7 +83,7 @@ git checkout -b feat/jdma-garage-phase2-37
 Props (TS interface — final shape; tasks below assume this signature without re-stating it):
 
 ```ts
-import type { GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageStats } from '@ccc/shared/garage-progress';
 
 export interface StatsRowProps {
   /** Wire shape from `garage.stats` per outline §395. */
@@ -124,7 +124,7 @@ Goal: drive the date formatter under test first. The component file in this task
 // @vitest-environment jsdom
 //
 // StatsRow tests. The component lives in `packages/ui/src/StatsRow.tsx`, but
-// tests live here so the mobile workspace's vitest picks them up — `@jdm/ui`
+// tests live here so the mobile workspace's vitest picks them up — `@ccc/ui`
 // has no test runner of its own (verified via packages/ui/package.json).
 // Same mocking pattern as BadgeRow.test.tsx.
 
@@ -140,7 +140,7 @@ declare global {
 import { vi } from 'vitest';
 
 // Mirror the Phase 1 reference `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx`
-// RN mock block verbatim. Importing `@jdm/ui` also pulls in components that
+// RN mock block verbatim. Importing `@ccc/ui` also pulls in components that
 // touch `ActivityIndicator`, `Image`, `Modal`, and `ScrollView` (BadgesSheet
 // et al), so we MUST mock them here or the import-time evaluation crashes
 // before any StatsRow assertion fires. `Platform` is added on top of the
@@ -200,9 +200,9 @@ vi.mock('react-native', async () => {
   };
 });
 
-// `@jdm/ui` re-exports components that pull `react-native-svg` (HexBadge,
+// `@ccc/ui` re-exports components that pull `react-native-svg` (HexBadge,
 // BadgesSheet). The Phase 1 reference test mocks the same surface; copy it
-// verbatim so importing `@jdm/ui` does not blow up at module-eval time.
+// verbatim so importing `@ccc/ui` does not blow up at module-eval time.
 vi.mock('react-native-svg', async () => {
   const ReactMod = await import('react');
   const make = (tag: string) =>
@@ -257,23 +257,23 @@ vi.mock('lucide-react-native', async () => {
 
 describe('formatJoinedAt', () => {
   it('formats a UTC ISO date to "<mês>. <YY>" PT-BR style', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('2026-02-14T00:00:00Z')).toBe('fev. 26');
   });
 
   it('always uses PT-BR regardless of host locale (no en-US fallback)', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     // March → "mar." in pt-BR; "Mar" in en-US. Assert PT-BR shape.
     expect(formatJoinedAt('2025-03-01T12:00:00Z')).toBe('mar. 25');
   });
 
   it('uses UTC so a midnight-UTC ISO never shifts month for east-of-UTC hosts', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('2026-02-01T00:00:00Z')).toBe('fev. 26');
   });
 
   it('returns "" for invalid input', async () => {
-    const { formatJoinedAt } = await import('@jdm/ui');
+    const { formatJoinedAt } = await import('@ccc/ui');
     expect(formatJoinedAt('not-a-date')).toBe('');
   });
 });
@@ -281,13 +281,13 @@ describe('formatJoinedAt', () => {
 
 - [ ] **Step 1.2: Run the test — expect FAIL ("formatJoinedAt is not exported")**
 
-Run: `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t formatJoinedAt`
+Run: `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t formatJoinedAt`
 Expected: all 4 cases FAIL with `TypeError: formatJoinedAt is not a function` (or import error). Note: package-root-relative path (canon §10); the filtered script runs from `apps/mobile`.
 
 - [ ] **Step 1.3: Implement `formatJoinedAt` in a new `StatsRow.tsx` (stub component)**
 
 ```tsx
-import type { GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageStats } from '@ccc/shared/garage-progress';
 
 /** See §"Component contract" for locale + UTC rationale. Exported only for direct unit testing. */
 export function formatJoinedAt(iso: string): string {
@@ -324,10 +324,10 @@ Insert directly below the `BadgesSheet` export so all garage-redesign-related ex
 
 - [ ] **Step 1.5: Run the helper tests — expect PASS**
 
-Run: `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t formatJoinedAt`
+Run: `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t formatJoinedAt`
 Expected: 4 passed.
 
-If chunk 24 (`@jdm/shared/garage-progress`) has not yet merged, the import in `StatsRow.tsx` will not resolve. Fallback: inline the type as a local `type GarageStats = { events: number; posts: number; likesReceived: number; joinedAt: string };` declaration with a `// TODO(chunk-24): swap for @jdm/shared/garage-progress export` comment. Replace the local type with the real import in the same PR once chunk 24 is on `main`.
+If chunk 24 (`@ccc/shared/garage-progress`) has not yet merged, the import in `StatsRow.tsx` will not resolve. Fallback: inline the type as a local `type GarageStats = { events: number; posts: number; likesReceived: number; joinedAt: string };` declaration with a `// TODO(chunk-24): swap for @ccc/shared/garage-progress export` comment. Replace the local type with the real import in the same PR once chunk 24 is on `main`.
 
 - [ ] **Step 1.6: Commit**
 
@@ -399,7 +399,7 @@ describe('StatsRow', () => {
   };
 
   it('renders 4 tiles in order: Eventos, Posts, Curtidas, Desde', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     const labels = Array.from(container.querySelectorAll('span'))
       .map((s) => s.textContent ?? '')
@@ -408,7 +408,7 @@ describe('StatsRow', () => {
   });
 
   it('renders zero values as "0" (never blank, never "undefined")', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_ZERO} />);
     const text = container.textContent ?? '';
     expect(text).not.toContain('undefined');
@@ -420,7 +420,7 @@ describe('StatsRow', () => {
   });
 
   it('renders numeric values raw with no thousand-separator (PT-BR `.` not inserted)', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(
       <StatsRow stats={{ ...STATS_NONZERO, events: 1234, posts: 5678, likesReceived: 9012 }} />,
     );
@@ -433,19 +433,19 @@ describe('StatsRow', () => {
   });
 
   it('formats joinedAt to "fev. 26" PT-BR abbreviated month', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     expect(container.textContent ?? '').toContain('fev. 26');
   });
 
   it('uses PT-BR locale on the date tile (never en-US "Feb")', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     expect(container.textContent ?? '').not.toMatch(/Feb\b/);
   });
 
   it('renders one icon per tile (flag, post, fire, pin via BadgeGlyph)', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} />);
     const icons = Array.from(container.querySelectorAll('i[data-icon]')).map((n) =>
       n.getAttribute('data-icon'),
@@ -455,7 +455,7 @@ describe('StatsRow', () => {
   });
 
   it('forwards testID to the outer container', async () => {
-    const { StatsRow } = await import('@jdm/ui');
+    const { StatsRow } = await import('@ccc/ui');
     await renderEl(<StatsRow stats={STATS_NONZERO} testID="garage-stats-row" />);
     expect(container.querySelector('[data-testid="garage-stats-row"]')).not.toBeNull();
   });
@@ -464,7 +464,7 @@ describe('StatsRow', () => {
 
 - [ ] **Step 2.2: Run the new tests — expect FAIL**
 
-Run: `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t StatsRow`
+Run: `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests -t StatsRow`
 Expected: 7 FAILs. `StatsRow` currently returns `null` so no tiles, no labels, no icons. Confirm each failure points at a missing label / icon / testID.
 
 ---
@@ -478,7 +478,7 @@ Expected: 7 FAILs. `StatsRow` currently returns `null` so no tiles, no labels, n
 - [ ] **Step 3.1: Replace the stub with the real implementation**
 
 ```tsx
-import type { GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageStats } from '@ccc/shared/garage-progress';
 import { Platform, Text, View } from 'react-native';
 
 import { BadgeGlyph } from './BadgeGlyph.js';
@@ -583,17 +583,17 @@ Implementation notes: `textTransform: 'uppercase'` AND uppercasing the literal a
 
 - [ ] **Step 3.2: Run all StatsRow tests — expect PASS**
 
-Run: `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests`
+Run: `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests`
 Expected: 11 passed (4 helper + 7 component).
 
-- [ ] **Step 3.3: Typecheck `@jdm/ui`**
+- [ ] **Step 3.3: Typecheck `@ccc/ui`**
 
-Run: `pnpm --filter @jdm/ui typecheck`
-Expected: 0 errors. If chunk 24 is not merged, expect `Cannot find module '@jdm/shared/garage-progress'` and fall back to the inline-type stub described in Task 1.
+Run: `pnpm --filter @ccc/ui typecheck`
+Expected: 0 errors. If chunk 24 is not merged, expect `Cannot find module '@ccc/shared/garage-progress'` and fall back to the inline-type stub described in Task 1.
 
 - [ ] **Step 3.4: Typecheck the mobile workspace (catches the export wiring)**
 
-Run: `pnpm --filter @jdm/mobile typecheck`
+Run: `pnpm --filter @ccc/mobile typecheck`
 Expected: 0 errors.
 
 - [ ] **Step 3.5: Commit**
@@ -609,12 +609,12 @@ git commit -m "feat(ui): StatsRow 4-tile component for garage profile"
 
 - [ ] **Step 4.1: Targeted vitest run**
 
-Run: `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests`
+Run: `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests`
 Expected: 11 passed, 0 failed.
 
-- [ ] **Step 4.2: `@jdm/ui` typecheck**
+- [ ] **Step 4.2: `@ccc/ui` typecheck**
 
-Run: `pnpm --filter @jdm/ui typecheck`
+Run: `pnpm --filter @ccc/ui typecheck`
 Expected: clean.
 
 - [ ] **Step 4.3: Confirm no other workspace was disturbed**
@@ -640,9 +640,9 @@ If any other path appears (especially `pnpm-lock.yaml`, `packages/shared/*`, `ap
 - **Date format `'fev. 26'` (period preserved, single space before year).** PT-BR `Intl.DateTimeFormat({ month: 'short' })` emits `'fev.'`; we keep the period and replace the locale `' de '` literal with a single space. Design canon `progress.jsx` strips the period; chunk skeleton + outline §300 explicitly call for the period.
 - **Web twin deferred.** Skeleton says "Possibly a web twin." Chunk 41 imports `ProfileStats` (chunk 39); any DOM rendering falls to the wrapper. RN-only here.
 - **No animation.** Matches §300 + the open-question default. Numbers hard-set on prop change.
-- **Inline-type fallback for `GarageStats`.** If chunk 24 has not merged when this PR opens, declare a local type matching outline §395 and swap to `@jdm/shared/garage-progress` in the same PR before merge.
+- **Inline-type fallback for `GarageStats`.** If chunk 24 has not merged when this PR opens, declare a local type matching outline §395 and swap to `@ccc/shared/garage-progress` in the same PR before merge.
 - **Test harness mirrors Phase 1 BadgeRow.** Post-review fix (canon §13): the test file copies the `react-native` (incl. `ActivityIndicator`, `Image`, `Modal`, `ScrollView`) + `react-native-svg` + `lucide-react-native` mock surface from `apps/mobile/src/screens/garage/__tests__/BadgeRow.test.tsx`, with `Platform` retained on top so `Platform.select` resolves to `'monospace'` in jsdom. Document in PR body so reviewers see the harness alignment.
-- **Filtered vitest commands use `exec vitest run` with package-root-relative paths.** Post-review fix (canon §10): `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests [-t <pattern>]`. Never `pnpm --filter @jdm/mobile test -- apps/mobile/src/...` (the `--` strips through the script and the repo-root path resolves to zero matches; `--passWithNoTests` then exits 0 silently).
+- **Filtered vitest commands use `exec vitest run` with package-root-relative paths.** Post-review fix (canon §10): `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests [-t <pattern>]`. Never `pnpm --filter @ccc/mobile test -- apps/mobile/src/...` (the `--` strips through the script and the repo-root path resolves to zero matches; `--passWithNoTests` then exits 0 silently).
 
 No §C correction is overridden by this chunk.
 
@@ -652,11 +652,11 @@ No §C correction is overridden by this chunk.
 
 - [ ] Branch `feat/jdma-garage-phase2-37` opened from fresh `main` (never `production`).
 - [ ] Three files in the diff (see Step 4.3). No incidental changes (no `pnpm-lock.yaml`, no other workspaces).
-- [ ] `pnpm --filter @jdm/ui typecheck` clean.
-- [ ] `pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests` → 11/11 green.
+- [ ] `pnpm --filter @ccc/ui typecheck` clean.
+- [ ] `pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/StatsRow.test.tsx --passWithNoTests` → 11/11 green.
 - [ ] PR body lists the five deviations from §"Deviations / deferrals" so reviewers see them up front.
 - [ ] PR opens against `main`. Do NOT push to `production`.
-- [ ] If `@jdm/shared/garage-progress` was stubbed locally, the stub is removed before merge AND the PR body links chunk 24.
+- [ ] If `@ccc/shared/garage-progress` was stubbed locally, the stub is removed before merge AND the PR body links chunk 24.
 - [ ] PR title references chunk number (`Chunk 37 — StatsRow component`) and links the skeleton.
 
 ---

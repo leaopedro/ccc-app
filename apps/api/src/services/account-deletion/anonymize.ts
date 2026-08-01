@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 
 import { findFreeGarageSlug } from '../garage/index.js';

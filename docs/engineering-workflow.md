@@ -190,21 +190,21 @@ skill encodes this discipline.
 
 Default minimums:
 
-- **API change:** `pnpm --filter @jdm/api typecheck` + the new + adjacent
-  integration tests (`pnpm --filter @jdm/api test apps/api/test/<file>.test.ts`).
-- **Shared package change:** `pnpm --filter @jdm/shared test`.
+- **API change:** `pnpm --filter @ccc/api typecheck` + the new + adjacent
+  integration tests (`pnpm --filter @ccc/api test apps/api/test/<file>.test.ts`).
+- **Shared package change:** `pnpm --filter @ccc/shared test`.
 - **DB schema change:** `pnpm db:migrate dev --name <name>` against a clean
   local DB; commit migration; show `prisma migrate status` clean.
-- **Admin change:** `pnpm --filter @jdm/admin lint && typecheck`. UI changes
+- **Admin change:** `pnpm --filter @ccc/admin lint && typecheck`. UI changes
   need a screenshot or recorded behavior in the issue.
-- **Mobile change:** `pnpm --filter @jdm/mobile typecheck`. UI changes need a
+- **Mobile change:** `pnpm --filter @ccc/mobile typecheck`. UI changes need a
   device or simulator screenshot.
 
 Only run `pnpm -w typecheck` / `pnpm -w test` when the change crosses package
 boundaries or before requesting review on a multi-app PR.
 
 State the evidence in the PR description. "Tests pass" is not evidence —
-"`pnpm --filter @jdm/api test apps/api/test/orders.test.ts` → 12/12 green"
+"`pnpm --filter @ccc/api test apps/api/test/orders.test.ts` → 12/12 green"
 is evidence.
 
 ## 6. Requesting code review (hard handoff)

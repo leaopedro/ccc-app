@@ -1,1 +1,1 @@
-export { PremiumBadge, type PremiumBadgeProps } from '@jdm/ui/web';
+export { PremiumBadge, type PremiumBadgeProps } from '@ccc/ui/web';

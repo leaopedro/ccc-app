@@ -1,5 +1,5 @@
-import type { Car } from '@jdm/shared/cars';
-import type { FeedPostResponse } from '@jdm/shared/feed';
+import type { Car } from '@ccc/shared/cars';
+import type { FeedPostResponse } from '@ccc/shared/feed';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,

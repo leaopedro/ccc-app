@@ -71,11 +71,19 @@ describe('normalizeStripeEvent', () => {
       expect(result.provider).toBe('stripe');
       expect(result.providerCustomerRef).toBe('cus_test_001');
       expect(result.providerSubRef).toBe('sub_test_001');
-      expect(result.tier).toBe('gold');
+      // The normalizer has no DB access, so it cannot resolve a multi-line
+      // invoice's plan line against the catalog. tier / baseAmountCents /
+      // devFeePercent / devFeeAmountCents are all PLACEHOLDERS here — the
+      // webhook route resolves them against PremiumPlanPrice and patches them
+      // in before dispatch (Task 6). That resolution is covered by the route's
+      // own integration tests (stripe-billing-webhook.test.ts), not this unit
+      // test of the normalizer's raw output. grossAmountCents and currency are
+      // real: they come straight off the invoice, not a line item.
+      expect(result.tier).toBe('bronze');
       expect(result.cadence).toBe('monthly');
-      expect(result.pricing.baseAmountCents).toBe(4536);
-      expect(result.pricing.devFeePercent).toBe(10);
-      expect(result.pricing.devFeeAmountCents).toBe(454);
+      expect(result.pricing.baseAmountCents).toBe(0);
+      expect(result.pricing.devFeePercent).toBe(0);
+      expect(result.pricing.devFeeAmountCents).toBe(0);
       expect(result.pricing.grossAmountCents).toBe(4990);
       expect(result.pricing.currency).toBe('BRL');
       expect(result.invoice.providerInvoiceRef).toBe('in_test_001');
@@ -183,6 +191,10 @@ describe('normalizeStripeEvent', () => {
       expect(result.provider).toBe('stripe');
       expect(result.providerSubRef).toBe('sub_test_001');
       expect(result.cadence).toBe('monthly');
+      // priceMetadata carries the new price's raw Stripe metadata so the route
+      // can resolve devFeePercent for a tier change exactly as it does for
+      // activation/renewal (Fix round 1, finding 2 — this must never be {}).
+      expect(result.priceMetadata).toEqual({ baseAmountCents: '4536', devFeePercent: '10' });
     });
   });
 

@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 import { setPendingCheckoutUrl } from './web-pending-checkout';
 

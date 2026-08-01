@@ -1,4 +1,4 @@
-import { prisma, GARAGE_SPOT_PRODUCT_SLUG, GARAGE_SPOT_PRODUCT_TYPE_NAME } from '@jdm/db';
+import { prisma, GARAGE_SPOT_PRODUCT_SLUG, GARAGE_SPOT_PRODUCT_TYPE_NAME } from '@ccc/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { fulfillGarageSpotsForOrder } from '../../src/services/orders/garage-fulfillment.js';

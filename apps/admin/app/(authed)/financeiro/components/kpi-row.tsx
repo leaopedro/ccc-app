@@ -1,4 +1,4 @@
-import type { AdminFinanceSummary } from '@jdm/shared/admin';
+import type { AdminFinanceSummary } from '@ccc/shared/admin';
 
 const fmtCurrency = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);

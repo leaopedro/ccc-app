@@ -1,4 +1,4 @@
-import type { AdminEventDetail, AdminTicketTier } from '@jdm/shared/admin';
+import type { AdminEventDetail, AdminTicketTier } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';

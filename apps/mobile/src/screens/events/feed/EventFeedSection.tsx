@@ -1,6 +1,6 @@
-import type { Car } from '@jdm/shared/cars';
-import type { FeedListResponse, FeedPostResponse, FeedSettings } from '@jdm/shared/feed';
-import type { TicketSource } from '@jdm/shared/tickets';
+import type { Car } from '@ccc/shared/cars';
+import type { FeedListResponse, FeedPostResponse, FeedSettings } from '@ccc/shared/feed';
+import type { TicketSource } from '@ccc/shared/tickets';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {

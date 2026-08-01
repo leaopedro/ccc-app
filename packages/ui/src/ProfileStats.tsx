@@ -1,4 +1,4 @@
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 

@@ -1,4 +1,4 @@
-import type { ConfirmedCar } from '@jdm/shared/events';
+import type { ConfirmedCar } from '@ccc/shared/events';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,

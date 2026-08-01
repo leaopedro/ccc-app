@@ -1,4 +1,4 @@
-import type { NotificationListItem } from '@jdm/shared/notifications';
+import type { NotificationListItem } from '@ccc/shared/notifications';
 import { useRouter } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';

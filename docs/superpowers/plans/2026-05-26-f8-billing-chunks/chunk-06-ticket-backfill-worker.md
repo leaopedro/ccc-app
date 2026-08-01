@@ -204,7 +204,7 @@ premiumTicketBackfillJobs PremiumTicketBackfillJob[]
 - [ ] **Step 1.2: Generate and apply the migration**
 
 ```bash
-pnpm --filter @jdm/db run db:migrate
+pnpm --filter @ccc/db run db:migrate
 ```
 
 Expected: Prisma creates a new migration file under `packages/db/prisma/migrations/`. Inspect the generated SQL and confirm the `CREATE TABLE "PremiumTicketBackfillJob"` and foreign key are present.
@@ -212,8 +212,8 @@ Expected: Prisma creates a new migration file under `packages/db/prisma/migratio
 - [ ] **Step 1.3: Rebuild the Prisma client and shared package**
 
 ```bash
-pnpm --filter @jdm/db build
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/db build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: both build with no errors. `prisma.premiumTicketBackfillJob` is now accessible on the client.
@@ -247,7 +247,7 @@ This file lives alongside the worker source file (same directory as `event-remin
 - [ ] **Step 2.1: Create `apps/api/src/workers/premium-ticket-backfill.test.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../env.js';
@@ -596,7 +596,7 @@ describe('runPremiumTicketBackfillTick', () => {
 - [ ] **Step 2.2: Create `apps/api/test/billing/apply-membership-event-enqueue.test.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -724,8 +724,8 @@ describe('applyMembershipEvent post-commit enqueue', () => {
 - [ ] **Step 2.3: Run both test files to confirm they fail**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-ticket-backfill.test.ts
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-ticket-backfill.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts
 ```
 
 Expected: both fail. `premium-ticket-backfill.test.ts` fails with "Cannot find module" (file doesn't exist yet). `apply-membership-event-enqueue.test.ts` fails because `applyMembershipEvent` does not yet enqueue a job.
@@ -796,7 +796,7 @@ export const pickPremiumGrantableTier = async (
 - [ ] **Step 3.2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors. The `Tx` type inference pattern matches `apps/api/src/services/tickets/issue.ts:73` exactly — it is the established pattern in this codebase.
@@ -837,7 +837,7 @@ or null if none. Never logs — callers are responsible for §F8.7 warning."
 //
 // Job-table pattern mirrors data-export.ts (existing codebase pattern).
 
-import { prisma, Prisma } from '@jdm/db';
+import { prisma, Prisma } from '@ccc/db';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
@@ -1031,7 +1031,7 @@ The `Ticket` model in `packages/db/prisma/schema.prisma` does NOT have a `code` 
 - [ ] **Step 4.3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors.
@@ -1039,7 +1039,7 @@ Expected: no errors.
 - [ ] **Step 4.4: Run the worker tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run src/workers/premium-ticket-backfill.test.ts
+pnpm --filter @ccc/api exec vitest run src/workers/premium-ticket-backfill.test.ts
 ```
 
 Expected: all tests pass.
@@ -1108,7 +1108,7 @@ If `applyMembershipEvent` uses a different structure (e.g., the tx result is ret
 - [ ] **Step 5.2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors.
@@ -1116,7 +1116,7 @@ Expected: no errors.
 - [ ] **Step 5.3: Run the enqueue test**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts
 ```
 
 Expected: all three enqueue tests pass.
@@ -1124,7 +1124,7 @@ Expected: all three enqueue tests pass.
 - [ ] **Step 5.4: Run both test suites together**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts src/workers/premium-ticket-backfill.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/apply-membership-event-enqueue.test.ts src/workers/premium-ticket-backfill.test.ts
 ```
 
 Expected: all tests pass.
@@ -1173,7 +1173,7 @@ If chunk F8.01 has not yet created the `GROWTH_PREMIUM_BILLING_ENABLED` gate in 
 - [ ] **Step 6.3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: no errors.
@@ -1195,7 +1195,7 @@ Polls every minute for pending PremiumTicketBackfillJob rows."
 - [ ] **Step 7.1: Run all touched-path tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run \
+pnpm --filter @ccc/api exec vitest run \
   src/workers/premium-ticket-backfill.test.ts \
   test/billing/apply-membership-event-enqueue.test.ts \
   test/billing/apply-membership-event.test.ts
@@ -1206,7 +1206,7 @@ Expected: all pass. The last test file (`apply-membership-event.test.ts`) is the
 - [ ] **Step 7.2: Typecheck the full API package**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -1214,7 +1214,7 @@ Expected: clean.
 - [ ] **Step 7.3: Rebuild shared (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: build succeeds. This chunk adds no new shared exports, but the rebuild confirms nothing is broken.
@@ -1222,7 +1222,7 @@ Expected: build succeeds. This chunk adds no new shared exports, but the rebuild
 - [ ] **Step 7.4: ESLint the new files**
 
 ```bash
-pnpm --filter @jdm/api exec eslint \
+pnpm --filter @ccc/api exec eslint \
   src/workers/premium-ticket-backfill.ts \
   src/services/billing/tier-selection.ts
 ```
@@ -1275,7 +1275,7 @@ Canon compliance:
 - [x] applyMembershipEvent enqueues exactly one job on `subscription.activated`
 - [x] No job enqueued on `subscription.renewed`
 - [x] Replay of `subscription.activated` does not produce second job
-- [x] `pnpm --filter @jdm/api typecheck` clean
+- [x] `pnpm --filter @ccc/api typecheck` clean
 
 ## Reviewer checklist
 

@@ -1,7 +1,6 @@
 {
-  "extends": "@jdm/tsconfig/node.json",
+  "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
-    "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // XPTooltip tests. Mirrors the mobile workspace's working pattern for
-// `@jdm/ui` components that depend on react-native: vi.mock RN to
+// `@ccc/ui` components that depend on react-native: vi.mock RN to
 // jsdom-friendly host tags + render via `react-dom/client.createRoot`.
 //
 // Why not `@testing-library/react-native` (plan §"Tech Stack"):
@@ -218,7 +218,7 @@ describe('<XPTooltip />', () => {
   it('renders nothing when visible={false}', async () => {
     const { XP_RULES, XPTooltip } = await import('../XPTooltip.js');
     await renderEl(<XPTooltip visible={false} onClose={() => {}} />);
-    expect(container.textContent ?? '').not.toContain(XP_RULES[0]!.label);
+    expect(container.textContent ?? '').not.toContain(XP_RULES[0]?.label ?? '');
   });
 
   it('calls onClose when the backdrop is pressed', async () => {
@@ -227,8 +227,9 @@ describe('<XPTooltip />', () => {
     await renderEl(<XPTooltip visible onClose={onClose} testID="xp-tooltip" />);
     const backdrop = container.querySelector<HTMLElement>('[data-testid="xp-tooltip-backdrop"]');
     expect(backdrop).not.toBeNull();
+    if (!backdrop) throw new Error('Expected tooltip backdrop');
     await act(async () => {
-      backdrop!.click();
+      backdrop.click();
       await flush();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -240,8 +241,9 @@ describe('<XPTooltip />', () => {
     await renderEl(<XPTooltip visible onClose={onClose} testID="xp-tooltip" />);
     const handler = modalRequestClose.get('xp-tooltip');
     expect(typeof handler).toBe('function');
+    if (!handler) throw new Error('Expected modal request close handler');
     await act(async () => {
-      handler!();
+      handler();
       await flush();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -253,8 +255,9 @@ describe('<XPTooltip />', () => {
     await renderEl(<XPTooltip visible onClose={onClose} testID="xp-tooltip" />);
     const card = container.querySelector<HTMLElement>('[data-testid="xp-tooltip-card"]');
     expect(card).not.toBeNull();
+    if (!card) throw new Error('Expected tooltip card');
     await act(async () => {
-      card!.click();
+      card.click();
       await flush();
     });
     expect(onClose).not.toHaveBeenCalled();

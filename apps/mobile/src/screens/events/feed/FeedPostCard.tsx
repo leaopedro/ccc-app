@@ -1,6 +1,6 @@
-import type { Car } from '@jdm/shared/cars';
-import type { FeedPostResponse } from '@jdm/shared/feed';
-import { PremiumBadge } from '@jdm/ui';
+import type { Car } from '@ccc/shared/cars';
+import type { FeedPostResponse } from '@ccc/shared/feed';
+import { PremiumBadge } from '@ccc/ui';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FeedComments } from './FeedComments';

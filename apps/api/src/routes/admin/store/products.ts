@@ -1,17 +1,17 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminStoreProductCreateSchema,
   adminStoreProductListResponseSchema,
   adminStoreProductLookupResponseSchema,
   adminStoreProductUpdateSchema,
-} from '@jdm/shared/admin';
-import { GARAGE_SPOT_PRODUCT_SLUG } from '@jdm/shared/garage';
+} from '@ccc/shared/admin';
+import { GARAGE_SPOT_PRODUCT_SLUG } from '@ccc/shared/garage';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
 // Singleton product slugs whose lifecycle is owned by seeds. Admin PATCH must
 // not change their status (mirrors UI guard in apps/admin product-form.tsx
-// and assertVirtualSingletonProtected in @jdm/db for delete/duplicate).
+// and assertVirtualSingletonProtected in @ccc/db for delete/duplicate).
 const SINGLETON_PRODUCT_SLUGS = new Set<string>([GARAGE_SPOT_PRODUCT_SLUG]);
 
 import { requireUser } from '../../../plugins/auth.js';
@@ -146,7 +146,7 @@ export const adminStoreProductRoutes: FastifyPluginAsync = async (app) => {
       // Note: `virtual` and `visibleInStore` are not in adminStoreProductUpdateSchema
       // and are stripped by zod, so they can't be patched via this endpoint. The
       // singleton's `virtual=true` / `visibleInStore=false` invariants are owned
-      // by seeds and enforced by assertVirtualSingletonProtected in @jdm/db.
+      // by seeds and enforced by assertVirtualSingletonProtected in @ccc/db.
     }
 
     if (input.status === 'active' && existing.status !== 'active') {

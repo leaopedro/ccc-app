@@ -1,5 +1,5 @@
 {
-  "name": "@jdm/admin",
+  "name": "@ccc/admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@jdm/shared": "workspace:*",
-    "@jdm/ui": "workspace:*",
+    "@ccc/design": "workspace:*",
+    "@ccc/shared": "workspace:*",
+    "@ccc/ui": "workspace:*",
     "@sentry/nextjs": "^10.49.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
@@ -27,7 +28,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

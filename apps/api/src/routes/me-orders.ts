@@ -1,10 +1,10 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
-import { cancelMyOrderResponseSchema, myOrdersResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { cancelMyOrderResponseSchema, myOrdersResponseSchema } from '@ccc/shared/orders';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 import { cancelPendingOrder, prepareCancelPendingOrder } from '../services/orders/cancel.js';
+import rateLimit from '@fastify/rate-limit';
 
 export const meOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.get('/me/orders', { preHandler: [app.authenticate] }, async (request) => {

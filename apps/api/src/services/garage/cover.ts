@@ -1,4 +1,4 @@
-import { GARAGE_COVER_PRESETS, GARAGE_COVER_PRESET_SLUGS } from '@jdm/shared/garage-covers';
+import { GARAGE_COVER_PRESETS, GARAGE_COVER_PRESET_SLUGS } from '@ccc/shared/garage-covers';
 import type { Garage } from '@prisma/client';
 
 import { computeIsPremiumActive } from './index.js';

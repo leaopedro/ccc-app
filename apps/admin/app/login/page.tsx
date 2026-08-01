@@ -1,10 +1,10 @@
 'use client';
 
-import { brand } from '@jdm/design';
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 
+import { brand } from '~/brand';
 import {
   loginAction,
   mfaVerifyAction,

@@ -4,7 +4,7 @@
 
 **Goal:** Expose `TicketTier.isPremiumGrantable` (already in DB via F8.01) through the full admin stack: zod schemas, tier CRUD API, admin tier list UI checkbox, and a non-blocking publish warning when no grantable tier exists.
 
-**Architecture:** Four-layer change. `packages/shared/src/admin.ts` gains the field on `adminTicketTierSchema` + `adminTierCreateSchema` + `adminTierUpdateSchema`. `apps/api/src/routes/admin/tiers.ts` (the tier CRUD handler — NOT `events.ts`) reads and persists the boolean on POST + PATCH. `apps/api/src/routes/admin/serializers.ts` emits the field. Admin UI `tier-list.tsx` renders a checkbox per row + in the create form. `event-form.tsx` shows a warning banner when the event is `draft` and no tier has `isPremiumGrantable=true`. Rebuild `@jdm/shared` after any schema export change (canon §F8.13).
+**Architecture:** Four-layer change. `packages/shared/src/admin.ts` gains the field on `adminTicketTierSchema` + `adminTierCreateSchema` + `adminTierUpdateSchema`. `apps/api/src/routes/admin/tiers.ts` (the tier CRUD handler — NOT `events.ts`) reads and persists the boolean on POST + PATCH. `apps/api/src/routes/admin/serializers.ts` emits the field. Admin UI `tier-list.tsx` renders a checkbox per row + in the create form. `event-form.tsx` shows a warning banner when the event is `draft` and no tier has `isPremiumGrantable=true`. Rebuild `@ccc/shared` after any schema export change (canon §F8.13).
 
 **Tech Stack:** Prisma 5, zod 3, Fastify 4, vitest + Testcontainers-Postgres, Next.js App Router (server actions + `useActionState`), React 18, Tailwind.
 
@@ -137,7 +137,7 @@ describe('adminTierUpdateSchema isPremiumGrantable', () => {
 - [ ] **Step 1.2 — Run the test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
 ```
 
 Expected: FAIL with "isPremiumGrantable is not a valid key" or type errors.
@@ -209,15 +209,15 @@ export type AdminTierUpdate = z.infer<typeof adminTierUpdateSchema>;
 - [ ] **Step 1.6 — Run the test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
+pnpm --filter @ccc/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
 ```
 
 Expected: 6 cases PASS.
 
-- [ ] **Step 1.7 — Rebuild `@jdm/shared` (canon §F8.13)**
+- [ ] **Step 1.7 — Rebuild `@ccc/shared` (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: success. Updated `dist/admin.js` + `.d.ts` exports `isPremiumGrantable` on all three schemas.
@@ -325,7 +325,7 @@ it('sets isPremiumGrantable back to false via PATCH', async () => {
 - [ ] **Step 2.2 — Run failing tests**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
 ```
 
 Expected: the 4 new cases FAIL (column accepted but not persisted; body field missing). Existing cases still PASS.
@@ -386,7 +386,7 @@ if (input.isPremiumGrantable !== undefined) data.isPremiumGrantable = input.isPr
 - [ ] **Step 2.6 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: GREEN. If `t.isPremiumGrantable` is not known to `DbTier`, it means F8.01 hasn't been merged yet — stop.
@@ -394,7 +394,7 @@ Expected: GREEN. If `t.isPremiumGrantable` is not known to `DbTier`, it means F8
 - [ ] **Step 2.7 — Run tests, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
+pnpm --filter @ccc/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
 ```
 
 Expected: all existing cases + 4 new cases PASS.
@@ -440,7 +440,7 @@ vi.mock('~/lib/tier-actions', () => ({
 }));
 
 import { TierList } from '../tier-list';
-import type { AdminTicketTier } from '@jdm/shared/admin';
+import type { AdminTicketTier } from '@ccc/shared/admin';
 
 const makeTier = (overrides: Partial<AdminTicketTier> = {}): AdminTicketTier => ({
   id: 't_1',
@@ -500,7 +500,7 @@ describe('TierList — isPremiumGrantable checkbox', () => {
 - [ ] **Step 3.2 — Run failing test**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx"
 ```
 
 Expected: FAIL (checkbox not found — it doesn't exist yet).
@@ -605,7 +605,7 @@ Note: HTML checkboxes only submit a value when checked; unchecked checkboxes are
 - [ ] **Step 3.6 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/tier-list.test.tsx"
 ```
 
 Expected: 4 cases PASS.
@@ -613,7 +613,7 @@ Expected: 4 cases PASS.
 - [ ] **Step 3.7 — Typecheck admin**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: GREEN.
@@ -668,7 +668,7 @@ vi.mock('~/components/date-time-field', () => ({
 }));
 
 import { EventForm } from '../event-form';
-import type { AdminEventDetail, AdminTicketTier } from '@jdm/shared/admin';
+import type { AdminEventDetail, AdminTicketTier } from '@ccc/shared/admin';
 
 const makeTier = (isPremiumGrantable: boolean): AdminTicketTier => ({
   id: 't_1',
@@ -747,7 +747,7 @@ describe('EventForm — no-grantable-tier publish warning', () => {
 - [ ] **Step 4.2 — Run failing test**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/event-form-publish-warning.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/event-form-publish-warning.test.tsx"
 ```
 
 Expected: FAIL (warning text not found).
@@ -783,7 +783,7 @@ This renders only on `draft` events. Once published, the event-form shows the pu
 - [ ] **Step 4.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/event-form-publish-warning.test.tsx"
+pnpm --filter @ccc/admin exec vitest run "app/\(authed\)/events/\[id\]/__tests__/event-form-publish-warning.test.tsx"
 ```
 
 Expected: 4 cases PASS.
@@ -791,7 +791,7 @@ Expected: 4 cases PASS.
 - [ ] **Step 4.5 — Typecheck admin**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: GREEN.
@@ -819,19 +819,19 @@ Stop and fix at the first failure.
 
 ```bash
 # 1. Shared — must build before any downstream package tests.
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts
 
 # 2. API tier CRUD.
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts
 
 # 3. Admin UI.
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/admin exec vitest run "app/(authed)/events/[id]/__tests__/tier-list.test.tsx" "app/(authed)/events/[id]/__tests__/event-form-publish-warning.test.tsx"
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/admin exec vitest run "app/(authed)/events/[id]/__tests__/tier-list.test.tsx" "app/(authed)/events/[id]/__tests__/event-form-publish-warning.test.tsx"
 ```
 
-`pnpm --filter @jdm/shared build` is required before API tests (canon §F8.13). Only the files touched in this chunk run (per `feedback_no_full_test_suite_locally.md`). All commands one-shot (per `feedback_no_background_shells.md`).
+`pnpm --filter @ccc/shared build` is required before API tests (canon §F8.13). Only the files touched in this chunk run (per `feedback_no_full_test_suite_locally.md`). All commands one-shot (per `feedback_no_background_shells.md`).
 
 ---
 
@@ -849,7 +849,7 @@ git push -u origin feat/jdma-f8-billing-08
 gh pr create --title "feat(shared,api,admin): TicketTier.isPremiumGrantable admin CRUD + UI (chunk 08)" --body "$(cat <<'EOF'
 ## Summary
 
-- Extends `adminTicketTierSchema`, `adminTierCreateSchema`, `adminTierUpdateSchema` in `@jdm/shared` with `isPremiumGrantable: z.boolean().default(false)`.
+- Extends `adminTicketTierSchema`, `adminTierCreateSchema`, `adminTierUpdateSchema` in `@ccc/shared` with `isPremiumGrantable: z.boolean().default(false)`.
 - `apps/api/src/routes/admin/tiers.ts` POST + PATCH handlers persist the boolean; `serializeAdminTier` emits it.
 - `tier-list.tsx` renders a "Conceder a membros premium na publicação" checkbox on each tier row and in the create form; `tier-actions.ts` reads + passes the value through.
 - `event-form.tsx` shows a non-blocking amber advisory on draft events with zero grantable tiers: "Nenhum nível concede acesso premium; membros não receberão ticket automático."
@@ -857,13 +857,13 @@ gh pr create --title "feat(shared,api,admin): TicketTier.isPremiumGrantable admi
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/shared build` — shared rebuilds cleanly (canon §F8.13)
-- [ ] `pnpm --filter @jdm/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts` — 6 zod cases PASS
-- [ ] `pnpm --filter @jdm/api typecheck` — GREEN
-- [ ] `pnpm --filter @jdm/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts` — all cases PASS including 4 new
-- [ ] `pnpm --filter @jdm/admin typecheck` — GREEN
-- [ ] `pnpm --filter @jdm/admin exec vitest run "app/(authed)/events/[id]/__tests__/tier-list.test.tsx"` — 4 UI cases PASS
-- [ ] `pnpm --filter @jdm/admin exec vitest run "app/(authed)/events/[id]/__tests__/event-form-publish-warning.test.tsx"` — 4 warning cases PASS
+- [ ] `pnpm --filter @ccc/shared build` — shared rebuilds cleanly (canon §F8.13)
+- [ ] `pnpm --filter @ccc/shared exec vitest run src/__tests__/admin-tier-premium-grantable.test.ts` — 6 zod cases PASS
+- [ ] `pnpm --filter @ccc/api typecheck` — GREEN
+- [ ] `pnpm --filter @ccc/api exec vitest run test/admin/tiers/create.test.ts test/admin/tiers/update.test.ts` — all cases PASS including 4 new
+- [ ] `pnpm --filter @ccc/admin typecheck` — GREEN
+- [ ] `pnpm --filter @ccc/admin exec vitest run "app/(authed)/events/[id]/__tests__/tier-list.test.tsx"` — 4 UI cases PASS
+- [ ] `pnpm --filter @ccc/admin exec vitest run "app/(authed)/events/[id]/__tests__/event-form-publish-warning.test.tsx"` — 4 warning cases PASS
 
 ## Chunk notes
 
@@ -881,7 +881,7 @@ EOF
 ## Self-review checklist (before requesting review)
 
 - [ ] Branch `feat/jdma-f8-billing-08`, cut from fresh `main`. F8.01 confirmed on `main`.
-- [ ] `@jdm/shared` rebuilt after schema changes (`pnpm --filter @jdm/shared build`).
+- [ ] `@ccc/shared` rebuilt after schema changes (`pnpm --filter @ccc/shared build`).
 - [ ] `adminTicketTierSchema` has `isPremiumGrantable: z.boolean().default(false)`.
 - [ ] `adminTierCreateSchema` has `isPremiumGrantable: z.boolean().default(false)`.
 - [ ] `adminTierUpdateSchema` has `isPremiumGrantable: z.boolean()` inside `.partial().strict()`.

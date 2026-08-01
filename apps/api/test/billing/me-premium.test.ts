@@ -10,7 +10,7 @@
  * No real Stripe API calls happen — FakeStripe returns deterministic values.
  */
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -267,9 +267,9 @@ describe('POST /api/me/premium/checkout', () => {
     // Subscription session creation was invoked with the monthly priceId.
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
     expect(subCall).toBeDefined();
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_monthly_test');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual(['price_monthly_test']);
     expect((subCall!.payload as { idempotencyKey: string }).idempotencyKey).toMatch(
-      /^checkout_sub_.+_monthly$/,
+      /^checkout_sub_.+_monthly_[0-9a-f]+$/,
     );
   });
 
@@ -288,7 +288,7 @@ describe('POST /api/me/premium/checkout', () => {
     expect(res.statusCode).toBe(201);
     expect(json(res).url).toContain('checkout.stripe.com');
     const subCall = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect((subCall!.payload as { priceId: string }).priceId).toBe('price_annual_test');
+    expect((subCall!.payload as { priceIds: string[] }).priceIds).toEqual(['price_annual_test']);
   });
 
   it('findOrCreateCustomer called once with the user email and garageId metadata', async () => {
@@ -375,7 +375,7 @@ describe('POST /api/me/premium/checkout', () => {
     expect(json(res).error).toBe('ServiceUnavailable');
   });
 
-  it('returns 409 when an open Stripe Checkout Session already exists (cross-cadence dup guard)', async () => {
+  it('expires a stale open Stripe Checkout Session before minting a new one (cross-cadence)', async () => {
     ({ app, stripe } = await buildPremiumApp(true));
     stripe.nextOpenSubscriptionCheckoutSessions = [
       { id: 'cs_existing_open', url: 'https://checkout.stripe.com/pay/cs_existing_open' },
@@ -390,14 +390,12 @@ describe('POST /api/me/premium/checkout', () => {
       payload: { cadence: 'annual' },
     });
 
-    expect(res.statusCode).toBe(409);
-    const body = json(res);
-    expect(body.error).toBe('AlreadySubscribed');
-    expect(body.provider).toBe('stripe');
-    expect(body.manageUrl).toBe('https://checkout.stripe.com/pay/cs_existing_open');
-    // The new session must NOT have been created.
+    expect(res.statusCode).toBe(201);
+    // The stale session is expired, then a new one is created.
+    const expireCall = stripe.calls.find((c) => c.kind === 'expireCheckoutSession');
+    expect(expireCall?.payload).toEqual({ sessionId: 'cs_existing_open' });
     const subCreate = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
-    expect(subCreate).toBeUndefined();
+    expect(subCreate).toBeDefined();
   });
 });
 

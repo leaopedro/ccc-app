@@ -1,4 +1,4 @@
-import type { StoreProduct } from '@jdm/shared/store';
+import type { StoreProduct } from '@ccc/shared/store';
 import { describe, expect, it } from 'vitest';
 
 import {

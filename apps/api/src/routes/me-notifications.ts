@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   notificationDestinationSchema,
   notificationListItemSchema,
@@ -7,7 +7,7 @@ import {
   notificationMarkReadResponseSchema,
   notificationUnreadCountResponseSchema,
   type NotificationListItem,
-} from '@jdm/shared/notifications';
+} from '@ccc/shared/notifications';
 import type { Notification, Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

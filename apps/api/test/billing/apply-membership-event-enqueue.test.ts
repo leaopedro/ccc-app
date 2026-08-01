@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -52,6 +52,9 @@ const makeActivatedEvent = (
   currentPeriodEnd: new Date('2026-07-01'),
   pricing: BASE_PRICING,
   invoice: BASE_INVOICE,
+  lines: [],
+  addons: [],
+  addonsAmountCents: 0,
   ...overrides,
 });
 
@@ -98,6 +101,7 @@ describe('enqueuePremiumTicketBackfillIfActivated', () => {
         periodEnd: new Date('2026-08-01'),
         paidAt: new Date('2026-07-01'),
       },
+      lines: [],
     };
 
     await dispatch(renewed, garage.id);
@@ -173,6 +177,8 @@ describe('enqueuePremiumTicketBackfillIfActivated', () => {
       kind: 'subscription.tier_changed',
       provider: 'stripe',
       providerSubRef: 'sub_test_enq_001',
+      priceRef: 'price_test_enq_annual_gold',
+      priceMetadata: { devFeePercent: '10' },
       tier: 'gold',
       cadence: 'annual',
       pricing: BASE_PRICING,

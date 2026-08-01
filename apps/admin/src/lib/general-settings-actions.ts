@@ -1,6 +1,6 @@
 'use server';
 
-import type { GeneralSettings, GeneralSettingsUpdate } from '@jdm/shared/general-settings';
+import type { GeneralSettings, GeneralSettingsUpdate } from '@ccc/shared/general-settings';
 
 import { getAdminGeneralSettings, updateAdminGeneralSettings } from './admin-api';
 import { ApiError } from './api';

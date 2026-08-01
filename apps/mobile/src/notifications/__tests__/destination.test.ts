@@ -1,4 +1,4 @@
-import type { NotificationDestination } from '@jdm/shared/notifications';
+import type { NotificationDestination } from '@ccc/shared/notifications';
 import { Linking } from 'react-native';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

@@ -1,6 +1,6 @@
-import type { UserRoleName } from '@jdm/shared/auth';
-import type { FeedPostResponse, FeedSettings } from '@jdm/shared/feed';
-import type { TicketSource } from '@jdm/shared/tickets';
+import type { UserRoleName } from '@ccc/shared/auth';
+import type { FeedPostResponse, FeedSettings } from '@ccc/shared/feed';
+import type { TicketSource } from '@ccc/shared/tickets';
 import { describe, expect, it } from 'vitest';
 
 import { canModerateFeedPost, resolveFeedPostActionVisibility } from '../post-actions';

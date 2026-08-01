@@ -1,6 +1,6 @@
 'use server';
 
-import { adminExtraCreateSchema, adminExtraUpdateSchema } from '@jdm/shared/admin';
+import { adminExtraCreateSchema, adminExtraUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 
 import { createExtra, deleteExtra, updateExtra } from './admin-api';

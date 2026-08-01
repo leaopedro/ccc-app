@@ -1,7 +1,7 @@
 'use server';
 
-import { consentListResponseSchema, consentRecordSchema } from '@jdm/shared';
-import { PRIVACY_POLICY_VERSION } from '@jdm/shared/legal';
+import { consentListResponseSchema, consentRecordSchema } from '@ccc/shared';
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import { z } from 'zod';
 
 import { apiFetch } from './api';

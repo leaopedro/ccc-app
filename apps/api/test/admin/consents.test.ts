@@ -1,4 +1,4 @@
-import { adminConsentListResponseSchema } from '@jdm/shared';
+import { adminConsentListResponseSchema } from '@ccc/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

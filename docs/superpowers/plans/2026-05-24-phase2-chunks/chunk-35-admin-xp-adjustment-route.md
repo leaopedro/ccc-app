@@ -4,7 +4,7 @@
 
 **Goal:** Ship `POST /admin/users/:id/garage/xp-adjustment` — admin-only, 30/min/admin rate-limit, accepts signed `delta` + free-form `reason`, writes one `XpEvent` (sourceRef `admin:<adminId>:<uuid>`) + one separate `AdminAudit` row, returns `{ xp }`. Killswitch off → `409 gamification_disabled`.
 
-**Architecture:** New shared zod subpath (`@jdm/shared/admin-garage-xp`) + new admin route registered in its own admin-only block in `apps/api/src/routes/admin/index.ts` with a dedicated 30/min/admin rate-limit bucket (§C7 — must NOT share the `adminUserMutationRoutes` bucket). Route delegates to `awardXp(tx, garageId, 'admin_adjustment', { delta, sourceRef })` per fix-canon §4 (positional 4-arg; the only awarder reason accepting signed delta — §C8). AdminAudit is recorded INSIDE the same `prisma.$transaction` as `awardXp` (passing `tx` to `recordAudit`) so XpEvent + Garage.xp + AdminAudit roll back together — no persisted unaudited admin adjustment. Admin UI modal folded here per the decision call, with admin-garage API + server-action updates included in the same chunk so the modal has a working submit path.
+**Architecture:** New shared zod subpath (`@ccc/shared/admin-garage-xp`) + new admin route registered in its own admin-only block in `apps/api/src/routes/admin/index.ts` with a dedicated 30/min/admin rate-limit bucket (§C7 — must NOT share the `adminUserMutationRoutes` bucket). Route delegates to `awardXp(tx, garageId, 'admin_adjustment', { delta, sourceRef })` per fix-canon §4 (positional 4-arg; the only awarder reason accepting signed delta — §C8). AdminAudit is recorded INSIDE the same `prisma.$transaction` as `awardXp` (passing `tx` to `recordAudit`) so XpEvent + Garage.xp + AdminAudit roll back together — no persisted unaudited admin adjustment. Admin UI modal folded here per the decision call, with admin-garage API + server-action updates included in the same chunk so the modal has a working submit path.
 
 **Tech Stack:** Fastify 4, Prisma 5, zod 3, `@fastify/rate-limit`, vitest + Testcontainers-Postgres, Next.js App Router, React 18 + Tailwind.
 
@@ -121,7 +121,7 @@ Remaining 8 `it` blocks (each `expect(...).toThrow()` unless noted):
 - [ ] **Step 1.2 — Run test, confirm FAIL**
 
 ```bash
-pnpm --filter @jdm/shared test -- src/__tests__/admin-garage-xp.test.ts
+pnpm --filter @ccc/shared test -- src/__tests__/admin-garage-xp.test.ts
 ```
 
 Expected FAIL: "Cannot find module '../admin-garage-xp.js'".
@@ -156,7 +156,7 @@ The zero-delta `.refine` rejects at the schema layer. Route still keeps a defens
 - [ ] **Step 1.4 — Run test, confirm PASS**
 
 ```bash
-pnpm --filter @jdm/shared test -- src/__tests__/admin-garage-xp.test.ts
+pnpm --filter @ccc/shared test -- src/__tests__/admin-garage-xp.test.ts
 ```
 
 Expected: 9 cases PASS.
@@ -184,12 +184,12 @@ Insert `'xp.adjustment'` after `'badge.unpin'` and before `'gamification.toggle'
   'gamification.toggle',
 ```
 
-- [ ] **Step 1.7 — Rebuild `@jdm/shared` (CLAUDE.md memory rule)**
+- [ ] **Step 1.7 — Rebuild `@ccc/shared` (CLAUDE.md memory rule)**
 
 Runtime resolves `dist/`. Without rebuild, API typechecks against `src/` but runs against stale `dist/`.
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: success. New `dist/admin-garage-xp.js` + `.d.ts`; `dist/admin.js` regenerated with the extended enum.
@@ -229,7 +229,7 @@ import { ensureGarageForUserId } from '../../services/garage/ensure.js';
 - [ ] **Step 2.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected GREEN. Chunk-20 test suite still passes verbatim — same function, just imported.
@@ -248,8 +248,8 @@ Pattern reference: `apps/api/src/routes/admin/user-garage.ts:387-445` (chunk-20 
 import rateLimit from '@fastify/rate-limit';
 import crypto from 'node:crypto';
 
-import { prisma } from '@jdm/db';
-import { adminXpAdjustmentSchema } from '@jdm/shared/admin-garage-xp';
+import { prisma } from '@ccc/db';
+import { adminXpAdjustmentSchema } from '@ccc/shared/admin-garage-xp';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';
@@ -337,7 +337,7 @@ export const adminGarageXpAdjustmentRoutes: FastifyPluginAsync = async (app) => 
 - [ ] **Step 3.2 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected GREEN. If the awardXp option keys differ, fix to match the actual export on `main`.
@@ -386,7 +386,7 @@ The outer block's `admin-xp-adj:` key matches the inner route-file rate-limit ke
 - [ ] **Step 4.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected GREEN.
@@ -405,7 +405,7 @@ File scaffolding (imports + `seedAdminAndTarget` helper + `post` helper + `descr
 
 ```ts
 // apps/api/test/garage/admin-xp-adjustment.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -480,10 +480,10 @@ describe('POST /admin/users/:id/garage/xp-adjustment (chunk 35)', () => {
 - [ ] **Step 5.2 — Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- test/garage/admin-xp-adjustment.test.ts
+pnpm --filter @ccc/api test -- test/garage/admin-xp-adjustment.test.ts
 ```
 
-Expected: 12 PASS. If `prisma.xpEvent` is undefined → `pnpm --filter @jdm/db build` (chunk 23 dist not regenerated locally).
+Expected: 12 PASS. If `prisma.xpEvent` is undefined → `pnpm --filter @ccc/db build` (chunk 23 dist not regenerated locally).
 
 - [ ] **Step 5.3 — Commit Tasks 2 + 3 + 4 + 5 together**
 
@@ -512,7 +512,7 @@ Read `apps/admin/src/components/grant-garage-premium-modal.tsx` + `edit-user-gar
 5. **`renders gamification_disabled error from server`** — `onSubmit = vi.fn().mockRejectedValue({ status: 409, body: { error: 'gamification_disabled' } })`; type valid inputs; click "Aplicar"; `waitFor` `screen.getByText(/gamificação desativada/i)` is present.
 
 ```bash
-pnpm --filter @jdm/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
+pnpm --filter @ccc/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
 ```
 
 Expected FAIL: module not found.
@@ -521,7 +521,7 @@ Expected FAIL: module not found.
 
 `apps/admin/src/components/admin-xp-adjustment-modal.tsx`. Tailwind classes copied from `grant-garage-premium-modal.tsx`.
 
-Props: `{ userId: string; open: boolean; onClose: () => void; onSubmit: (input: AdminXpAdjustmentInput) => Promise<{ xp: number }>; gamificationDisabled?: boolean }`. Import `AdminXpAdjustmentInput` from `@jdm/shared/admin-garage-xp`.
+Props: `{ userId: string; open: boolean; onClose: () => void; onSubmit: (input: AdminXpAdjustmentInput) => Promise<{ xp: number }>; gamificationDisabled?: boolean }`. Import `AdminXpAdjustmentInput` from `@ccc/shared/admin-garage-xp`.
 
 State: `delta` (string), `reason` (string), `error` (string | null), `submitting` (boolean).
 
@@ -552,8 +552,8 @@ On success: clear state + call `onClose()`.
 Markup: `<div role="dialog" aria-modal="true">` wrapper (or the admin app's existing `Dialog` primitive from Step 6.1) containing `<h2>Ajuste manual de XP</h2>`, `<label>Delta <input type="number" min={-10_000} max={10_000} step={1} .../></label>`, `<label>Motivo <textarea maxLength={120} .../></label>`, killswitch banner `<p>Gamificação desativada — ajustes bloqueados.</p>` when `gamificationDisabled`, `<p role="alert">` for the error string, Cancelar button (`disabled={submitting}`), Aplicar button (`disabled={!canSubmit}`; label switches `'Aplicando...'` while submitting).
 
 ```bash
-pnpm --filter @jdm/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
+pnpm --filter @ccc/admin typecheck
 ```
 
 Expected: 5 PASS, typecheck GREEN.
@@ -563,7 +563,7 @@ Expected: 5 PASS, typecheck GREEN.
 `apps/admin/src/lib/admin-garage-api.ts` already hosts the chunk-20 admin-garage fetchers (`grantPremium`, `awardBadge`, etc.). Add a sibling export:
 
 ```ts
-import type { AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 
 export const adjustGarageXp = async (
   userId: string,
@@ -589,7 +589,7 @@ Read the existing file first to confirm the helper name (`adminFetch` vs `postJs
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { adminXpAdjustmentSchema, type AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+import { adminXpAdjustmentSchema, type AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { adjustGarageXp } from '../lib/admin-garage-api.js';
 
 export const adjustGarageXpAction = async (
@@ -623,20 +623,20 @@ Stop and fix at the first failure.
 
 ```bash
 # 1. Shared.
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared typecheck
-pnpm --filter @jdm/shared test -- src/__tests__/admin-garage-xp.test.ts
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared typecheck
+pnpm --filter @ccc/shared test -- src/__tests__/admin-garage-xp.test.ts
 
 # 2. API.
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api test -- test/garage/admin-xp-adjustment.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api test -- test/garage/admin-xp-adjustment.test.ts
 
 # 3. Admin.
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/admin test -- src/components/admin-xp-adjustment-modal.interaction.test.tsx
 ```
 
-`pnpm --filter @jdm/shared build` is **required** before the API tests (CLAUDE.md `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only the new files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
+`pnpm --filter @ccc/shared build` is **required** before the API tests (CLAUDE.md `feedback_rebuild_shared_after_schema_change.md`). Per `feedback_no_full_test_suite_locally.md`, only the new files run. Per `feedback_no_background_shells.md`, all commands are one-shot.
 
 ---
 
@@ -676,7 +676,7 @@ PR opens against `main`. Never `production`.
 ## Self-review checklist (before requesting review)
 
 - [ ] Branch `feat/jdma-garage-phase2-35`, cut from fresh `main`. Chunks 23 + 24 + 27 on `main`.
-- [ ] `packages/shared/package.json` subpath alphabetical. `pnpm --filter @jdm/shared build` ran after the schema change; `dist/admin-garage-xp.js` exists.
+- [ ] `packages/shared/package.json` subpath alphabetical. `pnpm --filter @ccc/shared build` ran after the schema change; `dist/admin-garage-xp.js` exists.
 - [ ] `adminAuditActionSchema` includes `'xp.adjustment'`; new `recordAudit` typechecks.
 - [ ] Route has inner rate-limit bucket `admin-xp-adj:<sub>`. Registered in its OWN admin-only `app.register` block in `admin/index.ts` — NOT inside the `adminUserMutationRoutes` block (review MAJOR).
 - [ ] `crypto.randomUUID()` for `sourceRef` (fix-canon §7) — NOT timestamp, NOT hash of reason. Format matches `/^admin:[^:]+:[0-9a-f-]{36}$/`.

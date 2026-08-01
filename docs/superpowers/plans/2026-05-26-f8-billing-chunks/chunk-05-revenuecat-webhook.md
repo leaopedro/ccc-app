@@ -6,7 +6,7 @@
 
 **Architecture:** The route lives at `apps/api/src/routes/revenuecat-webhook.ts` (new file, `FastifyPluginAsync` pattern matching `abacatepay-webhook.ts`). Auth is constant-time compare of `request.headers.authorization` against `env.REVENUECAT_WEBHOOK_AUTH_HEADER`. The normalizer `normalize-revenuecat.ts` (stub in F8.02) receives the full RC v2 `event` object, checks `country_code`, and maps RC event types to `BillingEvent` discriminants. Unknown/ignorable types (`TRANSFER`, `SUBSCRIPTION_PAUSED`, others) return `null`. Non-BR storefronts return the sentinel `{ kind: '__non_br__' }`. The route consults `env.GROWTH_PREMIUM_BILLING_ENABLED` (canon §F8.11) before doing anything.
 
-**Tech Stack:** Fastify, Prisma (Testcontainers Postgres in tests), `timingSafeEqual` from `node:crypto`, `@jdm/shared` zod types (via F8.02 stubs), `isUniqueConstraintError` from `../lib/prisma-errors.js`, Vitest.
+**Tech Stack:** Fastify, Prisma (Testcontainers Postgres in tests), `timingSafeEqual` from `node:crypto`, `@ccc/shared` zod types (via F8.02 stubs), `isUniqueConstraintError` from `../lib/prisma-errors.js`, Vitest.
 
 **Branch:** `feat/jdma-f8-billing-05`
 
@@ -114,7 +114,7 @@ All tests must be written before any production code is written. They will fail 
 
 ```ts
 // apps/api/test/billing/revenuecat-webhook.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -693,7 +693,7 @@ describe('POST /webhooks/revenuecat', () => {
 - [ ] **Step 2: Run tests and confirm they all fail**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/revenuecat-webhook.test.ts
 ```
 
 Expected: all tests FAIL. Common failure modes:
@@ -902,7 +902,7 @@ export function normalizeRevenueCatEvent(rawEvent: unknown): NormalizeRCResult {
 - [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors. If errors occur, the most likely cause is `BillingEvent` discriminant names not matching what F8.02 defined in `types.ts`. Check `subscription.activated` vs `activated` naming — the `kind` values must match the union exactly.
@@ -930,7 +930,7 @@ git commit -m "feat(billing): implement normalizeRevenueCatEvent with RC v2 even
 import { timingSafeEqual } from 'node:crypto';
 
 import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import type { FastifyPluginAsync } from 'fastify';
@@ -1115,13 +1115,13 @@ await app.register(abacatepayWebhookRoutes);
 - [ ] **Step 3: Verify TypeScript compiles**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors. Common errors at this step:
 
 - `applyMembershipEvent` signature mismatch — check what F8.03 defined. If it takes `(tx, event, providerEventId)` vs `(prisma, event, providerEventId)`, adjust the call site. The service handles its own tx internally.
-- `provider_providerEventId` compound unique name — check that F8.01's Prisma schema defines `@@unique([provider, providerEventId])` (it should generate this accessor name automatically). If the generated name differs, run `pnpm --filter @jdm/db build` first to regenerate the client.
+- `provider_providerEventId` compound unique name — check that F8.01's Prisma schema defines `@@unique([provider, providerEventId])` (it should generate this accessor name automatically). If the generated name differs, run `pnpm --filter @ccc/db build` first to regenerate the client.
 
 - [ ] **Step 4: Commit the route + app registration**
 
@@ -1137,7 +1137,7 @@ git commit -m "feat(api): POST /webhooks/revenuecat route with auth + idempotenc
 - [ ] **Step 1: Run the full test suite for this chunk**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/revenuecat-webhook.test.ts
 ```
 
 Expected: all tests PASS. If any fail, the most common causes are:
@@ -1145,17 +1145,17 @@ Expected: all tests PASS. If any fail, the most common causes are:
 | Failure                                                                       | Fix                                                                                                                                                                |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `makeApp` does not accept `env` override for `REVENUECAT_WEBHOOK_AUTH_HEADER` | Check how `makeApp` in `apps/api/test/helpers.ts` handles env overrides — match pattern from F8.01                                                                 |
-| `prisma.subscriptionWebhookEvent` not found                                   | F8.01 migration not applied to test DB — run `pnpm --filter @jdm/db run db:migrate`                                                                                |
+| `prisma.subscriptionWebhookEvent` not found                                   | F8.01 migration not applied to test DB — run `pnpm --filter @ccc/db run db:migrate`                                                                                |
 | `PremiumMembership` not found                                                 | Same — run migration                                                                                                                                               |
 | `applyMembershipEvent` throws "not implemented"                               | F8.03 must be merged — check pre-flight                                                                                                                            |
-| `provider_providerEventId` compound unique accessor not found                 | Regenerate Prisma client: `pnpm --filter @jdm/db build`                                                                                                            |
+| `provider_providerEventId` compound unique accessor not found                 | Regenerate Prisma client: `pnpm --filter @ccc/db build`                                                                                                            |
 | 404 on all routes                                                             | Route not registered — check `app.ts` import and `app.register` call                                                                                               |
 | Auth test passes unexpectedly                                                 | Check `constantTimeEquals` — empty string matches empty string if `expectedAuth` is empty; ensure test `makeApp` sets a non-empty `REVENUECAT_WEBHOOK_AUTH_HEADER` |
 
 - [ ] **Step 2: Run typecheck again to confirm no regressions**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors.
@@ -1163,7 +1163,7 @@ Expected: 0 errors.
 - [ ] **Step 3: Run the touched neighborhood to confirm no regressions**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/stripe-billing-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/stripe-billing-webhook.test.ts
 ```
 
 Expected: all existing Stripe billing webhook tests still pass (we only added a new route; didn't touch the Stripe handler).
@@ -1177,7 +1177,7 @@ Expected: all existing Stripe billing webhook tests still pass (we only added a 
 - [ ] **Step 1: Run the complete chunk test file**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts
+pnpm --filter @ccc/api exec vitest run test/billing/revenuecat-webhook.test.ts
 ```
 
 Expected output: all tests pass. Count the test names — there should be at least 12 individual `it(...)` cases (auth × 3, feature flag × 1, non-BR × 2, replay × 1, INITIAL_PURCHASE × 1, RENEWAL × 1, CANCELLATION × 1, UNCANCELLATION × 1, EXPIRATION × 1, BILLING_ISSUE × 1, PRODUCT_CHANGE × 1, ignorable types × 3).
@@ -1185,18 +1185,18 @@ Expected output: all tests pass. Count the test names — there should be at lea
 - [ ] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: 0 errors.
 
-- [ ] **Step 3: Build @jdm/shared (canon §F8.13)**
+- [ ] **Step 3: Build @ccc/shared (canon §F8.13)**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
-Expected: clean build. This chunk does not change `@jdm/shared` exports, but building is a canon requirement after any F8 chunk to catch stale dist.
+Expected: clean build. This chunk does not change `@ccc/shared` exports, but building is a canon requirement after any F8 chunk to catch stale dist.
 
 ---
 
@@ -1225,9 +1225,9 @@ gh pr create --base main --title "feat(api): POST /webhooks/revenuecat — RC we
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/billing/revenuecat-webhook.test.ts` (all pass — auth, flag, non-BR, replay, all RC event types, ignorable noop types)
-- [ ] `pnpm --filter @jdm/api typecheck` clean
-- [ ] `pnpm --filter @jdm/shared build` clean
+- [ ] `pnpm --filter @ccc/api exec vitest run test/billing/revenuecat-webhook.test.ts` (all pass — auth, flag, non-BR, replay, all RC event types, ignorable noop types)
+- [ ] `pnpm --filter @ccc/api typecheck` clean
+- [ ] `pnpm --filter @ccc/shared build` clean
 - [ ] CI green
 
 ## Canon refs

@@ -1,4 +1,4 @@
-import { shippingAddressInputSchema, type ShippingAddressRecord } from '@jdm/shared/store';
+import { shippingAddressInputSchema, type ShippingAddressRecord } from '@ccc/shared/store';
 
 export type ShippingAddressFormValues = {
   recipientName: string;

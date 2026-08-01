@@ -1,4 +1,4 @@
-import { verifyEmailSchema } from '@jdm/shared/auth';
+import { verifyEmailSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { consumeVerificationToken } from '../../services/auth/verification.js';

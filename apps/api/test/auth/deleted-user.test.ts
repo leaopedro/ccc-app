@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { mfaChallengeResponseSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { mfaChallengeResponseSchema } from '@ccc/shared/auth';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

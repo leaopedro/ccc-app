@@ -74,7 +74,7 @@ After the first deploy:
 
 | Symptom                                            | Likely cause                                                     | Fix                                                                                   |
 | -------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Build fails: `Cannot find module '@jdm/shared'`    | `installCommand` not running from repo root                      | Ensure `vercel.json` `installCommand` is `cd ../.. && pnpm install --frozen-lockfile` |
+| Build fails: `Cannot find module '@ccc/shared'`    | `installCommand` not running from repo root                      | Ensure `vercel.json` `installCommand` is `cd ../.. && pnpm install --frozen-lockfile` |
 | `NEXT_PUBLIC_API_BASE_URL` is undefined in browser | Env var not set for the `Preview` scope                          | Add it under Preview in Vercel → Settings → Env vars                                  |
 | API calls return CORS errors                       | `CORS_ORIGINS` not updated in Railway after adding Vercel domain | Update Railway `CORS_ORIGINS` and redeploy                                            |
 | Sentry source maps missing                         | `SENTRY_AUTH_TOKEN` not set                                      | Set the token in Vercel env vars (non-`NEXT_PUBLIC_`)                                 |

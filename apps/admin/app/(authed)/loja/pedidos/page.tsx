@@ -1,7 +1,7 @@
 import {
   adminStoreOrderQueueFilterSchema,
   type AdminStoreOrderQueueFilter,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import Link from 'next/link';
 
 import {

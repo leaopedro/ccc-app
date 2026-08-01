@@ -1,6 +1,6 @@
-import { brand } from '@jdm/design';
-import type { MyOrder } from '@jdm/shared/orders';
-import { Button } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import type { MyOrder } from '@ccc/shared/orders';
+import { Button } from '@ccc/ui';
 import { PaymentSheetError, useStripe } from '@stripe/stripe-react-native';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';

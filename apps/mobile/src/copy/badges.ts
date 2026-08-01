@@ -2,7 +2,7 @@
 // for future migration to a shared locale package (CLAUDE.md mandates an i18n
 // scaffold from day one). Two-level shape so the eventual move is mechanical.
 //
-// Catalog keys are badge codes verbatim (EVT-001 ... JDM-003). Mobile UI
+// Catalog keys are badge codes verbatim (EVT-001 ... CCC-003). Mobile UI
 // consumers (chunk 17) look up `badgesCopy.badges.catalog[code]` and fall back
 // to the raw code if a key is missing — but every code MUST have an entry here.
 
@@ -12,7 +12,7 @@ const ptBR = {
       eventos: 'Eventos',
       carros: 'Carros',
       comunidade: 'Comunidade',
-      jdm: 'CCC',
+      ccc: 'CCC',
     },
     rarities: {
       common: 'Comum',
@@ -29,7 +29,7 @@ const ptBR = {
     catalog: {
       'EVT-001': {
         title: 'Primeira Largada',
-        description: 'Seu primeiro check-in confirmado em um encontro JDM.',
+        description: 'Seu primeiro check-in confirmado em um encontro CCC.',
         criteria: 'Faça check-in em qualquer evento publicado.',
       },
       'EVT-002': {
@@ -39,7 +39,7 @@ const ptBR = {
       },
       'EVT-003': {
         title: 'Veterano de Pista',
-        description: 'Dez check-ins confirmados na sua trajetória JDM.',
+        description: 'Dez check-ins confirmados na sua trajetória CCC.',
         criteria: 'Acumule 10 check-ins em eventos publicados.',
       },
       'CAR-001': {
@@ -53,7 +53,7 @@ const ptBR = {
         criteria: 'Tenha 5 carros simultâneos na garagem.',
       },
       'CAR-003': {
-        title: 'Curador JDM',
+        title: 'Curador CCC',
         description: 'Dez carros ou mais na coleção da sua garagem.',
         criteria: 'Tenha 10 carros simultâneos na garagem.',
       },
@@ -72,17 +72,17 @@ const ptBR = {
         description: 'Postagens engajadas em sequência na comunidade.',
         criteria: 'Mantenha uma sequência de postagens com engajamento.',
       },
-      'JDM-001': {
+      'CCC-001': {
         title: 'Marco Fixado',
-        description: 'Primeiro local fixado no seu mapa JDM.',
+        description: 'Primeiro local fixado no seu mapa CCC.',
         criteria: 'Fixe um local no seu mapa pessoal.',
       },
-      'JDM-002': {
-        title: 'Itinerário JDM',
+      'CCC-002': {
+        title: 'Itinerário CCC',
         description: 'Participação ativa na agenda nacional de eventos.',
         criteria: 'Compareça a múltiplos eventos pelo país.',
       },
-      'JDM-003': {
+      'CCC-003': {
         title: 'Fundador',
         description: 'Você entrou antes de a comunidade decolar.',
         criteria: 'Conta criada antes de 01/06/2026.',
@@ -97,7 +97,7 @@ const en = {
       eventos: 'Events',
       carros: 'Cars',
       comunidade: 'Community',
-      jdm: 'CCC',
+      ccc: 'CCC',
     },
     rarities: {
       common: 'Common',
@@ -114,7 +114,7 @@ const en = {
     catalog: {
       'EVT-001': {
         title: 'First Lap',
-        description: 'Your first confirmed check-in at a JDM meet.',
+        description: 'Your first confirmed check-in at a CCC meet.',
         criteria: 'Check in to any published event.',
       },
       'EVT-002': {
@@ -124,7 +124,7 @@ const en = {
       },
       'EVT-003': {
         title: 'Track Veteran',
-        description: 'Ten confirmed check-ins on your JDM journey.',
+        description: 'Ten confirmed check-ins on your CCC journey.',
         criteria: 'Accumulate 10 check-ins at published events.',
       },
       'CAR-001': {
@@ -157,17 +157,17 @@ const en = {
         description: 'Engaged posts in a community streak.',
         criteria: 'Maintain a posting streak with engagement.',
       },
-      'JDM-001': {
+      'CCC-001': {
         title: 'Marker Pinned',
-        description: 'First location pinned to your JDM map.',
+        description: 'First location pinned to your CCC map.',
         criteria: 'Pin a location on your personal map.',
       },
-      'JDM-002': {
+      'CCC-002': {
         title: 'CCC Itinerary',
         description: 'Active participation across the national event calendar.',
         criteria: 'Attend multiple events around the country.',
       },
-      'JDM-003': {
+      'CCC-003': {
         title: 'Founder',
         description: 'You joined before the community took off.',
         criteria: 'Account created before 2026-06-01.',

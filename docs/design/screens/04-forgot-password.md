@@ -6,7 +6,7 @@ The forgot-password screen lets a returning member request a password-reset
 link. It is a tight, single-job page: a back affordance to `/login`, a
 title, a one-line directive in the brand's casual PT-BR voice, an e-mail
 field, and one brand-red CTA `Enviar link`. The screen is dark
-(`bg-bg #0A0A0A`) end-to-end and reuses the `@jdm/ui` `Text` and `Button`
+(`bg-bg #0A0A0A`) end-to-end and reuses the `@ccc/ui` `Text` and `Button`
 primitives plus the local `TextField`. After a successful submission the
 screen swaps in place to a confirmation state (a `Mail` icon, a short
 energetic line, the obscured e-mail, and a "Reenviar" link gated by a
@@ -121,7 +121,7 @@ authCopy.errors.network)`; inline `Sem conexão. Tente novamente.`.
 8. **Generic API error (5xx, etc.)** — `setError('email',
 authCopy.errors.unknown)`; inline `Algo deu errado.`.
 9. **Field validation (zod)** — `forgotPasswordSchema` from
-   `@jdm/shared/auth` runs on submit; renders `errors.email?.message`.
+   `@ccc/shared/auth` runs on submit; renders `errors.email?.message`.
 
 ## Resend / cooldown
 

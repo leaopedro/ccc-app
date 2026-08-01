@@ -1,4 +1,4 @@
-import type { EventStatus } from '@jdm/shared/events';
+import type { EventStatus } from '@ccc/shared/events';
 
 const COPY: Record<EventStatus, string> = {
   draft: 'Rascunho',

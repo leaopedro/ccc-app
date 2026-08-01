@@ -3,9 +3,9 @@ import type {
   EventDetailCommerce,
   EventDetailPublic,
   TicketTier,
-} from '@jdm/shared/events';
-import type { TicketSource } from '@jdm/shared/tickets';
-import { Button } from '@jdm/ui';
+} from '@ccc/shared/events';
+import type { TicketSource } from '@ccc/shared/tickets';
+import { Button } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Ticket as TicketIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';

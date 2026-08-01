@@ -1,7 +1,7 @@
-import type { CartItem, FulfillmentMethod } from '@jdm/shared/cart';
-import type { EventExtraPublic } from '@jdm/shared/extras';
-import type { ShippingAddressRecord } from '@jdm/shared/store';
-import { Button } from '@jdm/ui';
+import type { CartItem, FulfillmentMethod } from '@ccc/shared/cart';
+import type { EventExtraPublic } from '@ccc/shared/extras';
+import type { ShippingAddressRecord } from '@ccc/shared/store';
+import { Button } from '@ccc/ui';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Car as CarIcon, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';

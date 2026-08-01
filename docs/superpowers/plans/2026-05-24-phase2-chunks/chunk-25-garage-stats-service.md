@@ -6,9 +6,9 @@
 
 **Architecture:** New service in `apps/api/src/services/garage/stats.ts`, shape mirrors sibling services (`killswitch.ts`, `awarder.ts`, `badges-read.ts`). Pure read — no tx, no writes, no killswitch read (§C5: gating belongs to the serializer in chunks 28+). Integration test in `apps/api/test/garage/stats.test.ts` against the Testcontainers Postgres set up by `apps/api/test/helpers.ts`.
 
-**Tech Stack:** Fastify + Prisma in `apps/api`, vitest + Testcontainers. `PrismaClient` from `@prisma/client`. No `@jdm/shared` import — returns a POJO; the serializer validates at the route boundary.
+**Tech Stack:** Fastify + Prisma in `apps/api`, vitest + Testcontainers. `PrismaClient` from `@prisma/client`. No `@ccc/shared` import — returns a POJO; the serializer validates at the route boundary.
 
-**Reads from:** chunk 23 (`Garage.likesReceived` column must exist), chunk 24 (`GarageStats` shape definition in `@jdm/shared`).
+**Reads from:** chunk 23 (`Garage.likesReceived` column must exist), chunk 24 (`GarageStats` shape definition in `@ccc/shared`).
 
 **Parallel-with:** chunk 26 (independent service — `progress.ts` does not touch the same files).
 
@@ -140,7 +140,7 @@ Full JSDoc lands in Task 3.
 
 - [ ] **Step 2: Verify the file compiles**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: PASS.
 
 - [ ] **Step 3: Do NOT commit yet** — wait for Task 3.
@@ -157,7 +157,7 @@ Expected: PASS.
 
 ```ts
 // apps/api/test/garage/stats.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { getGarageStats, GarageNotFoundError } from '../../src/services/garage/stats.js';
@@ -184,7 +184,7 @@ describe('getGarageStats', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'returns zero counters'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'returns zero counters'`
 Expected: FAIL with `Error: not implemented` (stub throws).
 
 - [ ] **Step 3: Do NOT commit yet.**
@@ -263,12 +263,12 @@ Shape note: Garage row first (counters need `garage.userId`), then 2 counters in
 
 - [ ] **Step 2: Run the failing test from Task 2**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'returns zero counters'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'returns zero counters'`
 Expected: PASS.
 
 - [ ] **Step 3: Run typecheck**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
@@ -358,7 +358,7 @@ it('events count matches Ticket rows with status="used" AND filters by userId', 
 
 - [ ] **Step 2: Run**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'events count matches'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'events count matches'`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -410,7 +410,7 @@ Before running: confirm `FeedPostStatus` enum still has `visible` + `hidden` + `
 
 - [ ] **Step 2: Run**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'posts count excludes'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'posts count excludes'`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -488,7 +488,7 @@ it('does NOT touch prisma.feedReaction.* — column-direct (§C4)', async () => 
 
 - [ ] **Step 2: Run both tests**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'likesReceived'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'likesReceived'`
 Expected: PASS for both cases.
 
 - [ ] **Step 3: Commit**
@@ -536,7 +536,7 @@ it('concurrent invocations return identical results (no shared state)', async ()
 
 - [ ] **Step 2: Run**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'concurrent'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'concurrent'`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -566,17 +566,17 @@ it('throws GarageNotFoundError for an unknown garageId', async () => {
 
 - [ ] **Step 2: Run**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts -t 'GarageNotFoundError'`
+Run: `pnpm --filter @ccc/api test stats.test.ts -t 'GarageNotFoundError'`
 Expected: PASS.
 
 - [ ] **Step 3: Run the full stats test file one last time**
 
-Run: `pnpm --filter @jdm/api test stats.test.ts`
+Run: `pnpm --filter @ccc/api test stats.test.ts`
 Expected: ALL 7 tests pass.
 
 - [ ] **Step 4: Run typecheck one last time**
 
-Run: `pnpm --filter @jdm/api typecheck`
+Run: `pnpm --filter @ccc/api typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -593,11 +593,11 @@ git commit -m "test(api): unknown garageId throws GarageNotFoundError (chunk 25)
 Must be green before opening the PR:
 
 ```bash
-pnpm --filter @jdm/api typecheck
-pnpm --filter @jdm/api test stats.test.ts
+pnpm --filter @ccc/api typecheck
+pnpm --filter @ccc/api test stats.test.ts
 ```
 
-Do NOT run the full vitest sweep locally (memory rule `feedback_no_full_test_suite_locally`). No schema rebuilds and no `@jdm/shared` rebuild needed.
+Do NOT run the full vitest sweep locally (memory rule `feedback_no_full_test_suite_locally`). No schema rebuilds and no `@ccc/shared` rebuild needed.
 
 ---
 
@@ -617,8 +617,8 @@ Do NOT run the full vitest sweep locally (memory rule `feedback_no_full_test_sui
 ## PR checklist (`feat/jdma-garage-phase2-25` → `main`)
 
 - [ ] Branch from fresh `main` (`git log main..HEAD --oneline` shows only chunk-25 commits).
-- [ ] `pnpm --filter @jdm/api typecheck` green.
-- [ ] `pnpm --filter @jdm/api test stats.test.ts` green (7 tests).
+- [ ] `pnpm --filter @ccc/api typecheck` green.
+- [ ] `pnpm --filter @ccc/api test stats.test.ts` green (7 tests).
 - [ ] Edits limited to `apps/api/src/services/garage/stats.ts` + `apps/api/test/garage/stats.test.ts`.
 - [ ] `grep -n "feedReaction" apps/api/src/services/garage/stats.ts` returns nothing.
 - [ ] `grep -n "readGamificationEnabled" apps/api/src/services/garage/stats.ts` returns nothing.

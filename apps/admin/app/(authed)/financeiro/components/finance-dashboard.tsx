@@ -7,7 +7,7 @@ import type {
   AdminFinanceQuery,
   AdminFinanceSummary,
   AdminFinanceTrendResponse,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Suspense,

@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { myTicketSchema, myTicketsResponseSchema } from '@jdm/shared/tickets';
+import { prisma } from '@ccc/db';
+import { myTicketSchema, myTicketsResponseSchema } from '@ccc/shared/tickets';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

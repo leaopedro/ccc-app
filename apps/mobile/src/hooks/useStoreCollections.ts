@@ -1,4 +1,4 @@
-import type { StoreCollection } from '@jdm/shared/store';
+import type { StoreCollection } from '@ccc/shared/store';
 import { useCallback, useEffect, useState } from 'react';
 
 import { listStoreCollections } from '~/api/store';

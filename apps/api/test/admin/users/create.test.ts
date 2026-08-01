@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminUserCreatedSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminUserCreatedSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

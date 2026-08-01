@@ -1,6 +1,6 @@
 'use server';
 
-import { adminTierCreateSchema, adminTierUpdateSchema } from '@jdm/shared/admin';
+import { adminTierCreateSchema, adminTierUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 
 import { createTier, deleteTier, updateTier } from './admin-api';

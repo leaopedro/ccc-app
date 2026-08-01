@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   confirmedCarSchema,
   confirmedCarsResponseSchema,
@@ -10,9 +10,9 @@ import {
   eventListResponseSchema,
   eventSummarySchema,
   ticketTierSchema,
-} from '@jdm/shared/events';
-import { eventExtraPublicSchema } from '@jdm/shared/extras';
-import { type CapacityDisplayPolicy, computeCapacityDisplay } from '@jdm/shared/general-settings';
+} from '@ccc/shared/events';
+import { eventExtraPublicSchema } from '@ccc/shared/extras';
+import { type CapacityDisplayPolicy, computeCapacityDisplay } from '@ccc/shared/general-settings';
 import type {
   Event as DbEvent,
   Prisma,

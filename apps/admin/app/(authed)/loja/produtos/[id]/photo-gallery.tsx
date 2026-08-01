@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminStoreProductPhoto } from '@jdm/shared/admin';
+import type { AdminStoreProductPhoto } from '@ccc/shared/admin';
 import { useState, useTransition } from 'react';
 
 import { addProductPhotoAction, removeProductPhotoAction } from '~/lib/store-actions';

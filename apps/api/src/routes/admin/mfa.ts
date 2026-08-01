@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   mfaDisableSchema,
   mfaSetupResponseSchema,
   mfaStatusSchema,
   mfaVerifySetupSchema,
-} from '@jdm/shared/mfa';
+} from '@ccc/shared/mfa';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {

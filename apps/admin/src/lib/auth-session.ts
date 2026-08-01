@@ -1,4 +1,4 @@
-import type { AuthResponse } from '@jdm/shared/auth';
+import type { AuthResponse } from '@ccc/shared/auth';
 import { cookies } from 'next/headers';
 
 const ACCESS_COOKIE = 'session_access';

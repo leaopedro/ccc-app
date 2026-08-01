@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ACCOUNT_DISABLED_ERROR, loginSchema } from '@jdm/shared/auth';
-import type { LoginInput } from '@jdm/shared/auth';
-import { Button, Text } from '@jdm/ui';
+import { ACCOUNT_DISABLED_ERROR, loginSchema } from '@ccc/shared/auth';
+import type { LoginInput } from '@ccc/shared/auth';
+import { Button, Text } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -85,7 +85,7 @@ export default function LoginScreen() {
           <View className="items-center pt-16 pb-3">
             <Image
               // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-              source={require('@jdm/design/assets/logo-wordmark.webp')}
+              source={require('@ccc/design/assets/logo-wordmark.webp')}
               accessibilityLabel={authCopy.common.appName}
               style={{ width: 180, height: 72, resizeMode: 'contain' }}
             />

@@ -68,7 +68,7 @@
 | Path                                                                                    | Change                                                                                                                                                                                                                                                                                                                                                                                               |
 | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ----------------------------------------------------------------------------------------------------------- |
 | `packages/shared/src/cars.ts`                                                           | Add `tier: garageSpotTierSchema` to `carSchema`. Export from `index.ts` already covers it. **Adding a required field breaks all consumers** (mobile `apps/mobile/src/api/cars.ts`, api `apps/api/src/routes/cars.ts`). Run `grep -rn "carSchema" apps/ packages/` before implementing and update every consumer that parses car payloads without `tier`.                                             |
-| `packages/shared/package.json`                                                          | Add `"./garage": { "types": "./src/garage.ts", "default": "./dist/garage.js" }` to the exports map. **Ownership: this entry belongs to TASK-A** (which creates `packages/shared/src/garage.ts`). If TASK-A is already merged with this entry, skip it here. If TASK-A shipped without it, add the entry as the first step of Task 1 before any import from `@jdm/shared/garage` will resolve.        |
+| `packages/shared/package.json`                                                          | Add `"./garage": { "types": "./src/garage.ts", "default": "./dist/garage.js" }` to the exports map. **Ownership: this entry belongs to TASK-A** (which creates `packages/shared/src/garage.ts`). If TASK-A is already merged with this entry, skip it here. If TASK-A shipped without it, add the entry as the first step of Task 1 before any import from `@ccc/shared/garage` will resolve.        |
 | `packages/shared/src/index.ts`                                                          | Add `export * from './garage.js';`.                                                                                                                                                                                                                                                                                                                                                                  |
 | `apps/api/src/services/cart/index.ts` (line 661 area, inside `validateProductCartItem`) | Extend the Variant select with `product.virtual` and `product.visibleInStore`. After the `variant.active` / `product.status` check, reject when `variant.product.virtual === true` **AND** `variant.product.visibleInStore === false` (both conditions must hold) with code `VARIANT_INTERNAL_ONLY` / 409. Master plan §3 says "reject garage variants entirely" meaning virtual AND hidden; using ` |     | ` would also block future non-virtual hidden products from the public cart, which is broader than intended. |
 | `apps/api/src/routes/cart.ts` (line 497 area, `hasProductItems`)                        | Compute `hasFulfillableProductItems` separately (`item.kind === 'product' && item.variant && item.variant.product.virtual !== true`) so virtual lines no longer demand a fulfillment method or shipping address. Keep the existing `hasProductItems` flag for store-disabled check.                                                                                                                  |
@@ -506,7 +506,7 @@ describe('garage schemas', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/shared test -- garage.spec`
+Run: `pnpm --filter @ccc/shared test -- garage.spec`
 Expected: FAIL with "Cannot find module '../garage.js'".
 
 - [ ] **Step 3: Implement schemas**
@@ -522,17 +522,17 @@ Edit `packages/shared/src/index.ts`: append `export * from './garage.js';` after
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/shared test -- garage.spec`
+Run: `pnpm --filter @ccc/shared test -- garage.spec`
 Expected: PASS.
 
 - [ ] **Step 5: Rebuild shared and run the whole shared test suite**
 
 ```bash
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/shared test
 ```
 
-Expected: all tests pass. (Memory rule: rebuild `@jdm/shared` after schema changes.)
+Expected: all tests pass. (Memory rule: rebuild `@ccc/shared` after schema changes.)
 
 - [ ] **Step 6: Commit**
 
@@ -578,7 +578,7 @@ it('returns tier on each car', async () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test -- cars/list`
+Run: `pnpm --filter @ccc/api test -- cars/list`
 Expected: FAIL (carSchema parse throws on missing `tier`).
 
 - [ ] **Step 3: Modify `serializeCar` to accept a tier argument**
@@ -610,12 +610,12 @@ Apply the same pattern to `GET /me/cars/:id`, `POST /me/cars`, `PATCH /me/cars/:
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/api test -- cars/list`
+Run: `pnpm --filter @ccc/api test -- cars/list`
 Expected: PASS.
 
 - [ ] **Step 5: Run the rest of the cars suite (sanity)**
 
-Run: `pnpm --filter @jdm/api test -- cars/`
+Run: `pnpm --filter @ccc/api test -- cars/`
 Expected: existing tests pass (delete/photos may need a default `tier: 'free'` insert in their fixtures — fix any failures by adding a `garageSpot.create` mirroring the new list test).
 
 - [ ] **Step 6: Commit**
@@ -638,7 +638,7 @@ git commit -m "feat(api): include garage tier in car serializer (JDMA-task-b)"
 
 ```ts
 // apps/api/test/garage/limit-transitions.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { reconcileGarageSpots } from '../../src/services/garage/index.js';
@@ -750,7 +750,7 @@ Without this, every test that creates a user or car leaks `GarageSpot` rows into
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test -- garage/limit-transitions`
+Run: `pnpm --filter @ccc/api test -- garage/limit-transitions`
 Expected: FAIL with "Cannot find module".
 
 - [ ] **Step 3: Implement the service**
@@ -758,21 +758,21 @@ Expected: FAIL with "Cannot find module".
 Create `apps/api/src/services/garage/index.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 
 import { applyDevFee } from '../pricing/dev-fee.js';
 
-// GARAGE_PRODUCT_SLUG is defined in and imported from @jdm/shared/garage.
+// GARAGE_PRODUCT_SLUG is defined in and imported from @ccc/shared/garage.
 // It is NOT re-exported from this service to avoid confusion about the source of truth.
-// Any file that needs GARAGE_PRODUCT_SLUG imports it directly from '@jdm/shared/garage'.
-import { GARAGE_PRODUCT_SLUG } from '@jdm/shared/garage';
+// Any file that needs GARAGE_PRODUCT_SLUG imports it directly from '@ccc/shared/garage'.
+import { GARAGE_PRODUCT_SLUG } from '@ccc/shared/garage';
 
 type Tx = Prisma.TransactionClient;
 
 // Re-export only for external consumers that already depend on this module path.
-// Prefer importing from '@jdm/shared/garage' directly in new code.
-// NOTE: remove this export once all callers import directly from @jdm/shared/garage.
+// Prefer importing from '@ccc/shared/garage' directly in new code.
+// NOTE: remove this export once all callers import directly from @ccc/shared/garage.
 // export { GARAGE_PRODUCT_SLUG };  <-- do NOT add this; import directly instead.
 
 export async function reconcileGarageSpots(userId: string, outerTx?: Tx): Promise<void> {
@@ -851,7 +851,7 @@ export async function reconcileGarageSpotsWithRetry(userId: string): Promise<voi
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/api test -- garage/limit-transitions`
+Run: `pnpm --filter @ccc/api test -- garage/limit-transitions`
 Expected: PASS (5 specs).
 
 - [ ] **Step 5: Commit**
@@ -876,8 +876,8 @@ git commit -m "feat(api): reconcileGarageSpots service with serializable tx (JDM
 
 ```ts
 // apps/api/test/garage/garage-read.test.ts
-import { prisma } from '@jdm/db';
-import { garageReadSchema } from '@jdm/shared/garage';
+import { prisma } from '@ccc/db';
+import { garageReadSchema } from '@ccc/shared/garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1001,7 +1001,7 @@ describe('GET /me/garage', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test -- garage/garage-read`
+Run: `pnpm --filter @ccc/api test -- garage/garage-read`
 Expected: FAIL (route not registered → 404).
 
 - [ ] **Step 3: Add `getGarageRead` to the service**
@@ -1083,13 +1083,13 @@ export async function getGarageReadData(
 `apps/api/src/routes/garage.ts`:
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   garageReadSchema,
   garageCartResponseSchema,
   GARAGE_PRODUCT_SLUG,
-} from '@jdm/shared/garage';
-import { carSchema } from '@jdm/shared/cars';
+} from '@ccc/shared/garage';
+import { carSchema } from '@ccc/shared/cars';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -1224,7 +1224,7 @@ In `apps/api/src/app.ts`, add `import { garageRoutes } from './routes/garage.js'
 
 - [ ] **Step 6: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/api test -- garage/garage-read`
+Run: `pnpm --filter @ccc/api test -- garage/garage-read`
 Expected: 3 specs PASS.
 
 - [ ] **Step 7: Commit**
@@ -1248,7 +1248,7 @@ git commit -m "feat(api): GET /me/garage with purchaseOption (JDMA-task-b)"
 
 ```ts
 // apps/api/test/garage/cars-allocation.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1425,7 +1425,7 @@ describe('POST /me/cars with garage allocation', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test -- garage/cars-allocation`
+Run: `pnpm --filter @ccc/api test -- garage/cars-allocation`
 Expected: FAIL (current route does not allocate).
 
 - [ ] **Step 3: Add `allocateSpotForCar` to the service**
@@ -1567,7 +1567,7 @@ import {
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/api test -- garage/cars-allocation`
+Run: `pnpm --filter @ccc/api test -- garage/cars-allocation`
 Expected: 8 specs PASS, including the concurrent test (the Serializable retry handles `P2034`).
 
 > The concurrent test asserts `[201, 409].sort() == [201, 409]`. If both requests serialize to PASS-then-RETRY-then-FAIL the result is still one 201 + one 409. If retry returns a 409 for the loser, this is the intended behavior. If you see `[409, 409]`, your retry loop is re-throwing too aggressively — re-read the retry code.
@@ -1616,7 +1616,7 @@ Expected: 8 specs PASS, including the concurrent test (the Serializable retry ha
 
 - [ ] **Step 6: Run the full cars + garage suite**
 
-Run: `pnpm --filter @jdm/api test -- cars/ garage/`
+Run: `pnpm --filter @ccc/api test -- cars/ garage/`
 Expected: all pass. If old `cars/*` tests fail because they no longer seed a spot, add `await prisma.garageSpot.create({ data: { userId: user.id, tier: 'free', source: 'default_free' } })` (or call `reconcileGarageSpots` after setting a free limit of 1) in each test's setup.
 
 - [ ] **Step 7: Commit**
@@ -1640,7 +1640,7 @@ git commit -m "feat(api): garage-aware car create/delete with spot allocation (J
 
 ```ts
 // apps/api/test/garage/cart-guard.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1717,7 +1717,7 @@ describe('public POST /cart/items rejects virtual+hidden variants', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm --filter @jdm/api test -- garage/cart-guard`
+Run: `pnpm --filter @ccc/api test -- garage/cart-guard`
 Expected: FAIL (current cart accepts it).
 
 - [ ] **Step 3: Patch the validator (~line 637 in services/cart/index.ts)**
@@ -1790,12 +1790,12 @@ The `requiresShipping` computation also gates on the same `item.variant?.product
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `pnpm --filter @jdm/api test -- garage/cart-guard`
+Run: `pnpm --filter @ccc/api test -- garage/cart-guard`
 Expected: PASS.
 
 - [ ] **Step 6: Run the wider cart suite to ensure no regression**
 
-Run: `pnpm --filter @jdm/api test -- cart/`
+Run: `pnpm --filter @ccc/api test -- cart/`
 Expected: all existing cart tests still pass. If `cart/checkout.test.ts` breaks because a fixture now reads an undefined `product.virtual`, the schema migration from TASK-A already provides a default `false` — verify the test product fixtures set `virtual: false` explicitly only when needed.
 
 - [ ] **Step 7: Commit**
@@ -1820,8 +1820,8 @@ git commit -m "feat(api): block virtual+hidden variants from public cart (JDMA-t
 
 ```ts
 // apps/api/test/garage/garage-spot-cart.test.ts
-import { prisma } from '@jdm/db';
-import { garageCartResponseSchema } from '@jdm/shared/garage';
+import { prisma } from '@ccc/db';
+import { garageCartResponseSchema } from '@ccc/shared/garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1922,7 +1922,7 @@ describe('POST /me/garage/spots/cart', () => {
 
 - [ ] **Step 2: Run the test to verify it passes (handler was added in Task 4)**
 
-Run: `pnpm --filter @jdm/api test -- garage/garage-spot-cart`
+Run: `pnpm --filter @ccc/api test -- garage/garage-spot-cart`
 Expected: 4 specs PASS.
 
 - [ ] **Step 3: Commit**
@@ -1939,11 +1939,11 @@ git commit -m "test(api): garage spot cart endpoint coverage (JDMA-task-b)"
 - [ ] **Step 1: Run the full test suite**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 pnpm -r test
 ```
 
-Expected: all packages pass. Memory rule: rebuild `@jdm/shared` before running api tests because the api consumes `dist/`.
+Expected: all packages pass. Memory rule: rebuild `@ccc/shared` before running api tests because the api consumes `dist/`.
 
 - [ ] **Step 2: Run lint + typecheck**
 
@@ -1968,10 +1968,10 @@ gh pr create --base main --title "feat(api): garage spots task B — public api 
 - `carSchema` gains `tier`; new `packages/shared/src/garage.ts` schemas.
 
 ## Test plan
-- [x] `pnpm --filter @jdm/api test -- garage/`
-- [x] `pnpm --filter @jdm/api test -- cars/`
-- [x] `pnpm --filter @jdm/api test -- cart/`
-- [x] `pnpm --filter @jdm/shared test`
+- [x] `pnpm --filter @ccc/api test -- garage/`
+- [x] `pnpm --filter @ccc/api test -- cars/`
+- [x] `pnpm --filter @ccc/api test -- cart/`
+- [x] `pnpm --filter @ccc/shared test`
 EOF
 )"
 ```
@@ -2062,11 +2062,11 @@ The following findings from the code review were evaluated against the actual co
 
 ### Finding: "Service imports GARAGE_PRODUCT_SLUG from shared, but also re-exports it. Contradiction."
 
-Accepted. The plan's Task 3 Step 3 service code had `export { GARAGE_PRODUCT_SLUG };` at the bottom while also importing it from `@jdm/shared/garage`. This is a contradiction. Fixed: removed the re-export. The constant stays in `@jdm/shared/garage` only. Any file needing it imports directly from `@jdm/shared/garage`.
+Accepted. The plan's Task 3 Step 3 service code had `export { GARAGE_PRODUCT_SLUG };` at the bottom while also importing it from `@ccc/shared/garage`. This is a contradiction. Fixed: removed the re-export. The constant stays in `@ccc/shared/garage` only. Any file needing it imports directly from `@ccc/shared/garage`.
 
 ### Finding: "`./garage` subpath export belongs to TASK-A"
 
-Partially accepted. The reviewer is correct that the `./garage` subpath export must exist in `packages/shared/package.json` before any import from `@jdm/shared/garage` resolves. However, TASK-A is the task that creates `packages/shared/src/garage.ts`, so TASK-A should add the export entry. TASK-B's Task 1 now includes an explicit check: if TASK-A is already merged with the entry, skip it; if not, add it as the first step.
+Partially accepted. The reviewer is correct that the `./garage` subpath export must exist in `packages/shared/package.json` before any import from `@ccc/shared/garage` resolves. However, TASK-A is the task that creates `packages/shared/src/garage.ts`, so TASK-A should add the export entry. TASK-B's Task 1 now includes an explicit check: if TASK-A is already merged with the entry, skip it; if not, add it as the first step.
 
 ### Finding: "CartWithItems type is inferred via Prisma.CartGetPayload, not a hand-written literal."
 

@@ -1,6 +1,7 @@
-import { brand } from '@jdm/design';
-import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@jdm/shared/legal';
+import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { Metadata } from 'next';
+
+import { brand } from '~/brand';
 
 export const metadata: Metadata = {
   title: `Política de privacidade · ${brand.name}`,

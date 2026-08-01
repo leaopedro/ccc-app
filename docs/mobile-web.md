@@ -37,9 +37,9 @@ config lives in `apps/mobile/vercel.json`.
    - **Framework preset:** Other (not Next.js).
    - **Build & Output Settings:** leave overrides empty. The tracked
      `apps/mobile/vercel.json` overrides the build command to
-     `pnpm --filter @jdm/shared build && pnpm run build`, and
+     `pnpm --filter @ccc/shared build && pnpm run build`, and
      `apps/mobile`'s `build` script exports the app with Expo while only
-     rebuilding `@jdm/shared` if its `dist/` output is missing in a fresh
+     rebuilding `@ccc/shared` if its `dist/` output is missing in a fresh
      local worktree. `apps/mobile/vercel.json` also sets
      `outputDirectory: dist` so Vercel knows where Expo wrote the static
      export.
@@ -102,13 +102,13 @@ docker compose up -d
 2. If you are in a Paperclip / Claude worktree, bootstrap the worktree
    itself before starting Expo or the API. Borrowed/symlinked installs can
    produce false negatives such as Metro failing to resolve
-   `@jdm/shared/*`.
+   `@ccc/shared/*`.
 
 ```bash
 pnpm install --offline --force
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/db db:generate
-pnpm --filter @jdm/db build
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/db db:generate
+pnpm --filter @ccc/db build
 ```
 
 3. Create local env files if missing:
@@ -126,15 +126,15 @@ cp -n packages/db/.env.example packages/db/.env
 5. Apply migrations and seed:
 
 ```bash
-pnpm --filter @jdm/db db:deploy
-pnpm --filter @jdm/db db:seed
+pnpm --filter @ccc/db db:deploy
+pnpm --filter @ccc/db db:seed
 ```
 
 6. Start the API and Expo web:
 
 ```bash
-pnpm --filter @jdm/api dev
-pnpm --filter @jdm/mobile start:web --port 8081
+pnpm --filter @ccc/api dev
+pnpm --filter @ccc/mobile start:web --port 8081
 ```
 
 Wait for API `listening on 0.0.0.0:4000` and Expo `Web is waiting on http://localhost:8081`.
@@ -179,11 +179,11 @@ Open the Vercel preview URL from a PR and verify:
 
 | Symptom                                                 | Likely cause                                                     | Fix                                                                                             |
 | ------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Build fails: `Cannot find module '@jdm/shared'`         | `installCommand` not running from repo root                      | Ensure `vercel.json` `buildCommand` starts with `cd ../.. && pnpm install --frozen-lockfile`.   |
+| Build fails: `Cannot find module '@ccc/shared'`         | `installCommand` not running from repo root                      | Ensure `vercel.json` `buildCommand` starts with `cd ../.. && pnpm install --frozen-lockfile`.   |
 | `EXPO_PUBLIC_API_BASE_URL` undefined in browser         | Env var not set for the deploy scope                             | Add it under the matching scope (Preview/Production) in Vercel → Settings → Env vars.           |
 | API calls return CORS errors                            | `CORS_ORIGINS` not updated in Railway after adding Vercel domain | Update Railway `CORS_ORIGINS` and redeploy.                                                     |
 | API fails at boot with `ABACATEPAY_*` validation errors | `apps/api/.env` copied empty optional AbacatePay keys            | Delete the blank `ABACATEPAY_*` lines or set real values.                                       |
-| Local worktree Metro cannot resolve `@jdm/shared/*`     | Worktree dependencies were borrowed instead of installed locally | Run `pnpm install --offline --force` in the worktree, then rebuild `@jdm/shared` and `@jdm/db`. |
+| Local worktree Metro cannot resolve `@ccc/shared/*`     | Worktree dependencies were borrowed instead of installed locally | Run `pnpm install --offline --force` in the worktree, then rebuild `@ccc/shared` and `@ccc/db`. |
 | Bundle includes `codegenNativeCommands` errors          | Native-only module not aliased on web                            | Add the package to the platform alias map in `apps/mobile/metro.config.js` (see Stripe).        |
 | Push notification UI prompts in browser                 | Missing `Platform.OS === 'web'` guard                            | Guard the call site; see `src/notifications/use-push-registration.ts`.                          |
 | Sentry source maps missing                              | `SENTRY_AUTH_TOKEN` not set                                      | Set the token in Vercel env vars.                                                               |

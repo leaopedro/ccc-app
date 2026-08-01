@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { AdminAuditAction } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import type { AdminAuditAction } from '@ccc/shared/admin';
 import { Prisma } from '@prisma/client';
 
 export type RecordAuditInput = {

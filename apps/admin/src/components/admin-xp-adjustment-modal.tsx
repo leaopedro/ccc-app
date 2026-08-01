@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminXpAdjustmentInput } from '@jdm/shared/admin-garage-xp';
+import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { useCallback, useEffect, useState } from 'react';
 
 const inputCls =

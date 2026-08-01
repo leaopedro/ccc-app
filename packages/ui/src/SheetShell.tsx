@@ -2,6 +2,19 @@ import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { garageTokens } from './garage-tokens.js';
 
+/**
+ * Optional visual overrides. The assinaturas module owns an authoritative
+ * palette of its own (see apps/mobile tier-visual.ts) and would otherwise look
+ * like a different app inside this sheet. Additive and fully optional — every
+ * existing caller keeps the garageTokens look.
+ */
+export interface SheetShellTheme {
+  surface?: string;
+  border?: string;
+  titleColor?: string;
+  titleFontFamily?: string;
+}
+
 export interface SheetShellProps {
   visible: boolean;
   title: string;
@@ -9,6 +22,7 @@ export interface SheetShellProps {
   children: React.ReactNode;
   testID?: string;
   closeLabel?: string;
+  theme?: SheetShellTheme;
 }
 
 export function SheetShell({
@@ -18,8 +32,12 @@ export function SheetShell({
   children,
   testID,
   closeLabel,
+  theme,
 }: SheetShellProps) {
   const close = closeLabel ?? 'Fechar';
+  const surface = theme?.surface ?? garageTokens.surface.sheet;
+  const border = theme?.border ?? garageTokens.surface.border;
+  const titleColor = theme?.titleColor ?? '#F5F5F5';
   return (
     <Modal
       animationType="slide"
@@ -40,7 +58,7 @@ export function SheetShell({
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: garageTokens.surface.sheet,
+          backgroundColor: surface,
           borderTopLeftRadius: 18,
           borderTopRightRadius: 18,
           maxHeight: '88%',
@@ -64,15 +82,16 @@ export function SheetShell({
             flexDirection: 'row',
             alignItems: 'center',
             borderBottomWidth: 1,
-            borderBottomColor: garageTokens.surface.border,
+            borderBottomColor: border,
           }}
         >
           <Text
             style={{
               flex: 1,
-              color: '#F5F5F5',
+              color: titleColor,
               fontSize: 15,
               fontWeight: '700',
+              ...(theme?.titleFontFamily ? { fontFamily: theme.titleFontFamily } : null),
             }}
           >
             {title}

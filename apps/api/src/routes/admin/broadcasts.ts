@@ -1,11 +1,11 @@
-import { prisma } from '@jdm/db';
-import type { BroadcastSummary, NotificationDestination } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import type { BroadcastSummary, NotificationDestination } from '@ccc/shared';
 import {
   broadcastDryRunRequestSchema,
   createBroadcastRequestSchema,
   notificationDestinationSchema,
   updateBroadcastRequestSchema,
-} from '@jdm/shared';
+} from '@ccc/shared';
 import { Prisma, type Broadcast } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

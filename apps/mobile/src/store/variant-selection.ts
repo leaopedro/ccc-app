@@ -1,4 +1,4 @@
-import type { StoreProductVariant } from '@jdm/shared/store';
+import type { StoreProductVariant } from '@ccc/shared/store';
 
 export type AddToCartVariantSelection =
   | { kind: 'sold_out' }
@@ -18,7 +18,8 @@ export function resolveAddToCartVariantSelection(
   }
 
   if (purchasableVariants.length === 1) {
-    const variant = purchasableVariants[0]!;
+    const variant = purchasableVariants[0];
+    if (!variant) return { kind: 'sold_out' };
     return { kind: 'single', variant };
   }
 

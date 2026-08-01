@@ -1,4 +1,4 @@
-import type { FeedReactionSummary } from '@jdm/shared/feed';
+import type { FeedReactionSummary } from '@ccc/shared/feed';
 import { ThumbsUp } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 

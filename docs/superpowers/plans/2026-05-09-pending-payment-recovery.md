@@ -35,15 +35,15 @@ The Order block should now contain:
 - [ ] **Step 2: Run the Prisma migration**
 
 ```bash
-pnpm --filter @jdm/db exec prisma migrate dev --name add-order-br-code
+pnpm --filter @ccc/db exec prisma migrate dev --name add-order-br-code
 ```
 
 Expected output: `The following migration(s) have been created and applied from new schema changes: db/migrations/YYYYMMDD_HHMMSS_add_order_br_code/migration.sql`
 
-- [ ] **Step 3: Rebuild `@jdm/db` so downstream packages pick up new types**
+- [ ] **Step 3: Rebuild `@ccc/db` so downstream packages pick up new types**
 
 ```bash
-pnpm --filter @jdm/db build
+pnpm --filter @ccc/db build
 ```
 
 Expected: exits 0 with no TypeScript errors.
@@ -157,7 +157,7 @@ export const buildFakeStripe = (): FakeStripe => {
 - [ ] **Step 5: Typecheck the Stripe service**
 
 ```bash
-pnpm --filter @jdm/api exec tsc --noEmit
+pnpm --filter @ccc/api exec tsc --noEmit
 ```
 
 Expected: 0 errors.
@@ -208,10 +208,10 @@ export const resumeOrderResponseSchema = z.discriminatedUnion('method', [
 export type ResumeOrderResponse = z.infer<typeof resumeOrderResponseSchema>;
 ```
 
-- [ ] **Step 2: Rebuild `@jdm/shared`**
+- [ ] **Step 2: Rebuild `@ccc/shared`**
 
 ```bash
-pnpm --filter @jdm/shared build
+pnpm --filter @ccc/shared build
 ```
 
 Expected: exits 0.
@@ -286,7 +286,7 @@ const order = await tx.order.findUnique({
 - [ ] **Step 3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api exec tsc --noEmit
+pnpm --filter @ccc/api exec tsc --noEmit
 ```
 
 Expected: 0 errors.
@@ -311,8 +311,8 @@ git commit -m "feat(api): expose brCode in expireSingleOrder outcome"
 Create `apps/api/test/orders/resume.test.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { resumeOrderResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { resumeOrderResponseSchema } from '@ccc/shared/orders';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -602,7 +602,7 @@ Expected: all 7 tests fail with 404 (route not found) or type errors.
 
 - [ ] **Step 3: Add `resumeOrderResponseSchema` import in `orders.ts`**
 
-In `apps/api/src/routes/orders.ts`, add to the imports from `@jdm/shared/orders`:
+In `apps/api/src/routes/orders.ts`, add to the imports from `@ccc/shared/orders`:
 
 ```typescript
 import {
@@ -613,7 +613,7 @@ import {
   createWebCheckoutResponseSchema,
   getOrderResponseSchema,
   resumeOrderResponseSchema,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 ```
 
 - [ ] **Step 4: Save `brCode` when creating PIX order**
@@ -735,7 +735,7 @@ import {
   getOrderResponseSchema,
   myOrdersResponseSchema,
   resumeOrderResponseSchema,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 import type {
   CreateOrderRequest,
   CreateOrderResponse,
@@ -745,7 +745,7 @@ import type {
   GetOrderResponse,
   MyOrdersResponse,
   ResumeOrderResponse,
-} from '@jdm/shared/orders';
+} from '@ccc/shared/orders';
 ```
 
 Then add the function after `listMyOrders`:
@@ -774,7 +774,7 @@ export const ordersCopy = {
 - [ ] **Step 3: Typecheck mobile**
 
 ```bash
-pnpm --filter @jdm/mobile exec tsc --noEmit
+pnpm --filter @ccc/mobile exec tsc --noEmit
 ```
 
 Expected: 0 errors.
@@ -799,7 +799,7 @@ git commit -m "feat(mobile): add resumeOrder API client + Pagar copy"
 In `apps/mobile/app/(app)/profile/orders.tsx`, update the import block:
 
 ```typescript
-import type { MyOrder } from '@jdm/shared/orders';
+import type { MyOrder } from '@ccc/shared/orders';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -1032,7 +1032,7 @@ Also update `footerRow` to use `alignItems: 'flex-start'` so the left label and 
 - [ ] **Step 5: Typecheck mobile**
 
 ```bash
-pnpm --filter @jdm/mobile exec tsc --noEmit
+pnpm --filter @ccc/mobile exec tsc --noEmit
 ```
 
 Expected: 0 errors.
@@ -1061,9 +1061,9 @@ Expected: all tests pass (no regressions).
 - [ ] **Step 2: Run shared + API typecheck**
 
 ```bash
-pnpm --filter @jdm/shared exec tsc --noEmit
-pnpm --filter @jdm/api exec tsc --noEmit
-pnpm --filter @jdm/mobile exec tsc --noEmit
+pnpm --filter @ccc/shared exec tsc --noEmit
+pnpm --filter @ccc/api exec tsc --noEmit
+pnpm --filter @ccc/mobile exec tsc --noEmit
 ```
 
 Expected: 0 errors in each.
@@ -1071,9 +1071,9 @@ Expected: 0 errors in each.
 - [ ] **Step 3: Run prettier check**
 
 ```bash
-pnpm --filter @jdm/api exec prettier --check .
-pnpm --filter @jdm/mobile exec prettier --check .
-pnpm --filter @jdm/shared exec prettier --check .
+pnpm --filter @ccc/api exec prettier --check .
+pnpm --filter @ccc/mobile exec prettier --check .
+pnpm --filter @ccc/shared exec prettier --check .
 ```
 
 If any files fail: `pnpm --filter <pkg> exec prettier --write .` then re-stage.

@@ -4,9 +4,9 @@
 
 **Goal:** Add a server-authoritative rank-derivation service for the Garage. `RANK_TIERS` constant + a pure `deriveProgress(xp)` function + a thin DB-read wrapper `getGarageProgress(prisma, garageId)` that loads `Garage.xp` and applies the derivation.
 
-**Architecture:** Single new file `apps/api/src/services/garage/progress.ts`. The `RANK_TIERS` table is server-only (NOT exported via `@jdm/shared`) — clients receive the resolved `{ rank, nextRank, xpInTier, xpToNextRank, tierSpan }` from the wire payload only. Tests split into a pure-unit block over `deriveProgress` (no DB) and an integration block that exercises `getGarageProgress` against a real Postgres row.
+**Architecture:** Single new file `apps/api/src/services/garage/progress.ts`. The `RANK_TIERS` table is server-only (NOT exported via `@ccc/shared`) — clients receive the resolved `{ rank, nextRank, xpInTier, xpToNextRank, tierSpan }` from the wire payload only. Tests split into a pure-unit block over `deriveProgress` (no DB) and an integration block that exercises `getGarageProgress` against a real Postgres row.
 
-**Tech Stack:** TypeScript, Fastify, Prisma (Postgres), Vitest. Uses the existing `@jdm/db` prisma client and the test helpers in `apps/api/test/helpers.ts`.
+**Tech Stack:** TypeScript, Fastify, Prisma (Postgres), Vitest. Uses the existing `@ccc/db` prisma client and the test helpers in `apps/api/test/helpers.ts`.
 
 **Spec references (read once, do not copy):**
 
@@ -85,7 +85,7 @@ grep -n '^\s*xp\s\+Int' packages/db/prisma/schema.prisma || echo "MISSING: Garag
 # Confirm the generated Prisma client knows about Garage.xp.
 grep -n 'xp:\s*number' node_modules/.pnpm/node_modules/@prisma/client/index.d.ts 2>/dev/null | head -1 \
   || grep -rn 'xp:\s*number' packages/db/node_modules/.prisma/client/index.d.ts 2>/dev/null | head -1 \
-  || echo "MISSING: generated Prisma client does not expose Garage.xp — run pnpm --filter @jdm/db prisma generate"
+  || echo "MISSING: generated Prisma client does not expose Garage.xp — run pnpm --filter @ccc/db prisma generate"
 ```
 
 If any of the three checks prints `MISSING`, STOP and wait for chunk 23 to land before starting this chunk. Do NOT add the `Garage.xp` column from inside chunk 26.
@@ -209,7 +209,7 @@ describe('deriveProgress', () => {
 - [ ] **Step 1.2: Run the file to confirm it fails on the import**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts
 ```
 
 Expected: module-not-found / import error on `../../src/services/garage/progress.js`. (Vitest under pnpm-workspace resolves the path through the source map; the failing import is the signal.)
@@ -247,7 +247,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 //
 // This constant is SERVER-ONLY by design (skeleton chunk 26 + outline
 // §260): clients never receive the thresholds, only the resolved
-// payload. Do NOT re-export through `@jdm/shared`.
+// payload. Do NOT re-export through `@ccc/shared`.
 export const RANK_TIERS = [
   { name: 'Iniciante', min: 0, next: 'Pilotador', nextAt: 100 },
   { name: 'Pilotador', min: 100, next: 'Veterano', nextAt: 500 },
@@ -356,7 +356,7 @@ export const getGarageProgress = async (
 - [ ] **Step 2.2: Run only the pure-unit tests to verify they pass**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts -t 'deriveProgress'
+pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts -t 'deriveProgress'
 ```
 
 Expected: 10 passing tests under `deriveProgress` (6 boundary cases + 4 invariants).
@@ -364,7 +364,7 @@ Expected: 10 passing tests under `deriveProgress` (6 boundary cases + 4 invarian
 - [ ] **Step 2.3: Run touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean. If TS complains about `tier.nextAt as number`, double-check the `as const` on `RANK_TIERS` — the literal types should narrow correctly.
@@ -391,7 +391,7 @@ This task adds a second `describe('getGarageProgress', …)` block that exercise
 Append to `apps/api/test/garage/progress.test.ts` (after the closing brace of the `deriveProgress` describe block):
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach } from 'vitest';
 
 import { createUser, resetDatabase } from '../helpers.js';
@@ -453,7 +453,7 @@ NOTE on imports: the second `import` block is appended at the bottom intentional
 Real Postgres must be reachable per repo standards (Testcontainers or `DATABASE_URL` to a preview DB — same setup the rest of `apps/api/test/garage/*.test.ts` already relies on).
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts
 ```
 
 Expected: 10 `deriveProgress` cases + 3 `getGarageProgress` cases = 13 passing.
@@ -463,7 +463,7 @@ If the integration block fails with "Garage row missing for user", confirm `crea
 - [ ] **Step 3.3: Re-run touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -487,15 +487,15 @@ Only needed if Task 3's appended import block tripped the import-order rule.
 
 - [ ] **Step 4.1: Hoist all imports to the top of the test file**
 
-Move the `import { prisma } from '@jdm/db';`, `import { afterEach, beforeEach } from 'vitest';`, `import { createUser, resetDatabase } from '../helpers.js';`, and `import { getGarageProgress } from '../../src/services/garage/progress.js';` lines to join the single top-of-file import section. Merge the `vitest` import into the existing `{ describe, expect, it }` import.
+Move the `import { prisma } from '@ccc/db';`, `import { afterEach, beforeEach } from 'vitest';`, `import { createUser, resetDatabase } from '../helpers.js';`, and `import { getGarageProgress } from '../../src/services/garage/progress.js';` lines to join the single top-of-file import section. Merge the `vitest` import into the existing `{ describe, expect, it }` import.
 
 - [ ] **Step 4.2: Run lint on touched files only**
 
 ```bash
-pnpm --filter @jdm/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts
+pnpm --filter @ccc/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts
 ```
 
-Expected: clean. Paths are package-root-relative because `--filter @jdm/api exec` runs from `apps/api/` (canon §10).
+Expected: clean. Paths are package-root-relative because `--filter @ccc/api exec` runs from `apps/api/` (canon §10).
 
 - [ ] **Step 4.3: Commit (only if Step 4.1 changed the file)**
 
@@ -511,7 +511,7 @@ git commit -m "chore(api): hoist progress.test.ts imports (chunk 26)"
 - [ ] **Step V.1: Targeted vitest run**
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts
+pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts
 ```
 
 Expected output (counts):
@@ -523,14 +523,14 @@ Expected output (counts):
 - [ ] **Step V.2: Touched-file typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
 
 - [ ] **Step V.3: Memory-rule check — no shared rebuild needed**
 
-`@jdm/shared` was not touched (RANK_TIERS stays server-only per chunk skeleton + outline §260). The CLAUDE.md memory rule about rebuilding `@jdm/shared/dist` after schema changes does NOT apply here — confirm the diff against `main` shows nothing under `packages/shared/` or `packages/db/`.
+`@ccc/shared` was not touched (RANK_TIERS stays server-only per chunk skeleton + outline §260). The CLAUDE.md memory rule about rebuilding `@ccc/shared/dist` after schema changes does NOT apply here — confirm the diff against `main` shows nothing under `packages/shared/` or `packages/db/`.
 
 ```bash
 git diff --name-only main...HEAD
@@ -552,7 +552,7 @@ Per CLAUDE.md memory `feedback_no_full_test_suite_locally.md`: do NOT run the fu
 Applied from `docs/superpowers/plans/2026-05-24-phase2-plan-review.md` and `/tmp/phase2-fix-canon.md`:
 
 - **Signature locked (canon §3):** `getGarageProgress(client: PrismaClient | Prisma.TransactionClient, garageId: string)`. The review flagged drift against chunk 28's earlier `getGarageProgress(garage.id)` call sites; canon §3 resolves the drift in this direction — chunk 28 must adopt `(prisma, garage.id)`, NOT chunk 26 collapsing to one arg. `ReadClient` is the union of `PrismaClient | Prisma.TransactionClient` (was a bespoke `Pick<typeof prisma, 'garage'> | Prisma.TransactionClient` shape).
-- **Canon §10 commands:** all `pnpm --filter @jdm/api test -- apps/api/test/garage/progress.test.ts` runs are now `pnpm --filter @jdm/api exec vitest run test/garage/progress.test.ts` (package-root-relative path). Lint command is `pnpm --filter @jdm/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts`.
+- **Canon §10 commands:** all `pnpm --filter @ccc/api test -- apps/api/test/garage/progress.test.ts` runs are now `pnpm --filter @ccc/api exec vitest run test/garage/progress.test.ts` (package-root-relative path). Lint command is `pnpm --filter @ccc/api exec eslint src/services/garage/progress.ts test/garage/progress.test.ts`.
 - **Chunk-23 dependency preflight (new Step 0.b):** stops the implementer if `Garage.xp` migration / schema / generated client are not present yet. Chunk 26 reads `Garage.xp` but edits no Prisma schema, so it cannot land before chunk 23.
 - **Verification (MINOR):** Step V.3 now uses `git diff --name-only main...HEAD` instead of `git status` (commits are already in by V.3, so `git status` would be clean and uninformative).
 
@@ -575,7 +575,7 @@ If any further deviation arises during implementation (e.g. typecheck forces a d
 - [ ] Top-tier sentinel: `xpToNextRank === 0` AND `tierSpan === 1` (§C14).
 - [ ] All 6 boundary cases from outline §491 are individual `it()` blocks.
 - [ ] `RANK_TIERS` is NOT exported from `packages/shared` (chunk-26 contract).
-- [ ] `pnpm --filter @jdm/api typecheck` clean.
+- [ ] `pnpm --filter @ccc/api typecheck` clean.
 - [ ] Targeted vitest passes: 13/13 in `progress.test.ts`.
 - [ ] No edits to `packages/shared`, `packages/db`, routes, or `index.ts`.
 - [ ] No edits to `production` branch (CLAUDE.md branch safety).

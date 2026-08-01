@@ -1,6 +1,6 @@
-import type { Car } from '@jdm/shared/cars';
-import type { FeedCommentResponse } from '@jdm/shared/feed';
-import { PremiumBadge } from '@jdm/ui';
+import type { Car } from '@ccc/shared/cars';
+import type { FeedCommentResponse } from '@ccc/shared/feed';
+import { PremiumBadge } from '@ccc/ui';
 import { useEffect, useState } from 'react';
 import {
   Alert,

@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 export const profileCopy = {
   profile: {
@@ -17,6 +17,8 @@ export const profileCopy = {
     saved: 'Perfil atualizado.',
     saveFailed: 'Não foi possível salvar.',
     loadFailed: 'Não foi possível carregar o perfil.',
+    memberTier: (tier: 'bronze' | 'silver' | 'gold') =>
+      tier === 'gold' ? 'Membro Ouro' : tier === 'silver' ? 'Membro Prata' : 'Membro Bronze',
   },
   menu: {
     subtitle: 'Gerencie seus dados, endereços e sua garagem.',
@@ -29,6 +31,8 @@ export const profileCopy = {
     shippingHint: 'Cadastre e edite seus endereços de entrega',
     garage: 'Garagem',
     garageHint: 'Veja e edite seus carros',
+    assinatura: 'Assinatura',
+    assinaturaHint: 'Conheça os planos e torne-se membro',
     support: 'Suporte',
     supportHint: 'Abra um chamado ou acompanhe seus tickets',
     logoutHint: 'Encerrar sessão neste aparelho',

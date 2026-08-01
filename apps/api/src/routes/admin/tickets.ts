@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminGrantTicketResponseSchema,
   adminGrantTicketSchema,
   adminTicketsListQuerySchema,
   adminTicketsListResponseSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type { Prisma, Ticket, TicketTier } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

@@ -1,4 +1,4 @@
-import type { GetOrderResponse } from '@jdm/shared/orders';
+import type { GetOrderResponse } from '@ccc/shared/orders';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getOrder } from '~/api/orders';

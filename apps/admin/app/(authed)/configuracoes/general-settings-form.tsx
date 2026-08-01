@@ -5,7 +5,7 @@ import {
   type CapacityDisplayPolicy,
   type GeneralSettings,
   computeCapacityDisplay,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 import { useState, useTransition } from 'react';
 
 import { updateAdminGeneralSettingsAction } from '~/lib/general-settings-actions';

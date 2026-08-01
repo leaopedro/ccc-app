@@ -1,15 +1,14 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
-import { badgeCodeSchema } from '@jdm/shared/badges';
+import { prisma } from '@ccc/db';
+import { badgeCodeSchema } from '@ccc/shared/badges';
 import {
   GARAGE_RESERVED_SLUGS,
   garageCoverPatchSchema,
   garagePatchSchema,
   garageReadSchema,
-} from '@jdm/shared/garage';
-import { GARAGE_COVER_PRESETS } from '@jdm/shared/garage-covers';
-import { garagePublicResponseSchema } from '@jdm/shared/garage-public';
-import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES } from '@jdm/shared/uploads';
+} from '@ccc/shared/garage';
+import { GARAGE_COVER_PRESETS } from '@ccc/shared/garage-covers';
+import { garagePublicResponseSchema } from '@ccc/shared/garage-public';
+import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES } from '@ccc/shared/uploads';
 import type { Garage } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -18,6 +17,7 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { recordAudit } from '../services/admin-audit.js';
 import { readOwnerBadgesState, readPublicBadges } from '../services/garage/badges-read.js';
+import rateLimit from '@fastify/rate-limit';
 import { validateCoverPatch, type CoverPatch } from '../services/garage/cover.js';
 import {
   computeIsPremiumActive,

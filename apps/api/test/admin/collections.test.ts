@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminStoreCollectionDetailSchema,
   adminStoreCollectionListResponseSchema,
   adminStoreCollectionSchema,
-} from '@jdm/shared/admin';
+} from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

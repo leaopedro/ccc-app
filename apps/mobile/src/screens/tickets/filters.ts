@@ -1,4 +1,4 @@
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 
 export type TicketStatusFilter = 'all' | 'valid' | 'used' | 'expired';
 

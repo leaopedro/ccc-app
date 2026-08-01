@@ -1,4 +1,4 @@
-import type { SupportTicketInternalStatus, SupportTicketStatus } from '@jdm/shared/support';
+import type { SupportTicketInternalStatus, SupportTicketStatus } from '@ccc/shared/support';
 import Link from 'next/link';
 
 import { listAdminSupportTickets } from '~/lib/admin-api';

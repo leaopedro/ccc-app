@@ -1,4 +1,4 @@
-import { ALLOWED_IMAGE_TYPES, type PresignResponse, type UploadKind } from '@jdm/shared/uploads';
+import { ALLOWED_IMAGE_TYPES, type PresignResponse, type UploadKind } from '@ccc/shared/uploads';
 import * as ImagePicker from 'expo-image-picker';
 
 import { requestPresign } from '~/api/uploads';

@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signupSchema } from '@jdm/shared/auth';
-import type { SignupInput } from '@jdm/shared/auth';
-import { Button, Text } from '@jdm/ui';
+import { signupSchema } from '@ccc/shared/auth';
+import type { SignupInput } from '@ccc/shared/auth';
+import { Button, Text } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Check } from 'lucide-react-native';
 import { useState } from 'react';

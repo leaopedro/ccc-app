@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { recordAudit } from '../../src/services/admin-audit.js';

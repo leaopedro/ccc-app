@@ -100,7 +100,7 @@ describe('mobile garage-badges API client', () => {
       new Response(
         JSON.stringify({
           badge: {
-            code: 'JDM-003',
+            code: 'CCC-003',
             earnedAt: '2026-02-10T11:30:00.000Z',
             pinned: false,
             pinnedAt: null,
@@ -109,8 +109,8 @@ describe('mobile garage-badges API client', () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
     );
-    await togglePinBadge('JDM-003', false);
+    await togglePinBadge('CCC-003', false);
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://api.test/me/garage/badges/JDM-003/pin');
+    expect(url).toBe('https://api.test/me/garage/badges/CCC-003/pin');
   });
 });

@@ -10,9 +10,9 @@
 // length-zero, mapping both to invalidSlug copy (length-40+ is blocked by
 // `maxLength` on the input).
 
-import { brand } from '@jdm/design';
-import { GARAGE_RESERVED_SLUGS, type GarageOwner, type GaragePatch } from '@jdm/shared/garage';
-import { SheetShell } from '@jdm/ui';
+import { brand } from '@ccc/design';
+import { GARAGE_RESERVED_SLUGS, type GarageOwner, type GaragePatch } from '@ccc/shared/garage';
+import { SheetShell } from '@ccc/ui';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 

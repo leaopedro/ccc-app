@@ -1,6 +1,6 @@
 'use server';
 
-import { adminProductTypeCreateSchema, adminProductTypeUpdateSchema } from '@jdm/shared/admin';
+import { adminProductTypeCreateSchema, adminProductTypeUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 
 import {

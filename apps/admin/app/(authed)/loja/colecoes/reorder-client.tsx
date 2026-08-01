@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminStoreCollection } from '@jdm/shared/admin';
+import type { AdminStoreCollection } from '@ccc/shared/admin';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 

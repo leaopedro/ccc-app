@@ -34,7 +34,7 @@ Items 4 + 5 fold into E (same file).
 ```tsx
 const dot = () => container.querySelector('[data-testid="hex-legendary-dot"]');
 const renderHex = async (props: Record<string, unknown>) => {
-  const { HexBadge } = await import('@jdm/ui');
+  const { HexBadge } = await import('@ccc/ui');
   await renderEl(<HexBadge code="X" {...props} icon="flag" />);
 };
 
@@ -56,7 +56,7 @@ it('locked legendary does NOT render the corner-dot', async () => {
 });
 ```
 
-- [ ] **A2: Verify FAIL** — `pnpm --filter @jdm/mobile test -- HexBadge.test.tsx -t "corner-dot"`.
+- [ ] **A2: Verify FAIL** — `pnpm --filter @ccc/mobile test -- HexBadge.test.tsx -t "corner-dot"`.
 
 - [ ] **A3: Implement in `packages/ui/src/HexBadge.tsx`.** Inside the `hex` `<View>`, after the glyph `<View>`, append:
 
@@ -82,7 +82,7 @@ it('locked legendary does NOT render the corner-dot', async () => {
 
 (`r` is already in scope via `const r = rarityColors(rarity)`.)
 
-- [ ] **A4: Verify PASS** — `pnpm --filter @jdm/mobile test -- HexBadge.test.tsx`.
+- [ ] **A4: Verify PASS** — `pnpm --filter @ccc/mobile test -- HexBadge.test.tsx`.
 
 - [ ] **A5: Failing test (web).** Append to `web-hex-badge.test.tsx`:
 
@@ -107,7 +107,7 @@ it('earned legendary sm suppresses the corner-dot', () => {
 });
 ```
 
-- [ ] **A6: Verify FAIL** — `pnpm --filter @jdm/admin test -- web-hex-badge.test.tsx -t "corner-dot"`.
+- [ ] **A6: Verify FAIL** — `pnpm --filter @ccc/admin test -- web-hex-badge.test.tsx -t "corner-dot"`.
 
 - [ ] **A7: Implement in `packages/ui/src/web/HexBadge.tsx`.** Inside the inner `<span className="relative inline-block" ...>`, after the glyph `<span>`, append:
 
@@ -131,7 +131,7 @@ it('earned legendary sm suppresses the corner-dot', () => {
 }
 ```
 
-- [ ] **A8: Verify PASS** — `pnpm --filter @jdm/admin test -- web-hex-badge.test.tsx`.
+- [ ] **A8: Verify PASS** — `pnpm --filter @ccc/admin test -- web-hex-badge.test.tsx`.
 
 - [ ] **A9: Commit.** Subject: `feat(ui): HexBadge legendary corner-dot (mobile + web)`. Stage the two `HexBadge.tsx` files + the two test files.
 
@@ -145,7 +145,7 @@ it('earned legendary sm suppresses the corner-dot', () => {
 
 ```tsx
 const renderSheet = async () => {
-  const { BadgesSheet } = await import('@jdm/ui');
+  const { BadgesSheet } = await import('@ccc/ui');
   await renderEl(
     <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={() => {}} />,
   );
@@ -193,7 +193,7 @@ it('tapping Todas clears the filter', async () => {
 });
 ```
 
-- [ ] **B2: Verify FAIL** — `pnpm --filter @jdm/mobile test -- BadgesSheet.test.tsx -t "tab"`.
+- [ ] **B2: Verify FAIL** — `pnpm --filter @ccc/mobile test -- BadgesSheet.test.tsx -t "tab"`.
 
 - [ ] **B3: Implement in `packages/ui/src/BadgesSheet.tsx`.** Add `Pressable` to the `react-native` import. Add state + constant near the existing `detailCode`:
 
@@ -247,7 +247,7 @@ In the existing `{CATEGORY_ORDER.map((cat) => { ... })}` callback, add at the to
 if (tabFilter !== 'all' && tabFilter !== cat) return null;
 ```
 
-- [ ] **B4: Verify PASS** — `pnpm --filter @jdm/mobile test -- BadgesSheet.test.tsx`.
+- [ ] **B4: Verify PASS** — `pnpm --filter @ccc/mobile test -- BadgesSheet.test.tsx`.
 
 - [ ] **B5: Commit.** Subject: `feat(ui): BadgesSheet category-tabs filter (mobile)`.
 
@@ -329,7 +329,7 @@ it('surfaces failure copy when cart-add throws', async () => {
 });
 ```
 
-- [ ] **C2: Verify FAIL** — `pnpm --filter @jdm/mobile test -- useBuySpotFlow.test.ts`.
+- [ ] **C2: Verify FAIL** — `pnpm --filter @ccc/mobile test -- useBuySpotFlow.test.ts`.
 
 - [ ] **C3: Capture itemId + append query.** Replace `goCheckout` in `useBuySpotFlow.ts`:
 
@@ -366,7 +366,7 @@ const goCheckout = useCallback(async () => {
 }, [router, refresh]);
 ```
 
-- [ ] **C4: Verify PASS** — `pnpm --filter @jdm/mobile test -- useBuySpotFlow.test.ts`.
+- [ ] **C4: Verify PASS** — `pnpm --filter @ccc/mobile test -- useBuySpotFlow.test.ts`.
 
 - [ ] **C5: Commit.** Subject: `feat(mobile): thread cart itemId for Phase 1 §C10 buy-spot return plumbing`.
 
@@ -409,7 +409,7 @@ it('refetches badges on re-focus when killswitch flipped on', async () => {
 
 If `mountRoute` lacks `unmount` / `flush`, extend it using the `HexBadge.test.tsx` `createRoot` pattern (test-file scope already touched): return `{ flush: () => new Promise(r => setTimeout(r, 0)), unmount: async () => act(async () => root.unmount()) }`.
 
-- [ ] **D2: Verify FAIL** — `pnpm --filter @jdm/mobile test -- GarageIndexRoute.test.tsx -t "re-focus"`.
+- [ ] **D2: Verify FAIL** — `pnpm --filter @ccc/mobile test -- GarageIndexRoute.test.tsx -t "re-focus"`.
 
 - [ ] **D3: Consolidate.** Replace the `useFocusEffect` (lines 55–59) AND delete the standalone `useEffect` (lines 98–110):
 
@@ -435,7 +435,7 @@ useFocusEffect(
 
 Keep `refetchBadges` (used by `handleTogglePin`) untouched.
 
-- [ ] **D4: Verify PASS** — `pnpm --filter @jdm/mobile test -- GarageIndexRoute.test.tsx`.
+- [ ] **D4: Verify PASS** — `pnpm --filter @ccc/mobile test -- GarageIndexRoute.test.tsx`.
 
 - [ ] **D5: Commit.** Subject: `fix(mobile): refetch badges on focus when killswitch re-enables`.
 
@@ -566,7 +566,7 @@ it('focus trap: Esc dismisses + restores focus to the grant button', async () =>
 });
 ```
 
-- [ ] **E2: Verify FAIL** — `pnpm --filter @jdm/admin test -- garage-badges-panel.interaction.test.tsx`.
+- [ ] **E2: Verify FAIL** — `pnpm --filter @ccc/admin test -- garage-badges-panel.interaction.test.tsx`.
 
 - [ ] **E3: Per-row pending in `garage-badges-panel.tsx`.** Track in-flight codes as a Set so concurrent grants don't clobber each other (a single `pendingCode` would forget row A the moment row B starts).
 
@@ -655,7 +655,7 @@ useEffect(() => {
 
 Wire JSX: catalog grant button → `onClick={(e) => handleGrantClick(entry, e.currentTarget)}`. Dialog Cancel → `ref={cancelRef} onClick={dismissConfirm}`. Dialog confirm → `ref={confirmRef} disabled={pendingCodes.has(confirm.code)} onClick={() => { const c = confirm.code; setConfirm(null); runGrant(c); lastFocusedRef.current?.focus(); }}`.
 
-- [ ] **E5: Verify PASS** — `pnpm --filter @jdm/admin test -- garage-badges-panel`.
+- [ ] **E5: Verify PASS** — `pnpm --filter @ccc/admin test -- garage-badges-panel`.
 
 - [ ] **E6: Commit.** Subject: `fix(admin): per-row pending + focus trap on garage-badges-panel`.
 
@@ -679,7 +679,7 @@ it('overflow chip uses inline borderColor — no border-border in className', ()
 });
 ```
 
-- [ ] **F2: Verify FAIL** — `pnpm --filter @jdm/admin test -- web-badge-row.test.tsx -t "no border-border"`.
+- [ ] **F2: Verify FAIL** — `pnpm --filter @ccc/admin test -- web-badge-row.test.tsx -t "no border-border"`.
 
 - [ ] **F3: Edit `packages/ui/src/web/BadgeRow.tsx`.** Replace the overflow chip's className:
 
@@ -690,7 +690,7 @@ className =
 
 Keep the inline `style={{ width: 52, height: 52, borderColor: garageTokens.surface.border }}` exactly as is.
 
-- [ ] **F4: Verify PASS** — `pnpm --filter @jdm/admin test -- web-badge-row.test.tsx`.
+- [ ] **F4: Verify PASS** — `pnpm --filter @ccc/admin test -- web-badge-row.test.tsx`.
 
 - [ ] **F5: Commit.** Subject: `chore(ui): drop dead border-border Tailwind on web BadgeRow chip`.
 
@@ -701,12 +701,12 @@ Keep the inline `style={{ width: 52, height: 52, borderColor: garageTokens.surfa
 After Item F. Never run the full suite locally (`feedback_no_full_test_suite_locally`):
 
 ```bash
-pnpm --filter @jdm/ui typecheck && pnpm --filter @jdm/mobile typecheck && pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/mobile test -- HexBadge.test.tsx BadgesSheet.test.tsx useBuySpotFlow.test.ts GarageIndexRoute.test.tsx
-pnpm --filter @jdm/admin test -- web-hex-badge.test.tsx web-badge-row.test.tsx garage-badges-panel
+pnpm --filter @ccc/ui typecheck && pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/mobile test -- HexBadge.test.tsx BadgesSheet.test.tsx useBuySpotFlow.test.ts GarageIndexRoute.test.tsx
+pnpm --filter @ccc/admin test -- web-hex-badge.test.tsx web-badge-row.test.tsx garage-badges-panel
 ```
 
-Expected: all green. No backend / migration runs. No schema deltas — no `@jdm/shared` rebuild required.
+Expected: all green. No backend / migration runs. No schema deltas — no `@ccc/shared` rebuild required.
 
 ---
 
@@ -770,7 +770,7 @@ Expected: all green. No backend / migration runs. No schema deltas — no `@jdm/
   ## Test plan
 
   - [x] A 7 specs, B 4, C 3, D 1, E 5, F 1 (21 total).
-  - [x] @jdm/ui + @jdm/mobile + @jdm/admin typechecks green.
+  - [x] @ccc/ui + @ccc/mobile + @ccc/admin typechecks green.
 
   ## Deviations from plan
 

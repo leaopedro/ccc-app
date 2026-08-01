@@ -1,6 +1,6 @@
-import { prisma } from '@jdm/db';
-import { adminStoreOrderDetailSchema } from '@jdm/shared/admin';
-import { beginCheckoutResponseSchema } from '@jdm/shared/cart';
+import { prisma } from '@ccc/db';
+import { adminStoreOrderDetailSchema } from '@ccc/shared/admin';
+import { beginCheckoutResponseSchema } from '@ccc/shared/cart';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';

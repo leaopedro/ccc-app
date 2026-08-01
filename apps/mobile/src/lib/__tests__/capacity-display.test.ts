@@ -1,4 +1,4 @@
-import type { CapacityDisplayDescriptor } from '@jdm/shared/general-settings';
+import type { CapacityDisplayDescriptor } from '@ccc/shared/general-settings';
 import { describe, expect, it } from 'vitest';
 
 import { capacityLabel, isCapacityBlocked } from '../capacity-display';

@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -85,10 +85,15 @@ const seedGarage = async (garageId: string): Promise<void> => {
 
 describe('POST /webhooks/revenuecat', () => {
   let app: FastifyInstance;
+  // Captured per-test (not at module-eval time) so this file is self-healing
+  // regardless of what any earlier file in the shared test process left
+  // behind — see test/setup.ts for the process-wide baseline.
+  let originalBillingFlag: string | undefined;
 
   beforeEach(async () => {
     await resetDatabase();
     process.env.REVENUECAT_WEBHOOK_AUTH_HEADER = RC_AUTH_HEADER;
+    originalBillingFlag = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'true';
     app = await makeApp();
   });
@@ -96,7 +101,11 @@ describe('POST /webhooks/revenuecat', () => {
   afterEach(async () => {
     await app.close();
     delete process.env.REVENUECAT_WEBHOOK_AUTH_HEADER;
-    process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'false';
+    if (originalBillingFlag === undefined) {
+      delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+    } else {
+      process.env.GROWTH_PREMIUM_BILLING_ENABLED = originalBillingFlag;
+    }
   });
 
   // -------------------------------------------------------------------------

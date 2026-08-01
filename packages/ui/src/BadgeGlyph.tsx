@@ -21,7 +21,7 @@ import {
 /**
  * BadgeGlyph — Lucide-RN icon resolver keyed by the free-form `icon` string
  * stored in `BadgeCatalogEntry.icon` (1–40 chars, validated by
- * `badgeCatalogEntrySchema` in `@jdm/shared/badges`). The seed catalog
+ * `badgeCatalogEntrySchema` in `@ccc/shared/badges`). The seed catalog
  * (packages/db/prisma/seed.ts, lines 428–483) uses the 12 wire strings
  * mapped below. Unknown strings render `HelpCircle` so a future catalog
  * addition can never crash the client — the renderer degrades to a

@@ -229,8 +229,8 @@ Expected: tests for new describe blocks fail (storePickup not in response, /stor
 Create `apps/api/src/services/store/pickup-collect.ts`:
 
 ```typescript
-import { prisma } from '@jdm/db';
-import type { StorePickupItem, StorePickupOrder } from '@jdm/shared/check-in';
+import { prisma } from '@ccc/db';
+import type { StorePickupItem, StorePickupOrder } from '@ccc/shared/check-in';
 
 import { recordAudit } from '../admin-audit.js';
 
@@ -388,7 +388,7 @@ import {
   pickupCollectRequestSchema,
   pickupCollectResponseSchema,
   storePickupOrderSchema,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 
 import {
   collectPickupOrders,
@@ -483,8 +483,8 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 In `apps/admin/src/lib/admin-api.ts`, add these imports at top (or alongside existing check-in imports):
 
 ```typescript
-import type { PickupCollectRequest, PickupCollectResponse } from '@jdm/shared/check-in';
-import { pickupCollectRequestSchema, pickupCollectResponseSchema } from '@jdm/shared/check-in';
+import type { PickupCollectRequest, PickupCollectResponse } from '@ccc/shared/check-in';
+import { pickupCollectRequestSchema, pickupCollectResponseSchema } from '@ccc/shared/check-in';
 ```
 
 Then add after `claimExtraItem`:
@@ -585,7 +585,7 @@ import {
 Also import the shared type:
 
 ```typescript
-import type { StorePickupOrder } from '@jdm/shared/check-in';
+import type { StorePickupOrder } from '@ccc/shared/check-in';
 ```
 
 - [ ] **Step 2: Update CheckInActionResult in check-in-actions.ts to include storePickup**
@@ -645,7 +645,7 @@ import type {
   ExtraClaimResponse,
   StorePickupOrder,
   TicketCheckInResponse,
-} from '@jdm/shared/check-in';
+} from '@ccc/shared/check-in';
 ```
 
 - [ ] **Step 3: Add TicketResultCard ticketId prop and StorePickupPanel**
@@ -841,7 +841,7 @@ Expected: all tests pass.
 - [ ] **Step 2: Typecheck all packages**
 
 ```bash
-pnpm --filter @jdm/shared tsc --noEmit && pnpm --filter api tsc --noEmit && pnpm --filter admin tsc --noEmit
+pnpm --filter @ccc/shared tsc --noEmit && pnpm --filter api tsc --noEmit && pnpm --filter admin tsc --noEmit
 ```
 
 Expected: no errors.

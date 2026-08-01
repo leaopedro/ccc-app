@@ -1,4 +1,4 @@
-import type { UserStatusName } from '@jdm/shared/auth';
+import type { UserStatusName } from '@ccc/shared/auth';
 
 const COPY: Record<UserStatusName, string> = {
   partial: 'Parcial',

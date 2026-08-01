@@ -1,16 +1,16 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   createSupportTicketBodySchema,
   supportTicketSchema,
   type SupportTicket,
-} from '@jdm/shared/support';
+} from '@ccc/shared/support';
 import type { SupportTicket as DbTicket } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 import { decryptField, encryptField } from '../services/crypto/field-encryption.js';
 import type { Uploads } from '../services/uploads/index.js';
+import rateLimit from '@fastify/rate-limit';
 
 const serializeTicket = async (
   t: DbTicket,

@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   createFeedBanInputSchema,
   moderateCommentInputSchema,
   moderatePostInputSchema,
   resolveReportInputSchema,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 

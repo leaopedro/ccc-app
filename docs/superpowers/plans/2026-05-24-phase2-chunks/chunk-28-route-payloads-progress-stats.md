@@ -6,7 +6,7 @@
 
 **Architecture:** Two route handlers in `apps/api/src/routes/garage.ts` gain optional fields at the response top level. Killswitch off → both routes omit `progress` + `stats` and return `gamification: { enabled: false }`. Killswitch on → owner always renders both; public applies hide-on-empty per "Locked invariants" #2 against all four metrics. Services `getGarageStats` (chunk 25) + `getGarageProgress` (chunk 26) ship the shapes; **both are called as `getGarageProgress(prisma, garage.id)` / `getGarageStats(prisma, garage.id)` — prisma FIRST per canon §3**. Shared schemas (chunk 24) accept them as `.optional()` per §C10. The 404 path on `/g/:slug` stays byte-identical (§C9). DSR: `data-export.ts` exports `Garage.xp` + `Garage.likesReceived` + the user's `XpEvent` rows; `anonymize.ts` resets both counters to 0 and deletes the user's `XpEvent` rows inside the existing anonymize tx (canon §14).
 
-**Tech Stack:** Fastify, Prisma, `@jdm/shared` zod, Vitest + real Postgres via `makeApp` + `resetDatabase` helpers. Final 2A gate (skeleton "Parallel-with: none in 2A"). Reads from chunks 24/25/26 (and Phase 1 killswitch).
+**Tech Stack:** Fastify, Prisma, `@ccc/shared` zod, Vitest + real Postgres via `makeApp` + `resetDatabase` helpers. Final 2A gate (skeleton "Parallel-with: none in 2A"). Reads from chunks 24/25/26 (and Phase 1 killswitch).
 
 ---
 
@@ -89,7 +89,7 @@ Write this test before any production change so we catch any byte-difference cau
 
 ```ts
 // apps/api/test/garage/garage-public-404-byte-parity.test.ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -126,7 +126,7 @@ describe('GET /g/:slug — 404 byte parity (§C9)', () => {
 
 - [ ] **Step 2: Run and confirm pass against current code**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts`
 Expected: PASS (existing handler already returns `{ error: 'NotFound' }` for both paths). This is our safety net for Task 3.
 
 - [ ] **Step 3: Commit (test-only — no production change yet)**
@@ -150,10 +150,10 @@ Write all 8 integration tests for the new behavior. They WILL fail until Task 3 
 
 ```ts
 // apps/api/test/garage/garage-route-progress-stats.test.ts
-import { prisma } from '@jdm/db';
-import { garagePublicResponseSchema } from '@jdm/shared/garage-public';
-import { garageReadSchema } from '@jdm/shared/garage';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { garagePublicResponseSchema } from '@ccc/shared/garage-public';
+import { garageReadSchema } from '@ccc/shared/garage';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -333,7 +333,7 @@ describe('garage routes — progress + stats payload (chunk 28)', () => {
 
 - [ ] **Step 2: Run and confirm 8 tests FAIL**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-route-progress-stats.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-route-progress-stats.test.ts`
 Expected: 8 failures — `progress`/`stats` are `undefined` even when expected, and `garageReadSchema.parse` / `garagePublicResponseSchema.parse` reject because the current responses don't carry the top-level `gamification` flag (per canon §1, this chunk is the one that introduces it). This validates the tests have grip.
 
 - [ ] **Step 3: Commit (failing tests only)**
@@ -408,12 +408,12 @@ const loadOwnerView = async (userId: string, uploads: Uploads) => {
 
 - [ ] **Step 3: Run owner-side tests; confirm they pass**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-route-progress-stats.test.ts -t "GET /me/garage"`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-route-progress-stats.test.ts -t "GET /me/garage"`
 Expected: 2 tests PASS (owner with killswitch on, owner with killswitch off). The `-t` filter matches the inner `describe('GET /me/garage', ...)` block.
 
 - [ ] **Step 4: Run the existing `me-garage.test.ts` to confirm no regression**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/me-garage.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/me-garage.test.ts`
 Expected: existing tests still PASS (they only assert fields that didn't change).
 
 - [ ] **Step 5: Commit**
@@ -487,17 +487,17 @@ scoped.get<{ Params: { slug: string } }>('/g/:slug', async (request, reply) => {
 
 - [ ] **Step 2: Run public-side tests; confirm they pass**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-route-progress-stats.test.ts -t "GET /g/:slug"`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-route-progress-stats.test.ts -t "GET /g/:slug"`
 Expected: 6 tests PASS (hide-on-empty, xp>0, likesReceived>0, events>0, posts>0, killswitch-off overrides). The `-t` filter matches the inner `describe('GET /g/:slug', ...)` block.
 
 - [ ] **Step 3: Run the §C9 byte-parity test again to confirm 404 is still identical**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts`
 Expected: PASS. If this fails, the public handler accidentally introduced a divergence between the unknown-slug and private-garage paths — revert step 1 and re-do, ensuring the 404 branch returns before any new code runs.
 
 - [ ] **Step 4: Run the existing `public-garage.test.ts` to confirm no regression**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/public-garage.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/public-garage.test.ts`
 Expected: all existing tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -523,8 +523,8 @@ Extend the existing DSR export route + anonymize service so the new XP surface (
 
 ```ts
 // apps/api/test/garage/xp-dsr.test.ts
-import { prisma } from '@jdm/db';
-import { GENERAL_SETTINGS_SINGLETON_ID } from '@jdm/shared/general-settings';
+import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -615,7 +615,7 @@ describe('DSR — XP surface coverage (chunk 28, canon §14)', () => {
 });
 ```
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/xp-dsr.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/xp-dsr.test.ts`
 Expected: 3 failures — export omits `xpEvents` + the counters; anonymize leaves both untouched.
 
 - [ ] **Step 2: Extend `data-export.ts`**
@@ -655,12 +655,12 @@ steps.push({ step: 'reset_xp_counters', status: 'ok', at: new Date().toISOString
 
 - [ ] **Step 4: Run DSR tests; confirm 3 PASS**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/xp-dsr.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/xp-dsr.test.ts`
 Expected: 3 PASS.
 
 - [ ] **Step 5: Run the existing DSR neighborhood to confirm no regression**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts`
 Expected: all existing tests PASS (we only ADDED entities + reset fields; nothing existing changes shape).
 
 - [ ] **Step 6: Commit**
@@ -676,22 +676,22 @@ git commit -m "feat(api): DSR export + anonymize cover XP surface (chunk 28, can
 
 ## Task 6 — Full verification sweep
 
-- [ ] **Step 1: Build @jdm/shared (memory rule — rebuild after schema changes)**
+- [ ] **Step 1: Build @ccc/shared (memory rule — rebuild after schema changes)**
 
-Run: `pnpm --filter @jdm/shared build` — clean build.
+Run: `pnpm --filter @ccc/shared build` — clean build.
 
 - [ ] **Step 2: Typecheck the API package**
 
-Run: `pnpm --filter @jdm/api typecheck` — 0 errors. If TS fails, most likely the response object shape doesn't match `garageReadSchema.parse` / `garagePublicResponseSchema.parse` — re-check the optional-spread in Task 3/4.
+Run: `pnpm --filter @ccc/api typecheck` — 0 errors. If TS fails, most likely the response object shape doesn't match `garageReadSchema.parse` / `garagePublicResponseSchema.parse` — re-check the optional-spread in Task 3/4.
 
 - [ ] **Step 3: Run all three new test files**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/garage-route-progress-stats.test.ts test/garage/garage-public-404-byte-parity.test.ts test/garage/xp-dsr.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/garage-route-progress-stats.test.ts test/garage/garage-public-404-byte-parity.test.ts test/garage/xp-dsr.test.ts`
 Expected: 8 + 1 + 3 = 12 PASS.
 
 - [ ] **Step 4: Run the touched neighborhood of existing tests**
 
-Run: `pnpm --filter @jdm/api exec vitest run test/garage/me-garage.test.ts test/garage/public-garage.test.ts test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts`
+Run: `pnpm --filter @ccc/api exec vitest run test/garage/me-garage.test.ts test/garage/public-garage.test.ts test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts`
 Expected: all existing tests PASS.
 
 > **Do NOT** run the full test suite locally (memory rule "Never run full test suite locally"). CI on the PR covers the full sweep.
@@ -723,12 +723,12 @@ gh pr create --base main --title "feat(api): wire progress+stats payloads + 404 
 
 ## Test plan
 
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/garage-route-progress-stats.test.ts` (8 pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts` (1 pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/xp-dsr.test.ts` (3 pass)
-- [ ] `pnpm --filter @jdm/api exec vitest run test/garage/me-garage.test.ts test/garage/public-garage.test.ts test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts` (no regression)
-- [ ] `pnpm --filter @jdm/api typecheck` clean
-- [ ] `pnpm --filter @jdm/shared build` clean
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/garage-route-progress-stats.test.ts` (8 pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/garage-public-404-byte-parity.test.ts` (1 pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/xp-dsr.test.ts` (3 pass)
+- [ ] `pnpm --filter @ccc/api exec vitest run test/garage/me-garage.test.ts test/garage/public-garage.test.ts test/garage/data-export-garage.test.ts test/garage/anonymize-garage.test.ts test/garage/badges-dsr.test.ts test/me-data-export.test.ts` (no regression)
+- [ ] `pnpm --filter @ccc/api typecheck` clean
+- [ ] `pnpm --filter @ccc/shared build` clean
 - [ ] CI green
 
 ## Corrections applied

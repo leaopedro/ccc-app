@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { resetPasswordSchema } from '@jdm/shared/auth';
-import { Button, Text } from '@jdm/ui';
+import { resetPasswordSchema } from '@ccc/shared/auth';
+import { Button, Text } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';

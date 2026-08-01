@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,6 +46,9 @@ const buildActivatedEvt = (
   currentPeriodEnd: new Date('2026-07-01'),
   pricing: BASE_PRICING,
   invoice: BASE_INVOICE,
+  lines: [],
+  addons: [],
+  addonsAmountCents: 0,
   ...overrides,
 });
 
@@ -65,6 +68,7 @@ const buildRenewedEvt = (
     periodStart: new Date('2026-07-01'),
     periodEnd: new Date('2026-08-01'),
   },
+  lines: [],
   ...overrides,
 });
 
@@ -401,6 +405,8 @@ describe('applyMembershipEvent', () => {
         kind: 'subscription.tier_changed',
         provider: 'stripe',
         providerSubRef: 'sub_test001',
+        priceRef: 'price_test_annual_gold',
+        priceMetadata: { devFeePercent: '10' },
         tier: 'gold',
         cadence: 'annual',
         pricing: ANNUAL_PRICING,

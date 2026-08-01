@@ -154,7 +154,7 @@ Every successful deploy should show:
 - **Bad migration.** From a local shell pointed at prod `DATABASE_URL`:
 
   ```bash
-  pnpm --filter @jdm/db exec prisma migrate resolve --rolled-back <name>
+  pnpm --filter @ccc/db exec prisma migrate resolve --rolled-back <name>
   ```
 
   Then redeploy.
@@ -267,7 +267,7 @@ docker run --rm \
 
 # 3. Verify schema state
 DATABASE_URL="postgresql://postgres:<TARGET_PGPASSWORD>@<TARGET_HOST>:<TARGET_PORT>/railway" \
-  pnpm --filter @jdm/db exec prisma migrate status
+  pnpm --filter @ccc/db exec prisma migrate status
 # Expect: "Database schema is up to date!"
 ```
 

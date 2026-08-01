@@ -11,7 +11,7 @@
 **Dependencies (must be merged before TASK-H starts):**
 
 - TASK-A has added `Product.virtual: boolean` and `Product.visibleInStore: boolean` to the Prisma schema, the serializer (`apps/api/src/routes/admin/store/serializers.ts`), and the shared Zod schema `adminStoreProductDetailSchema` in `packages/shared/src/admin.ts`. After this, `AdminStoreProductDetail.virtual` exists at the TypeScript level.
-- TASK-A has also seeded the singleton garage-spot product with `slug: 'garage-spot'` and exposed a constant (or at minimum committed to the slug `'garage-spot'`). This plan re-uses that slug literally; if TASK-A exports a constant from `@jdm/shared` (e.g. `GARAGE_SPOT_PRODUCT_SLUG`), Task 3 below should import it instead of hardcoding the literal.
+- TASK-A has also seeded the singleton garage-spot product with `slug: 'garage-spot'` and exposed a constant (or at minimum committed to the slug `'garage-spot'`). This plan re-uses that slug literally; if TASK-A exports a constant from `@ccc/shared` (e.g. `GARAGE_SPOT_PRODUCT_SLUG`), Task 3 below should import it instead of hardcoding the literal.
 - TASK-A has added the server-side validation carve-out in `apps/api/src/routes/admin/store/products.ts` (lines 121-136) that bypasses the photo + fulfillment-method requirement when the product is `virtual=true`. This is owned by TASK-A (which introduces `Product.virtual` and all virtual-product capability), not TASK-C. TASK-H blocks on this specific TASK-A change. The test cases below verify that the UI no longer surfaces those gates for virtual products; if the manual check in Task 5 returns a 400 when saving with `status=active`, TASK-A's server carve-out has not landed yet.
 
 **Out of scope (do NOT touch in this task):**
@@ -51,7 +51,7 @@ const COPY = {
 } as const;
 ```
 
-If TASK-A exports a `GARAGE_SPOT_PRODUCT_SLUG` constant from `@jdm/shared`, Task 3 imports it. Otherwise hard-code:
+If TASK-A exports a `GARAGE_SPOT_PRODUCT_SLUG` constant from `@ccc/shared`, Task 3 imports it. Otherwise hard-code:
 
 ```ts
 // apps/admin/app/(authed)/loja/produtos/[id]/product-form.tsx (top of file)
@@ -97,7 +97,7 @@ describe('VirtualProductBanner', () => {
 Run from repo root:
 
 ```bash
-pnpm --filter @jdm/admin test -- virtual-product-banner.test.tsx
+pnpm --filter @ccc/admin test -- virtual-product-banner.test.tsx
 ```
 
 Expected: FAIL with "Cannot find module './virtual-product-banner'".
@@ -129,7 +129,7 @@ Note: this component is intentionally synchronous and dependency-free. It must b
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @jdm/admin test -- virtual-product-banner.test.tsx
+pnpm --filter @ccc/admin test -- virtual-product-banner.test.tsx
 ```
 
 Expected: PASS, 2 tests.
@@ -223,7 +223,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 Run from repo root:
 
 ```bash
-pnpm --filter @jdm/admin tsc --noEmit
+pnpm --filter @ccc/admin tsc --noEmit
 ```
 
 Expected: PASS (assumes TASK-A has already added `virtual: boolean` to `adminStoreProductDetailSchema`; otherwise `product.virtual === true` will be a type error against `boolean | undefined` — see "Risks" section below).
@@ -257,7 +257,7 @@ Expected: at least one line inside `adminStoreProductDetailSchema` declaring `vi
 Also run a type-check to confirm the TypeScript surface:
 
 ```bash
-pnpm --filter @jdm/admin tsc --noEmit 2>&1 | head -20
+pnpm --filter @ccc/admin tsc --noEmit 2>&1 | head -20
 ```
 
 If there are errors on `product.virtual` or `product.visibleInStore`, TASK-A has not landed. Do not proceed.
@@ -267,7 +267,7 @@ If there are errors on `product.virtual` or `product.visibleInStore`, TASK-A has
 Create `apps/admin/app/(authed)/loja/produtos/[id]/product-form.test.tsx`:
 
 ```tsx
-import type { AdminProductType, AdminStoreProductDetail } from '@jdm/shared/admin';
+import type { AdminProductType, AdminStoreProductDetail } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -399,7 +399,7 @@ describe('ProductForm — virtual product', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-pnpm --filter @jdm/admin test -- product-form.test.tsx
+pnpm --filter @ccc/admin test -- product-form.test.tsx
 ```
 
 Expected: All "virtual product" tests FAIL because the current form unconditionally renders the fulfillment fieldset and Arquivar button.
@@ -518,7 +518,7 @@ const photoGateActive = !isVirtual && !hasPhotos && product.status !== 'active';
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-pnpm --filter @jdm/admin test -- product-form.test.tsx
+pnpm --filter @ccc/admin test -- product-form.test.tsx
 ```
 
 Expected: All 7 tests PASS.
@@ -526,8 +526,8 @@ Expected: All 7 tests PASS.
 - [ ] **Step 5: Run the lint + type-check**
 
 ```bash
-pnpm --filter @jdm/admin lint
-pnpm --filter @jdm/admin tsc --noEmit
+pnpm --filter @ccc/admin lint
+pnpm --filter @ccc/admin tsc --noEmit
 ```
 
 Expected: PASS. If TS complains about `product.virtual` being `undefined`, verify TASK-A landed `adminStoreProductDetailSchema.virtual` (see "Risks" below).
@@ -558,7 +558,7 @@ Create `apps/admin/app/(authed)/loja/produtos/[id]/product-form.interaction.test
 // @vitest-environment jsdom
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-import type { AdminProductType, AdminStoreProductDetail } from '@jdm/shared/admin';
+import type { AdminProductType, AdminStoreProductDetail } from '@ccc/shared/admin';
 import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -663,7 +663,7 @@ describe('ProductForm interaction — virtual product', () => {
 - [ ] **Step 2: Run the test to verify it fails (initially)**
 
 ```bash
-pnpm --filter @jdm/admin test -- product-form.interaction.test.tsx
+pnpm --filter @ccc/admin test -- product-form.interaction.test.tsx
 ```
 
 Expected: PASS if Task 3 is complete. If you are running this before Task 3 lands, expect "Arquivar" assertion + FormData assertion to FAIL.
@@ -685,7 +685,7 @@ git commit -m "test(admin): interaction tests for virtual product form behavior"
 
 This is a checklist for the executor. Skip if running headless.
 
-- [ ] Start the admin dev server (`pnpm --filter @jdm/admin dev`) and the API dev server.
+- [ ] Start the admin dev server (`pnpm --filter @ccc/admin dev`) and the API dev server.
 - [ ] Open `/loja/produtos` and click the garage-spot product (slug `garage-spot`).
 - [ ] Confirm: the hint banner reads "Produto virtual — sem estoque ou entrega.", appearing under the page header.
 - [ ] Confirm: there is no "Fotos" section on the page (PhotoGallery is not rendered).
@@ -715,7 +715,7 @@ This is a checklist for the executor. Skip if running headless.
 Run all task tests in one go:
 
 ```bash
-pnpm --filter @jdm/admin test -- product-form.test.tsx product-form.interaction.test.tsx virtual-product-banner.test.tsx
+pnpm --filter @ccc/admin test -- product-form.test.tsx product-form.interaction.test.tsx virtual-product-banner.test.tsx
 ```
 
 Expected: all suites PASS, zero skipped.
@@ -725,7 +725,7 @@ Expected: all suites PASS, zero skipped.
 ## Risks
 
 1. **TASK-A's `Product.virtual` shape not yet landed.** This plan assumes `adminStoreProductDetailSchema.virtual: boolean` and `adminStoreProductDetailSchema.visibleInStore: boolean` exist before TASK-H starts. If TASK-A defaults these to `boolean().optional()`, the comparisons `product.virtual === true` and `product.visibleInStore` in the page/form continue to behave correctly (undefined → falsy → non-virtual branch) but the static-markup tests' product fixtures need the field explicitly set. Mitigation: the test fixtures above set `virtual: true|false` and `visibleInStore` on every fixture, so the suite is robust either way.
-2. **Singleton slug coupling.** Hard-coding `'garage-spot'` in the admin app means renaming the seed slug breaks the Arquivar guard. Mitigation: if TASK-A exports `GARAGE_SPOT_PRODUCT_SLUG` from `@jdm/shared/store` (or a similar module), Task 3's `SINGLETON_PRODUCT_SLUGS` should be replaced with `new Set([GARAGE_SPOT_PRODUCT_SLUG])`. Confirm during TASK-H kickoff and adjust before writing the production code in Task 3.
+2. **Singleton slug coupling.** Hard-coding `'garage-spot'` in the admin app means renaming the seed slug breaks the Arquivar guard. Mitigation: if TASK-A exports `GARAGE_SPOT_PRODUCT_SLUG` from `@ccc/shared/store` (or a similar module), Task 3's `SINGLETON_PRODUCT_SLUGS` should be replaced with `new Set([GARAGE_SPOT_PRODUCT_SLUG])`. Confirm during TASK-H kickoff and adjust before writing the production code in Task 3.
 3. **Photo-gate disabled-flag drift.** The current form has the photo gate logic in two places: the `<option value="active" disabled>` in the Status select and the disabled prop on the "Reativar" button. Task 3 must update **both** call sites. The static-markup test "does NOT render the photo-required helper text" covers the option-level path; the Reativar test in the singleton case covers the button-level path. If a future change adds a third gate, both tests should fail clearly.
 4. **No e2e / Playwright coverage.** Car_spot_plan §9 TASK-H mentions "Playwright/RTL — match existing admin test pattern". The current admin test pattern is Vitest + `renderToStaticMarkup` + jsdom interaction tests — there is no Playwright suite in this repo. This plan ships RTL-style coverage to match the existing pattern and explicitly skips Playwright. If a reviewer insists on Playwright, that should be a follow-up task — it would land an entire new toolchain (browser binaries, CI step, fixtures), which is out of scope for a UI carve-out.
 5. **`new` product form not touched.** Admins can still pick `productType.name === 'garage_spot'` from the `new-product-form.tsx` dropdown, but the create route does not set `virtual=true`. This means a hand-rolled garage product would render normally (no virtual carve-outs) until an admin/seed flips its `virtual` flag. Server-side, TASK-A's seed enforces singleton-ness on the slug. Documented; not fixed here because it's a non-issue for the intended UX.

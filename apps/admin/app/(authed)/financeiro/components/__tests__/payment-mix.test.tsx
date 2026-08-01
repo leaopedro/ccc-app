@@ -1,4 +1,4 @@
-import type { AdminFinancePaymentMixItem } from '@jdm/shared/admin';
+import type { AdminFinancePaymentMixItem } from '@ccc/shared/admin';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

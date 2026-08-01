@@ -209,10 +209,10 @@ model PasswordResetToken {
 Run from repo root:
 
 ```bash
-pnpm --filter @jdm/db exec prisma migrate dev --name auth
+pnpm --filter @ccc/db exec prisma migrate dev --name auth
 ```
 
-> note: original command was `pnpm --filter @jdm/db db:migrate -- --name auth`, but pnpm doesn't forward the trailing `--name auth` through the script. Use `exec prisma migrate dev` directly.
+> note: original command was `pnpm --filter @ccc/db db:migrate -- --name auth`, but pnpm doesn't forward the trailing `--name auth` through the script. Use `exec prisma migrate dev` directly.
 
 Expected: a new folder `packages/db/prisma/migrations/<timestamp>_auth/` with a `migration.sql` that drops the placeholder `User` columns we didn't have and creates the new tables + enums. Applied migration: `20260418110341_auth`.
 
@@ -223,7 +223,7 @@ An additional migration `20260418112703_authprovider_userid_unique` was added in
 Run:
 
 ```bash
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:generate
 ```
 
 Expected: stdout ends with `Generated Prisma Client … to ./node_modules/@prisma/client`.
@@ -374,7 +374,7 @@ describe('auth schemas', () => {
 - [x] **Step 2: Run the test — expect failure**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: fail with "has no exported member 'signupSchema'" (and siblings).
@@ -482,7 +482,7 @@ export type MessageResponse = z.infer<typeof messageResponseSchema>;
 - [x] **Step 4: Re-run the test — expect pass**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: 7 passed.
@@ -490,7 +490,7 @@ Expected: 7 passed.
 - [x] **Step 5: Lint + typecheck shared**
 
 ```bash
-pnpm --filter @jdm/shared lint && pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/shared lint && pnpm --filter @ccc/shared typecheck
 ```
 
 Expected: both green.
@@ -586,7 +586,7 @@ process.env.MAIL_FROM = 'noreply@jdm.test';
 - [x] **Step 5: Run API tests — still green**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: 2 passed (health.test.ts).
@@ -611,8 +611,8 @@ git commit -m "feat(api): extend env schema with auth secrets and mail config"
 - [x] **Step 1: Install deps**
 
 ```bash
-pnpm --filter @jdm/api add bcrypt
-pnpm --filter @jdm/api add -D @types/bcrypt
+pnpm --filter @ccc/api add bcrypt
+pnpm --filter @ccc/api add -D @types/bcrypt
 ```
 
 Expected: two installs; `apps/api/package.json` dependencies now include `bcrypt`.
@@ -642,7 +642,7 @@ describe('password hashing', () => {
 - [x] **Step 3: Run the test — expect failure**
 
 ```bash
-pnpm --filter @jdm/api test -- services/password
+pnpm --filter @ccc/api test -- services/password
 ```
 
 Expected: fail with "Cannot find module '.../src/services/auth/password.js'".
@@ -666,7 +666,7 @@ export const verifyPassword = async (plain: string, hash: string): Promise<boole
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- services/password
+pnpm --filter @ccc/api test -- services/password
 ```
 
 Expected: 2 passed.
@@ -691,8 +691,8 @@ git commit -m "feat(api): add bcrypt password hasher"
 - [x] **Step 1: Install deps**
 
 ```bash
-pnpm --filter @jdm/api add jsonwebtoken
-pnpm --filter @jdm/api add -D @types/jsonwebtoken
+pnpm --filter @ccc/api add jsonwebtoken
+pnpm --filter @ccc/api add -D @types/jsonwebtoken
 ```
 
 - [x] **Step 2: Write failing test `apps/api/test/services/tokens.test.ts`**
@@ -748,7 +748,7 @@ describe('refresh tokens', () => {
 - [x] **Step 3: Run test — expect failure**
 
 ```bash
-pnpm --filter @jdm/api test -- services/tokens
+pnpm --filter @ccc/api test -- services/tokens
 ```
 
 Expected: module-not-found failure.
@@ -760,7 +760,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 
 import jwt from 'jsonwebtoken';
 
-import type { UserRoleName } from '@jdm/shared/auth';
+import type { UserRoleName } from '@ccc/shared/auth';
 
 type TokenEnv = {
   readonly JWT_ACCESS_SECRET: string;
@@ -811,7 +811,7 @@ Note: Using `jsonwebtoken` directly (no `@fastify/jwt` wrapper) keeps the servic
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- services/tokens
+pnpm --filter @ccc/api test -- services/tokens
 ```
 
 Expected: 4 passed.
@@ -840,7 +840,7 @@ git commit -m "feat(api): add jwt access + opaque refresh token services"
 - [x] **Step 1: Install deps**
 
 ```bash
-pnpm --filter @jdm/api add resend
+pnpm --filter @ccc/api add resend
 ```
 
 - [x] **Step 2: Write failing test `apps/api/test/services/mailer.test.ts`**
@@ -877,7 +877,7 @@ describe('DevMailer', () => {
 - [x] **Step 3: Run — expect failure (module not found)**
 
 ```bash
-pnpm --filter @jdm/api test -- services/mailer
+pnpm --filter @ccc/api test -- services/mailer
 ```
 
 - [x] **Step 4: Create `apps/api/src/services/mailer/types.ts`**
@@ -1004,7 +1004,7 @@ declare module 'fastify' {
 - [x] **Step 9: Re-run mailer test and full API suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: mailer test passes; existing `health.test.ts` still green.
@@ -1031,7 +1031,7 @@ git commit -m "feat(api): add mailer abstraction with dev capture and resend dri
 - [x] **Step 1: Create shared test helpers `apps/api/test/helpers.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
@@ -1131,7 +1131,7 @@ describe('GET /me', () => {
 - [x] **Step 3: Run — expect failure**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/me
+pnpm --filter @ccc/api test -- auth/me
 ```
 
 - [x] **Step 4: Create `apps/api/src/plugins/auth.ts`**
@@ -1172,10 +1172,10 @@ export const authPlugin = fp(async (app) => {
 - [x] **Step 5: Create `apps/api/src/routes/me.ts`**
 
 ```typescript
-import { publicUserSchema } from '@jdm/shared/auth';
+import { publicUserSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export const meRoutes: FastifyPluginAsync = async (app) => {
@@ -1215,7 +1215,7 @@ await app.register(meRoutes);
 - [x] **Step 7: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: `me.test.ts` all green + prior tests still pass.
@@ -1243,7 +1243,7 @@ git commit -m "feat(api): add authenticate decorator and GET /me"
 - [x] **Step 1: Failing test `apps/api/test/auth/signup.test.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -1321,7 +1321,7 @@ describe('POST /auth/signup', () => {
 - [x] **Step 2: Run — expect failure**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/signup
+pnpm --filter @ccc/api test -- auth/signup
 ```
 
 - [x] **Step 3: Create `apps/api/src/services/auth/verification.ts`**
@@ -1329,7 +1329,7 @@ pnpm --filter @jdm/api test -- auth/signup
 ```typescript
 import { createHash, randomBytes } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 const VERIFY_TTL_MS = 24 * 3_600_000;
 
@@ -1401,8 +1401,8 @@ export const resetMail = (to: string, link: string): ResetMail => ({
 - [x] **Step 5: Create `apps/api/src/routes/auth/signup.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema, signupSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { authResponseSchema, signupSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { hashPassword } from '../../services/auth/password.js';
@@ -1486,7 +1486,7 @@ await app.register(authRoutes, { prefix: '/auth' });
 - [x] **Step 8: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/signup
+pnpm --filter @ccc/api test -- auth/signup
 ```
 
 Expected: 4 passed.
@@ -1511,7 +1511,7 @@ git commit -m "feat(api): add POST /auth/signup with verification email"
 - [x] **Step 1: Failing test**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -1564,13 +1564,13 @@ describe('GET /auth/verify', () => {
 - [x] **Step 2: Run — expect failure**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/verify
+pnpm --filter @ccc/api test -- auth/verify
 ```
 
 - [x] **Step 3: Create `apps/api/src/routes/auth/verify.ts`**
 
 ```typescript
-import { verifyEmailSchema } from '@jdm/shared/auth';
+import { verifyEmailSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
@@ -1605,7 +1605,7 @@ await app.register(verifyRoute);
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/verify
+pnpm --filter @ccc/api test -- auth/verify
 ```
 
 Expected: 3 passed.
@@ -1689,8 +1689,8 @@ describe('POST /auth/resend-verify', () => {
 - [x] **Step 3: Create `apps/api/src/routes/auth/resend-verify.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { resendVerifySchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { resendVerifySchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verificationMail } from '../../services/auth/mail-templates.js';
@@ -1722,7 +1722,7 @@ await app.register(resendVerifyRoute);
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/resend-verify
+pnpm --filter @ccc/api test -- auth/resend-verify
 ```
 
 - [x] **Step 6: Commit**
@@ -1814,8 +1814,8 @@ describe('POST /auth/login', () => {
 - [x] **Step 3: Create `apps/api/src/routes/auth/login.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema, loginSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { authResponseSchema, loginSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verifyPassword } from '../../services/auth/password.js';
@@ -1877,7 +1877,7 @@ await app.register(loginRoute);
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/login
+pnpm --filter @ccc/api test -- auth/login
 ```
 
 - [x] **Step 6: Commit**
@@ -1900,7 +1900,7 @@ git commit -m "feat(api): add POST /auth/login with verified-email guard"
 - [x] **Step 1: Failing test**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -2006,8 +2006,8 @@ describe('POST /auth/refresh', () => {
 - [x] **Step 3: Create `apps/api/src/routes/auth/refresh.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema, refreshSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { authResponseSchema, refreshSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {
@@ -2074,7 +2074,7 @@ await app.register(refreshRoute);
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/refresh
+pnpm --filter @ccc/api test -- auth/refresh
 ```
 
 Expected: 5 passed.
@@ -2099,7 +2099,7 @@ git commit -m "feat(api): add POST /auth/refresh with single-use token rotation"
 - [x] **Step 1: Failing test**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -2155,8 +2155,8 @@ describe('POST /auth/logout', () => {
 - [x] **Step 3: Create `apps/api/src/routes/auth/logout.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { logoutSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { logoutSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { hashRefreshToken } from '../../services/auth/tokens.js';
@@ -2186,7 +2186,7 @@ await app.register(logoutRoute);
 - [x] **Step 5: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/logout
+pnpm --filter @ccc/api test -- auth/logout
 ```
 
 - [x] **Step 6: Commit**
@@ -2210,7 +2210,7 @@ git commit -m "feat(api): add POST /auth/logout with idempotent revocation"
 - [x] **Step 1: Failing test**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -2264,7 +2264,7 @@ describe('POST /auth/forgot-password', () => {
 ```typescript
 import { createHash, randomBytes } from 'node:crypto';
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 const RESET_TTL_MS = 3_600_000;
 
@@ -2301,8 +2301,8 @@ export const consumePasswordResetToken = async (
 - [x] **Step 4: Create `apps/api/src/routes/auth/forgot-password.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { forgotPasswordSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { forgotPasswordSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { resetMail } from '../../services/auth/mail-templates.js';
@@ -2353,7 +2353,7 @@ git commit -m "feat(api): add POST /auth/forgot-password"
 - [x] **Step 1: Failing test**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
@@ -2437,8 +2437,8 @@ describe('POST /auth/reset-password', () => {
 - [x] **Step 3: Create `apps/api/src/routes/auth/reset-password.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { resetPasswordSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { resetPasswordSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { hashPassword } from '../../services/auth/password.js';
@@ -2500,7 +2500,7 @@ git commit -m "feat(api): add POST /auth/reset-password (revokes refresh tokens)
 - [ ] **Step 1: Install `jose`**
 
 ```bash
-pnpm --filter @jdm/api add jose
+pnpm --filter @ccc/api add jose
 ```
 
 - [ ] **Step 2: Create `apps/api/src/services/auth/google-verifier.ts`**
@@ -2554,7 +2554,7 @@ const toClaims = (payload: JWTPayload): GoogleClaims => {
 - [ ] **Step 3: Create `apps/api/src/services/auth/social-upsert.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 export type SocialIdentity = {
   provider: 'google' | 'apple';
@@ -2680,8 +2680,8 @@ describe('POST /auth/google', () => {
 - [ ] **Step 5: Create `apps/api/src/routes/auth/google.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { authResponseSchema, googleSignInSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { authResponseSchema, googleSignInSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { JoseGoogleVerifier, type GoogleVerifier } from '../../services/auth/google-verifier.js';
@@ -2763,7 +2763,7 @@ await app.register(googleRoute);
 - [ ] **Step 7: Re-run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/google
+pnpm --filter @ccc/api test -- auth/google
 ```
 
 - [ ] **Step 8: Commit**
@@ -2905,8 +2905,8 @@ describe('POST /auth/apple', () => {
 - [ ] **Step 3: Create `apps/api/src/routes/auth/apple.ts`**
 
 ```typescript
-import { prisma } from '@jdm/db';
-import { appleSignInSchema, authResponseSchema } from '@jdm/shared/auth';
+import { prisma } from '@ccc/db';
+import { appleSignInSchema, authResponseSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { JoseAppleVerifier, type AppleVerifier } from '../../services/auth/apple-verifier.js';
@@ -3014,7 +3014,7 @@ git commit -m "feat(api): add POST /auth/apple with hide-my-email support"
 - [x] **Step 1: Install**
 
 ```bash
-pnpm --filter @jdm/api add @fastify/rate-limit
+pnpm --filter @ccc/api add @fastify/rate-limit
 ```
 
 - [x] **Step 2: ~~Register globally in `apps/api/src/app.ts`~~** — skipped per deviation note above (rate-limit registered inside the auth scope instead).
@@ -3097,13 +3097,13 @@ describe('auth rate limit', () => {
 - [x] **Step 5: Run — expect pass**
 
 ```bash
-pnpm --filter @jdm/api test -- auth/rate-limit
+pnpm --filter @ccc/api test -- auth/rate-limit
 ```
 
 - [x] **Step 6: Full API suite green**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: every auth/\* test plus `health.test.ts` pass. Result: 14 files / 43 tests green.
@@ -3127,7 +3127,7 @@ git commit -m "feat(api): rate-limit /auth/* endpoints per (ip,email)"
 - [ ] **Step 1: Install**
 
 ```bash
-pnpm --filter @jdm/mobile add expo-secure-store
+pnpm --filter @ccc/mobile add expo-secure-store
 ```
 
 - [ ] **Step 2: Create `apps/mobile/src/auth/storage.ts`**
@@ -3245,7 +3245,7 @@ import {
   type MessageResponse,
   publicUserSchema,
   type PublicUser,
-} from '@jdm/shared/auth';
+} from '@ccc/shared/auth';
 
 import { request } from './client';
 
@@ -3292,7 +3292,7 @@ The Phase 0 home screen imports the now-removed `api.health` export. Replace the
 
 ```typescript
 import { request } from '~/api/client';
-import { healthResponseSchema } from '@jdm/shared/health';
+import { healthResponseSchema } from '@ccc/shared/health';
 // ...
 const result = await request('/health', healthResponseSchema);
 ```
@@ -3300,7 +3300,7 @@ const result = await request('/health', healthResponseSchema);
 - [ ] **Step 4: Typecheck mobile — green**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 - [ ] **Step 6: Commit**
@@ -3383,7 +3383,7 @@ export const authCopy = {
 ```typescript
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import type { PublicUser } from '@jdm/shared/auth';
+import type { PublicUser } from '@ccc/shared/auth';
 
 import {
   loginRequest,
@@ -3609,7 +3609,7 @@ export default function AuthLayout() {
 - [ ] **Step 7: Typecheck and smoke-test**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: green. (Screens under `(auth)/` arrive in the next tasks; `expo-router` tolerates an empty group.)
@@ -3636,7 +3636,7 @@ git commit -m "feat(mobile): add auth context and root route guard"
 - [ ] **Step 1: Install deps**
 
 ```bash
-pnpm --filter @jdm/mobile add react-hook-form @hookform/resolvers
+pnpm --filter @ccc/mobile add react-hook-form @hookform/resolvers
 ```
 
 - [ ] **Step 2: Create `apps/mobile/src/components/TextField.tsx`**
@@ -3688,7 +3688,7 @@ import { Link, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { loginSchema, type LoginInput } from '@jdm/shared/auth';
+import { loginSchema, type LoginInput } from '@ccc/shared/auth';
 
 import { ApiError } from '~/api/client';
 import { useAuth } from '~/auth/context';
@@ -3771,7 +3771,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 4: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: green. (`/forgot` and `/signup` land in next tasks — expo-router tolerates missing hrefs at typecheck if `experiments.typedRoutes` is on? Yes, it will complain. Keep the href string literals but add the referenced screens as empty stubs in Task 23 + 25 before committing here.)
@@ -3815,7 +3815,7 @@ import { Link, useRouter } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { signupSchema, type SignupInput } from '@jdm/shared/auth';
+import { signupSchema, type SignupInput } from '@ccc/shared/auth';
 
 import { ApiError } from '~/api/client';
 import { useAuth } from '~/auth/context';
@@ -3913,7 +3913,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: green (the `/verify-email-pending` route is added in Task 24; stub it first).
@@ -3990,7 +3990,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/verify-email-pending.tsx
 git commit -m "feat(mobile): add verify-email-pending screen with resend"
 ```
@@ -4013,7 +4013,7 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { forgotPasswordSchema, type ForgotPasswordInput } from '@jdm/shared/auth';
+import { forgotPasswordSchema, type ForgotPasswordInput } from '@ccc/shared/auth';
 
 import { forgotPasswordRequest } from '~/api/auth';
 import { Button } from '~/components/Button';
@@ -4085,7 +4085,7 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { resetPasswordSchema, type ResetPasswordInput } from '@jdm/shared/auth';
+import { resetPasswordSchema, type ResetPasswordInput } from '@ccc/shared/auth';
 
 import { resetPasswordRequest } from '~/api/auth';
 import { Button } from '~/components/Button';
@@ -4162,7 +4162,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 3: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile
 git commit -m "feat(mobile): add forgot + reset password screens"
 ```
@@ -4184,7 +4184,7 @@ git commit -m "feat(mobile): add forgot + reset password screens"
 - [ ] **Step 1: Install**
 
 ```bash
-pnpm --filter @jdm/mobile add expo-auth-session expo-web-browser expo-crypto
+pnpm --filter @ccc/mobile add expo-auth-session expo-web-browser expo-crypto
 ```
 
 - [ ] **Step 2: Expose Google client IDs in `apps/mobile/app.config.ts` `extra` block**
@@ -4277,7 +4277,7 @@ export const GoogleSignInButton = ({ onUser }: { onUser: () => void }) => {
 - [ ] **Step 6: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 - [ ] **Step 7: Commit**
@@ -4304,7 +4304,7 @@ git commit -m "feat(mobile): add Google sign-in via expo-auth-session"
 - [ ] **Step 1: Install**
 
 ```bash
-pnpm --filter @jdm/mobile add expo-apple-authentication
+pnpm --filter @ccc/mobile add expo-apple-authentication
 ```
 
 - [ ] **Step 2: Add the plugin to `apps/mobile/app.config.ts`**
@@ -4371,7 +4371,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 5: Typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 - [ ] **Step 6: Commit**
@@ -4489,7 +4489,7 @@ Keep the existing `meRequest(token)` (boot still needs it — it runs before the
 - [ ] **Step 4: Typecheck + lint**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck && pnpm --filter @jdm/mobile lint
+pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint
 ```
 
 - [ ] **Step 5: Smoke test the full flow locally**

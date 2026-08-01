@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { createDsrBodySchema, dsrListQuerySchema, updateDsrBodySchema } from '@jdm/shared/dsr';
+import { prisma } from '@ccc/db';
+import { createDsrBodySchema, dsrListQuerySchema, updateDsrBodySchema } from '@ccc/shared/dsr';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

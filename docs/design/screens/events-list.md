@@ -90,7 +90,7 @@ badges: {
 > strings are kept where their meaning is unchanged; new entries above are
 > added to the same export object.
 
-## Component breakdown (`@jdm/ui` primitives)
+## Component breakdown (`@ccc/ui` primitives)
 
 | Region                  | Primitive                    | Notes                                       |
 | ----------------------- | ---------------------------- | ------------------------------------------- |

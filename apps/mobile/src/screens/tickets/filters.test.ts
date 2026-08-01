@@ -1,4 +1,4 @@
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { describe, expect, it } from 'vitest';
 
 import { applyEventFilter, applyStatusFilter, findEventTitle, isExpired } from './filters';

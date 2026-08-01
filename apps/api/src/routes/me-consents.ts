@@ -1,10 +1,10 @@
-import rateLimit from '@fastify/rate-limit';
-import { consentPurposeSchema, grantConsentBodySchema } from '@jdm/shared';
+import { consentPurposeSchema, grantConsentBodySchema } from '@ccc/shared';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 import { listUserConsents, recordConsent, withdrawConsent } from '../services/consent.js';
+import rateLimit from '@fastify/rate-limit';
 
 export const meConsentRoutes: FastifyPluginAsync = async (app) => {
   app.get('/me/consents', { preHandler: [app.authenticate] }, async (request) => {

@@ -7,7 +7,7 @@
 // per eligible member. Idempotent via the partial-unique index on Ticket
 // (canon §F8.8).
 
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyBaseLogger } from 'fastify';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 

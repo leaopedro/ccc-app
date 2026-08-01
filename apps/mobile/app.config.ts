@@ -1,4 +1,10 @@
-import { brand } from '@jdm/design';
+// Import the leaf `brand` module, not the package barrel. Expo loads this
+// config through Node's native ESM loader, which (unlike Metro/webpack) does
+// not remap NodeNext `./x.js` specifiers to their `.ts` source. The barrel
+// (`@ccc/design`) re-exports `./brand.js` + `./tokens.js`, so loading it here
+// throws ERR_MODULE_NOT_FOUND. `brand.ts` has no relative imports, so the
+// subpath resolves cleanly. See packages/design/package.json "./brand".
+import { brand } from '@ccc/design/brand';
 import type { ExpoConfig } from 'expo/config';
 
 type Variant = 'development' | 'preview' | 'production';

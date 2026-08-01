@@ -1,5 +1,5 @@
 'use server';
-import type { SupportTicketInternalStatus } from '@jdm/shared/support';
+import type { SupportTicketInternalStatus } from '@ccc/shared/support';
 import { revalidatePath } from 'next/cache';
 
 import { closeAdminSupportTicket, updateAdminSupportTicketInternalStatus } from './admin-api';

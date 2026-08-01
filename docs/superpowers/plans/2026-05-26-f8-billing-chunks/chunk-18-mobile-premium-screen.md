@@ -6,7 +6,7 @@
 
 **Architecture:** One new screen component `apps/mobile/src/screens/settings/PremiumScreen.tsx` (pure presentational logic, data fetched via `authedRequest`), one new API helper `apps/mobile/src/api/premium.ts` (owns the `GET /api/me/premium/status` call and the zod shape), a route file `apps/mobile/app/(app)/profile/premium.tsx` (wires the screen into Expo Router), a `Stack.Screen` entry in the profile `_layout.tsx`, a new ESLint plugin file `apps/mobile/eslint-rules/no-stripe-on-ios.cjs`, an update to `apps/mobile/eslint.config.js` registering the rule, a lint fixture test `apps/mobile/src/screens/settings/__tests__/ios-stripe-isolation.test.ts`, a `MenuRow` entry in `apps/mobile/app/(app)/profile/index.tsx`, and a note in `docs/eas-credentials.md`.
 
-**Tech Stack:** Expo Router (file-based navigation), React Native + `Platform` API, `expo-web-browser` (existing dep), `authedRequest` from `~/api/client`, `fetchOfferings` + `purchasePackage` from `~/lib/revenuecat` (chunk F8.10), `premiumStatusSchema` from `@jdm/shared/premium` (chunk F8.11), vitest + jsdom (existing mobile harness), ESLint flat-config + custom rule.
+**Tech Stack:** Expo Router (file-based navigation), React Native + `Platform` API, `expo-web-browser` (existing dep), `authedRequest` from `~/api/client`, `fetchOfferings` + `purchasePackage` from `~/lib/revenuecat` (chunk F8.10), `premiumStatusSchema` from `@ccc/shared/premium` (chunk F8.11), vitest + jsdom (existing mobile harness), ESLint flat-config + custom rule.
 
 ---
 
@@ -29,12 +29,12 @@
 - **Canon §F8.11** — all F8 routes gate on `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED`. When disabled: screen shows a maintenance banner (`"Premium em breve"`), CTA hidden, no RC calls.
 - **Canon §F8.14** — any new dep lands in `package.json` AND `pnpm-lock.yaml` in the same commit. This chunk adds no new deps (relies on existing `expo-web-browser`, `react-native-purchases` from F8.10, existing `authedRequest`).
 - **Canon §F8.16** — iOS code path MUST NOT reference `stripe://`, `checkout.stripe.com`, `STRIPE_PUBLISHABLE_KEY`, or `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Enforced by the `no-stripe-on-ios` lint rule added in Task 4.
-- **`premiumStatusSchema`** is defined in `packages/shared/src/premium.ts` (chunk F8.11). This chunk imports it from `@jdm/shared/premium`. If running before F8.11 merges, use the inline fallback shape defined in Task 1 step 1 (guarded by a TODO comment).
+- **`premiumStatusSchema`** is defined in `packages/shared/src/premium.ts` (chunk F8.11). This chunk imports it from `@ccc/shared/premium`. If running before F8.11 merges, use the inline fallback shape defined in Task 1 step 1 (guarded by a TODO comment).
 - **Platform.OS branching** must be a conditional expression that vitest can exercise — no build-time constants, no dead code elimination. The tests mock `Platform.OS` at the module level (same pattern as F8.10 tests).
 - **Status-display copy** is PT-BR throughout. English strings forbidden on customer surfaces.
 - **CTA hidden when `status.active === true`** and `status.cancelAtPeriodEnd === false`. When `cancelAtPeriodEnd === true`, show the manage-link only (no new-subscribe button).
 - **Deep-link return scheme**: Android `WebBrowser.openAuthSessionAsync` uses `jdmexperience://premium/return`. The `app.config.ts` already declares a deep-link scheme — this chunk does NOT modify `app.config.ts` (scheme confirmed in required reading; if not present, add a task-deviation note and add it).
-- Tests run via `pnpm --filter @jdm/mobile exec vitest run <path>` (canon §F8.12). Never run the full test suite locally.
+- Tests run via `pnpm --filter @ccc/mobile exec vitest run <path>` (canon §F8.12). Never run the full test suite locally.
 
 ---
 
@@ -98,7 +98,7 @@ docs/eas-credentials.md                                                (modify)
 // Consumes GET /api/me/premium/status (spec §8.3 / chunk F8.11).
 // premiumStatusSchema is defined in packages/shared/src/premium.ts (F8.11).
 
-import { premiumStatusSchema } from '@jdm/shared/premium';
+import { premiumStatusSchema } from '@ccc/shared/premium';
 import type { z } from 'zod';
 
 import { authedRequest } from '~/api/client';
@@ -593,7 +593,7 @@ describe('getPremiumStatus', () => {
 - [ ] **Step 2: run the test — expect FAIL**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/api/__tests__/premium.test.ts
+pnpm --filter @ccc/mobile exec vitest run src/api/__tests__/premium.test.ts
 # Expected: FAIL — Cannot find module '../premium'
 ```
 
@@ -614,7 +614,7 @@ In `apps/mobile/app.config.ts`, inside the `extra: { ... }` block (after the exi
 // Consumes GET /api/me/premium/status (spec §8.3 / chunk F8.11).
 // premiumStatusSchema is defined in packages/shared/src/premium.ts (F8.11).
 
-import { premiumStatusSchema } from '@jdm/shared/premium';
+import { premiumStatusSchema } from '@ccc/shared/premium';
 import type { z } from 'zod';
 
 import { authedRequest } from '~/api/client';
@@ -628,17 +628,17 @@ export const getPremiumStatus = (): Promise<PremiumStatusResponse> =>
 - [ ] **Step 5: run the test — expect PASS**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/api/__tests__/premium.test.ts
+pnpm --filter @ccc/mobile exec vitest run src/api/__tests__/premium.test.ts
 # Expected: 1 passing
 ```
 
 - [ ] **Step 6: typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
-# If @jdm/shared/premium is not yet exported: run `pnpm --filter @jdm/shared build`
-# per memory rule "Rebuild @jdm/shared after schema changes".
+# If @ccc/shared/premium is not yet exported: run `pnpm --filter @ccc/shared build`
+# per memory rule "Rebuild @ccc/shared after schema changes".
 ```
 
 - [ ] **Step 7: commit**
@@ -758,7 +758,7 @@ vi.mock('~/api/client', () => ({
   authedRequest: vi.fn(),
 }));
 
-// ─── lucide-react-native stub (transitive via @jdm/ui if needed) ──────────────
+// ─── lucide-react-native stub (transitive via @ccc/ui if needed) ──────────────
 vi.mock('lucide-react-native', () => ({ default: {} }));
 
 // ─── import SUT ──────────────────────────────────────────────────────────────
@@ -1001,7 +1001,7 @@ describe('manage link', () => {
 - [ ] **Step 2: run the tests — expect FAIL**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx
 # Expected: FAIL — Cannot find module '../PremiumScreen'
 ```
 
@@ -1024,20 +1024,20 @@ Create `apps/mobile/src/screens/settings/PremiumScreen.tsx` with the full conten
 - [ ] **Step 2: run the tests — expect PASS**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx
 # Expected: 13+ passing, 0 failing.
 ```
 
 Diagnose any failures before continuing. Common issues:
 
-- `Cannot find module '@jdm/shared/premium'`: run `pnpm --filter @jdm/shared build` (canon §F8.13).
+- `Cannot find module '@ccc/shared/premium'`: run `pnpm --filter @ccc/shared build` (canon §F8.13).
 - `Platform` not mocked: confirm `vi.mock('react-native', ...)` returns `Platform: platformMock`.
 - `fetchOfferings` not found: confirm `vi.mock('~/lib/revenuecat', ...)` exports it.
 
 - [ ] **Step 3: typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
@@ -1122,7 +1122,7 @@ b. Insert before the `LogOut` `MenuRow`:
 - [ ] **Step 4: typecheck**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
@@ -1281,7 +1281,7 @@ export default function BadEnvComponent() { return null; }
 - [ ] **Step 2: run the test — expect FAIL**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/screens/settings/__tests__/ios-stripe-isolation.test.ts
+pnpm --filter @ccc/mobile exec vitest run src/screens/settings/__tests__/ios-stripe-isolation.test.ts
 # Expected: FAIL — eslint exits 0 (rule doesn't exist yet) or the ruleId is absent.
 ```
 
@@ -1320,7 +1320,7 @@ module.exports = defineConfig([
 - [ ] **Step 5: run the lint fixture test — expect PASS**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/screens/settings/__tests__/ios-stripe-isolation.test.ts
+pnpm --filter @ccc/mobile exec vitest run src/screens/settings/__tests__/ios-stripe-isolation.test.ts
 # Expected: 3 passing, 0 failing.
 ```
 
@@ -1378,7 +1378,7 @@ Android users subscribe via the web Stripe Checkout flow opened with
 
 Before submitting a TestFlight or App Store build:
 
-1. Run `pnpm --filter @jdm/mobile exec eslint src/` and confirm 0 errors from
+1. Run `pnpm --filter @ccc/mobile exec eslint src/` and confirm 0 errors from
    the `jdm-mobile/no-stripe-on-ios` rule.
 2. Confirm `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` is `true` in the EAS build
    secret so the Premium screen is not hidden behind the maintenance banner.
@@ -1400,7 +1400,7 @@ git commit -m "docs: App Review note — iOS bundle must not reference Stripe (c
 - [ ] **A. Run both vitest test files**
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run \
+pnpm --filter @ccc/mobile exec vitest run \
   src/screens/settings/__tests__/PremiumScreen.test.tsx \
   src/screens/settings/__tests__/ios-stripe-isolation.test.ts
 # Expected: 16+ passing, 0 failing.
@@ -1409,7 +1409,7 @@ pnpm --filter @jdm/mobile exec vitest run \
 - [ ] **B. Typecheck the mobile workspace**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 # Expected: 0 errors.
 ```
 
@@ -1438,7 +1438,7 @@ cd /Users/pedro/Projects/jdm-experience/apps/mobile && node_modules/.bin/eslint 
 | §8.1 — Status badge (Membro Gold / Inativo / Pagamento pendente) | Task 3: `statusLabel()` covers all states; Task 2 tests assert each badge label                            |
 | §8.1 — Current-period-end formatted                              | Task 3: `formatPeriodEnd()` with `pt-BR` locale; Task 2 test checks `26/06/2026`                           |
 | §8.1 — Manage link when cancel_scheduled                         | Task 3: `showManageLink` logic; Task 2 tests assert manage-link presence/absence                           |
-| §8.3 — `premiumStatusSchema` shape used                          | Task 1: `getPremiumStatus` uses the schema from `@jdm/shared/premium`                                      |
+| §8.3 — `premiumStatusSchema` shape used                          | Task 1: `getPremiumStatus` uses the schema from `@ccc/shared/premium`                                      |
 | Canon §F8.11 — feature flag gates screen                         | Task 1: `premiumBillingEnabled` from `extra`; Task 3: maintenance banner when false; Task 2: flag-off test |
 | Canon §F8.16 — iOS bundle isolation                              | Task 5: `no-stripe-on-ios` rule + fixture tests fire on bad token; ok on guarded token                     |
 | Spec §11 — App Review note                                       | Task 6: note added to `docs/eas-credentials.md`                                                            |
@@ -1480,8 +1480,8 @@ No "TBD", "TODO", "similar to Task N", or "add appropriate error handling" entri
 - [ ] Branch is `feat/jdma-f8-billing-18`, created from a fresh `main` (CLAUDE.md preflight).
 - [ ] 11 files touched (matches §"Touched-path summary").
 - [ ] No edits outside the 11 touched paths.
-- [ ] `pnpm --filter @jdm/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx src/screens/settings/__tests__/ios-stripe-isolation.test.ts` — 16+ passing.
-- [ ] `pnpm --filter @jdm/mobile typecheck` — 0 errors.
+- [ ] `pnpm --filter @ccc/mobile exec vitest run src/screens/settings/__tests__/PremiumScreen.test.tsx src/screens/settings/__tests__/ios-stripe-isolation.test.ts` — 16+ passing.
+- [ ] `pnpm --filter @ccc/mobile typecheck` — 0 errors.
 - [ ] `apps/mobile/src/ eslint` passes with 0 `jdm-mobile/no-stripe-on-ios` errors.
 - [ ] Feature flag disabled → maintenance banner visible, no API call (test: "shows maintenance banner when premiumBillingEnabled is false").
 - [ ] iOS CTA → `purchasePackage` called; Android CTA → `WebBrowser.openAuthSessionAsync` called (confirmed by Platform.OS tests).

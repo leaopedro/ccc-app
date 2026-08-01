@@ -1,4 +1,4 @@
-import type { AdminStoreProductStatus } from '@jdm/shared/admin';
+import type { AdminStoreProductStatus } from '@ccc/shared/admin';
 
 const COPY: Record<AdminStoreProductStatus, string> = {
   draft: 'Rascunho',

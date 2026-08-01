@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   shippingAddressInputSchema,
   shippingAddressRecordSchema,
   shippingAddressUpdateSchema,
   type ShippingAddressRecord,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import type { ShippingAddress as DbShippingAddress } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

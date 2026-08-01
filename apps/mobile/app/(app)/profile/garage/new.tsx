@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { carInputSchema, type CarInput } from '@jdm/shared/cars';
-import { Button } from '@jdm/ui';
+import { carInputSchema, type CarInput } from '@ccc/shared/cars';
+import { Button } from '@ccc/ui';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Controller, useForm } from 'react-hook-form';

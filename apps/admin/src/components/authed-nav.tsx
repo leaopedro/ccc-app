@@ -1,15 +1,17 @@
 'use client';
 
-import { brand } from '@jdm/design';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState } from 'react';
 
 import { LogoutButton } from './logout-button';
 
+import { brand } from '~/brand';
+
 const ORGANIZER_LINKS = [
   { href: '/events', label: 'Eventos' },
   { href: '/loja', label: 'Loja' },
+  { href: '/premium/catalogo', label: 'Premium' },
   { href: '/users', label: 'Usuários' },
   { href: '/financeiro', label: 'Financeiro' },
   { href: '/broadcasts', label: 'Broadcasts' },

@@ -25,7 +25,7 @@ The HTML in this bundle is **design reference, not production code**. It's a hi-
 
 Your task is to **recreate these designs inside the existing `jdm-experience/` monorepo** using its established stack:
 
-- **Mobile:** Expo + React Native + the `@jdm/ui` shared library (`packages/ui/src/*`) + RN StyleSheet patterns. Existing screens live under `apps/mobile/src/screens/garage/*` and `apps/mobile/app/(app)/garage/*`.
+- **Mobile:** Expo + React Native + the `@ccc/ui` shared library (`packages/ui/src/*`) + RN StyleSheet patterns. Existing screens live under `apps/mobile/src/screens/garage/*` and `apps/mobile/app/(app)/garage/*`.
 - **Admin:** Next.js + Tailwind + `apps/admin/src/components/*`.
 - **Shared:** zod schemas in `packages/shared/src/*`. Prisma schema in `packages/db/prisma/`.
 - **API:** Fastify in `apps/api/src/routes/garage.ts` + services in `apps/api/src/services/garage/`.
@@ -57,7 +57,7 @@ The PT-BR copy in the prototype is the canonical copy. EN scaffolding exists in 
 
 2. **Open `JDMA-590 · Garagem.html`** in a browser and use the Tweaks panel to flip badge variant + cover preset + near-expiry state. Every screen reacts live.
 
-3. **Skim `jdma-garage/atoms.jsx` + `jdma-garage/screens.jsx`** — these are the canonical visual reference. The `JDM` object at the top of `atoms.jsx` is the token table. The components are structured 1:1 to how they should land in `@jdm/ui` and `apps/mobile/src/screens/garage/`.
+3. **Skim `jdma-garage/atoms.jsx` + `jdma-garage/screens.jsx`** — these are the canonical visual reference. The `JDM` object at the top of `atoms.jsx` is the token table. The components are structured 1:1 to how they should land in `@ccc/ui` and `apps/mobile/src/screens/garage/`.
 
 4. **Cross-reference `.handoffs/garage-spots-smoke-test-plan.md` §UX Audit** in the main repo — every "MAJOR" finding maps to a fix in this redesign. The mapping table is at the bottom of `IMPLEMENTATION.md`.
 

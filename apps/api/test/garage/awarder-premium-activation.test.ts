@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminGarageSummarySchema } from '@jdm/shared/admin-garage';
+import { prisma } from '@ccc/db';
+import { adminGarageSummarySchema } from '@ccc/shared/admin-garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -127,7 +127,7 @@ describe('premium_activation XP hook (chunk 34)', () => {
 
   it('killswitch off — premium grants succeed but no XpEvent or Garage.xp change', async () => {
     // Flip the killswitch before the grant. Use the canonical singleton id
-    // from @jdm/shared/general-settings (re-exported via killswitch.ts) per
+    // from @ccc/shared/general-settings (re-exported via killswitch.ts) per
     // canon §8 — no string literals at call sites.
     await prisma.generalSettings.upsert({
       where: { id: GENERAL_SETTINGS_SINGLETON_ID },

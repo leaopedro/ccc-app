@@ -1,4 +1,4 @@
-import { carSchema } from '@jdm/shared/cars';
+import { carSchema } from '@ccc/shared/cars';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

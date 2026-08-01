@@ -1,8 +1,8 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   GENERAL_SETTINGS_SINGLETON_ID,
   generalSettingsUpdateSchema,
-} from '@jdm/shared/general-settings';
+} from '@ccc/shared/general-settings';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

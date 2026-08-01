@@ -1,12 +1,12 @@
 {
-  "extends": "@jdm/tsconfig/nextjs.json",
+  "extends": "@ccc/tsconfig/nextjs.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@jdm/design": ["../../packages/design/src/index.ts"],
-      "@jdm/design/*": ["../../packages/design/src/*"],
+      "@ccc/design": ["../../packages/design/src/index.ts"],
+      "@ccc/design/*": ["../../packages/design/src/*"],
       "~/*": ["./src/*"],
-      "@jdm/shared/legal": ["../../packages/shared/src/legal.ts"]
+      "@ccc/shared/legal": ["../../packages/shared/src/legal.ts"]
     },
     "incremental": true,
     "plugins": [{ "name": "next" }]

@@ -13,7 +13,7 @@ import {
   type MessageResponse,
   publicUserSchema,
   type PublicUser,
-} from '@jdm/shared/auth';
+} from '@ccc/shared/auth';
 
 import { authedRequest, request } from './client';
 

@@ -8,7 +8,7 @@ import {
   carInputSchema,
   type CarUpdateInput,
   carUpdateSchema,
-} from '@jdm/shared/cars';
+} from '@ccc/shared/cars';
 import { z } from 'zod';
 
 import { authedRequest } from './client';

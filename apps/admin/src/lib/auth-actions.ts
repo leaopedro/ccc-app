@@ -1,7 +1,7 @@
 'use server';
 
-import { mfaRecoverySchema, mfaVerifySchema } from '@jdm/shared';
-import { authResponseSchema, loginResponseSchema, loginSchema } from '@jdm/shared/auth';
+import { mfaRecoverySchema, mfaVerifySchema } from '@ccc/shared';
+import { authResponseSchema, loginResponseSchema, loginSchema } from '@ccc/shared/auth';
 import { redirect } from 'next/navigation';
 
 import { apiFetch, ApiError } from './api';

@@ -1,5 +1,5 @@
 {
-  "name": "@jdm/ui",
+  "name": "@ccc/ui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -54,11 +54,11 @@
     }
   },
   "dependencies": {
-    "@jdm/design": "workspace:*",
-    "@jdm/shared": "workspace:*"
+    "@ccc/design": "workspace:*",
+    "@ccc/shared": "workspace:*"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@types/react": "~19.1.0",
     "jsdom": "^29.1.1",
     "lucide-react": "^0.469.0",

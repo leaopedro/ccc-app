@@ -19,7 +19,7 @@
 
 **Repo conventions this plan locks in:**
 
-- Workspace names: `@jdm/api`, `@jdm/mobile`, `@jdm/admin`, `@jdm/shared`, `@jdm/db`, `@jdm/tsconfig`.
+- Workspace names: `@ccc/api`, `@ccc/mobile`, `@ccc/admin`, `@ccc/shared`, `@ccc/db`, `@ccc/tsconfig`.
 - Env prefixes: API envs are unprefixed (`DATABASE_URL`, `JWT_SECRET`), mobile public envs use `EXPO_PUBLIC_*`, admin public envs use `NEXT_PUBLIC_*`.
 - Commit style: Conventional Commits (`feat:`, `chore:`, `docs:`, `test:`, `ci:`).
 - Strict TS everywhere: `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`.
@@ -260,7 +260,7 @@ git commit -m "chore: initialize pnpm + turborepo workspace"
 
 ```json
 {
-  "name": "@jdm/tsconfig",
+  "name": "@ccc/tsconfig",
   "version": "0.0.0",
   "private": true,
   "files": ["base.json", "node.json", "react-native.json", "nextjs.json"]
@@ -347,7 +347,7 @@ git commit -m "chore: initialize pnpm + turborepo workspace"
 }
 ```
 
-- [ ] **Step 6: Add `@jdm/tsconfig` to workspace install**
+- [ ] **Step 6: Add `@ccc/tsconfig` to workspace install**
 
 Run:
 
@@ -355,7 +355,7 @@ Run:
 pnpm install
 ```
 
-Expected: `@jdm/tsconfig` appears under `pnpm list -r --depth -1`.
+Expected: `@ccc/tsconfig` appears under `pnpm list -r --depth -1`.
 
 - [ ] **Step 7: Commit**
 
@@ -552,7 +552,7 @@ git commit -m "chore: add shared eslint, prettier, and pre-commit hook"
 
 ```json
 {
-  "name": "@jdm/shared",
+  "name": "@ccc/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -574,7 +574,7 @@ git commit -m "chore: add shared eslint, prettier, and pre-commit hook"
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
   }
@@ -585,7 +585,7 @@ git commit -m "chore: add shared eslint, prettier, and pre-commit hook"
 
 ```json
 {
-  "extends": "@jdm/tsconfig/node.json",
+  "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
     "noEmit": true,
     "module": "ESNext",
@@ -623,7 +623,7 @@ describe('branded id helpers', () => {
 - [ ] **Step 4: Run the failing test**
 
 ```bash
-pnpm --filter @jdm/shared test
+pnpm --filter @ccc/shared test
 ```
 
 Expected: FAIL — `src/ids.ts` does not exist.
@@ -707,8 +707,8 @@ export * from './health';
 
 ```bash
 pnpm install
-pnpm --filter @jdm/shared test
-pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/shared test
+pnpm --filter @ccc/shared typecheck
 ```
 
 Expected: all tests pass; typecheck exits 0.
@@ -767,7 +767,7 @@ volumes:
 
 ```json
 {
-  "name": "@jdm/db",
+  "name": "@ccc/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -787,7 +787,7 @@ volumes:
     "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "prisma": "^6.1.0",
     "typescript": "^5.7.2"
   }
@@ -798,7 +798,7 @@ volumes:
 
 ```json
 {
-  "extends": "@jdm/tsconfig/node.json",
+  "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
     "noEmit": true,
     "module": "ESNext",
@@ -814,7 +814,7 @@ Note: `module`/`moduleResolution` are overridden to `Bundler` because this is a 
 
 ```bash
 pnpm install
-pnpm --filter @jdm/db exec prisma init --datasource-provider postgresql
+pnpm --filter @ccc/db exec prisma init --datasource-provider postgresql
 ```
 
 Expected: creates `packages/db/prisma/schema.prisma` with a Postgres provider stub and `packages/db/.env` containing a placeholder `DATABASE_URL`. It will also print a next-steps hint — ignore it; we patch below.
@@ -891,8 +891,8 @@ export type { Prisma, User } from '@prisma/client';
 
 ```bash
 docker compose up -d postgres
-pnpm --filter @jdm/db exec prisma migrate dev --name init
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db exec prisma migrate dev --name init
+pnpm --filter @ccc/db db:generate
 ```
 
 Expected: a migration directory `packages/db/prisma/migrations/<timestamp>_init/migration.sql` is created with a `CREATE TABLE "User"` statement; `@prisma/client` types are generated.
@@ -900,7 +900,7 @@ Expected: a migration directory `packages/db/prisma/migrations/<timestamp>_init/
 - [ ] **Step 8: Typecheck the package**
 
 ```bash
-pnpm --filter @jdm/db typecheck
+pnpm --filter @ccc/db typecheck
 ```
 
 Expected: exits 0.
@@ -936,7 +936,7 @@ git commit -m "feat(db): bootstrap prisma with placeholder User model"
 
 ```json
 {
-  "name": "@jdm/api",
+  "name": "@ccc/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -951,8 +951,8 @@ git commit -m "feat(db): bootstrap prisma with placeholder User model"
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@fastify/sensible": "^6.0.1",
-    "@jdm/db": "workspace:*",
-    "@jdm/shared": "workspace:*",
+    "@ccc/db": "workspace:*",
+    "@ccc/shared": "workspace:*",
     "@sentry/node": "^8.42.0",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
@@ -960,7 +960,7 @@ git commit -m "feat(db): bootstrap prisma with placeholder User model"
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@types/node": "^22.10.0",
     "pino-pretty": "^13.0.0",
     "tsx": "^4.19.2",
@@ -974,7 +974,7 @@ git commit -m "feat(db): bootstrap prisma with placeholder User model"
 
 ```json
 {
-  "extends": "@jdm/tsconfig/node.json",
+  "extends": "@ccc/tsconfig/node.json",
   "compilerOptions": {
     "noEmit": true
   },
@@ -1149,7 +1149,7 @@ export const errorHandlerPlugin = fp(async (app) => {
 ```ts
 import type { FastifyPluginAsync } from 'fastify';
 
-import { healthResponseSchema } from '@jdm/shared/health';
+import { healthResponseSchema } from '@ccc/shared/health';
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
   app.get('/health', async () => {
@@ -1249,8 +1249,8 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-RUN pnpm --filter @jdm/db db:generate
-RUN pnpm --filter @jdm/api build
+RUN pnpm --filter @ccc/db db:generate
+RUN pnpm --filter @ccc/api build
 
 FROM node:22-alpine AS runner
 RUN corepack enable
@@ -1280,8 +1280,8 @@ coverage
 
 ```bash
 cp apps/api/.env.example apps/api/.env
-pnpm --filter @jdm/db db:generate
-pnpm --filter @jdm/api dev &
+pnpm --filter @ccc/db db:generate
+pnpm --filter @ccc/api dev &
 sleep 3
 curl -s http://localhost:4000/health | tee /tmp/health.json
 kill %1 || true
@@ -1310,7 +1310,7 @@ git commit -m "feat(api): fastify skeleton with /health, env, logger, request-id
 - [ ] **Step 1: Add Testcontainers + supertest-style deps**
 
 ```bash
-pnpm --filter @jdm/api add -D \
+pnpm --filter @ccc/api add -D \
   @testcontainers/postgresql@^10.13.0 \
   testcontainers@^10.13.0 \
   @types/node@^22.10.0
@@ -1382,7 +1382,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../src/app';
 import { loadEnv } from '../src/env';
-import { healthResponseSchema } from '@jdm/shared/health';
+import { healthResponseSchema } from '@ccc/shared/health';
 
 describe('GET /health', () => {
   it('returns ok and a valid payload', async () => {
@@ -1414,7 +1414,7 @@ describe('GET /health', () => {
 - [ ] **Step 5: Run tests — must go green (Testcontainers spins up Postgres)**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: both tests PASS; a container `postgres:16-alpine` spins up and is torn down.
@@ -1457,13 +1457,13 @@ ls apps/mobile/assets
 
 Expected: `apps/mobile/assets` contains `icon.png`, `splash.png` (or `splash-icon.png`, depending on template version), and `adaptive-icon.png`. If `splash-icon.png` is present but not `splash.png`, rename it: `mv apps/mobile/assets/splash-icon.png apps/mobile/assets/splash.png`.
 
-- [ ] **Step 3: Replace `apps/mobile/package.json`** (rename to `@jdm/mobile`, add workspace deps, trim)
+- [ ] **Step 3: Replace `apps/mobile/package.json`** (rename to `@ccc/mobile`, add workspace deps, trim)
 
 Keep the scaffolded `dependencies` version pins (they match the installed Expo SDK), but rewrite `name`, `main`, `scripts`, and add workspace deps + zod. Target state:
 
 ```json
 {
-  "name": "@jdm/mobile",
+  "name": "@ccc/mobile",
   "version": "0.0.0",
   "private": true,
   "main": "expo-router/entry",
@@ -1477,7 +1477,7 @@ Keep the scaffolded `dependencies` version pins (they match the installed Expo S
     "test": "vitest run"
   },
   "dependencies": {
-    "@jdm/shared": "workspace:*",
+    "@ccc/shared": "workspace:*",
     "expo": "~52.0.0",
     "expo-constants": "~17.0.3",
     "expo-linking": "~7.0.3",
@@ -1490,7 +1490,7 @@ Keep the scaffolded `dependencies` version pins (they match the installed Expo S
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@babel/core": "^7.25.0",
     "@types/react": "~18.3.12",
     "typescript": "^5.7.2",
@@ -1499,13 +1499,13 @@ Keep the scaffolded `dependencies` version pins (they match the installed Expo S
 }
 ```
 
-If the scaffolder's pinned versions differ, prefer the scaffolder's pins (they match the installed SDK). Only the `name`, `main`, `scripts`, and the addition of `@jdm/shared`/`@jdm/tsconfig`/`zod` must match above.
+If the scaffolder's pinned versions differ, prefer the scaffolder's pins (they match the installed SDK). Only the `name`, `main`, `scripts`, and the addition of `@ccc/shared`/`@ccc/tsconfig`/`zod` must match above.
 
 - [ ] **Step 4: Replace `apps/mobile/tsconfig.json`** (extend our shared config)
 
 ```json
 {
-  "extends": "@jdm/tsconfig/react-native.json",
+  "extends": "@ccc/tsconfig/react-native.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": { "~/*": ["src/*"] }
@@ -1698,7 +1698,7 @@ const styles = StyleSheet.create({
 import Constants from 'expo-constants';
 import { z } from 'zod';
 
-import { healthResponseSchema, type HealthResponse } from '@jdm/shared/health';
+import { healthResponseSchema, type HealthResponse } from '@ccc/shared/health';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string };
 const DEFAULT_BASE = 'http://localhost:4000';
@@ -1825,8 +1825,8 @@ const styles = StyleSheet.create({
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env
 pnpm install
-pnpm --filter @jdm/mobile typecheck
-pnpm --filter @jdm/mobile exec expo-doctor || true
+pnpm --filter @ccc/mobile typecheck
+pnpm --filter @ccc/mobile exec expo-doctor || true
 ```
 
 Expected: `typecheck` exits 0; `expo-doctor` should pass (assets already real, not placeholders).
@@ -1862,7 +1862,7 @@ Run from a terminal with interactive TTY (one-time, per developer):
 
 ```bash
 pnpm dlx eas-cli login
-pnpm --filter @jdm/mobile exec eas init --non-interactive
+pnpm --filter @ccc/mobile exec eas init --non-interactive
 ```
 
 Expected: a project is created or linked in expo.dev. The command prints an `EAS_PROJECT_ID` (a UUID) and writes it into `app.config.ts`'s `extra.eas.projectId` (or prompts you to paste it in).
@@ -1872,7 +1872,7 @@ If the CLI populated `extra.eas.projectId` with a literal string, replace it wit
 - [ ] **Step 3: Generate default `eas.json`**
 
 ```bash
-pnpm --filter @jdm/mobile exec eas build:configure --platform all
+pnpm --filter @ccc/mobile exec eas build:configure --platform all
 ```
 
 Expected: creates `apps/mobile/eas.json` with `development` / `preview` / `production` profiles.
@@ -1965,7 +1965,7 @@ git commit -m "chore(mobile): link eas project, add build profiles and credentia
 
 ## Task 10: `apps/admin` — Next.js skeleton (roadmap 0.10)
 
-**Approach:** Use `create-next-app` with non-interactive flags to scaffold the App Router, Tailwind, ESLint, and `~/*` import alias. Then patch `tsconfig.json` to extend `@jdm/tsconfig`, add workspace deps, and replace the sample page with our health-fetch page.
+**Approach:** Use `create-next-app` with non-interactive flags to scaffold the App Router, Tailwind, ESLint, and `~/*` import alias. Then patch `tsconfig.json` to extend `@ccc/tsconfig`, add workspace deps, and replace the sample page with our health-fetch page.
 
 **Files after this task:**
 
@@ -1992,11 +1992,11 @@ Expected: creates `apps/admin/` with `package.json` (name `admin`), `next.config
 
 - [ ] **Step 2: Patch `apps/admin/package.json`** (rename + add workspace deps)
 
-Change `name` to `@jdm/admin` and add the marked entries. Keep the scaffolded version pins for `next`, `react`, `react-dom`, `tailwindcss`, `postcss`, `autoprefixer`, `@types/*`, `eslint`, `eslint-config-next`, `typescript`. Target fields (merge, do not wholesale replace):
+Change `name` to `@ccc/admin` and add the marked entries. Keep the scaffolded version pins for `next`, `react`, `react-dom`, `tailwindcss`, `postcss`, `autoprefixer`, `@types/*`, `eslint`, `eslint-config-next`, `typescript`. Target fields (merge, do not wholesale replace):
 
 ```json
 {
-  "name": "@jdm/admin",
+  "name": "@ccc/admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -2009,11 +2009,11 @@ Change `name` to `@jdm/admin` and add the marked entries. Keep the scaffolded ve
     "test": "vitest run"
   },
   "dependencies": {
-    "@jdm/shared": "workspace:*",
+    "@ccc/shared": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "vitest": "^3.0.0"
   }
 }
@@ -2023,7 +2023,7 @@ Change `name` to `@jdm/admin` and add the marked entries. Keep the scaffolded ve
 
 ```json
 {
-  "extends": "@jdm/tsconfig/nextjs.json",
+  "extends": "@ccc/tsconfig/nextjs.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": { "~/*": ["./src/*"] },
@@ -2047,7 +2047,7 @@ Then create `apps/admin/next.config.mjs`:
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
-  transpilePackages: ['@jdm/shared'],
+  transpilePackages: ['@ccc/shared'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000',
   },
@@ -2098,7 +2098,7 @@ body {
 - [ ] **Step 7: Create `apps/admin/src/lib/api.ts`**
 
 ```ts
-import { healthResponseSchema, type HealthResponse } from '@jdm/shared/health';
+import { healthResponseSchema, type HealthResponse } from '@ccc/shared/health';
 
 const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -2185,8 +2185,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
 ```bash
 cp apps/admin/.env.example apps/admin/.env.local
 pnpm install
-pnpm --filter @jdm/admin typecheck
-pnpm --filter @jdm/admin build
+pnpm --filter @ccc/admin typecheck
+pnpm --filter @ccc/admin build
 ```
 
 Expected: `.next/` produced; no type errors.
@@ -2194,7 +2194,7 @@ Expected: `.next/` produced; no type errors.
 - [ ] **Step 13: Smoke-run the server (optional)**
 
 ```bash
-pnpm --filter @jdm/admin dev &
+pnpm --filter @ccc/admin dev &
 sleep 4
 curl -s http://localhost:3000/api/health | tee /tmp/admin-health.json
 kill %1 || true
@@ -2267,9 +2267,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter @jdm/db db:generate
+      - run: pnpm --filter @ccc/db db:generate
 
-      - run: pnpm --filter @jdm/db exec prisma migrate deploy
+      - run: pnpm --filter @ccc/db exec prisma migrate deploy
 
       - run: pnpm lint
 
@@ -2291,8 +2291,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @jdm/mobile typecheck
-      - run: pnpm --filter @jdm/mobile exec expo config --type public
+      - run: pnpm --filter @ccc/mobile typecheck
+      - run: pnpm --filter @ccc/mobile exec expo config --type public
 ```
 
 - [ ] **Step 2: Verify workflow lints locally**
@@ -2346,7 +2346,7 @@ git commit -m "ci: add lint/typecheck/test/build pipeline across workspaces"
 Add to `scripts`:
 
 ```json
-"start:migrate": "pnpm --filter @jdm/db db:deploy && node dist/server.js"
+"start:migrate": "pnpm --filter @ccc/db db:deploy && node dist/server.js"
 ```
 
 - [ ] **Step 2: Create `railway.json`**
@@ -2407,7 +2407,7 @@ Add to `scripts`:
 ## Rollback
 
 - Railway keeps previous builds; hit "Redeploy" on the last good build.
-- For a bad migration: `pnpm --filter @jdm/db exec prisma migrate resolve --rolled-back <name>` from a local shell pointed at prod `DATABASE_URL`, then redeploy.
+- For a bad migration: `pnpm --filter @ccc/db exec prisma migrate resolve --rolled-back <name>` from a local shell pointed at prod `DATABASE_URL`, then redeploy.
 ```
 
 - [ ] **Step 4: Commit**
@@ -2441,7 +2441,7 @@ Expected: `{"status":"ok","sha":"<commit>","uptimeSeconds":<n>}`. Tick the roadm
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && pnpm --filter @jdm/admin build",
+  "buildCommand": "cd ../.. && pnpm --filter @ccc/admin build",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "outputDirectory": ".next",
   "framework": "nextjs"
@@ -2520,7 +2520,7 @@ git commit -m "chore(admin): add vercel config and deploy runbook"
 3. `cp apps/mobile/.env.example apps/mobile/.env`
 4. `cp packages/db/.env.example packages/db/.env`
 5. `docker compose up -d postgres`
-6. `pnpm install && pnpm --filter @jdm/db db:migrate && pnpm --filter @jdm/db db:generate`
+6. `pnpm install && pnpm --filter @ccc/db db:migrate && pnpm --filter @ccc/db db:generate`
 7. `pnpm dev` — runs all three apps via Turbo.
 8. Ask the team lead for dev values of any remaining secrets above (most can
    start empty for Phase 0).
@@ -2577,7 +2577,7 @@ if (env.NODE_ENV !== 'production') {
 The wizard installs `@sentry/nextjs`, generates `sentry.{client,server,edge}.config.ts`, wraps `next.config.mjs` with `withSentryConfig`, and creates `.sentryclirc` for source-map uploads. Requires a Sentry account + auth token (one-time prompt).
 
 ```bash
-pnpm --filter @jdm/admin dlx @sentry/wizard@latest -i nextjs --saas --signup
+pnpm --filter @ccc/admin dlx @sentry/wizard@latest -i nextjs --saas --signup
 ```
 
 Expected: wizard completes and prints a checklist. Verify these files exist: `apps/admin/sentry.client.config.ts`, `apps/admin/sentry.server.config.ts`, `apps/admin/sentry.edge.config.ts`, and that `apps/admin/next.config.mjs` imports `withSentryConfig`.
@@ -2587,7 +2587,7 @@ Expected: wizard completes and prints a checklist. Verify these files exist: `ap
 - [x] **Step 2b: Run `@sentry/wizard` for Expo (mobile)**
 
 ```bash
-pnpm --filter @jdm/mobile dlx @sentry/wizard@latest -i reactNative --saas
+pnpm --filter @ccc/mobile dlx @sentry/wizard@latest -i reactNative --saas
 ```
 
 Expected: installs `@sentry/react-native`, adds the Sentry plugin to `app.config.ts` (or `app.json`), and creates `.sentryclirc`. It may prompt to modify metro.config.js — accept; our monorepo-aware metro.config.js merges cleanly with the Sentry wrapper (`getSentryExpoConfig`). If the wizard asks to overwrite metro.config.js, review the diff and preserve the monorepo `watchFolders` + `nodeModulesPaths` from Task 8 Step 6.
@@ -2635,7 +2635,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
-  transpilePackages: ['@jdm/shared'],
+  transpilePackages: ['@ccc/shared'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000',
   },
@@ -2786,8 +2786,8 @@ cp packages/db/.env.example packages/db/.env
 
 # 3. Start Postgres + run migrations
 docker compose up -d postgres
-pnpm --filter @jdm/db db:migrate
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:migrate
+pnpm --filter @ccc/db db:generate
 
 # 4. Run everything
 pnpm dev
@@ -2803,22 +2803,22 @@ After `pnpm dev`:
 ## Running individual apps
 
 ```bash
-pnpm --filter @jdm/api dev
-pnpm --filter @jdm/admin dev
-pnpm --filter @jdm/mobile start
+pnpm --filter @ccc/api dev
+pnpm --filter @ccc/admin dev
+pnpm --filter @ccc/mobile start
 ```
 
 ## Tests
 
 ```bash
 pnpm test                    # all workspaces
-pnpm --filter @jdm/api test  # api only (spins up Postgres via Testcontainers)
+pnpm --filter @ccc/api test  # api only (spins up Postgres via Testcontainers)
 ```
 
 Run a single test:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/health.test.ts -t "returns ok"
+pnpm --filter @ccc/api exec vitest run test/health.test.ts -t "returns ok"
 ```
 
 ## Lint + typecheck + format

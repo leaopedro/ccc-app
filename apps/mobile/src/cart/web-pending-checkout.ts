@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 const STORAGE_PREFIX = `${brand.app.storagePrefix}:pendingCheckoutUrl:`;
 

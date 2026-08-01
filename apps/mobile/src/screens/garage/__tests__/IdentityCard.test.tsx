@@ -2,10 +2,10 @@
 //
 // IdentityCard tests. Mirrors the pattern in `PremiumBadge.test.tsx`:
 // react-native primitives are stubbed to plain HTML tags so jsdom can render
-// them; `react-native-svg` is mocked because `@jdm/ui`'s barrel re-exports
+// them; `react-native-svg` is mocked because `@ccc/ui`'s barrel re-exports
 // `ParkingStallCard`, which imports SVG primitives.
 
-import type { GarageOwner } from '@jdm/shared/garage';
+import type { GarageOwner } from '@ccc/shared/garage';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

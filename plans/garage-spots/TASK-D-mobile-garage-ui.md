@@ -20,7 +20,7 @@
 
 **Architecture:** Pure presentation helpers convert `GarageReadResponse` into a typed `GarageSlot[]` view-model in `src/screens/garage/garage-slots.ts`. The list screen consumes that view-model and renders one of three card components per slot. The buy-spot card calls `POST /me/garage/spots/cart` then routes to `/cart` after the global `CartProvider.refresh()` completes. Both `/garage` and `/profile/garage` route trees are updated symmetrically. There is no React Query or SWR in this app — fetching uses `useFocusEffect` + `useState` with `authedRequest`, the existing pattern.
 
-**Tech Stack:** Expo Router, React 19, React Native 0.81, Zod schemas from `@jdm/shared`, vitest 3 + jsdom + react-dom for component-level tests (no `@testing-library/react-native` is installed — do not add it). All copy is plain strings imported from `~/copy/garage`. Theme tokens from `~/theme`.
+**Tech Stack:** Expo Router, React 19, React Native 0.81, Zod schemas from `@ccc/shared`, vitest 3 + jsdom + react-dom for component-level tests (no `@testing-library/react-native` is installed — do not add it). All copy is plain strings imported from `~/copy/garage`. Theme tokens from `~/theme`.
 
 ---
 
@@ -50,7 +50,7 @@ Out of scope (handled in other tasks):
 
 ## 2. Unblocking artifacts from TASK-B (what must exist before this task starts)
 
-This task starts as soon as the following are **merged to main** and the `@jdm/shared` workspace is rebuilt (`pnpm --filter @jdm/shared build`). Endpoint runtime can still be missing — fixtures cover dev work.
+This task starts as soon as the following are **merged to main** and the `@ccc/shared` workspace is rebuilt (`pnpm --filter @ccc/shared build`). Endpoint runtime can still be missing — fixtures cover dev work.
 
 Required artifacts:
 
@@ -108,8 +108,8 @@ Why split `GarageListView.tsx` from the route files: both `/garage/index.tsx` an
 ### 4.1 `garage-slots.ts` (pure helper, no React)
 
 ```ts
-import type { Car } from '@jdm/shared/cars';
-import type { GarageReadResponse, GarageSpot, GaragePurchaseOption } from '@jdm/shared/garage';
+import type { Car } from '@ccc/shared/cars';
+import type { GarageReadResponse, GarageSpot, GaragePurchaseOption } from '@ccc/shared/garage';
 
 export type GarageSlot =
   | { kind: 'filled'; car: Car; spot: GarageSpot }
@@ -302,14 +302,14 @@ This task starts before the TASK-B endpoint is live. Three layers of indirection
 3. **Dev-only mock:** A new env-gated helper at `apps/mobile/src/api/garage.ts`:
 
 ```ts
-import { garageReadSchema, type GarageReadResponse } from '@jdm/shared/garage';
+import { garageReadSchema, type GarageReadResponse } from '@ccc/shared/garage';
 import { authedRequest } from './client';
 
 const USE_MOCK = process.env.EXPO_PUBLIC_GARAGE_MOCK === '1';
 
 export const getGarage = async (): Promise<GarageReadResponse> => {
   if (USE_MOCK) {
-    const { garageReadFixtureMixed } = await import('@jdm/shared/test-fixtures/garage');
+    const { garageReadFixtureMixed } = await import('@ccc/shared/test-fixtures/garage');
     return garageReadSchema.parse(garageReadFixtureMixed);
   }
   return authedRequest('/me/garage', garageReadSchema);
@@ -507,7 +507,7 @@ This is **nice-to-have**, not a gate. If RN-in-jsdom proves flaky, defer to manu
 - [ ] **Step 2: Run mobile typecheck**
 
 ```
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: PASS (file is self-contained).
@@ -529,8 +529,8 @@ git commit -m "feat(mobile): add garage copy module (TASK-D)"
 - [ ] **Step 1: Write the client**
 
 ```ts
-import { garageReadSchema, type GarageReadResponse } from '@jdm/shared/garage';
-import { garageCartResponseSchema, type GarageCartResponse } from '@jdm/shared/garage';
+import { garageReadSchema, type GarageReadResponse } from '@ccc/shared/garage';
+import { garageCartResponseSchema, type GarageCartResponse } from '@ccc/shared/garage';
 
 import { authedRequest } from './client';
 
@@ -538,7 +538,7 @@ const USE_MOCK = process.env.EXPO_PUBLIC_GARAGE_MOCK === '1';
 
 export const getGarage = async (): Promise<GarageReadResponse> => {
   if (USE_MOCK) {
-    const { garageReadFixtureMixed } = await import('@jdm/shared/test-fixtures/garage');
+    const { garageReadFixtureMixed } = await import('@ccc/shared/test-fixtures/garage');
     return garageReadSchema.parse(garageReadFixtureMixed);
   }
   return authedRequest('/me/garage', garageReadSchema);
@@ -554,11 +554,11 @@ export const addGarageSpotToCart = (): Promise<GarageCartResponse> =>
 - [ ] **Step 2: Rebuild shared and typecheck**
 
 ```
-pnpm --filter @jdm/shared build
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/shared build
+pnpm --filter @ccc/mobile typecheck
 ```
 
-Expected: PASS. If `@jdm/shared/test-fixtures/garage` is unresolved, TASK-B has not published fixtures yet — block this task per §2.
+Expected: PASS. If `@ccc/shared/test-fixtures/garage` is unresolved, TASK-B has not published fixtures yet — block this task per §2.
 
 - [ ] **Step 3: Commit**
 
@@ -583,7 +583,7 @@ import {
   garageReadFixtureMixed,
   garageReadFixtureAllFilled,
   garageReadFixtureUnlimited,
-} from '@jdm/shared/test-fixtures/garage';
+} from '@ccc/shared/test-fixtures/garage';
 
 import { buildGarageSlots } from '../garage-slots';
 
@@ -631,7 +631,7 @@ describe('buildGarageSlots', () => {
 - [ ] **Step 2: Run the test, confirm it fails**
 
 ```
-pnpm --filter @jdm/mobile test garage-slots.test.ts
+pnpm --filter @ccc/mobile test garage-slots.test.ts
 ```
 
 Expected: FAIL with "Cannot find module '../garage-slots'".
@@ -645,8 +645,8 @@ Expected: FAIL with "Cannot find module '../garage-slots'".
 - [ ] **Step 1: Write the implementation per §4.1**
 
 ```ts
-import type { Car } from '@jdm/shared/cars';
-import type { GarageReadResponse, GarageSpot, GaragePurchaseOption } from '@jdm/shared/garage';
+import type { Car } from '@ccc/shared/cars';
+import type { GarageReadResponse, GarageSpot, GaragePurchaseOption } from '@ccc/shared/garage';
 
 export type GarageSlot =
   | { kind: 'filled'; car: Car; spot: GarageSpot }
@@ -692,7 +692,7 @@ export function buildGarageSlots(payload: GarageReadResponse): GarageSlot[] {
 - [ ] **Step 2: Run the test, confirm it passes**
 
 ```
-pnpm --filter @jdm/mobile test garage-slots.test.ts
+pnpm --filter @ccc/mobile test garage-slots.test.ts
 ```
 
 Expected: PASS.
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck**
 
 ```
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: PASS.
@@ -825,7 +825,7 @@ export function AddCarPlaceholderCard({ onPress }: Props) {
 - [ ] **Step 2: Typecheck**
 
 ```
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: PASS.
@@ -869,7 +869,7 @@ export function FillSpotCard({ spotId, onPress }: Props) {
 - [ ] **Step 2: Typecheck**
 
 ```
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: PASS.
@@ -1030,7 +1030,7 @@ describe('BuySpotCard', () => {
 - [ ] **Step 2: Run the test, confirm it fails**
 
 ```
-pnpm --filter @jdm/mobile test BuySpotCard.test.tsx
+pnpm --filter @ccc/mobile test BuySpotCard.test.tsx
 ```
 
 Expected: FAIL with "Cannot find module '../BuySpotCard'".
@@ -1044,7 +1044,7 @@ Expected: FAIL with "Cannot find module '../BuySpotCard'".
 - [ ] **Step 1: Write the component per §4.5**
 
 ```tsx
-import type { GaragePurchaseOption } from '@jdm/shared/garage';
+import type { GaragePurchaseOption } from '@ccc/shared/garage';
 import { useState } from 'react';
 
 import { garageCopy } from '~/copy/garage';
@@ -1089,7 +1089,7 @@ export function BuySpotCard({ purchaseOption, onPurchase }: Props) {
 - [ ] **Step 2: Run the test, confirm it passes**
 
 ```
-pnpm --filter @jdm/mobile test BuySpotCard.test.tsx
+pnpm --filter @ccc/mobile test BuySpotCard.test.tsx
 ```
 
 Expected: PASS.
@@ -1117,7 +1117,7 @@ import {
   garageReadFixtureFreeLimitZero,
   garageReadFixtureMixed,
   garageReadFixtureAllFilled,
-} from '@jdm/shared/test-fixtures/garage';
+} from '@ccc/shared/test-fixtures/garage';
 
 import { buildGarageSlots, type GarageSlot } from '../garage-slots';
 
@@ -1170,7 +1170,7 @@ describe('GarageListView view-model', () => {
 - [ ] **Step 2: Run the test, confirm it passes**
 
 ```
-pnpm --filter @jdm/mobile test GarageListView.viewmodel.test.ts
+pnpm --filter @ccc/mobile test GarageListView.viewmodel.test.ts
 ```
 
 Expected: PASS.
@@ -1290,7 +1290,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck**
 
 ```
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: PASS.
@@ -1311,7 +1311,7 @@ git commit -m "feat(mobile): add GarageListView (TASK-D)"
 - [ ] **Step 1: Replace the file contents**
 
 ```tsx
-import type { GarageReadResponse } from '@jdm/shared/garage';
+import type { GarageReadResponse } from '@ccc/shared/garage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -1394,9 +1394,9 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck + lint + tests**
 
 ```
-pnpm --filter @jdm/mobile typecheck
-pnpm --filter @jdm/mobile lint
-pnpm --filter @jdm/mobile test
+pnpm --filter @ccc/mobile typecheck
+pnpm --filter @ccc/mobile lint
+pnpm --filter @ccc/mobile test
 ```
 
 Expected: PASS for all three.
@@ -1417,7 +1417,7 @@ git commit -m "feat(mobile): wire /garage index to GarageListView (TASK-D)"
 - [ ] **Step 1: Replace the file contents**
 
 ```tsx
-import type { GarageReadResponse } from '@jdm/shared/garage';
+import type { GarageReadResponse } from '@ccc/shared/garage';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
@@ -1512,9 +1512,9 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck + lint + tests**
 
 ```
-pnpm --filter @jdm/mobile typecheck
-pnpm --filter @jdm/mobile lint
-pnpm --filter @jdm/mobile test
+pnpm --filter @ccc/mobile typecheck
+pnpm --filter @ccc/mobile lint
+pnpm --filter @ccc/mobile test
 ```
 
 Expected: PASS.
@@ -1573,9 +1573,9 @@ Mirror the change. Replace the route in the success path with `/profile/garage/$
 - [ ] **Step 4: Typecheck + lint + tests**
 
 ```
-pnpm --filter @jdm/mobile typecheck
-pnpm --filter @jdm/mobile lint
-pnpm --filter @jdm/mobile test
+pnpm --filter @ccc/mobile typecheck
+pnpm --filter @ccc/mobile lint
+pnpm --filter @ccc/mobile test
 ```
 
 Expected: PASS.
@@ -1594,7 +1594,7 @@ git commit -m "feat(mobile): thread spotId through car-create flow (TASK-D)"
 - [ ] **Step 1: Run with mock fixtures**
 
 ```
-EXPO_PUBLIC_GARAGE_MOCK=1 pnpm --filter @jdm/mobile start
+EXPO_PUBLIC_GARAGE_MOCK=1 pnpm --filter @ccc/mobile start
 ```
 
 Open on iOS sim + Android emulator. Walk through the five fixtures by temporarily swapping the imported fixture in `apps/mobile/src/api/garage.ts`. Confirm each card renders.

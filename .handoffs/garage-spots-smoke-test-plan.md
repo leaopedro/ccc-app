@@ -318,7 +318,7 @@ Use a real device. Run with VoiceOver/TalkBack on for at least one pass. Run in 
 - [ ] **E.1** `GarageHeader` summary row: the only edit affordance is `accessibilityLabel="Toque para editar"`. Visually there is no pencil, no chevron, no hover state. A first-time user has no visual signal that the name/slug/description are editable. **MAJOR candidate for J.**
 - [ ] **E.2** `Tornar pública` Switch: PT-BR label is clear ("Tornar pública") but the hint (`visibilityPublicHint: 'Sua garagem fica visível em /g/<slug>.'`) is technical. Does a non-tech user understand the privacy implications (LGPD-relevant)? Compare with "Qualquer pessoa pode ver sua garagem nesta URL".
 - [ ] **E.3** Slug field on edit: `editSlug: 'URL pública (/g/)'`. No example placeholder, no format hint, no list of reserved words. User has to fail-save to learn the constraints.
-- [ ] **E.4** PremiumBadge (mobile `@jdm/ui`): tap target is the `Badge` `<View>` with no `onPress`. Tapping does nothing. Does this make the badge feel dead/decorative? Should it open a "What is Premium?" sheet?
+- [ ] **E.4** PremiumBadge (mobile `@ccc/ui`): tap target is the `Badge` `<View>` with no `onPress`. Tapping does nothing. Does this make the badge feel dead/decorative? Should it open a "What is Premium?" sheet?
 - [ ] **E.5** Admin `EditUserGarageModal` slug input: helper text reads `Slug (admin override — qualquer caractere)`. Does it warn that the override bypasses regex _but reserved-word + uniqueness still apply_? Currently no — the admin discovers via the 400/409 response.
 - [ ] **E.6** Admin general-settings `Ilimitado` toggle: copy reads `Marque "Ilimitado" para desativar o limite.` No warning about cost/abuse implications of unlimited garages. Should it?
 - [ ] **E.7** `FillSpotCard` (extra-spot empty placeholder) vs `AddCarPlaceholderCard` (free empty): both render via `GarageSpotPlaceholderCard` with identical dashed-border styling. Only the subtitle differs. Does the user see _which_ spots are free vs extra at a glance? Probably not — flag in J.
@@ -327,7 +327,7 @@ Use a real device. Run with VoiceOver/TalkBack on for at least one pass. Run in 
 ### F. Cross-surface consistency
 
 - [ ] **F.1** PremiumBadge style:
-  - Mobile `@jdm/ui` PremiumBadge → `Badge tone="brand"` → `bg-brand` + `text-fg-inverse`, uppercase tracking-widest, height 6/7.
+  - Mobile `@ccc/ui` PremiumBadge → `Badge tone="brand"` → `bg-brand` + `text-fg-inverse`, uppercase tracking-widest, height 6/7.
   - Admin `premium-badge.tsx` → `bg-amber-500` + `text-amber-950`, uppercase tracking-widest, `text-[10px]`.
   - **These are different colors.** Verify on screen side-by-side — does the brand color match the amber? Flag inconsistency in J if not.
 - [ ] **F.2** Garage name + slug rendering: owner `/garage` (`GarageHeader`), public `/g/:slug` (API JSON), admin `user-garage-panel.tsx`, feed author chip. Consistent font weight, casing, slug-prefix display (`/g/<slug>` vs `<slug>` vs `slug`)?
@@ -360,7 +360,7 @@ Use a real device. Run with VoiceOver/TalkBack on for at least one pass. Run in 
 - [ ] **H.1** "Garagem" — primary copy. Verify no surfaces leak "Garage" / "My Cars" / "Meus Carros" in PT-BR mode. Grep `garageCopy.garage.listTitle = 'Garagem'`, but check tab labels, push notification copy, email subjects.
 - [ ] **H.2** Error codes localized: confirm no raw English strings leak through. Suspects: `SERIALIZATION_CONFLICT`, `GARAGE_FULL`, `slug_taken`, `reserved_slug`, `nickname_taken`, `invalid_slug`. The mobile `GarageHeader` maps these to PT-BR copy — verify exhaustive coverage by hitting each path.
 - [ ] **H.3** Terminology consistency:
-  - "Premium" — used in `@jdm/ui` badge label ("PREMIUM"), admin `Premium {tierLabel}`, copy in admin panel. Consistent.
+  - "Premium" — used in `@ccc/ui` badge label ("PREMIUM"), admin `Premium {tierLabel}`, copy in admin panel. Consistent.
   - "Vaga" / "vagas" — used in `Comprar Vaga Adicional`, `Vaga extra disponível`, `Vagas grátis por usuário`, `Vagas` panel header. Consistent.
   - "Ilimitado" — admin general-settings label. Verify no "Sem limite" / "Infinito" mix.
 - [ ] **H.4** Tone: imperative ("Adicione seu primeiro carro", "Comprar Vaga Adicional") vs friendly ("Conte sobre sua garagem"). Match the rest of the app's tone? Check the brand-voice doc if one exists.
@@ -399,7 +399,7 @@ Seed examples (verify on device, then keep or strike):
   **Suggested fix:** subtle background tint on extra cards, or a tag chip ("Extra") in the corner. File: `apps/mobile/src/screens/garage/FillSpotCard.tsx` + copy in `~/copy/garage.ts`.
   **Severity:** MINOR.
 
-- **Observation:** Mobile PremiumBadge (`bg-brand`) and admin PremiumBadge (`bg-amber-500`) are visually different colors despite the admin code comment claiming "Mirrors the mobile @jdm/ui PremiumBadge visual contract".
+- **Observation:** Mobile PremiumBadge (`bg-brand`) and admin PremiumBadge (`bg-amber-500`) are visually different colors despite the admin code comment claiming "Mirrors the mobile @ccc/ui PremiumBadge visual contract".
   **Friction:** Cross-surface inconsistency; the admin twin lies about parity. May drift further over time.
   **Suggested fix:** either align admin to use the shared brand color via `var(--color-brand)`, or extract the badge into a shared design token. File: `apps/admin/src/components/premium-badge.tsx`.
   **Severity:** MINOR.

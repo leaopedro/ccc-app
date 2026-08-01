@@ -12,7 +12,7 @@ import {
   type FeedPostResponse,
   feedReactionSummarySchema,
   type FeedReactionSummary,
-} from '@jdm/shared/feed';
+} from '@ccc/shared/feed';
 import { z } from 'zod';
 
 import { ApiError, authedRequest, request } from './client';

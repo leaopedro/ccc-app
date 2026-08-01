@@ -14,7 +14,7 @@
 3. Phase 2:Phase 2C — Manual badge grants can award premium-exclusive badges to non-premium users — fix: enforce `isPremiumActive` in every award path, including admin.
 4. Phase 3:Phase 3B — XP idempotency is not DB-enforced and concurrent awards can double-increment XP — fix: add a unique idempotency constraint or serializable insert/upsert pattern.
 5. Phase 3:Phase 3B — Unlike rollback can decrement XP even when no prior XP event existed — fix: only decrement after deleting a matching prior `XpEvent`.
-6. Phase 1:Chunk 05 — Admin imports React Native `@jdm/ui` into Next without RN-web setup — fix: use web-compatible shared primitives or keep an admin Tailwind twin.
+6. Phase 1:Chunk 05 — Admin imports React Native `@ccc/ui` into Next without RN-web setup — fix: use web-compatible shared primitives or keep an admin Tailwind twin.
 7. Phase 2:LGPD — Badge anonymize assumes a cascade that does not fire because Garage rows are scrubbed and retained — fix: delete `GarageBadge` rows explicitly in the anonymization transaction.
 8. Phase 3:LGPD — XP anonymize assumes a cascade that does not fire and leaves XP rows/counters behind — fix: delete `XpEvent` rows and reset affected `Garage` counters explicitly.
 9. Cross-plan:gamification contract — Phase 3 starts after Phase 2A but depends on Phase 2C `awardBadge` behavior — fix: gate Phase 3B badge-XP work on Phase 2C completion.
@@ -26,7 +26,7 @@ docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:88: 🚨 Critical
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:856: 🚨 Critical: URL validation accepts any host if the path starts with `/garage-cover/<userId>/`, allowing public tracking URLs. Restrict to configured R2 public base URL or store/validate object keys server-side.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1468: 🚨 Critical: Importing `@jdm/ui` PremiumBadge into admin pulls React Native components into Next.js without `react-native-web` setup. Provide a web-compatible shared badge export or keep the admin Tailwind twin.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1468: 🚨 Critical: Importing `@ccc/ui` PremiumBadge into admin pulls React Native components into Next.js without `react-native-web` setup. Provide a web-compatible shared badge export or keep the admin Tailwind twin.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:7: ⚠️ Major: Plan omits required `POST /me/garage/cover/upload`, `GET /me/garage/cover/presets`, and uses generic `/uploads/presign` instead of the handoff API surface. Add the missing cover endpoints or document and approve the contract deviation.
 
@@ -40,13 +40,13 @@ docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:55: ⚠️ Major:
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:69: ⚠️ Major: CLAUDE.md branch safety preflight is missing before edits. Add `git branch --show-current`, stop on `production`, pull `main --ff-only`, and create the feature branch before chunk work.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:99: ⚠️ Major: The plan does not require a `@jdm/shared/garage-covers` package export, but later imports that subpath. Add `./garage-covers` to `packages/shared/package.json` exports.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:99: ⚠️ Major: The plan does not require a `@ccc/shared/garage-covers` package export, but later imports that subpath. Add `./garage-covers` to `packages/shared/package.json` exports.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:269: ⚠️ Major: `pnpm --filter @jdm/ui build` is invalid because `packages/ui/package.json` has no `build` script. Use `pnpm --filter @jdm/ui typecheck` or add a build script.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:269: ⚠️ Major: `pnpm --filter @ccc/ui build` is invalid because `packages/ui/package.json` has no `build` script. Use `pnpm --filter @ccc/ui typecheck` or add a build script.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:389: ⚠️ Major: Extending `garagePatchSchema` with cover fields lets existing `PATCH /me/garage` accept cover payloads without the premium/ownership gate. Use a separate `garageCoverPatchSchema` for `/me/garage/cover` or make both routes share the same validation and write path.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:472: ⚠️ Major: `pnpm --filter api ...` uses the wrong package filter; the package is named `@jdm/api`. Replace all `api`, `mobile`, and `admin` filters with `@jdm/api`, `@jdm/mobile`, and `@jdm/admin`.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:472: ⚠️ Major: `pnpm --filter api ...` uses the wrong package filter; the package is named `@ccc/api`. Replace all `api`, `mobile`, and `admin` filters with `@ccc/api`, `@ccc/mobile`, and `@ccc/admin`.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:545: ⚠️ Major: Public serializer masks lapsed cover fields, contradicting the locked invariant that premium-cover lapse is renderer logic. Keep stored fields in payload and route all rendering through `resolveGarageCoverSlug`, or centralize the mask in one shared resolver.
 
@@ -62,11 +62,11 @@ docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:905: ⚠️ Major
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1003: ⚠️ Major: Test snippet calls `vi.fn()` without importing `vi` from `vitest`. Add `import { describe, expect, it, vi } from 'vitest';`.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1455: ⚠️ Major: Plan assumes `apps/admin` already depends on `@jdm/ui`, but `apps/admin/package.json` does not. Add the dependency or keep a web-safe admin badge component.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1455: ⚠️ Major: Plan assumes `apps/admin` already depends on `@ccc/ui`, but `apps/admin/package.json` does not. Add the dependency or keep a web-safe admin badge component.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1578: ⚠️ Major: ParkingStallCard tests call `vi.fn()` without importing `vi`. Add the Vitest import.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1590: ⚠️ Major: `pnpm --filter @jdm/ui test` is invalid because `packages/ui/package.json` has no `test` script. Add a UI test script and dependencies or move these tests under `@jdm/mobile`.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1590: ⚠️ Major: `pnpm --filter @ccc/ui test` is invalid because `packages/ui/package.json` has no `test` script. Add a UI test script and dependencies or move these tests under `@ccc/mobile`.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1595: ⚠️ Major: ParkingStallCard defers asphalt texture and chevrons even though README.md lines 89-99 and atoms.jsx lines 353-380 require them for high-fidelity parity. Implement the grid/chevron treatment.
 
@@ -76,7 +76,7 @@ docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1837: ⚠️ Majo
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1874: ⚠️ Major: `GarageSlotV2 extends { car: infer C } ? C : never` resolves to `never` for the union, making `toCarPayload` type-invalid. Use `Extract<GarageSlotV2, { kind: 'filled' }>['car']`.
 
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:2060: ⚠️ Major: `@jdm/ui` imports `expo-linear-gradient` and `@jdm/shared/garage-covers`, but `packages/ui/package.json` declares neither dependency. Add the dependencies or move `GarageCover` to mobile.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:2060: ⚠️ Major: `@ccc/ui` imports `expo-linear-gradient` and `@ccc/shared/garage-covers`, but `packages/ui/package.json` declares neither dependency. Add the dependencies or move `GarageCover` to mobile.
 
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:2749: ⚠️ Major: Chunk 09 contradicts itself on whether `CoverPickerSheet` state lives in the route or `GarageHeader`. Choose one owner and update chunk 08/09 props consistently.
 
@@ -128,7 +128,7 @@ docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:43: �
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:44: ⚠️ Major: `garageBadgeSchema` only models earned rows, but `GET /me/garage/badges` promises locked and `lockedPremium` entries. Define a separate owner catalog-state schema covering earned, locked, and lockedPremium.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:47: ⚠️ Major: New `apps/api/src/routes/badges-catalog.ts` is not paired with an `apps/api/src/app.ts` registration. Add the route import and `app.register` step.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:65: ⚠️ Major: Phase 1 places `VagasSectionHeader` in the route `ListHeaderComponent`, not inside `GarageHeader`, so this insertion point is wrong. Wire `BadgeRow` in the garage route header between `<GarageHeader />` and `<VagasSectionHeader />`.
-docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:66: ⚠️ Major: `BadgesSheet` from `@jdm/ui` would be React Native UI, but the admin SSR app is Next and currently has no `@jdm/ui` transpile or RN-web setup. Add admin/web badge components or explicitly limit SSR to a static `BadgeRow`.
+docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:66: ⚠️ Major: `BadgesSheet` from `@ccc/ui` would be React Native UI, but the admin SSR app is Next and currently has no `@ccc/ui` transpile or RN-web setup. Add admin/web badge components or explicitly limit SSR to a static `BadgeRow`.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:78: ⚠️ Major: `badge.award` is not in `adminAuditActionSchema`, and automatic awards have no defined `AdminAudit.actorId` semantics. Extend shared audit action/entity schemas and define the actor/source mapping.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:79: ⚠️ Major: `EVT-002` requires three consecutive events, but the plan only describes independent counter reads. Specify the ordered attendance streak query and missed-event reset behavior.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:81: ⚠️ Major: Deferring `COM-002` and `COM-003` leaves two seeded v1 badges unawardable despite §11.6 covering post engagement counters. Either move those badges out of v1 catalog or include the comment/reaction award hooks.
@@ -137,7 +137,7 @@ docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:83: �
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:84: ⚠️ Major: Existing `Notification` requires `title`, `body`, `data`, and `dedupeKey`; the plan only writes `kind` and `payload`. Use the existing notification schema/service with a deterministic badge dedupe key.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:149: ⚠️ Major: `AdminGeneralSettings` does not exist; the repo model is `GeneralSettings`. Add `gamificationEnabled` to `GeneralSettings` and its shared/admin schemas.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:176: ⚠️ Major: Payloads gain `gamification`, but the shared schema chunk only adds `badges`. Add `gamification: { enabled: boolean }` to owner and public zod response schemas.
-docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:188: ⚠️ Major: New `packages/shared/src/badges.ts` lacks `packages/shared/package.json` export and index export steps. Add the `./badges` subpath and rebuild `@jdm/shared`.
+docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:188: ⚠️ Major: New `packages/shared/src/badges.ts` lacks `packages/shared/package.json` export and index export steps. Add the `./badges` subpath and rebuild `@ccc/shared`.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:194: ⚠️ Major: `apps/api/src/services/notifications/index.ts` does not match the existing notification infrastructure. Reuse `apps/api/src/services/push/transactional.ts` or add a narrowly named in-app helper.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:195: ⚠️ Major: `apps/api/src/routes/notifications.ts` is wrong for this repo; existing routes live in `apps/api/src/routes/me-notifications.ts`. Extend the existing route only if needed.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:199: ⚠️ Major: Test description says disabled payloads omit badges, but the killswitch spec says badges return `[]`. Make tests and schemas use one contract.
@@ -175,7 +175,7 @@ docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:137: ⚠️ Ma
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:151: ⚠️ Major: Admin adjustment semantics contradict themselves: line 151 says negative adjustment is a separate positive-delta call, while line 153 says `delta` is signed for admin adjustments. Define one model and enforce it in schema, service, and tests.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:161: ⚠️ Major: The API surface says no new endpoints even though 3B.35 adds `POST /admin/users/:id/garage/xp-adjustment`. Update the API table to include the admin route or remove 3B.35.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:193: ⚠️ Major: This says progress/stats are always present and never undefined, but lines 29, 293, and 294 require omitting them for public-empty and killswitch-off responses. Make the shared schemas optional/nullable where omitted and document exact response shapes.
-docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:200: ⚠️ Major: Adding `packages/shared/src/garage-progress.ts` omits the required `packages/shared/package.json` export entry and shared rebuild step. Add the export and verification command to rebuild `@jdm/shared` after shared/schema changes.
+docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:200: ⚠️ Major: Adding `packages/shared/src/garage-progress.ts` omits the required `packages/shared/package.json` export entry and shared rebuild step. Add the export and verification command to rebuild `@ccc/shared` after shared/schema changes.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:206: ⚠️ Major: The new admin route file is listed, but the plan does not register it in `apps/api/src/routes/admin/index.ts`; unregistered Fastify route files are dead code in this repo. Add the import, `scope.register(...)`, and route registration test.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:246: ⚠️ Major: Caching `gamificationEnabled` for 30 seconds allows XP awards and user-facing surfaces to remain active after the single killswitch is flipped. Remove caching on awarder decisions or invalidate synchronously on `gamification.toggle`.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:349: ⚠️ Major: The proposed likes reconciliation SQL references `FeedPost.likeCount`, but the actual schema has no `likeCount`; likes are `FeedReaction` rows. Rewrite reconciliation against `FeedReaction` or drop the denormalized column.
@@ -189,13 +189,13 @@ docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:10: 💭 Nit: 
 ## Cross-plan findings (issues spanning multiple plans)
 
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:310: 🚨 Critical: All phases add user-owned or derived garage data while relying on no-op/cascade DSR assumptions that do not match retained Garage rows. Add explicit export/anonymize/delete/reset steps for cover uploads, badges, XP events, and counters in each plan.
-docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1468: 🚨 Critical: Phase 1 and Phase 2 both route React Native `@jdm/ui` surfaces into the Next admin/public app without a web compatibility layer. Define web-safe shared components or keep separate admin implementations before either phase lands.
+docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:1468: 🚨 Critical: Phase 1 and Phase 2 both route React Native `@ccc/ui` surfaces into the Next admin/public app without a web compatibility layer. Define web-safe shared components or keep separate admin implementations before either phase lands.
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:11: ⚠️ Major: Phase 1 defers §11 Conquistas while Phase 2 and Phase 3 are only high-level plans, leaving the handoff's v1 gamification scope without any build-ready plan. Convert Phase 2/3 to full TDD chunks or record a scope waiver for §11/§12.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:8: ⚠️ Major: Phase 3 allows kickoff after Phase 2A, but its badge-XP hooks require the Phase 2C `awardBadge` service and premium-gate semantics. Gate Phase 3B badge-XP work on Phase 2C completion.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:149: ⚠️ Major: Phase 2 and Phase 3 both name the killswitch model `AdminGeneralSettings`, but the repo and intended singleton are `GeneralSettings`. Standardize on `GeneralSettings.gamificationEnabled` across both plans and shared schemas.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:199: ⚠️ Major: Phase 2 alternates between omitting badges and returning empty arrays when disabled, while Phase 3 alternates between always-present and omitted `progress/stats`. Define one killswitch response contract for owner/public payloads before schemas are generated.
 docs/superpowers/plans/2026-05-21-garage-ui-redesign-phase1.md:35: ⚠️ Major: Phase 1 and Phase 2 both reference `apps/admin/src/app/g/[slug]/page.tsx`, but the actual route root is `apps/admin/app`. Update all public SSR insertion points and tests to the real App Router path.
-docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:200: ⚠️ Major: All three phases add new shared subpaths but omit at least one package export or rebuild gate. Add `packages/shared/package.json` exports and `@jdm/shared` rebuild verification to every phase that adds shared modules.
+docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:200: ⚠️ Major: All three phases add new shared subpaths but omit at least one package export or rebuild gate. Add `packages/shared/package.json` exports and `@ccc/shared` rebuild verification to every phase that adds shared modules.
 docs/superpowers/plans/2026-05-21-garage-progression-phase3-xp.md:246: ⚠️ Major: Phase 2 defines a single killswitch governance model, but Phase 3 caches the flag for 30 seconds, allowing stale award and public-render decisions. Require synchronous read/invalidation for award paths and payload render decisions.
 docs/superpowers/plans/2026-05-21-garage-gamification-phase2-conquistas.md:65: ⚠️ Major: Phase 2's `BadgeRow` insertion point targets `GarageHeader`, but Phase 1 moves section-header composition into the route `ListHeaderComponent`. Update Phase 2 to insert between `<GarageHeader />` and `<VagasSectionHeader />` in the route header.
 

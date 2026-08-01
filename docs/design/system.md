@@ -57,7 +57,7 @@ If you need a token that isn't in the preset, add it to **both**
 Body weight: pass `weight` prop on `<Text>` (`regular | medium | semibold |
 bold`). Inter font family is set via `style={{ fontFamily }}`.
 
-## Primitives reference (`@jdm/ui`)
+## Primitives reference (`@ccc/ui`)
 
 ### `<Button>`
 
@@ -152,5 +152,5 @@ or button. Sizes: 20 (dense), 24 (default), 32 (hero).
 ## Don't reinvent
 
 If a screen needs something the primitives don't cover — confirm with the
-team and add it to `@jdm/ui` rather than one-off it. Three usages = a
+team and add it to `@ccc/ui` rather than one-off it. Three usages = a
 primitive.

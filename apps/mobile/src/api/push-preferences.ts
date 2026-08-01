@@ -3,7 +3,7 @@ import {
   updatePushPrefsRequestSchema,
   type PushPrefs,
   type UpdatePushPrefsRequest,
-} from '@jdm/shared';
+} from '@ccc/shared';
 
 import { authedRequest } from './client';
 

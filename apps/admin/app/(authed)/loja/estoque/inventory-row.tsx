@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminStoreInventoryRow } from '@jdm/shared/admin';
+import type { AdminStoreInventoryRow } from '@ccc/shared/admin';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';

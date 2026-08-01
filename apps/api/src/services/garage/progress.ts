@@ -10,7 +10,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 //
 // This constant is SERVER-ONLY by design (skeleton chunk 26 + outline
 // §260): clients never receive the thresholds, only the resolved
-// payload. Do NOT re-export through `@jdm/shared`.
+// payload. Do NOT re-export through `@ccc/shared`.
 export const RANK_TIERS = [
   { name: 'Iniciante', min: 0, next: 'Pilotador', nextAt: 100 },
   { name: 'Pilotador', min: 100, next: 'Veterano', nextAt: 500 },

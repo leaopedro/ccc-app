@@ -6,11 +6,16 @@ import { z } from 'zod';
 
 /**
  * POST /api/me/premium/checkout — request body.
- * Client sends cadence; server resolves priceId from env (never trusts
- * client-supplied Stripe price IDs).
+ * Client sends cadence; server resolves priceId server-side (never trusts
+ * client-supplied Stripe price IDs). `planSlug` is optional and additive.
+ * `addonKeys` are add-on module keys resolved against the catalog server-side —
+ * the client never sends prices. Max 10 keeps the Checkout Session line-item
+ * count bounded.
  */
 export const premiumCheckoutRequestSchema = z.object({
   cadence: z.enum(['monthly', 'annual']),
+  planSlug: z.string().min(1).max(40).optional(),
+  addonKeys: z.array(z.string().min(1).max(40)).max(10).optional(),
 });
 
 export type PremiumCheckoutRequest = z.infer<typeof premiumCheckoutRequestSchema>;
@@ -57,8 +62,8 @@ export type PremiumBillingPortalResponse = z.infer<typeof premiumBillingPortalRe
 export const premiumStatusSchema = z.object({
   /** Whether the user currently holds an active premium entitlement. */
   active: z.boolean(),
-  /** Current premium tier. Gold-only v1; null when no active entitlement. */
-  tier: z.enum(['gold']).nullable(),
+  /** Current premium tier. null when no active entitlement. */
+  tier: z.enum(['bronze', 'silver', 'gold']).nullable(),
   /**
    * Billing cadence of the live subscription row.
    * null for admin-granted premium (no cadence) or when inactive.

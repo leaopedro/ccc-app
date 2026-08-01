@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // BadgeDetail tests. Lives here (not packages/ui/src/__tests__/) because
-// `@jdm/ui` has no test runner of its own — same precedent as the
+// `@ccc/ui` has no test runner of its own — same precedent as the
 // HexBadge / BadgeRow tests added in chunk 17.
 //
 // react-native + react-native-svg + lucide-react-native are stubbed to
@@ -156,7 +156,7 @@ describe('BadgeDetail', () => {
   };
 
   it('renders the rarity · category pill (canon: badges.jsx line 909)', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
+    const { BadgeDetail } = await import('@ccc/ui');
     await renderEl(
       <BadgeDetail
         entry={baseEntry}
@@ -172,13 +172,13 @@ describe('BadgeDetail', () => {
     expect(container.textContent ?? '').toContain('Raro · Carros');
   });
 
-  it('uses every category label (eventos / carros / comunidade / jdm)', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
-    const cases: Array<['eventos' | 'carros' | 'comunidade' | 'jdm', string]> = [
+  it('uses every category label (eventos / carros / comunidade / ccc)', async () => {
+    const { BadgeDetail } = await import('@ccc/ui');
+    const cases: Array<['eventos' | 'carros' | 'comunidade' | 'ccc', string]> = [
       ['eventos', 'Eventos'],
       ['carros', 'Carros'],
       ['comunidade', 'Comunidade'],
-      ['jdm', 'CCC'],
+      ['ccc', 'CCC'],
     ];
     for (const [cat, label] of cases) {
       await renderEl(
@@ -192,7 +192,7 @@ describe('BadgeDetail', () => {
   });
 
   it('renders the Voltar affordance only when onBack is supplied', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
+    const { BadgeDetail } = await import('@ccc/ui');
     await renderEl(<BadgeDetail entry={baseEntry} state={{ code: 'CAR-001', state: 'locked' }} />);
     expect(container.querySelector('i[data-icon="ArrowLeft"]')).toBeNull();
     expect(container.textContent ?? '').not.toContain('Voltar');
@@ -214,7 +214,7 @@ describe('BadgeDetail', () => {
   });
 
   it('marks the pin button aria-disabled when pinCount >= pinCap and not already pinned', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
+    const { BadgeDetail } = await import('@ccc/ui');
     const fn = vi.fn();
     await renderEl(
       <BadgeDetail
@@ -242,7 +242,7 @@ describe('BadgeDetail', () => {
   });
 
   it('pin button fires onTogglePin under the cap', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
+    const { BadgeDetail } = await import('@ccc/ui');
     const fn = vi.fn();
     await renderEl(
       <BadgeDetail
@@ -269,7 +269,7 @@ describe('BadgeDetail', () => {
   });
 
   it('omits the pin button on locked and locked_premium states', async () => {
-    const { BadgeDetail } = await import('@jdm/ui');
+    const { BadgeDetail } = await import('@ccc/ui');
     const fn = vi.fn();
     await renderEl(
       <BadgeDetail

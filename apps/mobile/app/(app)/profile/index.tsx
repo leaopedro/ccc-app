@@ -1,16 +1,17 @@
-import type { PublicProfile } from '@jdm/shared/profile';
+import type { PublicProfile } from '@ccc/shared/profile';
+import { PremiumBadge } from '@ccc/ui';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   Bell,
   BellDot,
   CarFront,
   ChevronRight,
+  Gem,
   LogOut,
   MapPinned,
   MessageCircle,
   Package,
   PencilLine,
-  Star,
 } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -29,6 +30,7 @@ import { useAuth } from '~/auth/context';
 import { authCopy } from '~/copy/auth';
 import { notificationsCopy } from '~/copy/notifications';
 import { profileCopy } from '~/copy/profile';
+import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { useUnreadCount } from '~/hooks/useUnreadCount';
 import { pickAndUpload } from '~/lib/upload-image';
 import { theme } from '~/theme';
@@ -87,6 +89,7 @@ export default function ProfileMenuScreen() {
   const { logout } = useAuth();
   const router = useRouter();
   const { count: unreadCount } = useUnreadCount(true);
+  const { subscription } = usePremiumSubscription();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -168,6 +171,14 @@ export default function ProfileMenuScreen() {
           <Text style={styles.name}>{profile.name}</Text>
           <Text style={styles.meta}>{profile.email}</Text>
           {location ? <Text style={styles.meta}>{location}</Text> : null}
+          {subscription?.active && subscription.tier ? (
+            <View style={styles.premiumRow}>
+              <PremiumBadge isPremiumActive tier={subscription.tier} />
+              <Text style={styles.premiumLabel}>
+                {profileCopy.profile.memberTier(subscription.tier)}
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.avatarLink}>
             {uploading ? profileCopy.profile.avatarUploading : profileCopy.profile.avatarChange}
           </Text>
@@ -222,16 +233,16 @@ export default function ProfileMenuScreen() {
           onPress={() => router.push('/profile/garage' as never)}
         />
         <MenuRow
+          icon={<Gem color={theme.colors.fg} size={18} strokeWidth={1.75} />}
+          label={profileCopy.menu.assinatura}
+          hint={profileCopy.menu.assinaturaHint}
+          onPress={() => router.push('/assinaturas' as never)}
+        />
+        <MenuRow
           icon={<MessageCircle color={theme.colors.fg} size={18} strokeWidth={1.75} />}
           label={profileCopy.menu.support}
           hint={profileCopy.menu.supportHint}
           onPress={() => router.push('/profile/support' as never)}
-        />
-        <MenuRow
-          icon={<Star color={theme.colors.fg} size={18} strokeWidth={1.75} />}
-          label="Premium Gold"
-          hint="Gerencie sua assinatura premium"
-          onPress={() => router.push('/profile/premium' as never)}
         />
         <MenuRow
           icon={<LogOut color={theme.colors.accent} size={18} strokeWidth={1.75} />}
@@ -272,6 +283,8 @@ const styles = StyleSheet.create({
   heroText: { flex: 1, gap: theme.spacing.xs },
   name: { color: theme.colors.fg, fontSize: theme.font.size.xl, fontWeight: '700' },
   meta: { color: theme.colors.muted, fontSize: theme.font.size.md },
+  premiumRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  premiumLabel: { color: theme.colors.fg, fontSize: 12, fontWeight: '600' },
   avatarLink: {
     marginTop: theme.spacing.sm,
     color: theme.colors.fg,

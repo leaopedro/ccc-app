@@ -6,9 +6,9 @@
 
 **Architecture:** Three new files under `apps/admin/app/`: a public `premium/page.tsx` (NOT inside the `(authed)` route group so unauthenticated visitors can see it; auth is checked at CTA time), a `'use server'` `premium/actions.ts` (calls `POST /api/me/premium/checkout`, returns Stripe URL), and an `(authed)` `me/billing/page.tsx` (calls `POST /api/me/premium/billing-portal`, redirects immediately). Pricing values are fetched from the public `GET /api/premium/pricing` endpoint (shipped by chunk F8.20). Member status (when authed) is fetched in parallel from `GET /api/me/premium/status` (shipped by chunk F8.11). Tests live in `apps/admin/app/premium/__tests__/page.test.tsx` using `renderToStaticMarkup` (SSR components) and `vi.mock` (server actions + pricing fetch + status fetch).
 
-> **PLAN-REWRITE NOTE (run 10 orchestrator):** Earlier drafts of this plan extended `GET /api/me/premium/status` with `?priceCatalog=true`. That approach was REJECTED. Chunk F8.20 already shipped a dedicated unauthed `GET /api/premium/pricing` route (PR #470, merged on `main`). All pricing fetches MUST hit `/api/premium/pricing` and parse `premiumPricingResponseSchema` from `@jdm/shared/premium`. The status endpoint stays auth-only with no `priceCatalog` field. See "Pricing endpoint" section below for the locked contract.
+> **PLAN-REWRITE NOTE (run 10 orchestrator):** Earlier drafts of this plan extended `GET /api/me/premium/status` with `?priceCatalog=true`. That approach was REJECTED. Chunk F8.20 already shipped a dedicated unauthed `GET /api/premium/pricing` route (PR #470, merged on `main`). All pricing fetches MUST hit `/api/premium/pricing` and parse `premiumPricingResponseSchema` from `@ccc/shared/premium`. The status endpoint stays auth-only with no `priceCatalog` field. See "Pricing endpoint" section below for the locked contract.
 
-**Tech Stack:** Next.js App Router server components, `'use server'` actions, Vitest + `react-dom/server` (`renderToStaticMarkup`) for tests, existing `apiFetch` helper, `@jdm/shared/premium` zod types (populated by chunk F8.11), existing `garageTokens.brand.*` hex values from `@jdm/ui` (no unresolved CSS vars — per XPScoreboardWeb pattern), Anton font via `font-[Anton]` Tailwind utility.
+**Tech Stack:** Next.js App Router server components, `'use server'` actions, Vitest + `react-dom/server` (`renderToStaticMarkup`) for tests, existing `apiFetch` helper, `@ccc/shared/premium` zod types (populated by chunk F8.11), existing `garageTokens.brand.*` hex values from `@ccc/ui` (no unresolved CSS vars — per XPScoreboardWeb pattern), Anton font via `font-[Anton]` Tailwind utility.
 
 ---
 
@@ -17,7 +17,7 @@
 **Chosen:** the public unauthed `GET /api/premium/pricing` endpoint shipped by chunk F8.20. Response is exactly:
 
 ```ts
-// from @jdm/shared/premium — premiumPricingResponseSchema
+// from @ccc/shared/premium — premiumPricingResponseSchema
 {
   monthly: {
     priceId: string;
@@ -97,15 +97,15 @@ grep -n "premiumPricingResponseSchema\|premiumStatusSchema" \
 ls apps/api/src/routes/premium-pricing.ts 2>/dev/null
 ```
 
-Expected: `checkout` + `billing-portal` route entries; both `premiumStatusSchema` AND `premiumPricingResponseSchema` exported from `@jdm/shared/premium`; `premium-pricing.ts` route file exists. If any is missing, the upstream chunks (F8.09 / F8.11 / F8.20) have not landed — STOP.
+Expected: `checkout` + `billing-portal` route entries; both `premiumStatusSchema` AND `premiumPricingResponseSchema` exported from `@ccc/shared/premium`; `premium-pricing.ts` route file exists. If any is missing, the upstream chunks (F8.09 / F8.11 / F8.20) have not landed — STOP.
 
-- [ ] **PF-3a: Confirm `@jdm/shared` dist contains pricing exports**
+- [ ] **PF-3a: Confirm `@ccc/shared` dist contains pricing exports**
 
 ```bash
 grep -c "premiumPricingResponseSchema" packages/shared/dist/premium.js
 ```
 
-Expected: `>= 1`. If `0`, rebuild: `pnpm --filter @jdm/shared build` (canon §F8.13).
+Expected: `>= 1`. If `0`, rebuild: `pnpm --filter @ccc/shared build` (canon §F8.13).
 
 - [ ] **PF-4: Confirm `GROWTH_PREMIUM_BILLING_ENABLED` is in the API env schema**
 
@@ -138,7 +138,7 @@ Expected: appears with `z.coerce.boolean().default(false)`. If missing, chunk F8
 ```ts
 'use server';
 
-import type { PremiumCadence } from '@jdm/shared/premium';
+import type { PremiumCadence } from '@ccc/shared/premium';
 import { z } from 'zod';
 
 import { apiFetch } from '~/lib/api';
@@ -181,13 +181,13 @@ export async function subscribeAction(cadence: PremiumCadence): Promise<string> 
  * Gross prices only — no devfee breakdown per canon §F8.1 user-facing rule.
  */
 
-import { garageTokens } from '@jdm/ui/web';
+import { garageTokens } from '@ccc/ui/web';
 import {
   premiumPricingResponseSchema,
   premiumStatusSchema,
   type PremiumPricingResponse,
   type PremiumStatus,
-} from '@jdm/shared/premium';
+} from '@ccc/shared/premium';
 
 import { readRole } from '~/lib/auth-session';
 import { apiFetch } from '~/lib/api';
@@ -457,10 +457,10 @@ import {
   premiumStatusSchema,
   type PremiumPricingResponse,
   type PremiumStatus,
-} from '@jdm/shared/premium';
+} from '@ccc/shared/premium';
 ```
 
-If `pnpm --filter @jdm/admin typecheck` reports either import as missing, the `@jdm/shared` dist is stale — rebuild with `pnpm --filter @jdm/shared build` (canon §F8.13). Do NOT compose anything locally.
+If `pnpm --filter @ccc/admin typecheck` reports either import as missing, the `@ccc/shared` dist is stale — rebuild with `pnpm --filter @ccc/shared build` (canon §F8.13). Do NOT compose anything locally.
 
 ---
 
@@ -473,7 +473,7 @@ All tests use `renderToStaticMarkup` from `react-dom/server` for server-componen
 **Test fixtures:**
 
 ```ts
-import type { PremiumPricingResponse, PremiumStatus } from '@jdm/shared/premium';
+import type { PremiumPricingResponse, PremiumStatus } from '@ccc/shared/premium';
 
 const pricing: PremiumPricingResponse = {
   monthly: {
@@ -667,7 +667,7 @@ it('degrades to not-premium when authed status fetch throws but pricing succeeds
 **Verification command:**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/premium/__tests__/page.test.tsx
 ```
 
 ---
@@ -691,7 +691,7 @@ mkdir -p apps/admin/app/premium/__tests__
 - [ ] **1.3 — Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/premium/__tests__/page.test.tsx
 ```
 
 Expected: "Cannot find module '../page'" or "Failed to resolve import". That is the red signal.
@@ -714,10 +714,10 @@ git commit -m "test(admin): failing F8.17 premium page specs"
 - [ ] **2.2 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
-If `PremiumCadence` is missing from `@jdm/shared/premium`, define a local fallback type and document the deviation:
+If `PremiumCadence` is missing from `@ccc/shared/premium`, define a local fallback type and document the deviation:
 
 ```ts
 type PremiumCadence = 'monthly' | 'annual';
@@ -741,7 +741,7 @@ git commit -m "feat(admin): subscribeAction server action (F8.17)"
 - [ ] **3.2 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 - [ ] **3.3 — Commit**
@@ -763,7 +763,7 @@ git commit -m "feat(admin): SubscribeButton client component (F8.17)"
 mkdir -p apps/admin/app/me/billing
 ```
 
-- [ ] **4.2 — Confirm both required exports land in `@jdm/shared/premium`**
+- [ ] **4.2 — Confirm both required exports land in `@ccc/shared/premium`**
 
 ```bash
 grep -n "premiumPricingResponseSchema\|premiumStatusSchema" packages/shared/src/premium.ts | head -10
@@ -771,14 +771,14 @@ grep -n "premiumPricingResponseSchema\|premiumStatusSchema" packages/shared/src/
 
 Both names must appear (F8.20 + F8.11). If either is missing, the upstream chunk has not landed — STOP. Do NOT compose anything locally.
 
-- [ ] **4.3 — Write `premium/page.tsx`** per the code shape above. Import `premiumPricingResponseSchema`, `premiumStatusSchema`, `PremiumPricingResponse`, `PremiumStatus` from `@jdm/shared/premium` directly.
+- [ ] **4.3 — Write `premium/page.tsx`** per the code shape above. Import `premiumPricingResponseSchema`, `premiumStatusSchema`, `PremiumPricingResponse`, `PremiumStatus` from `@ccc/shared/premium` directly.
 
 - [ ] **4.4 — Write `me/billing/page.tsx`** per the code shape above.
 
 - [ ] **4.5 — Run the tests (expect green)**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/premium/__tests__/page.test.tsx
 ```
 
 Expected: all 10 specs PASS.
@@ -786,10 +786,10 @@ Expected: all 10 specs PASS.
 - [ ] **4.6 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
-Fix any TypeScript errors. Common: `readRole` return type mismatch (it returns `string | null`; the `isAuthed` boolean cast is `role !== null`). If `garageTokens` is not importable from `@jdm/ui/web`, check `packages/ui/src/web/index.ts` — it already exports `garageTokens` as of chunk 41.
+Fix any TypeScript errors. Common: `readRole` return type mismatch (it returns `string | null`; the `isAuthed` boolean cast is `role !== null`). If `garageTokens` is not importable from `@ccc/ui/web`, check `packages/ui/src/web/index.ts` — it already exports `garageTokens` as of chunk 41.
 
 - [ ] **4.7 — Commit**
 
@@ -805,7 +805,7 @@ git commit -m "feat(admin): /premium pricing page + /me/billing portal redirect 
 - [ ] **5.1 — Confirm all 10 tests PASS**
 
 ```bash
-pnpm --filter @jdm/admin exec vitest run app/premium/__tests__/page.test.tsx
+pnpm --filter @ccc/admin exec vitest run app/premium/__tests__/page.test.tsx
 ```
 
 Expected output: `10 passed`.
@@ -813,13 +813,13 @@ Expected output: `10 passed`.
 - [ ] **5.2 — Typecheck clean**
 
 ```bash
-pnpm --filter @jdm/admin typecheck
+pnpm --filter @ccc/admin typecheck
 ```
 
 - [ ] **5.3 — Lint touched files only**
 
 ```bash
-pnpm --filter @jdm/admin lint -- \
+pnpm --filter @ccc/admin lint -- \
   apps/admin/app/premium/page.tsx \
   apps/admin/app/premium/actions.ts \
   apps/admin/app/premium/subscribe-button.tsx \
@@ -843,7 +843,7 @@ git push -u origin feat/jdma-f8-billing-17
 
 ## Deviations (lock at plan time, document in PR body)
 
-1. **Pricing via the dedicated unauthed `GET /api/premium/pricing` endpoint (F8.20), NOT `?priceCatalog=true`.** Earlier plan drafts proposed extending the status endpoint with a `?priceCatalog=true` query param; that approach was rejected during run 9 in favor of the standalone route shipped by chunk F8.20. The current plan consumes `premiumPricingResponseSchema` from `@jdm/shared/premium` and fetches pricing separately from status. Status is only fetched when the visitor is authed. Documented at the top of `premium/page.tsx`.
+1. **Pricing via the dedicated unauthed `GET /api/premium/pricing` endpoint (F8.20), NOT `?priceCatalog=true`.** Earlier plan drafts proposed extending the status endpoint with a `?priceCatalog=true` query param; that approach was rejected during run 9 in favor of the standalone route shipped by chunk F8.20. The current plan consumes `premiumPricingResponseSchema` from `@ccc/shared/premium` and fetches pricing separately from status. Status is only fetched when the visitor is authed. Documented at the top of `premium/page.tsx`.
 
 2. **`SubscribeButton` is a co-located `'use client'` component** (`premium/subscribe-button.tsx`). The pricing page itself is a server component; the subscribe button cannot be — it calls a server action on user interaction and updates `window.location.href`. Splitting avoids making the whole page a client component. Tests stub it with `vi.mock('../subscribe-button', ...)`.
 
@@ -859,7 +859,7 @@ git push -u origin feat/jdma-f8-billing-17
 
 - [ ] Branch `feat/jdma-f8-billing-17` from fresh `main` (PF-1 + PF-2 verified).
 - [ ] All 10 specs in `app/premium/__tests__/page.test.tsx` PASS.
-- [ ] `pnpm --filter @jdm/admin typecheck` clean.
+- [ ] `pnpm --filter @ccc/admin typecheck` clean.
 - [ ] Lint clean on touched files.
 - [ ] Feature-flag-off state renders maintenance message (spec #8 covers it).
 - [ ] No devfee text on pricing cards (spec #9 + canon §F8.1 user-facing).

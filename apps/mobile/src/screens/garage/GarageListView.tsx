@@ -1,4 +1,4 @@
-import { type GaragePremiumTier, ParkingStallCard, type ParkingStallCarPayload } from '@jdm/ui';
+import { type GaragePremiumTier, ParkingStallCard, type ParkingStallCarPayload } from '@ccc/ui';
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet } from 'react-native';
 

@@ -1,4 +1,4 @@
-import { Text } from '@jdm/ui';
+import { Text } from '@ccc/ui';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';

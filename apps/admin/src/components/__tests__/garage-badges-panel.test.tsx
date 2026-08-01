@@ -1,4 +1,4 @@
-import type { BadgeCatalogEntry } from '@jdm/shared/badges';
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -28,8 +28,8 @@ const catalog: BadgeCatalogEntry[] = [
     premiumExclusive: true,
   },
   {
-    code: 'JDM-003',
-    category: 'jdm',
+    code: 'CCC-003',
+    category: 'ccc',
     rarity: 'legendary',
     icon: 'founder',
     premiumExclusive: true,
@@ -44,7 +44,7 @@ describe('GarageBadgesPanel (render)', () => {
     expect(html).toContain('Conquista EVT-001');
     expect(html).toContain('Conquista EVT-002');
     expect(html).toContain('Conquista CAR-003');
-    expect(html).toContain('Conquista JDM-003');
+    expect(html).toContain('Conquista CCC-003');
   });
 
   it('marks earned badges with the earned indicator + earned variant', () => {

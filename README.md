@@ -27,8 +27,8 @@ cp packages/db/.env.example packages/db/.env
 
 # 3. Start Postgres + run migrations
 docker compose up -d postgres
-pnpm --filter @jdm/db db:migrate
-pnpm --filter @jdm/db db:generate
+pnpm --filter @ccc/db db:migrate
+pnpm --filter @ccc/db db:generate
 
 # 4. Run everything
 pnpm dev
@@ -46,22 +46,22 @@ conflicts with any Homebrew Postgres already running.
 ## Running individual apps
 
 ```bash
-pnpm --filter @jdm/api dev
-pnpm --filter @jdm/admin dev
-pnpm --filter @jdm/mobile start
+pnpm --filter @ccc/api dev
+pnpm --filter @ccc/admin dev
+pnpm --filter @ccc/mobile start
 ```
 
 ## Tests
 
 ```bash
 pnpm test                    # all workspaces
-pnpm --filter @jdm/api test  # api only (spins up Postgres via Testcontainers)
+pnpm --filter @ccc/api test  # api only (spins up Postgres via Testcontainers)
 ```
 
 Run a single test:
 
 ```bash
-pnpm --filter @jdm/api exec vitest run test/health.test.ts -t "returns ok"
+pnpm --filter @ccc/api exec vitest run test/health.test.ts -t "returns ok"
 ```
 
 ## Lint + typecheck + format

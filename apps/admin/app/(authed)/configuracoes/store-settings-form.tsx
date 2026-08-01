@@ -1,9 +1,9 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import type { StoreSettings } from '@jdm/shared/store';
+import type { StoreSettings } from '@ccc/shared/store';
 import { useState, useTransition } from 'react';
 
+import { brand } from '~/brand';
 import { updateAdminStoreSettingsAction } from '~/lib/store-settings-actions';
 
 const inputCls =

@@ -1,9 +1,9 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   beginCheckoutResponseSchema,
   getCartResponseSchema,
   upsertCartItemResponseSchema,
-} from '@jdm/shared/cart';
+} from '@ccc/shared/cart';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';

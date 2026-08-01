@@ -1,5 +1,5 @@
-import { brand } from '@jdm/design';
-import { myTicketSchema, type MyTicket } from '@jdm/shared/tickets';
+import { brand } from '@ccc/design';
+import { myTicketSchema, type MyTicket } from '@ccc/shared/tickets';
 import { z } from 'zod';
 
 const STORAGE_KEY = `@${brand.app.storagePrefix}/tickets/offline-store/v1`;

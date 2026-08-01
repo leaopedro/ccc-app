@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminStoreVariantCreateSchema, adminStoreVariantUpdateSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminStoreVariantCreateSchema, adminStoreVariantUpdateSchema } from '@ccc/shared/admin';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 

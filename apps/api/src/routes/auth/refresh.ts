@@ -1,10 +1,10 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   ACCOUNT_DISABLED_ERROR,
   INACTIVE_USER_STATUSES,
   authResponseSchema,
   refreshSchema,
-} from '@jdm/shared/auth';
+} from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {

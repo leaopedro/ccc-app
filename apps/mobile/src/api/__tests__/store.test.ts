@@ -6,7 +6,7 @@ import {
   storeProductListResponseSchema,
   storeSettingsSchema,
   storeProductTypeListResponseSchema,
-} from '@jdm/shared/store';
+} from '@ccc/shared/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));

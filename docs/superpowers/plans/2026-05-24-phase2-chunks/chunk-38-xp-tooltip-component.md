@@ -1,10 +1,10 @@
-# Chunk 38 — `XPTooltip` component (`@jdm/ui`) Implementation Plan
+# Chunk 38 — `XPTooltip` component (`@ccc/ui`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land a centered-card overlay in `@jdm/ui` listing the 8 XP-earning actions (icon + label + `+N XP`) and the dashed-bordered PT-BR footer disclaimer. **Tooltip, NOT a bottom sheet** — canonical UI deviation from Phase 1. **Mobile-only surface** (canon §12): SSR has no overlay; the `ProfileStatsWeb` wrapper omits the opener and renders `?` static.
+**Goal:** Land a centered-card overlay in `@ccc/ui` listing the 8 XP-earning actions (icon + label + `+N XP`) and the dashed-bordered PT-BR footer disclaimer. **Tooltip, NOT a bottom sheet** — canonical UI deviation from Phase 1. **Mobile-only surface** (canon §12): SSR has no overlay; the `ProfileStatsWeb` wrapper omits the opener and renders `?` static.
 
-**Architecture:** Single self-contained `XPTooltip.tsx`. RN `Modal` + transparent + full-bleed `Pressable` backdrop (Phase 1 idiom — `packages/ui/src/SheetShell.tsx:24-35`). Backdrop layer is an `expo-blur` `BlurView` (intensity 40, dark tint) wrapped in the dim `Pressable` — keeps the Phase 2 §2C.38 backdrop blur in scope. Card centered via flex. Backdrop tap → `onClose`. Inner `Pressable` swallows card-taps. Static 8-row `ScrollView`. Icons via `lucide-react-native` per `BadgeGlyph.tsx:1-19`. `XP_RULES` lives **inside `@jdm/ui`** — UI copy stays out of `@jdm/shared`.
+**Architecture:** Single self-contained `XPTooltip.tsx`. RN `Modal` + transparent + full-bleed `Pressable` backdrop (Phase 1 idiom — `packages/ui/src/SheetShell.tsx:24-35`). Backdrop layer is an `expo-blur` `BlurView` (intensity 40, dark tint) wrapped in the dim `Pressable` — keeps the Phase 2 §2C.38 backdrop blur in scope. Card centered via flex. Backdrop tap → `onClose`. Inner `Pressable` swallows card-taps. Static 8-row `ScrollView`. Icons via `lucide-react-native` per `BadgeGlyph.tsx:1-19`. `XP_RULES` lives **inside `@ccc/ui`** — UI copy stays out of `@ccc/shared`.
 
 **Tech Stack:** TS, React 19, RN 0.81, `lucide-react-native`, `expo-blur`, `garageTokens`. Tests on Vitest 3 + `@testing-library/react-native` (first test file in `packages/ui/` — harness setup is part of the chunk; mobile RN/SVG/`lucide-react-native` stubs reused).
 
@@ -25,7 +25,7 @@
 - `packages/ui/src/index.ts` (MODIFY) — re-export the 4 symbols.
 - `packages/ui/src/__tests__/XPTooltip.test.tsx` (NEW; `__tests__/` dir is also new).
 - `packages/ui/vitest.config.ts` (NEW) — mirrors `apps/mobile/vitest.config.ts` aliases (`lucide-react-native` stub).
-- `packages/ui/test-stubs/lucide-react-native.tsx` (NEW) — copy of `apps/mobile/test-stubs/lucide-react-native.tsx` so `@jdm/ui` tests stand alone (canon §13).
+- `packages/ui/test-stubs/lucide-react-native.tsx` (NEW) — copy of `apps/mobile/test-stubs/lucide-react-native.tsx` so `@ccc/ui` tests stand alone (canon §13).
 - `packages/ui/package.json` (MODIFY) — test scripts + `expo-blur` peer dep + test devDeps.
 - `pnpm-lock.yaml` (MODIFY) — picks up `expo-blur` + test devDeps (canon §13).
 - `apps/mobile/test-stubs/expo-blur.tsx` (NEW) — barrel-cascade prophylactic (canon §15); mirrors `lucide-react-native.tsx` stub.
@@ -82,7 +82,7 @@ git checkout -b feat/jdma-garage-phase2-38
 
 ## Backdrop blur (spec-aligned)
 
-Outline §2C.38 mandates "Backdrop + blur". Earlier draft dropped blur to a flat dim; that deviation is NOT authorized by §C1–C14. **Revert to the spec.** Add `expo-blur` (Expo SDK 54 ships ~`~15.x` — pin to match other Expo packages in `apps/mobile/package.json`) as a peer dep of `@jdm/ui` and a transitive dep via `apps/mobile/package.json` (Expo prebuild picks it up; no manual EAS native module wiring needed since `expo-blur` is an Expo Modules package).
+Outline §2C.38 mandates "Backdrop + blur". Earlier draft dropped blur to a flat dim; that deviation is NOT authorized by §C1–C14. **Revert to the spec.** Add `expo-blur` (Expo SDK 54 ships ~`~15.x` — pin to match other Expo packages in `apps/mobile/package.json`) as a peer dep of `@ccc/ui` and a transitive dep via `apps/mobile/package.json` (Expo prebuild picks it up; no manual EAS native module wiring needed since `expo-blur` is an Expo Modules package).
 
 Backdrop layer composition (inside Modal):
 
@@ -97,11 +97,11 @@ Backdrop layer composition (inside Modal):
 
 ---
 
-## Task 1 — Vitest harness for `@jdm/ui`
+## Task 1 — Vitest harness for `@ccc/ui`
 
 **Files:** `packages/ui/vitest.config.ts` (NEW), `packages/ui/test-stubs/lucide-react-native.tsx` (NEW), `packages/ui/package.json` (MODIFY), `pnpm-lock.yaml` (MODIFY).
 
-`@jdm/ui` has no tests yet. Mirror `apps/mobile/vitest.config.ts` 1:1 — same `lucide-react-native` alias + the same `esbuild.jsx: 'automatic'` override + the same `deps.external` for native-only packages. The `lucide-react-native` stub is REQUIRED: `@jdm/ui` barrel already pulls `BadgeGlyph` → real lucide ESM, which vitest can't transform under jsdom (per the comment in the mobile stub file). Without the alias the harness will explode on any test that touches the barrel.
+`@ccc/ui` has no tests yet. Mirror `apps/mobile/vitest.config.ts` 1:1 — same `lucide-react-native` alias + the same `esbuild.jsx: 'automatic'` override + the same `deps.external` for native-only packages. The `lucide-react-native` stub is REQUIRED: `@ccc/ui` barrel already pulls `BadgeGlyph` → real lucide ESM, which vitest can't transform under jsdom (per the comment in the mobile stub file). Without the alias the harness will explode on any test that touches the barrel.
 
 - [ ] **Step 1.1 — Create `packages/ui/test-stubs/lucide-react-native.tsx`**
 
@@ -170,13 +170,13 @@ Add to `devDependencies` (alphabetical; versions match the mobile workspace pins
 
 Mirror the `expo-blur` version pin to whichever Expo-SDK-54 minor lands; `jsdom: ^29.1.1` matches mobile.
 
-> NOTE — agent does NOT run `pnpm install` itself per canon §13. The install in Step 1.4 is what touches `pnpm-lock.yaml`; agent stages the lockfile diff after install completes. `expo-blur` propagates to `apps/mobile` transitively through `@jdm/ui`'s peer dep; Expo prebuild walks workspace peer deps, so no separate edit to `apps/mobile/package.json` is needed.
+> NOTE — agent does NOT run `pnpm install` itself per canon §13. The install in Step 1.4 is what touches `pnpm-lock.yaml`; agent stages the lockfile diff after install completes. `expo-blur` propagates to `apps/mobile` transitively through `@ccc/ui`'s peer dep; Expo prebuild walks workspace peer deps, so no separate edit to `apps/mobile/package.json` is needed.
 
 - [ ] **Step 1.4 — Install + verify empty runner**
 
 ```bash
 pnpm install
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui test
 ```
 
 Expected: install completes; `pnpm-lock.yaml` diff shows `expo-blur` + the 5 new test devDeps only; `test` exits 0 via `passWithNoTests`.
@@ -188,7 +188,7 @@ git add packages/ui/vitest.config.ts \
         packages/ui/test-stubs/lucide-react-native.tsx \
         packages/ui/package.json \
         pnpm-lock.yaml
-git commit -m "chore(ui): add vitest harness + RN testing-library + expo-blur for @jdm/ui"
+git commit -m "chore(ui): add vitest harness + RN testing-library + expo-blur for @ccc/ui"
 ```
 
 ---
@@ -208,7 +208,7 @@ git commit -m "chore(ui): add vitest harness + RN testing-library + expo-blur fo
 
 **Files (Phase 2D):** `apps/mobile/test-stubs/expo-blur.tsx` (NEW), `apps/mobile/vitest.config.ts` (MODIFY).
 
-**Why this task exists** (from `.handoffs/orchestrator-state.md` canon §15, added after chunk 36 + 37 cascade): adding ANY new runtime dep on `packages/ui/package.json` with untransformed-ESM-in-build (here: `expo-blur` ships native binding + ESM that vitest can't transform under jsdom) cascades into CI failures on ~30+ unrelated `apps/mobile` tests that load the new component through the `@jdm/ui` barrel — even though THIS chunk's own test (which keeps `expo-blur` `deps.external` in `packages/ui/vitest.config.ts`) passes locally. Per-file `vi.mock` does NOT scale once the dep enters the barrel.
+**Why this task exists** (from `.handoffs/orchestrator-state.md` canon §15, added after chunk 36 + 37 cascade): adding ANY new runtime dep on `packages/ui/package.json` with untransformed-ESM-in-build (here: `expo-blur` ships native binding + ESM that vitest can't transform under jsdom) cascades into CI failures on ~30+ unrelated `apps/mobile` tests that load the new component through the `@ccc/ui` barrel — even though THIS chunk's own test (which keeps `expo-blur` `deps.external` in `packages/ui/vitest.config.ts`) passes locally. Per-file `vi.mock` does NOT scale once the dep enters the barrel.
 
 Mirror the existing `lucide-react-native` global-alias pattern in `apps/mobile/vitest.config.ts`. The stub forwards-ref a `View` with no blur logic — tests assert text + structure, not blur pixels, so a no-op host is correct.
 
@@ -218,7 +218,7 @@ Mirror the existing `lucide-react-native` global-alias pattern in `apps/mobile/v
 /* expo-blur jsdom stub — see canon §15 (barrel-cascade prophylactic).
  *
  * Reason: real expo-blur ships native binding + ESM that vitest can't
- * transform under jsdom. `XPTooltip` lives in @jdm/ui's barrel and imports
+ * transform under jsdom. `XPTooltip` lives in @ccc/ui's barrel and imports
  * `BlurView`; ~30+ mobile tests would explode on transitive load. Stub
  * mirrors the runtime ergonomics of the lucide-react-native stub.
  *
@@ -250,19 +250,19 @@ In the `resolve.alias` block, append below the existing `lucide-react-native` li
 
 ```ts
 // `expo-blur` ships a native binding + ESM that vitest can't transform
-// under jsdom. Once `XPTooltip` (chunk 38) joined `@jdm/ui`'s barrel,
-// every mobile test that pulls anything from `@jdm/ui` started loading
+// under jsdom. Once `XPTooltip` (chunk 38) joined `@ccc/ui`'s barrel,
+// every mobile test that pulls anything from `@ccc/ui` started loading
 // expo-blur transitively. Redirect to the local stub. (Canon §15.)
 'expo-blur': path.resolve(__dirname, 'test-stubs/expo-blur.tsx'),
 ```
 
 - [ ] **Step 1.5.3 — Verify the cascade prophylactic actually works**
 
-Run two unrelated mobile tests that load `@jdm/ui` (per canon §15 mandate — chunk's own test alone is insufficient):
+Run two unrelated mobile tests that load `@ccc/ui` (per canon §15 mandate — chunk's own test alone is insufficient):
 
 ```bash
-pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/BadgesSheet.test.tsx
-pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/CoverPickerSheet.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/BadgesSheet.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/CoverPickerSheet.test.tsx
 ```
 
 Both must PASS. If either FAILs with `expo-blur` parse / resolve errors, the alias is mis-placed or the stub path is wrong — fix before proceeding to Task 2.
@@ -365,7 +365,7 @@ describe('<XPTooltip />', () => {
 - [ ] **Step 2.2 — Run; confirm 8 fail with "module not found"**
 
 ```bash
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui test
 ```
 
 Expected: all 8 FAIL with `Cannot find module '../XPTooltip.js'`. Any other failure mode = harness bug; fix Task 1 first. Task 3 adds the file (constant + a temporary `XPTooltip` stub) so the failure narrows from "module not found" → "rules pass, component renders nothing" — locked sequencing per canon §"failing-test sequencing".
@@ -497,7 +497,7 @@ export function XPTooltip(_props: XPTooltipProps) {
 - [ ] **Step 3.2 — Re-run tests**
 
 ```bash
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui test
 ```
 
 Expected:
@@ -676,7 +676,7 @@ Notes:
 - [ ] **Step 4.2 — Run tests; expect 8/8 PASS**
 
 ```bash
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui test
 ```
 
 If the `onRequestClose` test fails, it's testID propagation: some `@testing-library/react-native` versions surface `Modal` differently. Fallback: query `getByA11yLabel('Fechar')` for the backdrop and restructure the request-close case to fire on the Modal host directly via `UNSAFE_root`. Investigate before patching the component.
@@ -684,7 +684,7 @@ If the `onRequestClose` test fails, it's testID propagation: some `@testing-libr
 - [ ] **Step 4.3 — Typecheck**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
+pnpm --filter @ccc/ui typecheck
 ```
 
 Expected: clean. `LucideIcon` import path matches `BadgeGlyph.tsx`.
@@ -704,8 +704,8 @@ export { XPTooltip, XP_RULES, type XPTooltipProps, type XPRule } from './XPToolt
 - [ ] **Step 5.2 — Re-verify**
 
 ```bash
-pnpm --filter @jdm/ui typecheck
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui typecheck
+pnpm --filter @ccc/ui test
 ```
 
 Expected: typecheck clean, 8/8 tests pass.
@@ -730,13 +730,13 @@ git push -u origin feat/jdma-garage-phase2-38
 gh pr create --base main \
   --title "feat(ui): XPTooltip centered-overlay component (chunk 38)" \
   --body "$(cat <<'EOF'
-Chunk 38 — `XPTooltip` (`@jdm/ui`).
+Chunk 38 — `XPTooltip` (`@ccc/ui`).
 
 ## Summary
 - Centered-overlay component (NOT bottom sheet — outline §301 deviation).
 - Local `XP_RULES` (8 entries) — single source of truth for user-facing XP copy. Awarder deltas mirrored from outline §437; drift guarded by contract test.
 - Locked PT-BR dashed-bordered footer: "XP não expira e não pode ser comprado. Premium dá um bônus único de +200 XP no momento da ativação."
-- First test harness in `@jdm/ui` (vitest + @testing-library/react-native).
+- First test harness in `@ccc/ui` (vitest + @testing-library/react-native).
 
 ## Deviations
 - **No tween/scale-pop animation.** RN `Modal animationType="fade"` only. Tween/scale-pop is Phase 2D.
@@ -744,8 +744,8 @@ Chunk 38 — `XPTooltip` (`@jdm/ui`).
 - **No `XPTooltip` in SSR.** Per canon §12, web `ProfileStatsWeb` renders `?` static; tooltip stays mobile-only.
 
 ## Test plan
-- [x] `pnpm --filter @jdm/ui test` — 8/8
-- [x] `pnpm --filter @jdm/ui typecheck` — clean
+- [x] `pnpm --filter @ccc/ui test` — 8/8
+- [x] `pnpm --filter @ccc/ui typecheck` — clean
 - [ ] Visual QA in chunk 40 (mobile owner integration) — out of scope here.
 
 ## Refs
@@ -768,11 +768,11 @@ Expected `{"baseRefName":"main"}`. Never merge feature → `production`; per CLA
 ## Verification
 
 ```bash
-pnpm --filter @jdm/ui typecheck
-pnpm --filter @jdm/ui test
+pnpm --filter @ccc/ui typecheck
+pnpm --filter @ccc/ui test
 # Canon §15 cascade verification — MANDATORY.
-pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/BadgesSheet.test.tsx
-pnpm --filter @jdm/mobile exec vitest run src/screens/garage/__tests__/CoverPickerSheet.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/BadgesSheet.test.tsx
+pnpm --filter @ccc/mobile exec vitest run src/screens/garage/__tests__/CoverPickerSheet.test.tsx
 ```
 
 All four must exit clean. The two mobile-barrel runs are the canon §15 cascade gate — failure on either means the `expo-blur` alias / stub in Task 1.5 didn't land correctly. Do **not** run the full repo sweep locally (`feedback_no_full_test_suite_locally`). Visual QA is deferred to chunk 40 (no Storybook/Snack scaffold in this repo).
@@ -797,8 +797,8 @@ File: `packages/ui/src/__tests__/XPTooltip.test.tsx`. **Total: 8 tests.**
 ## PR checklist
 
 - [ ] Branched from fresh `main` (not `production`).
-- [ ] `pnpm --filter @jdm/ui typecheck` clean.
-- [ ] `pnpm --filter @jdm/ui test` — 8/8.
+- [ ] `pnpm --filter @ccc/ui typecheck` clean.
+- [ ] `pnpm --filter @ccc/ui test` — 8/8.
 - [ ] No edits outside the 9 touched paths.
 - [ ] `XP_RULES` order matches outline §437 top-to-bottom.
 - [ ] Footer disclaimer matches outline §2C.38 verbatim.
@@ -827,7 +827,7 @@ File: `packages/ui/src/__tests__/XPTooltip.test.tsx`. **Total: 8 tests.**
 - [x] **Spec coverage:** every skeleton AC (centered card / 8 rules / dashed footer / backdrop dismiss / esc-back dismiss / backdrop blur) maps to a task + a test.
 - [x] **Placeholder scan:** all code blocks are complete; no TBD / hand-waved tests.
 - [x] **Type consistency:** `XPRule.key` literal-union matches `XP_RULES` rows exactly (verified by test #1). `XPTooltipProps` shape stable across the Task 3 stub, Task 4 real component, and the future chunk 39 wrapper.
-- [x] **Single source of truth:** `XP_RULES` lives in `@jdm/ui` per the hard rule (UI copy stays out of `@jdm/shared`). Server-deltas drift guarded by test #2.
+- [x] **Single source of truth:** `XP_RULES` lives in `@ccc/ui` per the hard rule (UI copy stays out of `@ccc/shared`). Server-deltas drift guarded by test #2.
 - [x] **Canon §12:** `XPTooltip` mobile-only; SSR has no overlay — documented in arch + deviations + component JSDoc.
 - [x] **Canon §13:** `pnpm-lock.yaml` + `packages/ui/package.json` in touched paths; `lucide-react-native` test stub mirrors `apps/mobile/test-stubs/lucide-react-native.tsx`.
 - [x] **Failing-test sequencing:** Task 3 ships a `null`-returning `XPTooltip` stub so 2 rules tests PASS + 6 component tests FAIL with assertion errors (not module errors). Task 4 deletes the stub then appends the real component.

@@ -1,5 +1,5 @@
-import type { PublicUser } from '@jdm/shared/auth';
-import type { LoginInput, SignupInput } from '@jdm/shared/auth';
+import type { PublicUser } from '@ccc/shared/auth';
+import type { LoginInput, SignupInput } from '@ccc/shared/auth';
 import {
   createContext,
   useCallback,
@@ -15,6 +15,7 @@ import { clearTokens, loadTokens, saveTokens, type StoredTokens } from './storag
 import { loginRequest, logoutRequest, meAuthed, refreshRequest, signupRequest } from '~/api/auth';
 import { registerTokenProvider } from '~/api/client';
 import { authCopy } from '~/copy/auth';
+import { migrateLegacyStorageKeys } from '~/lib/legacy-storage-migration';
 import { captureException } from '~/lib/sentry';
 import { usePushRegistration } from '~/notifications/use-push-registration';
 
@@ -111,6 +112,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const boot = async () => {
       try {
+        // One-time JDM -> CCC persisted-key rename. Must run before the first
+        // token read so upgrading users keep their session + offline data.
+        await migrateLegacyStorageKeys();
         const stored = await loadTokens();
         if (!stored) {
           resetToSignedOut();

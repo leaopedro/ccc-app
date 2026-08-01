@@ -1,4 +1,4 @@
-import type { MyTicket, MyTicketExtra } from '@jdm/shared/tickets';
+import type { MyTicket, MyTicketExtra } from '@ccc/shared/tickets';
 import { useEffect, useState } from 'react';
 
 import { listMyTickets } from '~/api/tickets';

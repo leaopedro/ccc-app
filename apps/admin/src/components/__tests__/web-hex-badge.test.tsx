@@ -1,4 +1,4 @@
-import { HexBadge } from '@jdm/ui/web';
+import { HexBadge } from '@ccc/ui/web';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -14,7 +14,7 @@ type HexProps = React.ComponentProps<typeof HexBadge>;
 describe('HexBadge (web)', () => {
   it('renders an earned legendary badge with the brand gold ring color', () => {
     const html = renderToStaticMarkup(
-      <HexBadge code="JDM-003" variant="earned" rarity="legendary" icon="founder" size="md" />,
+      <HexBadge code="CCC-003" variant="earned" rarity="legendary" icon="founder" size="md" />,
     );
     expect(html.toUpperCase()).toContain('#D4AF37');
   });
@@ -72,7 +72,7 @@ describe('HexBadge (web)', () => {
   it('renders the "Exclusivo Premium" tag for the locked_premium variant only', () => {
     const lockedPremium = renderToStaticMarkup(
       <HexBadge
-        code="JDM-003"
+        code="CCC-003"
         variant="locked_premium"
         rarity="legendary"
         icon="founder"
@@ -80,7 +80,7 @@ describe('HexBadge (web)', () => {
       />,
     );
     const locked = renderToStaticMarkup(
-      <HexBadge code="JDM-003" variant="locked" rarity="legendary" icon="founder" size="md" />,
+      <HexBadge code="CCC-003" variant="locked" rarity="legendary" icon="founder" size="md" />,
     );
     expect(lockedPremium).toContain('Exclusivo Premium');
     expect(locked).not.toContain('Exclusivo Premium');

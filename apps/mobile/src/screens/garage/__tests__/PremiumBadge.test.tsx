@@ -49,7 +49,7 @@ vi.mock('react-native', async () => {
   };
 });
 
-// `@jdm/ui` barrel now re-exports ParkingStallCard which imports react-native-svg.
+// `@ccc/ui` barrel now re-exports ParkingStallCard which imports react-native-svg.
 // Mock the SVG primitives so the barrel doesn't blow up when this test imports
 // the PremiumBadge symbol — match the same shape used in ParkingStallCard.test.tsx.
 vi.mock('react-native-svg', async () => {
@@ -102,25 +102,25 @@ describe('PremiumBadge (mobile)', () => {
   };
 
   it('renders the Premium label when isPremiumActive is true with no tier', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive={true} />);
     expect(container.textContent).toContain('Premium');
   });
 
   it('renders nothing when isPremiumActive is false', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive={false} />);
     expect(container.textContent).toBe('');
   });
 
   it('renders nothing when isPremiumActive is null', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive={null} />);
     expect(container.textContent).toBe('');
   });
 
   it('renders nothing when isPremiumActive is undefined', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive={undefined} />);
     expect(container.textContent).toBe('');
   });
@@ -153,26 +153,26 @@ describe('PremiumBadge V2', () => {
   };
 
   it('renders tier label (Gold) for gold premium', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive tier="gold" size="md" />);
     expect(container.textContent).toContain('Gold');
   });
 
   it('renders the near-expiry days block when daysLeftUntilExpiry <= 7', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive tier="gold" size="md" daysLeftUntilExpiry={3} />);
     expect(container.textContent).toContain('3d');
   });
 
   it('omits the days block when daysLeftUntilExpiry > 7', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive tier="gold" size="md" daysLeftUntilExpiry={30} />);
     expect(container.textContent).not.toContain('30d');
   });
 
   it('invokes onPress when tapped', async () => {
     const fn = vi.fn();
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive tier="gold" size="md" onPress={fn} />);
     const btn = container.querySelector('button');
     if (!btn) throw new Error('pressable not rendered');
@@ -184,7 +184,7 @@ describe('PremiumBadge V2', () => {
   });
 
   it('returns null when isPremiumActive !== true', async () => {
-    const { PremiumBadge } = await import('@jdm/ui');
+    const { PremiumBadge } = await import('@ccc/ui');
     await renderEl(<PremiumBadge isPremiumActive={false} tier="gold" />);
     expect(container.textContent).toBe('');
   });

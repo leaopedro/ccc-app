@@ -1,14 +1,13 @@
-import rateLimit from '@fastify/rate-limit';
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import {
   adminGaragePatchSchema,
   adminGaragePremiumSchema,
   adminGarageReadSchema,
   adminGarageSpotRevokeBodySchema,
   adminGarageSummarySchema,
-} from '@jdm/shared/admin-garage';
-import { badgeCodeSchema } from '@jdm/shared/badges';
-import { GARAGE_RESERVED_SLUGS } from '@jdm/shared/garage';
+} from '@ccc/shared/admin-garage';
+import { badgeCodeSchema } from '@ccc/shared/badges';
+import { GARAGE_RESERVED_SLUGS } from '@ccc/shared/garage';
 import type { Garage, GarageSpot } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -18,6 +17,7 @@ import { recordAudit } from '../../services/admin-audit.js';
 import { awardBadge } from '../../services/garage/awarder.js';
 import { ensureGarageForUserId } from '../../services/garage/ensure.js';
 import { computeIsPremiumActive, reconcileGarageSpots } from '../../services/garage/index.js';
+import rateLimit from '@fastify/rate-limit';
 import { awardXp } from '../../services/garage/xp-awarder.js';
 
 const serializeGarageSummary = (g: Garage) => ({
@@ -350,7 +350,7 @@ export const adminUserGarageRoutes: FastifyPluginAsync = async (app) => {
   // POST /admin/users/:id/garage/badges/:code/grant — admin manual badge
   // grant. The premium-exclusive gate is bypassable via
   // `awardBadge(..., { allowAdminOverride: true })`: kickoff decision lets
-  // an admin grant premium-exclusive specs (CAR-003, JDM-003, etc.) to
+  // an admin grant premium-exclusive specs (CAR-003, CCC-003, etc.) to
   // non-premium users for support cases. This intentionally deviates from
   // the reviewer's recommendation — documented in the chunk-18 PR §Deviations.
   //

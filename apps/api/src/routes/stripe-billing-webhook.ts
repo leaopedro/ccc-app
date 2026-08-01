@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 import type { FastifyPluginAsync } from 'fastify';
@@ -8,13 +8,14 @@ import {
   applyInvoiceRefund,
   applyMembershipEvent,
   enqueuePremiumTicketBackfillIfActivated,
+  reconcileMembershipAddonsAmount,
 } from '../services/billing/apply-membership-event.js';
 import { normalizeStripeEvent } from '../services/billing/normalize-stripe.js';
 import type {
   NormalizeStripeResult,
   StripeRefundMarker,
 } from '../services/billing/normalize-stripe.js';
-import type { BillingEvent } from '../services/billing/types.js';
+import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/billing/types.js';
 
 /**
  * POST /webhooks/stripe-billing — Stripe subscription webhook (F8.04).
@@ -39,6 +40,131 @@ import type { BillingEvent } from '../services/billing/types.js';
  * REQUIRE the caller to hold `SELECT id FROM "Garage" WHERE id = $garageId FOR UPDATE`
  * inside the same transaction. This route is the lock owner.
  */
+/**
+ * Parses devFeePercent from the plan line's Stripe Price metadata (canon
+ * §F8.1 — the one value still read from metadata, never the catalog).
+ * Malformed input must never reach the Prisma Int write: by the time this
+ * runs, the SubscriptionWebhookEvent row is already inserted with
+ * processedAt: null, so a thrown error here would poison every Stripe retry
+ * into the 503 branch forever — a poison-pill event that never applies and
+ * never alerts beyond a replay-stale warning. Reject anything that isn't a
+ * finite value in [0, 100], fall back to 0, and alert so an operator can fix
+ * the Stripe Price metadata.
+ */
+const parseDevFeePercent = (raw: string | undefined): number => {
+  if (raw === undefined) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    Sentry.captureMessage('stripe-billing webhook: invalid devFeePercent in Price metadata', {
+      level: 'warning',
+      tags: { kind: 'billing-devfee-invalid', provider: 'stripe' },
+      extra: { raw },
+    });
+    return 0;
+  }
+  return Math.trunc(n);
+};
+
+/**
+ * Resolve raw provider invoice lines against the DB catalog.
+ *
+ * The catalog is the source of truth for tier, cadence, and base amount —
+ * NOT Stripe Price metadata, which cannot be trusted to stay in sync and
+ * which the old tierFromPrice() hardcoded to 'gold'. devFeePercent is the one
+ * value still read from metadata (canon §F8.1), and only from the plan line.
+ *
+ * `plan` is null both when zero lines match a PremiumPlanPrice (unknown
+ * price — an operator forgot to register it) AND when lines match MORE THAN
+ * ONE DISTINCT PremiumPlanPrice (genuinely ambiguous — e.g. a plan-change
+ * invoice carries a proration credit line for the old price alongside the
+ * new price's line; Stripe does not contract line ordering, so picking "the
+ * first match" would silently provision whichever tier happens to sort
+ * first). Both cases must refuse and alert rather than guess — the caller
+ * checks `!resolved.plan`.
+ *
+ * Ambiguity is judged by DISTINCT matched price refs, not by raw line count:
+ * an invoice can legitimately carry two lines for the very same price (e.g.
+ * a proration credit plus a charge for the same price across a cycle
+ * boundary) without that being ambiguous at all — both resolve to the same
+ * PremiumPlanPrice row and must activate/renew normally.
+ */
+const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
+  const priceRefs = lines.map((l) => l.priceRef);
+
+  const [planPrices, addonModules] = await Promise.all([
+    prisma.premiumPlanPrice.findMany({
+      where: { stripePriceId: { in: priceRefs } },
+      select: {
+        stripePriceId: true,
+        baseAmountCents: true,
+        cadence: true,
+        plan: { select: { tier: true } },
+      },
+    }),
+    prisma.premiumAddonModule.findMany({
+      where: { stripePriceId: { in: priceRefs } },
+      select: {
+        key: true,
+        stripePriceId: true,
+        monthlyDeltaCents: true,
+        quotaPerCycle: true,
+        quotaUnit: true,
+        currency: true,
+      },
+    }),
+  ]);
+
+  const matchingPlanLines = lines.filter((l) =>
+    planPrices.some((p) => p.stripePriceId === l.priceRef),
+  );
+  // Count DISTINCT catalog rows matched, not raw lines: two lines for the
+  // same price (proration credit + charge) are one match, not two. Two
+  // lines for two DIFFERENT registered prices are genuinely ambiguous and
+  // must still refuse — deliberately not excluding negative-amount (credit)
+  // lines from this count, since doing so would let a real plan-change
+  // invoice (old price credited, new price charged) resolve to "just the new
+  // price" instead of correctly refusing as ambiguous.
+  const distinctPlanPriceRefs = new Set(matchingPlanLines.map((l) => l.priceRef));
+  const planLine = distinctPlanPriceRefs.size === 1 ? matchingPlanLines[0] : undefined;
+  const planPrice = planLine
+    ? planPrices.find((p) => p.stripePriceId === planLine.priceRef)
+    : undefined;
+
+  const addons: BillingAddonLine[] = [];
+  for (const line of lines) {
+    const mod = addonModules.find((m) => m.stripePriceId === line.priceRef);
+    if (!mod) continue;
+    addons.push({
+      addonKey: mod.key,
+      providerItemRef: line.subscriptionItemRef,
+      monthlyDeltaCents: mod.monthlyDeltaCents,
+      quotaPerCycle: mod.quotaPerCycle,
+      quotaUnit: mod.quotaUnit,
+      currency: mod.currency,
+    });
+  }
+
+  const devFeePercent = parseDevFeePercent(planLine?.metadata.devFeePercent);
+  const baseAmountCents = planPrice?.baseAmountCents ?? 0;
+
+  return {
+    plan: planPrice ? { tier: planPrice.plan.tier, cadence: planPrice.cadence } : null,
+    baseAmountCents,
+    devFeePercent,
+    devFeeAmountCents: Math.round((baseAmountCents * devFeePercent) / 100),
+    addons,
+    // Fix round 1, finding 5: this used to sum the raw Stripe invoice line
+    // amounts (proration/discount included) for add-on lines. Nothing reads
+    // it anymore — handleActivated now derives its own addonsAmountCents from
+    // the resolved add-ons' catalog monthlyDeltaCents (matching
+    // reconcileMembershipAddonsAmount and the attach/detach routes), which is
+    // the only place BillingEvent.addonsAmountCents was ever consumed. The
+    // field stays 0 here rather than being removed because BillingEvent still
+    // requires it (types.ts is out of scope for this task); it is vestigial.
+    addonsAmountCents: 0,
+  };
+};
+
 // eslint-disable-next-line @typescript-eslint/require-await
 export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
   // Raw body parser is shared with the existing stripe-webhook.ts route; Fastify
@@ -170,6 +296,34 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // -----------------------------------------------------------------------
+    // P5 additive seam — add-ons amount sync.
+    // On ANY customer.subscription.updated, re-derive
+    // PremiumMembership.addonsAmountCents from the active add-on rows (the same
+    // rule attach/detach use). This is intentionally SEPARATE from the tier/
+    // status normalization below — it only touches addonsAmountCents. Runs in
+    // its own tx + garage lock. No-op when the subscription/membership or its
+    // garage is unknown. Kept before the normalize dispatch so it applies even
+    // to updates that normalize to null (e.g. an item add/remove that does not
+    // flip cancel_at_period_end or swap the base price).
+    // -----------------------------------------------------------------------
+    if (event.type === 'customer.subscription.updated') {
+      const subObj = event.data.object as { id?: string };
+      const subRef = subObj.id;
+      if (subRef) {
+        const membershipRow = await prisma.premiumMembership.findUnique({
+          where: { provider_providerSubRef: { provider: 'stripe', providerSubRef: subRef } },
+          select: { garageId: true },
+        });
+        if (membershipRow) {
+          await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${membershipRow.garageId} FOR UPDATE`;
+            await reconcileMembershipAddonsAmount(tx, 'stripe', subRef);
+          });
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Normalize event
     // -----------------------------------------------------------------------
     const normalized: NormalizeStripeResult = normalizeStripeEvent(event);
@@ -237,6 +391,94 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // Resolve garageId for membership events
     // -----------------------------------------------------------------------
     const billingEvt: BillingEvent = normalized;
+
+    // Patch the catalog-resolved values into the event before dispatch, in the
+    // same spirit as the garageId patch below.
+    if (
+      billingEvt.kind === 'subscription.activated' ||
+      billingEvt.kind === 'subscription.renewed'
+    ) {
+      const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+
+      // The normalizer's tier placeholder is a VALID enum value ('bronze') and
+      // its pricing placeholders are all zero, so a silent fall-through is
+      // dangerous on BOTH kinds: activation would provision a paying gold
+      // customer as bronze, and renewal would zero out a previously-correct
+      // membership's baseAmountCents/devFeePercent (e.g. an operator retiring a
+      // Stripe Price that subscribers are still billed on). Refuse and alert on
+      // both rather than write zeros over — or under — a real charge.
+      // Decision 2026-07-29: 200 + ignored. Stripe must NOT redeliver, because
+      // the fix is an operator action in the admin catalog, not a transient
+      // error.
+      if (!resolved.plan) {
+        await prisma.subscriptionWebhookEvent.update({
+          where: { id: webhookEventId },
+          data: { processedAt: new Date() },
+        });
+        request.log.error(
+          {
+            eventId: event.id,
+            kind: billingEvt.kind,
+            priceRefs: billingEvt.lines.map((l) => l.priceRef),
+          },
+          'stripe-billing webhook: no single catalog plan price matched the invoice, refusing to apply',
+        );
+        Sentry.captureMessage(
+          'stripe-billing webhook: invoice.paid with no unambiguous matching PremiumPlanPrice, apply refused',
+          {
+            level: 'error',
+            tags: { kind: 'billing-catalog-miss', provider: 'stripe' },
+            extra: {
+              eventId: event.id,
+              billingKind: billingEvt.kind,
+              priceRefs: billingEvt.lines.map((l) => l.priceRef),
+            },
+          },
+        );
+        return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-plan-price' });
+      }
+
+      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+
+      if (billingEvt.kind === 'subscription.activated') {
+        billingEvt.tier = resolved.plan.tier;
+        billingEvt.cadence = resolved.plan.cadence;
+        billingEvt.addons = resolved.addons;
+        billingEvt.addonsAmountCents = resolved.addonsAmountCents;
+      }
+    }
+
+    // A tier_changed whose swapped price is an add-on is not a tier change at
+    // all: reconcileMembershipAddonsAmount above already handled it.
+    if (billingEvt.kind === 'subscription.tier_changed') {
+      const resolved = await resolveLinesAgainstCatalog([
+        {
+          priceRef: billingEvt.priceRef,
+          amountCents: 0,
+          subscriptionItemRef: null,
+          metadata: billingEvt.priceMetadata,
+        },
+      ]);
+      if (!resolved.plan) {
+        await prisma.subscriptionWebhookEvent.update({
+          where: { id: webhookEventId },
+          data: { processedAt: new Date() },
+        });
+        request.log.info(
+          { eventId: event.id, priceRef: billingEvt.priceRef },
+          'stripe-billing webhook: item swap is an add-on, not a tier change',
+        );
+        return reply.status(200).send({ ok: true, ignored: true, reason: 'addon-item-swap' });
+      }
+      billingEvt.tier = resolved.plan.tier;
+      billingEvt.cadence = resolved.plan.cadence;
+      billingEvt.pricing.baseAmountCents = resolved.baseAmountCents;
+      billingEvt.pricing.devFeePercent = resolved.devFeePercent;
+      billingEvt.pricing.devFeeAmountCents = resolved.devFeeAmountCents;
+      billingEvt.pricing.grossAmountCents = resolved.baseAmountCents + resolved.devFeeAmountCents;
+    }
 
     let garageId: string;
 

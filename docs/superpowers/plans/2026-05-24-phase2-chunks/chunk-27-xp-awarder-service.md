@@ -45,7 +45,7 @@ If any is missing, STOP and dispatch it first.
 - **Canon §6** — Awarder owns `Garage.likesReceived`. `awardXp('post_like', ...)` increments BOTH `xp` and `likesReceived` in one `prisma.garage.update`; `revertLikeXp` decrements both. Chunk 32 (route hook) MUST NOT touch `likesReceived` directly.
 - **Canon §7** — `sourceRef` is non-null at the awarder boundary on every write (DB column stays nullable for migration compat).
 - **Canon §8** — Test fixtures upsert `GeneralSettings` using `GENERAL_SETTINGS_SINGLETON_ID` (imported from `killswitch.ts`). Never `id: 1`.
-- **Canon §10** — Filtered test/lint commands use `pnpm --filter @jdm/api exec vitest|eslint <PACKAGE-ROOT-RELATIVE-PATH>`.
+- **Canon §10** — Filtered test/lint commands use `pnpm --filter @ccc/api exec vitest|eslint <PACKAGE-ROOT-RELATIVE-PATH>`.
 
 ## File structure (touched paths only)
 
@@ -208,7 +208,7 @@ export const revertLikeXp = async (
 **Files:** Create `apps/api/src/services/garage/xp-awarder.ts`.
 
 - [ ] **1.1:** Create file with the imports, types (`AwardXpOutcome`, `RevertLikeXpOutcome`, `AwardXpOpts`), the `XP_DELTAS` constant, and stubs for `awardXp(tx, garageId, reason, opts)` + `revertLikeXp` that `throw new Error('not implemented')`. The exported `awardXp` MUST use the canonical positional 4-arg signature so consumer chunks 29-35 compile.
-- [ ] **1.2:** Run `pnpm --filter @jdm/api typecheck` → PASS. Confirms `XpReason` resolves (chunk 23 merged).
+- [ ] **1.2:** Run `pnpm --filter @ccc/api typecheck` → PASS. Confirms `XpReason` resolves (chunk 23 merged).
 - [ ] **1.3:** Commit: `feat(api): scaffold XP awarder service module (chunk 27)`.
 
 ---
@@ -235,7 +235,7 @@ it('event_checkin writes one XpEvent row (+10) and increments Garage.xp', async 
 });
 ```
 
-- [ ] **2.2:** Run `pnpm --filter @jdm/api test -- xp-awarder.test` → FAIL (`not implemented`).
+- [ ] **2.2:** Run `pnpm --filter @ccc/api test -- xp-awarder.test` → FAIL (`not implemented`).
 - [ ] **2.3:** Replace the `awardXp` stub with the canonical body shown above.
 - [ ] **2.4:** Re-run → PASS.
 - [ ] **2.5:** Commit: `feat(api): awardXp happy path writes XpEvent and increments Garage.xp`.
@@ -366,7 +366,7 @@ it('hard-deletes the matching XpEvent row and decrements both counters', async (
 });
 ```
 
-- [ ] **7.3:** Run `pnpm --filter @jdm/api test -- xp-revert-on-unlike.test` → PASS. Commit: `test(api): revertLikeXp hard-deletes XpEvent + decrements both counters`.
+- [ ] **7.3:** Run `pnpm --filter @ccc/api test -- xp-revert-on-unlike.test` → PASS. Commit: `test(api): revertLikeXp hard-deletes XpEvent + decrements both counters`.
 
 ---
 
@@ -417,9 +417,9 @@ Loser may return `not_found` (read-committed sees the delete) OR throw `P2025` (
 
 ## Task 10 — Final verification + branch hygiene
 
-- [ ] **10.1:** `pnpm --filter @jdm/api typecheck` → PASS.
-- [ ] **10.2:** `pnpm --filter @jdm/api exec vitest run test/garage/xp-awarder.test.ts test/garage/xp-revert-on-unlike.test.ts` → PASS. Expected counts: Task 2 (1) + Task 3 (7) + Task 4 (3) + Task 5 (1) + Task 6 (1) = **13 awarder tests**; Task 7 (1) + Task 8 (3) + Task 9 (1) = **5 revert tests**; **18 tests total**. Paths are package-root-relative per canon §10.
-- [ ] **10.3:** `pnpm --filter @jdm/api exec eslint src/services/garage/xp-awarder.ts test/garage/xp-awarder.test.ts test/garage/xp-revert-on-unlike.test.ts` → PASS.
+- [ ] **10.1:** `pnpm --filter @ccc/api typecheck` → PASS.
+- [ ] **10.2:** `pnpm --filter @ccc/api exec vitest run test/garage/xp-awarder.test.ts test/garage/xp-revert-on-unlike.test.ts` → PASS. Expected counts: Task 2 (1) + Task 3 (7) + Task 4 (3) + Task 5 (1) + Task 6 (1) = **13 awarder tests**; Task 7 (1) + Task 8 (3) + Task 9 (1) = **5 revert tests**; **18 tests total**. Paths are package-root-relative per canon §10.
+- [ ] **10.3:** `pnpm --filter @ccc/api exec eslint src/services/garage/xp-awarder.ts test/garage/xp-awarder.test.ts test/garage/xp-revert-on-unlike.test.ts` → PASS.
 - [ ] **10.4:** `git status` shows exactly the 3 chunk files. Per CLAUDE.md memory `feedback_no_full_test_suite_locally.md`, DO NOT run the full test suite locally.
 - [ ] **10.5:** `git push -u origin feat/jdma-garage-phase2-27`.
 
@@ -442,7 +442,7 @@ Lands the Phase 2 XP chokepoint at `apps/api/src/services/garage/xp-awarder.ts`.
 
 - [x] `xp-awarder.test.ts` (13 tests): each reason from §437 → correct delta + `Garage.xp` increment; `post_like` also increments `Garage.likesReceived` in same update; idempotency on the (garageId, reason, sourceRef) triple; non-P2002 errors rethrow; killswitch-off short-circuit; same-tx parent rollback unwrites both rows.
 - [x] `xp-revert-on-unlike.test.ts` (5 tests): hard-delete + both counter decrements; no-prior-row no-op (killswitch off at like time, then on at unlike); killswitch-off short-circuit at unlike; wrong-reactionId no-op; concurrent race never goes negative.
-- [x] `pnpm --filter @jdm/api typecheck` green.
+- [x] `pnpm --filter @ccc/api typecheck` green.
 - [x] No full-suite local run (per `feedback_no_full_test_suite_locally.md`).
 
 ### Deviations from plan

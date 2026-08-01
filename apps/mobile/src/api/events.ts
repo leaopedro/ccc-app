@@ -8,7 +8,7 @@ import {
   type EventListQuery,
   type EventListResponse,
   eventListResponseSchema,
-} from '@jdm/shared/events';
+} from '@ccc/shared/events';
 
 import { authedRequest, request } from './client';
 

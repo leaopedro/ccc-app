@@ -32,17 +32,17 @@ function isRedirectError(e: unknown): boolean {
   );
 }
 
-import { brand } from '@jdm/design';
 import {
   premiumPricingResponseSchema,
   premiumStatusSchema,
   type PremiumPricingResponse,
   type PremiumStatus,
-} from '@jdm/shared/premium';
-import { garageTokens } from '@jdm/ui/web';
+} from '@ccc/shared/premium';
+import { garageTokens } from '@ccc/ui/web';
 
 import { SubscribeButton } from './subscribe-button';
 
+import { brand } from '~/brand';
 import { apiFetch } from '~/lib/api';
 import { readRole } from '~/lib/auth-session';
 

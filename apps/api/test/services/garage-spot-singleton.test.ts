@@ -7,7 +7,7 @@ import {
   GARAGE_SPOT_PRODUCT_TYPE_NAME,
   GARAGE_SPOT_VARIANT_NAME,
   prisma,
-} from '@jdm/db';
+} from '@ccc/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDatabase } from '../helpers.js';

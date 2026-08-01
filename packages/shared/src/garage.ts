@@ -157,6 +157,6 @@ export const garageCoverPatchSchema = z.union([
 export type GarageCoverPatch = z.infer<typeof garageCoverPatchSchema>;
 
 // Singleton identifiers re-exported for cross-app use (mobile, admin) where importing
-// from @jdm/db is awkward. Keep in sync with packages/db/src/garage-spot-product.ts.
+// from @ccc/db is awkward. Keep in sync with packages/db/src/garage-spot-product.ts.
 export const GARAGE_SPOT_PRODUCT_SLUG = 'garage-spot';
 export const GARAGE_SPOT_PRODUCT_TYPE_NAME = 'garage_spot';

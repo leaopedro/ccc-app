@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import type { BroadcastTarget } from '@jdm/shared';
+import { prisma } from '@ccc/db';
+import type { BroadcastTarget } from '@ccc/shared';
 
 import { hasActiveConsent } from '../consent.js';
 

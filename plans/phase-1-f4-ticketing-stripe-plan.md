@@ -96,7 +96,7 @@
 - **No pushes yet:** F6 will subscribe to a `ticketIssued` event or wrap `issueTicketForPaidOrder`. This plan leaves a structured log line in that code path so the push hook has a clear insertion point — no TODO comments.
 - **PT-BR copy:** all mobile strings live in `apps/mobile/src/copy/tickets.ts` or existing copy files. No inline strings in screens.
 - **Ticket code format:** `<ticketId>.<base64url-hmac-sha256-of-ticketId>`. `TICKET_CODE_SECRET` env var, 32+ chars. QR encodes the full code string.
-- **Expo Go limitation:** Stripe RN SDK is a native module. Developer must run `pnpm --filter @jdm/mobile expo run:ios` or `run:android` (local dev client). Expo Go will silently fail. This is documented in the handoff; EAS config (0.9) is not unblocked by this plan.
+- **Expo Go limitation:** Stripe RN SDK is a native module. Developer must run `pnpm --filter @ccc/mobile expo run:ios` or `run:android` (local dev client). Expo Go will silently fail. This is documented in the handoff; EAS config (0.9) is not unblocked by this plan.
 - **No check-in here:** F5 will consume `verifyTicketCode` and add `POST /admin/tickets/check-in`. Do not add that route in this plan.
 
 ---
@@ -239,7 +239,7 @@ In `TicketTier`:
 - [ ] **Step 4: Run the migration**
 
 ```bash
-pnpm --filter @jdm/db exec prisma migrate dev --name ticketing_stripe
+pnpm --filter @ccc/db exec prisma migrate dev --name ticketing_stripe
 ```
 
 Expected: new folder `packages/db/prisma/migrations/<timestamp>_ticketing_stripe/` containing `migration.sql` with `CREATE TYPE` statements for the five enums, `CREATE TABLE "Order"`, `CREATE TABLE "Ticket"`, `CREATE TABLE "PaymentWebhookEvent"`, and associated indexes + unique constraints. Prisma client regenerates.
@@ -250,7 +250,7 @@ Expected: new folder `packages/db/prisma/migrations/<timestamp>_ticketing_stripe
 pnpm -w typecheck
 ```
 
-Expected: all packages clean. (`@jdm/db` regenerates types; downstream consumers don't break because nothing uses these models yet.)
+Expected: all packages clean. (`@ccc/db` regenerates types; downstream consumers don't break because nothing uses these models yet.)
 
 - [ ] **Step 6: Commit**
 
@@ -370,7 +370,7 @@ In the `exports` block, add two entries (keep alphabetical order):
 - [ ] **Step 5: Typecheck**
 
 ```bash
-pnpm --filter @jdm/shared typecheck
+pnpm --filter @ccc/shared typecheck
 ```
 
 Expected: clean.
@@ -415,7 +415,7 @@ TICKET_CODE_SECRET=dev_only_ticket_hmac_secret_32_plus_chars
 - [ ] **Step 2: Install `stripe` SDK**
 
 ```bash
-pnpm --filter @jdm/api add stripe
+pnpm --filter @ccc/api add stripe
 ```
 
 Expected: `apps/api/package.json` gets `"stripe": "^latest"`; `pnpm-lock.yaml` updates.
@@ -556,7 +556,7 @@ export const buildFakeStripe = (): FakeStripe => {
 - [ ] **Step 6: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean. (`app.stripe` decoration happens in Task 6.)
@@ -622,7 +622,7 @@ describe('ticket codes', () => {
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/codes
+pnpm --filter @ccc/api test -- tickets/codes
 ```
 
 Expected: FAIL — module not found.
@@ -660,7 +660,7 @@ export const verifyTicketCode = (code: string, env: CodeEnv): string => {
 - [ ] **Step 4: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/codes
+pnpm --filter @ccc/api test -- tickets/codes
 ```
 
 Expected: 5 tests PASS.
@@ -707,7 +707,7 @@ export const resetDatabase = async (): Promise<void> => {
 - [ ] **Step 2: Write failing tests** — `apps/api/test/tickets/issue.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -855,7 +855,7 @@ describe('issueTicketForPaidOrder', () => {
 - [ ] **Step 3: Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/issue
+pnpm --filter @ccc/api test -- tickets/issue
 ```
 
 Expected: FAIL — module not found.
@@ -863,7 +863,7 @@ Expected: FAIL — module not found.
 - [ ] **Step 4: Implement `apps/api/src/services/tickets/issue.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 
 import { signTicketCode } from './codes.js';
 
@@ -924,7 +924,7 @@ export const issueTicketForPaidOrder = async (
 - [ ] **Step 5: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- tickets/issue
+pnpm --filter @ccc/api test -- tickets/issue
 ```
 
 Expected: 4 tests PASS.
@@ -1000,7 +1000,7 @@ export const makeAppWithFakeStripe = async (): Promise<{
 - [ ] **Step 3: Typecheck**
 
 ```bash
-pnpm --filter @jdm/api typecheck
+pnpm --filter @ccc/api typecheck
 ```
 
 Expected: clean.
@@ -1025,8 +1025,8 @@ git commit -m "feat(api): decorate app.stripe + test fake injection"
 - [ ] **Step 1: Write failing tests** — `apps/api/test/orders/create.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
-import { createOrderResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { createOrderResponseSchema } from '@ccc/shared/orders';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1202,7 +1202,7 @@ describe('POST /orders', () => {
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- orders/create
+pnpm --filter @ccc/api test -- orders/create
 ```
 
 Expected: FAIL — route not registered.
@@ -1210,8 +1210,8 @@ Expected: FAIL — route not registered.
 - [ ] **Step 3: Implement `apps/api/src/routes/orders.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
-import { createOrderRequestSchema, createOrderResponseSchema } from '@jdm/shared/orders';
+import { prisma } from '@ccc/db';
+import { createOrderRequestSchema, createOrderResponseSchema } from '@ccc/shared/orders';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -1327,7 +1327,7 @@ await app.register(orderRoutes);
 - [ ] **Step 5: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- orders/create
+pnpm --filter @ccc/api test -- orders/create
 ```
 
 Expected: 7 tests PASS.
@@ -1335,7 +1335,7 @@ Expected: 7 tests PASS.
 - [ ] **Step 6: Run full suite + typecheck**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 pnpm -w typecheck
 ```
 
@@ -1361,7 +1361,7 @@ git commit -m "feat(api): POST /orders reserves capacity + creates Stripe Paymen
 - [ ] **Step 1: Write failing tests** — `apps/api/test/stripe/webhook.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1552,7 +1552,7 @@ describe('POST /stripe/webhook', () => {
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- stripe/webhook
+pnpm --filter @ccc/api test -- stripe/webhook
 ```
 
 Expected: FAIL.
@@ -1560,7 +1560,7 @@ Expected: FAIL.
 - [ ] **Step 3: Implement `apps/api/src/routes/stripe-webhook.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { issueTicketForPaidOrder } from '../services/tickets/issue.js';
@@ -1649,7 +1649,7 @@ await app.register(stripeWebhookRoutes);
 - [ ] **Step 5: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- stripe/webhook
+pnpm --filter @ccc/api test -- stripe/webhook
 ```
 
 Expected: 6 tests PASS.
@@ -1657,7 +1657,7 @@ Expected: 6 tests PASS.
 - [ ] **Step 6: Run full API suite + typecheck**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 pnpm -w typecheck
 ```
 
@@ -1684,8 +1684,8 @@ git commit -m "feat(api): POST /stripe/webhook — verify, dedupe, issue tickets
 - [ ] **Step 1: Write failing tests** — `apps/api/test/orders/me-tickets.test.ts`
 
 ```ts
-import { prisma } from '@jdm/db';
-import { myTicketsResponseSchema } from '@jdm/shared/tickets';
+import { prisma } from '@ccc/db';
+import { myTicketsResponseSchema } from '@ccc/shared/tickets';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1788,7 +1788,7 @@ describe('GET /me/tickets', () => {
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-pnpm --filter @jdm/api test -- orders/me-tickets
+pnpm --filter @ccc/api test -- orders/me-tickets
 ```
 
 Expected: FAIL.
@@ -1796,9 +1796,9 @@ Expected: FAIL.
 - [ ] **Step 3: Implement `apps/api/src/routes/me-tickets.ts`**
 
 ```ts
-import { prisma } from '@jdm/db';
-import { eventSummarySchema } from '@jdm/shared/events';
-import { myTicketsResponseSchema } from '@jdm/shared/tickets';
+import { prisma } from '@ccc/db';
+import { eventSummarySchema } from '@ccc/shared/events';
+import { myTicketsResponseSchema } from '@ccc/shared/tickets';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
@@ -1871,7 +1871,7 @@ await app.register(meTicketsRoutes);
 - [ ] **Step 5: Run tests**
 
 ```bash
-pnpm --filter @jdm/api test -- orders/me-tickets
+pnpm --filter @ccc/api test -- orders/me-tickets
 ```
 
 Expected: 3 tests PASS.
@@ -1879,7 +1879,7 @@ Expected: 3 tests PASS.
 - [ ] **Step 6: Run full suite**
 
 ```bash
-pnpm --filter @jdm/api test
+pnpm --filter @ccc/api test
 ```
 
 Expected: all green (previous 121 + ~22 new ≈ 143).
@@ -1910,7 +1910,7 @@ git commit -m "feat(api): GET /me/tickets with signed codes"
 - [ ] **Step 1: Install `@stripe/stripe-react-native`**
 
 ```bash
-pnpm --filter @jdm/mobile add @stripe/stripe-react-native
+pnpm --filter @ccc/mobile add @stripe/stripe-react-native
 ```
 
 - [ ] **Step 2: Add publishable key to `app.config.ts`**
@@ -1959,8 +1959,8 @@ return (
 - [ ] **Step 4: Create `apps/mobile/src/api/orders.ts`**
 
 ```ts
-import { createOrderRequestSchema, createOrderResponseSchema } from '@jdm/shared/orders';
-import type { CreateOrderRequest, CreateOrderResponse } from '@jdm/shared/orders';
+import { createOrderRequestSchema, createOrderResponseSchema } from '@ccc/shared/orders';
+import type { CreateOrderRequest, CreateOrderResponse } from '@ccc/shared/orders';
 
 import { authedRequest } from './client';
 
@@ -1975,8 +1975,8 @@ export const createOrder = (input: CreateOrderRequest): Promise<CreateOrderRespo
 - [ ] **Step 5: Create `apps/mobile/src/api/tickets.ts`**
 
 ```ts
-import { myTicketsResponseSchema } from '@jdm/shared/tickets';
-import type { MyTicketsResponse } from '@jdm/shared/tickets';
+import { myTicketsResponseSchema } from '@ccc/shared/tickets';
+import type { MyTicketsResponse } from '@ccc/shared/tickets';
 
 import { authedRequest } from './client';
 
@@ -2031,7 +2031,7 @@ Change `detail.buy` / `detail.buyDisabled` usage so the plain label is available
 - [ ] **Step 8: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/package.json apps/mobile/app.config.ts apps/mobile/.env.example \
         apps/mobile/app/_layout.tsx apps/mobile/src/api/orders.ts \
         apps/mobile/src/api/tickets.ts apps/mobile/src/copy/tickets.ts \
@@ -2052,7 +2052,7 @@ git commit -m "feat(mobile): install Stripe SDK, wrap in StripeProvider, add ord
 Full updated file:
 
 ```tsx
-import type { EventDetail, TicketTier } from '@jdm/shared/events';
+import type { EventDetail, TicketTier } from '@ccc/shared/events';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -2273,7 +2273,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 2: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/\(app\)/events/\[slug\].tsx
 git commit -m "feat(mobile): enable tier picker and Stripe Payment Sheet on event detail"
 ```
@@ -2293,7 +2293,7 @@ git commit -m "feat(mobile): enable tier picker and Stripe Payment Sheet on even
 - [ ] **Step 1: Install QR + keep-awake + brightness**
 
 ```bash
-pnpm --filter @jdm/mobile add react-native-qrcode-svg react-native-svg expo-keep-awake expo-brightness
+pnpm --filter @ccc/mobile add react-native-qrcode-svg react-native-svg expo-keep-awake expo-brightness
 ```
 
 - [ ] **Step 2: Add the Tickets tab**
@@ -2333,7 +2333,7 @@ export default function TicketsLayout() {
 - [ ] **Step 4: Create `apps/mobile/app/(app)/tickets/index.tsx`**
 
 ```tsx
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -2448,7 +2448,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 5: Create `apps/mobile/app/(app)/tickets/[ticketId].tsx`**
 
 ```tsx
-import type { MyTicket } from '@jdm/shared/tickets';
+import type { MyTicket } from '@ccc/shared/tickets';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -2541,7 +2541,7 @@ const styles = StyleSheet.create({
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/mobile typecheck
 git add apps/mobile/app/\(app\)/_layout.tsx apps/mobile/app/\(app\)/tickets/ \
         apps/mobile/package.json pnpm-lock.yaml
 git commit -m "feat(mobile): Ingressos tab with list + QR detail"
@@ -2566,7 +2566,7 @@ Replace the F7a handoff with F4 summary:
 
 1. **Branch:** `feat/f4-ticketing-stripe`.
 2. **What shipped:** Prisma Order/Ticket/PaymentWebhookEvent models, `POST /orders`, Stripe webhook with signature + dedupe, HMAC-signed ticket codes, `GET /me/tickets`, mobile tier picker → Payment Sheet, Ingressos tab with QR detail.
-3. **How to exercise:** start API with `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`TICKET_CODE_SECRET` set, start mobile via `pnpm --filter @jdm/mobile expo run:ios` (Expo Go will not work — Stripe SDK is native), log in, open an event, select a tier, use Stripe test card `4242 4242 4242 4242`, verify ticket appears in Ingressos.
+3. **How to exercise:** start API with `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`TICKET_CODE_SECRET` set, start mobile via `pnpm --filter @ccc/mobile expo run:ios` (Expo Go will not work — Stripe SDK is native), log in, open an event, select a tier, use Stripe test card `4242 4242 4242 4242`, verify ticket appears in Ingressos.
 4. **Test status:** API suite NNN passing (was 121); mobile typecheck clean.
 5. **Deploy checklist (before roadmap `[x]`):** Railway API redeploy (new migration); set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`TICKET_CODE_SECRET`/`STRIPE_PUBLISHABLE_KEY` in Railway; register Stripe webhook → `<api>/stripe/webhook`; Vercel admin redeploy (no admin change but keeps versions aligned); Mobile dev-client build tested on iOS and Android.
 6. **Open edges:**
@@ -2593,9 +2593,9 @@ git commit -m "docs: mark roadmap 4.1-4.7 in-progress; update handoff for F4"
 
 ```bash
 pnpm -w typecheck
-pnpm --filter @jdm/api test
-pnpm --filter @jdm/shared test
-pnpm --filter @jdm/mobile typecheck
+pnpm --filter @ccc/api test
+pnpm --filter @ccc/shared test
+pnpm --filter @ccc/mobile typecheck
 ```
 
 Expected: all green. API ≥ 140 tests.
@@ -2606,7 +2606,7 @@ User-instruction policy: no background shells without consent. The executor shou
 
 1. API up with Stripe test secrets.
 2. Run `stripe listen --forward-to localhost:4000/stripe/webhook` (user runs locally).
-3. `pnpm --filter @jdm/mobile expo run:ios` (dev client).
+3. `pnpm --filter @ccc/mobile expo run:ios` (dev client).
 4. Seeded event → select tier → Stripe test card `4242 4242 4242 4242` any future expiry, any CVC.
 5. Confirm Ingressos tab shows ticket with QR.
 6. Decline card `4000 0000 0000 9995` → reservation released; tier capacity back up.
@@ -2629,8 +2629,8 @@ Covers 4.1 through 4.7. Pix path (4.8 through 4.12) lands in a separate plan (F4
 
 ## Test plan
 - [ ] pnpm -w typecheck clean
-- [ ] pnpm --filter @jdm/api test green (140+ tests)
-- [ ] pnpm --filter @jdm/mobile typecheck clean
+- [ ] pnpm --filter @ccc/api test green (140+ tests)
+- [ ] pnpm --filter @ccc/mobile typecheck clean
 - [ ] Dev client buy flow completes end-to-end with Stripe test card 4242 4242 4242 4242
 - [ ] Declined card releases the reservation (tier.quantitySold decrements)
 - [ ] Webhook redelivery is a 200 no-op (dedup verified)

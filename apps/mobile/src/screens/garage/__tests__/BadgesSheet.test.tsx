@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // BadgesSheet tests. Lives here (not packages/ui/src/__tests__/) because
-// `@jdm/ui` has no test runner of its own — same precedent as the
+// `@ccc/ui` has no test runner of its own — same precedent as the
 // HexBadge / BadgeRow / BadgeDetail tests added in chunk 17.
 //
 // react-native + Modal + react-native-svg + lucide-react-native are
@@ -161,8 +161,8 @@ const baseData = {
       icon: 'curator',
     },
     {
-      code: 'JDM-003',
-      category: 'jdm' as const,
+      code: 'CCC-003',
+      category: 'ccc' as const,
       rarity: 'legendary' as const,
       premiumExclusive: true,
       icon: 'founder',
@@ -177,7 +177,7 @@ const baseData = {
       pinnedAt: null,
     },
     { code: 'CAR-003', state: 'locked' as const },
-    { code: 'JDM-003', state: 'locked_premium' as const },
+    { code: 'CCC-003', state: 'locked_premium' as const },
   ],
 };
 
@@ -208,7 +208,7 @@ describe('BadgesSheet', () => {
   };
 
   it('renders nothing when visible=false (Modal mock returns null)', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     await renderEl(
       <BadgesSheet visible={false} onClose={() => {}} data={baseData} onLockedPress={() => {}} />,
     );
@@ -216,7 +216,7 @@ describe('BadgesSheet', () => {
   });
 
   it('renders the category sections and the earned/total summary on open', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     await renderEl(
       <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={() => {}} />,
     );
@@ -229,7 +229,7 @@ describe('BadgesSheet', () => {
   });
 
   it('tapping a locked tile fires onLockedPress (not the drilldown)', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     const onLockedPress = vi.fn();
     await renderEl(
       <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={onLockedPress} />,
@@ -245,7 +245,7 @@ describe('BadgesSheet', () => {
   });
 
   it('tapping an earned tile drills into BadgeDetail inline (header swaps to "Conquista")', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     await renderEl(
       <BadgesSheet
         visible
@@ -272,7 +272,7 @@ describe('BadgesSheet', () => {
   });
 
   it('Voltar from the drilldown returns to the catalog grid (no onClose)', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     const onClose = vi.fn();
     await renderEl(
       <BadgesSheet visible onClose={onClose} data={baseData} onLockedPress={() => {}} />,
@@ -298,7 +298,7 @@ describe('BadgesSheet', () => {
   });
 
   it('closing the sheet from the grid clears any pending detail state', async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     const onClose = vi.fn();
     await renderEl(
       <BadgesSheet visible onClose={onClose} data={baseData} onLockedPress={() => {}} />,
@@ -313,7 +313,7 @@ describe('BadgesSheet', () => {
   });
 
   const renderSheet = async () => {
-    const { BadgesSheet } = await import('@jdm/ui');
+    const { BadgesSheet } = await import('@ccc/ui');
     await renderEl(
       <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={() => {}} />,
     );
@@ -336,7 +336,7 @@ describe('BadgesSheet', () => {
       'badges-tab-eventos',
       'badges-tab-carros',
       'badges-tab-comunidade',
-      'badges-tab-jdm',
+      'badges-tab-ccc',
     ]);
   });
   it('defaults to "all" — every catalog tile rendered', async () => {

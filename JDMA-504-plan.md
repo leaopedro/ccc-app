@@ -158,7 +158,7 @@ Add `fulfillment` keys:
 ### 9. Verification
 
 - `pnpm test` at root.
-- `pnpm --filter @jdm/api build && pnpm --filter @jdm/api test`.
+- `pnpm --filter @ccc/api build && pnpm --filter @ccc/api test`.
 - Mobile web preview via dev server: smoke test
   1. Cart with both-enabled product + no ticket → defaults to ship.
   2. Cart with ticket + both-enabled product → defaults to pickup.

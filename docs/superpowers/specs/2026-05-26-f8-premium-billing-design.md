@@ -519,7 +519,7 @@ Modified endpoints (all keyed off the existing `buildWhere(query)` plus a new `m
 
 - New route `/premium` — pricing page (monthly vs annual), "Assinar" button → Stripe Checkout (mode=subscription).
 - `/me/billing` — links to Stripe Billing Portal (server-generates portal URL via Stripe API).
-- Shared SSR component for the pricing card (Anton font, brand-tinted card; reuse `@jdm/ui` design tokens).
+- Shared SSR component for the pricing card (Anton font, brand-tinted card; reuse `@ccc/ui` design tokens).
 
 ### 8.3 Shared zod schemas (`packages/shared/src/premium.ts` — new)
 
@@ -547,7 +547,7 @@ export const adminFinanceMembershipsQuerySchema = z.object({ ... });
    - Raw SQL: `CREATE UNIQUE INDEX premium_membership_live_per_garage ON "PremiumMembership" ("garageId") WHERE status IN ('active','past_due','cancel_scheduled');` (partial unique — one live row per garage; expired rows accumulate as history).
    - Raw SQL: `CREATE UNIQUE INDEX ticket_one_premium_grant_per_user_event ON "Ticket" ("userId","eventId") WHERE status = 'valid' AND source = 'premium_grant';` (DB-level idempotency backstop for F8.06 + F8.07 only — see §2.6 for why the broader form was rejected).
    - Add `TicketTier.isPremiumGrantable Boolean DEFAULT false`.
-2. Generate Prisma client, rebuild `@jdm/shared`.
+2. Generate Prisma client, rebuild `@ccc/shared`.
 3. Land schema chunk + tests behind a feature flag (`GROWTH_PREMIUM_BILLING_ENABLED=false` by default; flip after smoke).
 4. Stripe Dashboard config (manual, documented in `docs/stripe.md`):
    - Create Product "JDM Premium Gold".

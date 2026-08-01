@@ -1,5 +1,5 @@
 {
-  "name": "@jdm/shared",
+  "name": "@ccc/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -59,8 +59,8 @@
       "default": "./dist/garage-covers.js"
     },
     "./garage-progress": {
-      "types": "./dist/garage-progress.d.ts",
-      "import": "./dist/garage-progress.js"
+      "types": "./src/garage-progress.ts",
+      "default": "./dist/garage-progress.js"
     },
     "./feed": {
       "types": "./src/feed.ts",
@@ -97,6 +97,14 @@
     "./premium": {
       "types": "./src/premium.ts",
       "default": "./dist/premium.js"
+    },
+    "./premium-catalog": {
+      "types": "./src/premium-catalog.ts",
+      "default": "./dist/premium-catalog.js"
+    },
+    "./premium-subscription": {
+      "types": "./src/premium-subscription.ts",
+      "default": "./dist/premium-subscription.js"
     },
     "./profile": {
       "types": "./src/profile.ts",
@@ -149,7 +157,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@jdm/tsconfig": "workspace:*",
+    "@ccc/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"

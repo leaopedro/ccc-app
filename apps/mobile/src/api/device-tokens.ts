@@ -2,7 +2,7 @@ import {
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   type RegisterDeviceTokenRequest,
-} from '@jdm/shared/push';
+} from '@ccc/shared/push';
 
 import { authedRequest } from './client';
 

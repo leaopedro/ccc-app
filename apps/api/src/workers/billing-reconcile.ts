@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import type { PremiumMembership } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
@@ -107,6 +107,11 @@ const reconcileStripeRow = async (
         periodEnd: newPeriodEnd,
         paidAt: now,
       },
+      // Genuinely empty, not a placeholder: this event is synthesised from a
+      // single Stripe Subscription retrieve, which carries pricing straight
+      // from the provider. There is no multi-line invoice here for a route
+      // to decompose, so `lines` has nothing to carry.
+      lines: [],
     };
     return renewalEvent;
   }
@@ -177,6 +182,10 @@ const reconcileRcRow = async (
         periodEnd: expiresAt,
         paidAt: now,
       },
+      // Genuinely empty, not a placeholder: RC's getSubscriber reads pricing
+      // straight from the provider (row snapshot below), never through a
+      // multi-line invoice a route would need to decompose.
+      lines: [],
     };
   }
 

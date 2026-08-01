@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { confirmedCarsResponseSchema } from '@jdm/shared/events';
+import { prisma } from '@ccc/db';
+import { confirmedCarsResponseSchema } from '@ccc/shared/events';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

@@ -1,4 +1,4 @@
-import type { CapacityDisplayDescriptor } from '@jdm/shared/general-settings';
+import type { CapacityDisplayDescriptor } from '@ccc/shared/general-settings';
 
 export function capacityLabel(descriptor: CapacityDisplayDescriptor): string | null {
   if (descriptor.status === 'sold_out') return 'Esgotado';

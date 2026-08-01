@@ -1,7 +1,6 @@
 'use client';
 
-import { brand } from '@jdm/design';
-import type { AdminFinanceTrendPoint } from '@jdm/shared/admin';
+import type { AdminFinanceTrendPoint } from '@ccc/shared/admin';
 import {
   Area,
   AreaChart,
@@ -12,6 +11,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+
+import { brand } from '~/brand';
 
 const fmtCurrency = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);

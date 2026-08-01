@@ -2,7 +2,7 @@
 //
 // BuySpotSheet tests. Mirrors the CoverPickerSheet/IdentityCard pattern:
 // react-native primitives + Modal are stubbed to plain HTML tags so jsdom can
-// render them; `react-native-svg` is mocked because `@jdm/ui`'s barrel
+// render them; `react-native-svg` is mocked because `@ccc/ui`'s barrel
 // re-exports `ParkingStallCard` which imports SVG primitives.
 
 import { act } from 'react';

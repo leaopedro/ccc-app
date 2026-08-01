@@ -1,4 +1,4 @@
-import { brand } from '@jdm/design';
+import { brand } from '@ccc/design';
 
 const KEY = `@${brand.app.storagePrefix}/consent/marketing/seen/v1`;
 

@@ -1,4 +1,4 @@
-import { prisma } from '@jdm/db';
+import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Uploads } from '../../src/services/uploads/index.js';

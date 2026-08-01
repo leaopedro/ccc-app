@@ -7,7 +7,7 @@
 // deps), so we reuse the same harness chunk 38 established. Documented
 // as a deviation in the chunk PR body.
 
-import type { GarageProgress, GarageStats } from '@jdm/shared/garage-progress';
+import type { GarageProgress, GarageStats } from '@ccc/shared/garage-progress';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -337,8 +337,9 @@ describe('ProfileStats', () => {
 
       const hint = q('profile-stats-scoreboard-hint');
       expect(hint).not.toBeNull();
+      if (!hint) throw new Error('Expected score hint');
       await act(async () => {
-        hint!.click();
+        hint.click();
         await flush();
       });
 
@@ -358,7 +359,9 @@ describe('ProfileStats', () => {
       );
 
       await act(async () => {
-        q('profile-stats-scoreboard-hint')!.click();
+        const hint = q('profile-stats-scoreboard-hint');
+        if (!hint) throw new Error('Expected score hint');
+        hint.click();
         await flush();
       });
       expect(q('profile-stats-tooltip')).not.toBeNull();
@@ -370,8 +373,9 @@ describe('ProfileStats', () => {
       // simply absent from the DOM.
       const backdrop = q('profile-stats-tooltip-backdrop');
       expect(backdrop).not.toBeNull();
+      if (!backdrop) throw new Error('Expected tooltip backdrop');
       await act(async () => {
-        backdrop!.click();
+        backdrop.click();
         await flush();
       });
 

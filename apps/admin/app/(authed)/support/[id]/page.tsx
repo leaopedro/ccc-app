@@ -1,4 +1,4 @@
-import type { SupportTicketInternalStatus } from '@jdm/shared/support';
+import type { SupportTicketInternalStatus } from '@ccc/shared/support';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 

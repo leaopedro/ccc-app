@@ -1,5 +1,5 @@
-import { prisma } from '@jdm/db';
-import { adminGroupDetailSchema, adminGroupListResponseSchema } from '@jdm/shared/admin';
+import { prisma } from '@ccc/db';
+import { adminGroupDetailSchema, adminGroupListResponseSchema } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

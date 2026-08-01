@@ -1,4 +1,4 @@
-import type { GarageBadgesOwnerResponse, GarageBadgeOwnerState } from '@jdm/shared/badges';
+import type { GarageBadgesOwnerResponse, GarageBadgeOwnerState } from '@ccc/shared/badges';
 import { Pressable, Text, View } from 'react-native';
 
 import { HexBadge } from './HexBadge.js';
@@ -20,9 +20,17 @@ export interface BadgeRowProps {
   testID?: string;
 }
 
-const isEarned = (
-  b: GarageBadgeOwnerState,
-): b is Extract<GarageBadgeOwnerState, { state: 'earned' }> => b.state === 'earned';
+type EarnedBadge = {
+  code: string;
+  state: 'earned';
+  earnedAt: string;
+  pinned: boolean;
+  pinnedAt: string | null;
+};
+
+const isEarned = (b: GarageBadgeOwnerState): b is EarnedBadge => b.state === 'earned';
+
+const badgeTimestamp = (badge: EarnedBadge): string => badge.pinnedAt ?? badge.earnedAt;
 
 /**
  * Order: pinned-first (pinnedAt DESC), then unpinned earned (earnedAt DESC),
@@ -33,15 +41,13 @@ function orderBadges(
   badges: GarageBadgeOwnerState[],
   catalog: GarageBadgesOwnerResponse['catalog'],
 ): GarageBadgeOwnerState[] {
-  const earned = badges.filter(isEarned);
-  const pinned = earned
+  const earned: EarnedBadge[] = badges.filter(isEarned);
+  const pinned: EarnedBadge[] = earned
     .filter((b) => b.pinned)
     .sort((a, b) => {
-      const aT = a.pinnedAt ?? a.earnedAt;
-      const bT = b.pinnedAt ?? b.earnedAt;
-      return bT.localeCompare(aT);
+      return badgeTimestamp(b).localeCompare(badgeTimestamp(a));
     });
-  const unpinned = earned
+  const unpinned: EarnedBadge[] = earned
     .filter((b) => !b.pinned)
     .sort((a, b) => b.earnedAt.localeCompare(a.earnedAt));
   const earnedCodes = new Set(earned.map((b) => b.code));

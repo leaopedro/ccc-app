@@ -1,6 +1,6 @@
-import { prisma } from '@jdm/db';
-import type { NotificationDestination } from '@jdm/shared/notifications';
-import type { PushKind } from '@jdm/shared/push';
+import { prisma } from '@ccc/db';
+import type { NotificationDestination } from '@ccc/shared/notifications';
+import type { PushKind } from '@ccc/shared/push';
 import { Prisma } from '@prisma/client';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';

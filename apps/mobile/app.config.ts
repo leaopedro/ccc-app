@@ -34,7 +34,7 @@ const bundleId: Record<Variant, string> = {
 // of silently producing an empty projectId — which makes
 // Notifications.getExpoPushTokenAsync throw 'no-project-id' and breaks the
 // local broadcast push smoke (JDMA-534).
-const easProjectId = process.env.EAS_PROJECT_ID || 'c071216e-6224-4f00-9eb0-6737fb5e1691';
+const easProjectId = process.env.EAS_PROJECT_ID || 'bd5bfc09-9874-47f5-9ded-5dcf3bd8c3c3';
 
 const stripeMerchantIdentifier = variant === 'production' ? brand.app.stripeMerchantId : undefined;
 const sentryOrg = process.env.SENTRY_ORG;
@@ -78,7 +78,7 @@ const config: ExpoConfig = {
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic',
   updates: {
-    url: 'https://u.expo.dev/c071216e-6224-4f00-9eb0-6737fb5e1691',
+    url: 'https://u.expo.dev/bd5bfc09-9874-47f5-9ded-5dcf3bd8c3c3',
   },
   splash: {
     image: './assets/splash.png',
@@ -103,6 +103,7 @@ const config: ExpoConfig = {
     'expo-router',
     ...devLauncherPlugins,
     'expo-secure-store',
+    'expo-web-browser',
     [
       '@stripe/stripe-react-native',
       stripeMerchantIdentifier ? { merchantIdentifier: stripeMerchantIdentifier } : {},

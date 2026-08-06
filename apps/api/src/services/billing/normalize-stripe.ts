@@ -174,6 +174,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       current_period_start: number;
       current_period_end: number;
       canceled_at: number | null;
+      pause_collection: { behavior?: string } | null;
       items: {
         data: Array<{
           price: {
@@ -185,6 +186,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       };
       previous_attributes?: {
         cancel_at_period_end?: boolean;
+        pause_collection?: { behavior?: string } | null;
         items?: { data: Array<{ price: { id: string } }> };
       };
     };
@@ -207,6 +209,32 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
           provider: 'stripe',
           providerSubRef: sub.id,
         } satisfies BillingEvent & { kind: 'subscription.uncancelled' };
+      }
+    }
+
+    // Discriminator 1.5: pause_collection flip.
+    //
+    // Avaliado DEPOIS do flip de cancel_at_period_end e ANTES do swap de preco.
+    // Ordem deliberada: um evento que cancela e pausa ao mesmo tempo e antes de
+    // tudo um cancelamento, que muda entitlement; pausa so muda cobranca. E a
+    // pausa da Stripe nao mexe em preco, entao vir antes do swap evita ler
+    // items.data[0] sem necessidade.
+    if (prev.pause_collection !== undefined) {
+      const wasPaused = prev.pause_collection !== null;
+      const isPaused = sub.pause_collection !== null;
+      if (!wasPaused && isPaused) {
+        return {
+          kind: 'subscription.paused',
+          provider: 'stripe',
+          providerSubRef: sub.id,
+        } satisfies BillingEvent & { kind: 'subscription.paused' };
+      }
+      if (wasPaused && !isPaused) {
+        return {
+          kind: 'subscription.resumed',
+          provider: 'stripe',
+          providerSubRef: sub.id,
+        } satisfies BillingEvent & { kind: 'subscription.resumed' };
       }
     }
 

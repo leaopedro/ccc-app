@@ -117,6 +117,22 @@ export type BillingEvent =
       tier: GaragePremiumTier;
       cadence: PremiumCadence;
       pricing: BillingPricing;
+    }
+  | {
+      /**
+       * Cobranca suspensa sem cancelamento (Stripe pause_collection). Produz o
+       * status `paused`, que ja existia no enum do schema mas que nenhum evento
+       * gerava antes desta mudanca.
+       */
+      kind: 'subscription.paused';
+      provider: PremiumProvider;
+      providerSubRef: string;
+    }
+  | {
+      /** Cobranca retomada: pause_collection limpo. Volta para `active`. */
+      kind: 'subscription.resumed';
+      provider: PremiumProvider;
+      providerSubRef: string;
     };
 
 /** Convenience: all valid `kind` strings, for exhaustiveness checks in switch arms. */

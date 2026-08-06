@@ -37,6 +37,10 @@ export const applyMembershipEvent = async (
       return handlePastDue(tx, evt);
     case 'subscription.tier_changed':
       return handleTierChanged(tx, evt);
+    case 'subscription.paused':
+      return handlePaused(tx, evt);
+    case 'subscription.resumed':
+      return handleResumed(tx, evt);
     default: {
       // Exhaustive check — TypeScript will error if BillingEvent grows a new kind
       // without a corresponding case.
@@ -511,6 +515,53 @@ async function handleTierChanged(
   await tx.garage.update({
     where: { id: membership.garageId },
     data: { premiumTier: tier, premiumUntil: newUntil },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.paused (Stripe pause_collection)
+// ---------------------------------------------------------------------------
+
+async function handlePaused(
+  tx: Prisma.TransactionClient,
+  evt: Extract<BillingEvent, { kind: 'subscription.paused' }>,
+): Promise<void> {
+  const { provider, providerSubRef } = evt;
+
+  // Status flip only. Snapshot da Garage fica intacto de proposito: o membro
+  // mantem entitlement ate premiumUntil, mesma escolha ja feita em handlePastDue.
+  // Pausa suspende cobranca, nao revoga o que ja foi pago.
+  await tx.premiumMembership.update({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    data: { status: 'paused' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.resumed (pause_collection cleared)
+// ---------------------------------------------------------------------------
+
+async function handleResumed(
+  tx: Prisma.TransactionClient,
+  evt: Extract<BillingEvent, { kind: 'subscription.resumed' }>,
+): Promise<void> {
+  const { provider, providerSubRef } = evt;
+
+  const membership = await tx.premiumMembership.update({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    data: { status: 'active', cancelAtPeriodEnd: false, cancelledAt: null },
+  });
+
+  // Snapshot refresh com a regra de max() (canon §F8.3), igual a
+  // handleUncancelled: uma concessao manual mais distante nao pode ser encurtada.
+  const garage = await tx.garage.findUniqueOrThrow({ where: { id: membership.garageId } });
+  const existingUntil = garage.premiumUntil ?? new Date(0);
+  const newUntil =
+    membership.currentPeriodEnd > existingUntil ? membership.currentPeriodEnd : existingUntil;
+
+  await tx.garage.update({
+    where: { id: membership.garageId },
+    data: { premiumTier: membership.tier, premiumUntil: newUntil },
   });
 }
 

@@ -56,8 +56,8 @@ export const brand = {
   },
 
   contact: {
-    privacyEmail: 'privacidade@casacarclub.com.br',
-    contactEmail: 'contato@casacarclub.com.br',
+    privacyEmail: 'privacidade@casacar.club',
+    contactEmail: 'contato@casacar.club',
     legalName: 'Casa Car Club',
     dpoName: 'Pedro Leão',
     dpoTitle: 'CEO e fundador',

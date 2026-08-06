@@ -21,6 +21,10 @@ export const buildLoggerOptions = (env: Env): LoggerOptions => {
         'req.headers.authorization',
         'req.headers.cookie',
         'req.headers["x-webhook-signature"]',
+        // Client IP: the privacy policy states logs mask the IP. Pino's
+        // stdSerializers.req emits it as remoteAddress/remotePort.
+        'req.remoteAddress',
+        'req.remotePort',
         '*.password',
         '*.token',
       ],

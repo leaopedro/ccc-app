@@ -43,6 +43,14 @@ export const profileCopy = {
     title: 'Privacidade e dados',
     intro:
       'Você pode exportar uma cópia dos seus dados ou excluir sua conta. Para outras solicitações (correção, portabilidade), escreva para privacidade@casacar.club.',
+    exportTitle: 'Exportar meus dados',
+    exportExplainer:
+      'Geramos um arquivo com os seus dados (perfil, garagem, pedidos, ingressos e mais). Isso pode levar alguns instantes.',
+    exportButton: 'Exportar meus dados',
+    exportWorking: 'Preparando exportação…',
+    exportReadyOpening: 'Abrindo download…',
+    exportSlow: 'Ainda estamos preparando. Tente novamente em alguns minutos.',
+    exportFailed: 'Não foi possível exportar seus dados. Tente novamente.',
     deleteTitle: 'Excluir conta',
     deleteExplainer:
       'Sua conta é desativada imediatamente e anonimizada após 30 dias de carência. Registros fiscais de compras são mantidos pelo prazo exigido por lei. Esta ação não pode ser desfeita.',

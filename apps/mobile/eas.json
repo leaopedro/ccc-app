@@ -36,7 +36,7 @@
   },
   "submit": {
     "production": {
-      "ios": { "appleId": "$APPLE_ID", "ascAppId": "6798074856" },
+      "ios": { "ascAppId": "6798074856" },
       "android": { "serviceAccountKeyPath": "./secrets/play-service-account.json" }
     }
   }

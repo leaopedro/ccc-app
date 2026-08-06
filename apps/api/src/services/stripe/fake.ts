@@ -14,10 +14,14 @@ import type {
   FindOrCreateCustomerInput,
   FindOrCreateCustomerResult,
   OpenSubscriptionCheckoutSession,
+  PauseSubscriptionCollectionInput,
   PaymentIntentResult,
   RemoveSubscriptionItemInput,
+  ResumeSubscriptionCancellationInput,
+  ResumeSubscriptionCollectionInput,
   StripeClient,
   SubscriptionCheckoutSessionResult,
+  UpdateSubscriptionItemPriceInput,
   WebhookEvent,
 } from './index.js';
 
@@ -37,7 +41,11 @@ type FakeCall = {
     | 'retrievePrice'
     | 'addSubscriptionItem'
     | 'removeSubscriptionItem'
-    | 'cancelSubscriptionAtPeriodEnd';
+    | 'cancelSubscriptionAtPeriodEnd'
+    | 'updateSubscriptionItemPrice'
+    | 'resumeSubscriptionCancellation'
+    | 'pauseSubscriptionCollection'
+    | 'resumeSubscriptionCollection';
   payload: unknown;
 };
 
@@ -78,6 +86,14 @@ export type FakeStripe = StripeClient & {
   nextRemoveSubscriptionItemError: Error | null;
   /** Next payload returned by cancelSubscriptionAtPeriodEnd. */
   nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
+  /** When set, updateSubscriptionItemPrice throws this error. */
+  nextUpdateSubscriptionItemPriceError: Error | null;
+  /** When set, resumeSubscriptionCancellation throws this error. */
+  nextResumeSubscriptionCancellationError: Error | null;
+  /** When set, pauseSubscriptionCollection throws this error. */
+  nextPauseSubscriptionCollectionError: Error | null;
+  /** When set, resumeSubscriptionCollection throws this error. */
+  nextResumeSubscriptionCollectionError: Error | null;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
@@ -115,6 +131,10 @@ export const buildFakeStripe = (): FakeStripe => {
     nextCancelledSubscription: {
       cancelAtPeriodEnd: true,
     },
+    nextUpdateSubscriptionItemPriceError: null,
+    nextResumeSubscriptionCancellationError: null,
+    nextPauseSubscriptionCollectionError: null,
+    nextResumeSubscriptionCollectionError: null,
     // eslint-disable-next-line @typescript-eslint/require-await
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -249,6 +269,40 @@ export const buildFakeStripe = (): FakeStripe => {
     ): Promise<CancelSubscriptionAtPeriodEndResult> => {
       fake.calls.push({ kind: 'cancelSubscriptionAtPeriodEnd', payload: input });
       return fake.nextCancelledSubscription;
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    updateSubscriptionItemPrice: async (input: UpdateSubscriptionItemPriceInput): Promise<void> => {
+      fake.calls.push({ kind: 'updateSubscriptionItemPrice', payload: input });
+      if (fake.nextUpdateSubscriptionItemPriceError) {
+        throw fake.nextUpdateSubscriptionItemPriceError;
+      }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    resumeSubscriptionCancellation: async (
+      input: ResumeSubscriptionCancellationInput,
+    ): Promise<void> => {
+      fake.calls.push({ kind: 'resumeSubscriptionCancellation', payload: input });
+      if (fake.nextResumeSubscriptionCancellationError) {
+        throw fake.nextResumeSubscriptionCancellationError;
+      }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    pauseSubscriptionCollection: async (
+      input: PauseSubscriptionCollectionInput,
+    ): Promise<void> => {
+      fake.calls.push({ kind: 'pauseSubscriptionCollection', payload: input });
+      if (fake.nextPauseSubscriptionCollectionError) {
+        throw fake.nextPauseSubscriptionCollectionError;
+      }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    resumeSubscriptionCollection: async (
+      input: ResumeSubscriptionCollectionInput,
+    ): Promise<void> => {
+      fake.calls.push({ kind: 'resumeSubscriptionCollection', payload: input });
+      if (fake.nextResumeSubscriptionCollectionError) {
+        throw fake.nextResumeSubscriptionCollectionError;
+      }
     },
   };
   return fake;

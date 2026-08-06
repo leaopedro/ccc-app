@@ -101,7 +101,7 @@ export default async function AssinaturasPage({
   if (search) preservedParams.search = search;
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6" data-accent="ccc">
       <header>
         <h1 className="text-2xl font-bold">Assinaturas</h1>
         <p className="mt-1 text-sm text-[color:var(--color-muted)]">

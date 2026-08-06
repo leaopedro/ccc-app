@@ -1,6 +1,9 @@
 import type { AdminFinanceMembershipsItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 
+import { DateField } from '~/components/date-field';
+import { fmtBRL, fmtDate, fmtRelative } from '~/lib/format';
+
 const statusLabel: Record<string, string> = {
   active: 'Ativo',
   past_due: 'Inadimplente',
@@ -10,13 +13,17 @@ const statusLabel: Record<string, string> = {
   paused: 'Pausado',
 };
 
+// Pilulas com fundo tintado + borda combinando, em vez do bg-*-900 solido:
+// mais discreto, sem competir com o nome do membro na mesma linha.
 const statusColor: Record<string, string> = {
-  active: 'bg-emerald-900 text-emerald-300',
-  past_due: 'bg-red-900 text-red-300',
-  cancel_scheduled: 'bg-yellow-900 text-yellow-300',
-  expired: 'bg-[color:var(--color-border)] text-[color:var(--color-muted)]',
-  trialing: 'bg-blue-900 text-blue-300',
-  paused: 'bg-[color:var(--color-border)] text-[color:var(--color-muted)]',
+  active: 'border border-emerald-900 bg-emerald-900/20 text-emerald-300',
+  past_due: 'border border-red-900 bg-red-900/20 text-red-300',
+  cancel_scheduled: 'border border-yellow-900 bg-yellow-900/20 text-yellow-300',
+  expired:
+    'border border-[color:var(--color-border)] bg-[color:var(--color-border)]/20 text-[color:var(--color-muted)]',
+  trialing: 'border border-blue-900 bg-blue-900/20 text-blue-300',
+  paused:
+    'border border-[color:var(--color-border)] bg-[color:var(--color-border)]/20 text-[color:var(--color-muted)]',
 };
 
 const cadenceLabel: Record<string, string> = { monthly: 'Mensal', annual: 'Anual' };
@@ -37,12 +44,18 @@ function paymentLabel(item: AdminFinanceMembershipsItem): string {
   return item.provider === 'apple_revenuecat' ? 'App Store' : 'Cartão';
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR');
-}
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RENEWING_STATUSES = new Set(['active', 'past_due', 'trialing']);
 
-function fmtBRL(cents: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+// Destaque sutil (cor de acento) quando a renovacao esta a 7 dias ou menos e
+// a assinatura de fato vai renovar. cancelAtPeriodEnd tem seu proprio aviso.
+function renewalToneClass(item: AdminFinanceMembershipsItem, now: Date): string {
+  if (item.cancelAtPeriodEnd) return 'text-[color:var(--color-muted)]';
+  const days = Math.round((new Date(item.currentPeriodEnd).getTime() - now.getTime()) / DAY_MS);
+  if (days >= 0 && days <= 7 && RENEWING_STATUSES.has(item.status)) {
+    return 'font-medium text-[color:var(--color-accent)]';
+  }
+  return 'text-[color:var(--color-muted)]';
 }
 
 type ActiveFilters = {
@@ -151,6 +164,7 @@ export function AssinaturasTable({
   vendorOptions,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const now = new Date();
 
   const statusOptions = ['active', 'past_due', 'cancel_scheduled', 'paused', 'expired'];
   const cadenceOptions = ['monthly', 'annual'];
@@ -240,26 +254,18 @@ export function AssinaturasTable({
             .map((k) => (
               <input key={k} type="hidden" name={k} value={activeFilters[k] as string} />
             ))}
-          <label className="flex flex-col gap-1 text-xs text-[color:var(--color-muted)]">
-            Renova de
-            <input
-              type="date"
-              name="from"
-              defaultValue={preservedParams.from ?? ''}
-              className="rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--color-fg)]"
-              data-testid="assinaturas-from"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-[color:var(--color-muted)]">
-            até
-            <input
-              type="date"
-              name="to"
-              defaultValue={preservedParams.to ?? ''}
-              className="rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--color-fg)]"
-              data-testid="assinaturas-to"
-            />
-          </label>
+          <DateField
+            name="from"
+            label="Renova de"
+            defaultValue={preservedParams.from ?? ''}
+            data-testid="assinaturas-from"
+          />
+          <DateField
+            name="to"
+            label="até"
+            defaultValue={preservedParams.to ?? ''}
+            data-testid="assinaturas-to"
+          />
           <label className="flex flex-col gap-1 text-xs text-[color:var(--color-muted)]">
             Buscar
             <input
@@ -305,9 +311,9 @@ export function AssinaturasTable({
               <th className="pr-3">Status</th>
               <th className="pr-3">Pagamento</th>
               <th className="pr-3">Renovação</th>
-              <th className="pr-3">Mensal</th>
+              <th className="pr-3 text-right">Mensal</th>
               <th className="pr-3">Módulos</th>
-              <th className="pr-3">Total pago</th>
+              <th className="pr-3 text-right">Total pago</th>
             </tr>
           </thead>
           <tbody>
@@ -317,7 +323,7 @@ export function AssinaturasTable({
                 className="border-b border-[color:var(--color-border)] hover:bg-[color:var(--color-border)]/30"
                 data-testid={`assinaturas-row-${item.membershipId}`}
               >
-                <td className="py-2 pr-3">
+                <td className="py-3 pr-3">
                   <Link
                     href={`/assinaturas/${item.membershipId}`}
                     className="font-medium hover:underline"
@@ -327,10 +333,10 @@ export function AssinaturasTable({
                   </Link>
                   <div className="text-xs text-[color:var(--color-muted)]">{item.userEmail}</div>
                 </td>
-                <td className="pr-3">
+                <td className="py-3 pr-3 text-[color:var(--color-muted)]">
                   {tierLabel[item.tier] ?? item.tier} / {cadenceLabel[item.cadence] ?? item.cadence}
                 </td>
-                <td className="pr-3">
+                <td className="py-3 pr-3">
                   <span
                     className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusColor[item.status] ?? ''}`}
                     data-testid={`assinaturas-status-${item.membershipId}`}
@@ -338,12 +344,26 @@ export function AssinaturasTable({
                     {statusLabel[item.status] ?? item.status}
                   </span>
                 </td>
-                <td className="pr-3 text-xs">{paymentLabel(item)}</td>
-                <td className="pr-3">{fmtDate(item.currentPeriodEnd)}</td>
-                <td className="pr-3">{fmtBRL(item.baseAmountCents + item.addonsAmountCents)}</td>
-                <td className="pr-3">
+                <td className="py-3 pr-3 text-xs text-[color:var(--color-muted)]">
+                  {paymentLabel(item)}
+                </td>
+                <td className="py-3 pr-3">
+                  <div>{fmtDate(item.currentPeriodEnd)}</div>
+                  <div className={`text-xs ${renewalToneClass(item, now)}`}>
+                    {fmtRelative(item.currentPeriodEnd, now)}
+                    {item.cancelAtPeriodEnd ? (
+                      <span className="ml-1.5 rounded border border-yellow-900 bg-yellow-900/20 px-1 py-0.5 text-[9px] font-semibold text-yellow-300">
+                        Encerra
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="py-3 pr-3 text-right font-medium tabular-nums">
+                  {fmtBRL(item.baseAmountCents + item.addonsAmountCents)}
+                </td>
+                <td className="py-3 pr-3 text-[color:var(--color-muted)]">
                   {item.addonKeys.length === 0 ? (
-                    <span className="text-xs text-[color:var(--color-muted)]">—</span>
+                    <span className="text-xs">—</span>
                   ) : (
                     <span
                       className="text-xs"
@@ -353,7 +373,9 @@ export function AssinaturasTable({
                     </span>
                   )}
                 </td>
-                <td className="pr-3">{fmtBRL(item.totalPaidCents)}</td>
+                <td className="py-3 pr-3 text-right font-semibold tabular-nums">
+                  {fmtBRL(item.totalPaidCents)}
+                </td>
               </tr>
             ))}
           </tbody>

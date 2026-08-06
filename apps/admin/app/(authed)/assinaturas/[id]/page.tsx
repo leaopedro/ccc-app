@@ -9,6 +9,7 @@ import { StatusActions } from './status-actions';
 import { getAdminPremiumCatalog } from '~/lib/admin-api';
 import { ApiError } from '~/lib/api';
 import { fetchAdminSubscription } from '~/lib/assinaturas-actions';
+import { fmtBRL, fmtDate, fmtPeriod, fmtRelative } from '~/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,13 +22,17 @@ const statusLabel: Record<string, string> = {
   paused: 'Pausado',
 };
 
+// Pilulas com fundo tintado + borda combinando, em vez do bg-*-900 solido:
+// mais discreto, sem competir com o nome do membro no card acima.
 const statusColor: Record<string, string> = {
-  active: 'bg-emerald-900 text-emerald-300',
-  past_due: 'bg-red-900 text-red-300',
-  cancel_scheduled: 'bg-yellow-900 text-yellow-300',
-  expired: 'bg-[color:var(--color-border)] text-[color:var(--color-muted)]',
-  trialing: 'bg-blue-900 text-blue-300',
-  paused: 'bg-[color:var(--color-border)] text-[color:var(--color-muted)]',
+  active: 'border border-emerald-900 bg-emerald-900/20 text-emerald-300',
+  past_due: 'border border-red-900 bg-red-900/20 text-red-300',
+  cancel_scheduled: 'border border-yellow-900 bg-yellow-900/20 text-yellow-300',
+  expired:
+    'border border-[color:var(--color-border)] bg-[color:var(--color-border)]/20 text-[color:var(--color-muted)]',
+  trialing: 'border border-blue-900 bg-blue-900/20 text-blue-300',
+  paused:
+    'border border-[color:var(--color-border)] bg-[color:var(--color-border)]/20 text-[color:var(--color-muted)]',
 };
 
 const cadenceLabel: Record<string, string> = { monthly: 'Mensal', annual: 'Anual' };
@@ -48,28 +53,77 @@ const invoiceStatusLabel: Record<string, string> = {
   partial_refund: 'Estorno parcial',
 };
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR');
-}
-
-function fmtBRL(cents: number): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-}
-
 function paymentLabel(d: AdminSubscriptionDetail): string {
   if (d.paymentBrand && d.paymentLast4) return `${d.paymentBrand} ····${d.paymentLast4}`;
   return d.provider === 'apple_revenuecat' ? 'App Store' : 'Cartão';
 }
 
-function Tile({ label, value, testId }: { label: string; value: string; testId?: string }) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Tile de suporte: rotulo + valor, peso visual menor que os dois numeros que
+// abrem a tela (total mensal e renovacao).
+function Tile({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: React.ReactNode;
+  testId?: string;
+}) {
   return (
     <div className="rounded-lg border border-[color:var(--color-border)] p-3" data-testid={testId}>
+      <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-medium tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+// Tile principal: o total cobrado e a data de renovacao sao a informacao que
+// o operador busca primeiro; o resto (plano, cadencia, pagamento) so apoia.
+function HeroTile({
+  label,
+  value,
+  sub,
+  accentValue,
+  testId,
+}: {
+  label: string;
+  value: string;
+  sub?: React.ReactNode;
+  accentValue?: boolean;
+  testId?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[color:var(--color-border)] p-4" data-testid={testId}>
       <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
         {label}
       </div>
-      <div className="mt-1 text-lg font-semibold">{value}</div>
+      <div
+        className={`mt-1 text-2xl font-bold tabular-nums ${
+          accentValue ? 'text-[color:var(--color-accent)]' : ''
+        }`}
+      >
+        {value}
+      </div>
+      {sub ? <div className="mt-1 text-xs text-[color:var(--color-muted)]">{sub}</div> : null}
     </div>
   );
+}
+
+// Margem em destaque quando negativa: pilula tintada, mesma convencao das
+// pilulas de status, em vez de so um numero perdido no meio da tabela.
+function MarginValue({ cents }: { cents: number }) {
+  if (cents < 0) {
+    return (
+      <span className="rounded border border-red-900 bg-red-900/20 px-1.5 py-0.5 font-semibold text-red-300">
+        {fmtBRL(cents)}
+      </span>
+    );
+  }
+  return <span className="font-medium">{fmtBRL(cents)}</span>;
 }
 
 export default async function AssinaturaDetalhePage({
@@ -104,8 +158,15 @@ export default async function AssinaturaDetalhePage({
     moduleOptions = [];
   }
 
+  const now = new Date();
+  const windingDown = detail.cancelAtPeriodEnd || detail.status === 'paused';
+  const daysToRenewal = Math.round(
+    (new Date(detail.currentPeriodEnd).getTime() - now.getTime()) / DAY_MS,
+  );
+  const renewalSoon = !windingDown && daysToRenewal >= 0 && daysToRenewal <= 7;
+
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6" data-accent="ccc">
       <Link
         href="/assinaturas"
         className="text-sm text-[color:var(--color-muted)] hover:text-[color:var(--color-fg)]"
@@ -149,23 +210,41 @@ export default async function AssinaturaDetalhePage({
         </div>
       ) : null}
 
-      {/* Tiles */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* Os dois numeros que o operador busca primeiro: quanto e quando. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <HeroTile
+          label="Total mensal"
+          value={fmtBRL(detail.totalAmountCents)}
+          accentValue
+          testId="assinaturas-detalhe-total"
+          sub={`Base ${fmtBRL(detail.baseAmountCents)} + módulos ${fmtBRL(detail.addonsAmountCents)}`}
+        />
+        <HeroTile
+          label="Renovação"
+          value={fmtDate(detail.currentPeriodEnd)}
+          sub={
+            <span className={renewalSoon ? 'font-medium text-[color:var(--color-accent)]' : ''}>
+              {fmtRelative(detail.currentPeriodEnd, now)}
+              {windingDown ? (
+                <span className="ml-1.5 rounded border border-yellow-900 bg-yellow-900/20 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-300">
+                  Encerra ao fim do período
+                </span>
+              ) : null}
+            </span>
+          }
+        />
+      </div>
+
+      {/* Suporte: plano, cadencia e demais valores que ja compoem o total acima. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
         <Tile
           label="Plano"
-          value={`${detail.planName ?? tierLabel[detail.tier] ?? detail.tier}`}
+          value={detail.planName ?? tierLabel[detail.tier] ?? detail.tier}
           testId="assinaturas-detalhe-plano"
         />
         <Tile label="Cadência" value={cadenceLabel[detail.cadence] ?? detail.cadence} />
         <Tile label="Valor base" value={fmtBRL(detail.baseAmountCents)} />
         <Tile label="Módulos" value={fmtBRL(detail.addonsAmountCents)} />
-        <Tile
-          label="Total mensal"
-          value={fmtBRL(detail.totalAmountCents)}
-          testId="assinaturas-detalhe-total"
-        />
-        <Tile label="Renovação" value={fmtDate(detail.currentPeriodEnd)} />
-        <Tile label="Cancelamento agendado" value={detail.cancelAtPeriodEnd ? 'Sim' : 'Não'} />
         <Tile
           label="Pagamento"
           value={paymentLabel(detail)}
@@ -191,9 +270,9 @@ export default async function AssinaturaDetalhePage({
                 <th className="pr-3">Fornecedor</th>
                 <th className="pr-3">Status</th>
                 <th className="pr-3">Cota do ciclo</th>
-                <th className="pr-3">Cobrado</th>
-                <th className="pr-3">Repasse</th>
-                <th className="pr-3">Margem</th>
+                <th className="pr-3 text-right">Cobrado</th>
+                <th className="pr-3 text-right">Repasse</th>
+                <th className="pr-3 text-right">Margem</th>
               </tr>
             </thead>
             <tbody>
@@ -203,7 +282,7 @@ export default async function AssinaturaDetalhePage({
                   className="border-b border-[color:var(--color-border)]"
                   data-testid={`assinaturas-detalhe-modulo-${addon.key}`}
                 >
-                  <td className="py-2 pr-3">
+                  <td className="py-3 pr-3">
                     <div className="font-medium">{addon.name}</div>
                     {!addon.billingIntegrated ? (
                       <div
@@ -214,20 +293,28 @@ export default async function AssinaturaDetalhePage({
                       </div>
                     ) : null}
                   </td>
-                  <td className="pr-3">
+                  <td className="py-3 pr-3 text-[color:var(--color-muted)]">
                     {addon.vendorName ?? (
                       <span className="text-[color:var(--color-muted)]">Não cadastrado</span>
                     )}
                   </td>
-                  <td className="pr-3 text-xs">{addonStatusLabel[addon.status] ?? addon.status}</td>
-                  <td className="pr-3 text-xs">
+                  <td className="py-3 pr-3 text-xs text-[color:var(--color-muted)]">
+                    {addonStatusLabel[addon.status] ?? addon.status}
+                  </td>
+                  <td className="py-3 pr-3 text-xs text-[color:var(--color-muted)]">
                     {addon.currentCycle
                       ? `${addon.currentCycle.quotaUsed} de ${addon.currentCycle.quotaTotal} ${quotaUnitLabel[addon.quotaUnit] ?? addon.quotaUnit}`
                       : '—'}
                   </td>
-                  <td className="pr-3">{fmtBRL(addon.monthlyDeltaCents)}</td>
-                  <td className="pr-3">{fmtBRL(addon.payoutAmountCents)}</td>
-                  <td className="pr-3">{fmtBRL(addon.marginCents)}</td>
+                  <td className="py-3 pr-3 text-right tabular-nums text-[color:var(--color-muted)]">
+                    {fmtBRL(addon.monthlyDeltaCents)}
+                  </td>
+                  <td className="py-3 pr-3 text-right tabular-nums text-[color:var(--color-muted)]">
+                    {fmtBRL(addon.payoutAmountCents)}
+                  </td>
+                  <td className="py-3 pr-3 text-right tabular-nums">
+                    <MarginValue cents={addon.marginCents} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -270,7 +357,7 @@ export default async function AssinaturaDetalhePage({
               <tr className="border-b border-[color:var(--color-border)] text-xs text-[color:var(--color-muted)]">
                 <th className="py-2 pr-3">Período</th>
                 <th className="pr-3">Pago em</th>
-                <th className="pr-3">Valor</th>
+                <th className="pr-3 text-right">Valor</th>
                 <th className="pr-3">Status</th>
                 <th className="pr-3">Estorno</th>
               </tr>
@@ -282,13 +369,17 @@ export default async function AssinaturaDetalhePage({
                   className="border-b border-[color:var(--color-border)]"
                   data-testid={`assinaturas-detalhe-fatura-${i}`}
                 >
-                  <td className="py-2 pr-3">
-                    {fmtDate(inv.periodStart)} — {fmtDate(inv.periodEnd)}
+                  <td className="py-3 pr-3">{fmtPeriod(inv.periodStart, inv.periodEnd)}</td>
+                  <td className="py-3 pr-3 text-[color:var(--color-muted)]">
+                    {fmtDate(inv.paidAt)}
                   </td>
-                  <td className="pr-3">{fmtDate(inv.paidAt)}</td>
-                  <td className="pr-3">{fmtBRL(inv.grossAmountCents)}</td>
-                  <td className="pr-3 text-xs">{invoiceStatusLabel[inv.status] ?? inv.status}</td>
-                  <td className="pr-3 text-xs">
+                  <td className="py-3 pr-3 text-right font-medium tabular-nums">
+                    {fmtBRL(inv.grossAmountCents)}
+                  </td>
+                  <td className="py-3 pr-3 text-xs text-[color:var(--color-muted)]">
+                    {invoiceStatusLabel[inv.status] ?? inv.status}
+                  </td>
+                  <td className="py-3 pr-3 text-xs text-[color:var(--color-muted)]">
                     {inv.refundedAt
                       ? `${fmtDate(inv.refundedAt)} · ${fmtBRL(inv.refundedAmountCents ?? 0)}`
                       : '—'}

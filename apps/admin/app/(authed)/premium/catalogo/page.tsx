@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export default async function PremiumPage() {
   const catalog = await getAdminPremiumCatalog();
   return (
-    <section className="flex flex-col gap-8">
+    <section className="flex flex-col gap-8" data-accent="ccc">
       <header>
         <h1 className="text-2xl font-bold">Catálogo premium</h1>
         <p className="text-sm text-[color:var(--color-muted)]">

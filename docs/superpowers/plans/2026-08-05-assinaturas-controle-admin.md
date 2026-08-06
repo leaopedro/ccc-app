@@ -1169,7 +1169,7 @@ const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
 const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
 
 async function seedMembership(status: 'active' | 'paused') {
-  const user = await createUser({ verified: true });
+  const { user } = await createUser({ verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
   await prisma.garage.update({
     where: { id: garage.id },
@@ -1412,7 +1412,7 @@ const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
 const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
 
 async function garageFor() {
-  const user = await createUser({ verified: true });
+  const { user } = await createUser({ verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
   return garage.id;
 }
@@ -1920,7 +1920,7 @@ const logger = {
 } as never;
 
 async function seed(opts: { stripePriceId?: string | null } = {}) {
-  const user = await createUser({ verified: true });
+  const { user } = await createUser({ verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
   const membership = await prisma.premiumMembership.create({
     data: {
@@ -2655,7 +2655,7 @@ const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
 const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
 
 async function seed() {
-  const user = await createUser({ verified: true });
+  const { user } = await createUser({ verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
   const membership = await prisma.premiumMembership.create({
     data: {
@@ -3096,7 +3096,7 @@ const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
 const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
 
 async function seedSubscription(provider: 'stripe' | 'apple_revenuecat' = 'stripe') {
-  const member = await createUser({ email: 'membro@example.com', name: 'Ana', verified: true });
+  const { user: member } = await createUser({ email: 'membro@example.com', name: 'Ana', verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: member.id } });
 
   const plan = await prisma.premiumPlan.create({
@@ -3212,7 +3212,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('403 para role user', async () => {
     const { membershipId } = await seedSubscription();
-    const u = await createUser({ email: 'u@example.com', verified: true });
+    const { user: u } = await createUser({ email: 'u@example.com', verified: true });
     const res = await app.inject({
       method: 'GET',
       url: `/admin/subscriptions/${membershipId}`,
@@ -3223,7 +3223,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('403 para role staff', async () => {
     const { membershipId } = await seedSubscription();
-    const u = await createUser({ email: 's@example.com', role: 'staff', verified: true });
+    const { user: u } = await createUser({ email: 's@example.com', role: 'staff', verified: true });
     const res = await app.inject({
       method: 'GET',
       url: `/admin/subscriptions/${membershipId}`,
@@ -3234,7 +3234,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('devolve o detalhe completo, validado pelo schema', async () => {
     const { membershipId, memberId, garageId } = await seedSubscription();
-    const admin = await createUser({ email: 'a@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'a@example.com', role: 'admin', verified: true });
 
     const res = await app.inject({
       method: 'GET',
@@ -3268,7 +3268,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('nao vaza referencia de provider', async () => {
     const { membershipId } = await seedSubscription();
-    const admin = await createUser({ email: 'a2@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'a2@example.com', role: 'admin', verified: true });
 
     const res = await app.inject({
       method: 'GET',
@@ -3283,7 +3283,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('assinatura Apple vem com mutable falso', async () => {
     const { membershipId } = await seedSubscription('apple_revenuecat');
-    const admin = await createUser({ email: 'a3@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'a3@example.com', role: 'admin', verified: true });
 
     const res = await app.inject({
       method: 'GET',
@@ -3295,7 +3295,7 @@ describe('GET /admin/subscriptions/:id', () => {
   });
 
   it('404 para id inexistente', async () => {
-    const admin = await createUser({ email: 'a4@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'a4@example.com', role: 'admin', verified: true });
     const res = await app.inject({
       method: 'GET',
       url: '/admin/subscriptions/mem_inexistente',
@@ -3306,7 +3306,7 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('leitura funciona com a flag de billing desligada', async () => {
     const { membershipId } = await seedSubscription();
-    const admin = await createUser({ email: 'a5@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'a5@example.com', role: 'admin', verified: true });
     const previous = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'false';
     const flaggedApp = await makeApp();
@@ -3526,7 +3526,7 @@ import { seedSubscription } from './seed.js';
 type App = Awaited<ReturnType<typeof makeAppWithFakeStripe>>;
 
 const adminAuth = async (id = 'a@example.com') => {
-  const admin = await createUser({ email: id, role: 'admin', verified: true });
+  const { user: admin } = await createUser({ email: id, role: 'admin', verified: true });
   return bearer(loadEnv(), admin.id, 'admin');
 };
 
@@ -3548,7 +3548,7 @@ describe('mutacoes admin de assinatura', () => {
 
   it('403 para staff em toda mutacao', async () => {
     const { membershipId } = await seedSubscription();
-    const staff = await createUser({ email: 's@example.com', role: 'staff', verified: true });
+    const { user: staff } = await createUser({ email: 's@example.com', role: 'staff', verified: true });
     const auth = bearer(loadEnv(), staff.id, 'staff');
 
     for (const [method, url] of [
@@ -4186,7 +4186,7 @@ async function createSubscription(opts: {
   email: string;
   addonKey?: 'detailing' | 'oficina';
 }): Promise<string> {
-  const user = await createUser({ email: opts.email, name: opts.email, verified: true });
+  const { user } = await createUser({ email: opts.email, name: opts.email, verified: true });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
   const mod = MODULES.find((m) => m.key === opts.addonKey);
 
@@ -4260,7 +4260,7 @@ describe('GET /admin/finance/memberships: filtros de modulo e fornecedor', () =>
     comOficina = await createSubscription({ email: 'o@example.com', addonKey: 'oficina' });
     semModulo = await createSubscription({ email: 'n@example.com' });
 
-    const admin = await createUser({ email: 'admin@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({ email: 'admin@example.com', role: 'admin', verified: true });
     auth = bearer(loadEnv(), admin.id, 'admin');
   });
 

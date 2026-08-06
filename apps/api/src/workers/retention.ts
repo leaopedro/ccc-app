@@ -72,6 +72,21 @@ async function purgeOldPaymentWebhookEvents(now: Date): Promise<PurgeResult> {
   };
 }
 
+async function scrubOldConsentIpMetadata(now: Date): Promise<PurgeResult> {
+  // The consent record itself is retained as proof, but the IP/user-agent
+  // captured with it are access-log metadata. The privacy policy states access
+  // logs (IP, user-agent) are kept 90 days, so null them out past that window.
+  const cutoff = new Date(now.getTime() - 90 * MS_PER_DAY);
+  const { count } = await prisma.consent.updateMany({
+    where: {
+      givenAt: { lt: cutoff },
+      OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }],
+    },
+    data: { ipAddress: null, userAgent: null },
+  });
+  return { table: 'Consent', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
 async function purgeOldNotifications(now: Date): Promise<PurgeResult> {
   const cutoff = new Date(now.getTime() - 90 * MS_PER_DAY);
   const { count } = await prisma.notification.deleteMany({
@@ -123,6 +138,7 @@ const PURGE_JOBS = [
   purgeConsumedVerificationTokens,
   purgeConsumedPasswordResetTokens,
   purgeOldPaymentWebhookEvents,
+  scrubOldConsentIpMetadata,
   purgeOldNotifications,
   purgeOldBroadcastDeliveries,
 ] as const;

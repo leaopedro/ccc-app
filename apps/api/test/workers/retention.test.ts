@@ -240,6 +240,44 @@ describe('runRetentionTick', () => {
     expect(await prisma.notification.count()).toBe(1);
   });
 
+  it('scrubs IP/user-agent from consents older than 90 days, keeping the record', async () => {
+    const { user } = await createUser({ verified: true });
+    const old = await prisma.consent.create({
+      data: {
+        userId: user.id,
+        purpose: 'push_marketing',
+        version: 'v1',
+        channel: 'mobile',
+        ipAddress: '203.0.113.7',
+        userAgent: 'ExpoClient/1.0',
+        evidence: {},
+        givenAt: new Date(Date.now() - 91 * MS_PER_DAY),
+      },
+    });
+    const recent = await prisma.consent.create({
+      data: {
+        userId: user.id,
+        purpose: 'newsletter',
+        version: 'v1',
+        channel: 'mobile',
+        ipAddress: '203.0.113.8',
+        userAgent: 'ExpoClient/1.0',
+        evidence: {},
+        givenAt: new Date(Date.now() - 30 * MS_PER_DAY),
+      },
+    });
+
+    const results = await runRetentionTick({ now: new Date(), uploads });
+
+    const c = results.find((r) => r.table === 'Consent')!;
+    expect(c.deletedCount).toBe(1);
+    const oldAfter = await prisma.consent.findUniqueOrThrow({ where: { id: old.id } });
+    expect(oldAfter.ipAddress).toBeNull();
+    expect(oldAfter.userAgent).toBeNull();
+    const recentAfter = await prisma.consent.findUniqueOrThrow({ where: { id: recent.id } });
+    expect(recentAfter.ipAddress).toBe('203.0.113.8');
+  });
+
   it('deletes broadcast deliveries older than 1 year', async () => {
     const { user } = await createUser({ verified: true });
     const { user: user2 } = await createUser({ verified: true, email: 'user2@jdm.test' });

@@ -239,34 +239,63 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
     }
 
     // Discriminator 2: price swap (cadence or tier change)
-    const currentPriceId = sub.items.data[0]?.price.id;
-    const prevPriceId = prev.items?.data[0]?.price.id;
-    if (prevPriceId && currentPriceId && prevPriceId !== currentPriceId) {
-      const currentPrice = sub.items.data[0]!.price;
-      // cadence here is also a placeholder, same reasoning as the invoice.paid
-      // branch above: the route overwrites it from the resolved
-      // PremiumPlanPrice's own `cadence` column, since items.data[0] is a
-      // single-item read that still shouldn't be trusted over the catalog.
-      const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
-      return {
-        kind: 'subscription.tier_changed',
-        provider: 'stripe',
-        providerSubRef: sub.id,
-        priceRef: currentPrice.id,
-        priceMetadata: currentPrice.metadata,
-        // Placeholders — the route resolves tier + cadence + pricing from the
-        // catalog and drops the event entirely when the swapped price is an
-        // add-on.
-        tier: 'bronze',
-        cadence,
-        pricing: {
-          baseAmountCents: 0,
-          devFeePercent: 0,
-          devFeeAmountCents: 0,
-          grossAmountCents: 0,
-          currency: 'BRL',
-        },
-      } satisfies BillingEvent & { kind: 'subscription.tier_changed' };
+    //
+    // Fix round 2, finding 1: this used to compare sub.items.data[0].price.id
+    // against prev.items.data[0].price.id — index 0 vs index 0. The comment
+    // on resolvePlanSubscriptionItemId (plan-item.ts) already establishes,
+    // for the way OUT, that Stripe does not contractually order items.data
+    // once add-on items are attached (see services/stripe/index.ts). The
+    // same is true on the way IN: if an add-on item happened to sort first
+    // in both the previous and current item arrays, comparing index 0 against
+    // index 0 compared the add-on price to itself, missed a real plan swap
+    // sitting at index 1 in both arrays, and returned null — silently never
+    // updating PremiumMembership.tier / Garage.premiumTier while Stripe kept
+    // billing the new price.
+    //
+    // Fix: compare the FULL SET of price ids, not a position. A genuine
+    // single price swap is exactly one price id leaving the set and exactly
+    // one arriving, regardless of where either sits in either array. Any
+    // other shape — a pure add, a pure removal, no change, or more than one
+    // of each (not reachable from our own admin actions, which issue one
+    // Stripe item mutation per action) — is deliberately NOT treated as a
+    // swap here: guessing which of several added prices is "the" new plan
+    // price would risk exactly the tier-snapshot corruption this fix exists
+    // to prevent. A pure add-on attach/detach is handled separately by
+    // reconcileMembershipAddonsAmount, which the route runs unconditionally
+    // on every customer.subscription.updated before dispatch.
+    if (prev.items) {
+      const currentIds = new Set(sub.items.data.map((item) => item.price.id));
+      const prevIds = new Set(prev.items.data.map((item) => item.price.id));
+      const added = [...currentIds].filter((id) => !prevIds.has(id));
+      const removed = [...prevIds].filter((id) => !currentIds.has(id));
+
+      if (added.length === 1 && removed.length === 1) {
+        const currentPrice = sub.items.data.find((item) => item.price.id === added[0])!.price;
+        // cadence here is also a placeholder, same reasoning as the invoice.paid
+        // branch above: the route overwrites it from the resolved
+        // PremiumPlanPrice's own `cadence` column, since reading it off the raw
+        // Stripe item still shouldn't be trusted over the catalog.
+        const cadence = cadenceFromInterval(currentPrice.recurring?.interval);
+        return {
+          kind: 'subscription.tier_changed',
+          provider: 'stripe',
+          providerSubRef: sub.id,
+          priceRef: currentPrice.id,
+          priceMetadata: currentPrice.metadata,
+          // Placeholders — the route resolves tier + cadence + pricing from the
+          // catalog and drops the event entirely when the swapped price is an
+          // add-on.
+          tier: 'bronze',
+          cadence,
+          pricing: {
+            baseAmountCents: 0,
+            devFeePercent: 0,
+            devFeeAmountCents: 0,
+            grossAmountCents: 0,
+            currency: 'BRL',
+          },
+        } satisfies BillingEvent & { kind: 'subscription.tier_changed' };
+      }
     }
 
     return null;

@@ -82,14 +82,6 @@ function seedPreserved(params: URLSearchParams, preserved: Record<string, string
   }
 }
 
-// URLSearchParams#toString() codifica espaco como "+", mas o padrao para
-// querystring em href e "%20". Sem isso, um valor como "Lava Rápido X"
-// gera um link com "+" que nao bate com encodeURIComponent em nenhum lugar
-// que compare o href contra o valor original.
-function toQueryString(params: URLSearchParams): string {
-  return params.toString().replace(/\+/g, '%20');
-}
-
 function applyFilters(params: URLSearchParams, f: ActiveFilters): void {
   if (f.status) params.set('status', f.status);
   if (f.cadence) params.set('cadence', f.cadence);
@@ -110,7 +102,7 @@ function buildFilterHref(
   const params = new URLSearchParams();
   seedPreserved(params, preserved);
   applyFilters(params, { ...current, [key]: value });
-  const qs = toQueryString(params);
+  const qs = params.toString();
   return qs ? `?${qs}` : '?';
 }
 
@@ -123,13 +115,13 @@ function buildPageHref(
   seedPreserved(params, preserved);
   applyFilters(params, current);
   params.set('page', String(page));
-  return `?${toQueryString(params)}`;
+  return `?${params.toString()}`;
 }
 
 function buildClearHref(preserved: Record<string, string>): string {
   const params = new URLSearchParams();
   seedPreserved(params, preserved);
-  const qs = toQueryString(params);
+  const qs = params.toString();
   return qs ? `?${qs}` : '?';
 }
 
@@ -239,7 +231,7 @@ export function AssinaturasTable({
         */}
         <form method="get" className="flex flex-wrap items-end gap-2">
           {Object.entries(preservedParams)
-            .filter(([k]) => k !== 'from' && k !== 'to')
+            .filter(([k]) => k !== 'from' && k !== 'to' && k !== 'search')
             .map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />
             ))}

@@ -93,7 +93,8 @@ describe('AssinaturasTable', () => {
   it('renderiza chips de modulo e de fornecedor', () => {
     const html = renderToStaticMarkup(<AssinaturasTable {...base} items={[item()]} />);
     expect(html).toContain('addonKey=detailing');
-    expect(html).toContain(`vendorName=${encodeURIComponent('Lava Rápido X')}`);
+    // URLSearchParams#toString() codifica espaco como "+", nao "%20".
+    expect(html).toContain(new URLSearchParams({ vendorName: 'Lava Rápido X' }).toString());
   });
 
   it('mostra estado vazio quando nao ha itens', () => {
@@ -121,5 +122,13 @@ describe('AssinaturasTable', () => {
     const html = renderToStaticMarkup(<AssinaturasTable {...base} items={[item()]} />);
     expect(html).toMatch(/name="from"/);
     expect(html).toMatch(/name="to"/);
+  });
+
+  it('nao duplica o campo search quando ja ha um termo de busca ativo', () => {
+    const html = renderToStaticMarkup(
+      <AssinaturasTable {...base} items={[item()]} preservedParams={{ search: 'ana' }} />,
+    );
+    const searchFields = html.match(/name="search"/g) ?? [];
+    expect(searchFields).toHaveLength(1);
   });
 });

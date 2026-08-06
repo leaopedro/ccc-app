@@ -532,6 +532,38 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // -----------------------------------------------------------------------
+    // Metodo de pagamento (conveniencia para o admin, nao dado de cobranca)
+    //
+    // O payload de invoice.paid traz `payment_intent` como id, nao expandido,
+    // entao a bandeira e o final do cartao NAO estao no evento. O normalizador e
+    // puro e nao pode buscar: a resolucao fica aqui.
+    //
+    // Falha desta chamada nao derruba o webhook. Perder um dado de exibicao nao
+    // pode impedir o processamento de uma cobranca.
+    // -----------------------------------------------------------------------
+    if (
+      (billingEvt.kind === 'subscription.activated' ||
+        billingEvt.kind === 'subscription.renewed') &&
+      !billingEvt.pricing.paymentBrand
+    ) {
+      const paymentIntentId = (event.data.object as { payment_intent?: unknown }).payment_intent;
+      if (typeof paymentIntentId === 'string' && paymentIntentId.length > 0) {
+        try {
+          const card = await app.stripe.retrievePaymentMethodCard(paymentIntentId);
+          if (card) {
+            billingEvt.pricing.paymentBrand = card.brand;
+            billingEvt.pricing.paymentLast4 = card.last4;
+          }
+        } catch (err) {
+          request.log.warn(
+            { eventId: event.id, paymentIntentId, err },
+            'stripe-billing webhook: falha ao resolver metodo de pagamento, seguindo sem ele',
+          );
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // §F8.5 — Open tx + SELECT FOR UPDATE on Garage, then dispatch
     // -----------------------------------------------------------------------
     await prisma.$transaction(async (tx) => {

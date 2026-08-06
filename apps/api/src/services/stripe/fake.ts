@@ -16,6 +16,7 @@ import type {
   OpenSubscriptionCheckoutSession,
   PauseSubscriptionCollectionInput,
   PaymentIntentResult,
+  PaymentMethodCard,
   RemoveSubscriptionItemInput,
   ResumeSubscriptionCancellationInput,
   ResumeSubscriptionCollectionInput,
@@ -45,7 +46,8 @@ type FakeCall = {
     | 'updateSubscriptionItemPrice'
     | 'resumeSubscriptionCancellation'
     | 'pauseSubscriptionCollection'
-    | 'resumeSubscriptionCollection';
+    | 'resumeSubscriptionCollection'
+    | 'retrievePaymentMethodCard';
   payload: unknown;
 };
 
@@ -94,6 +96,10 @@ export type FakeStripe = StripeClient & {
   nextPauseSubscriptionCollectionError: Error | null;
   /** When set, resumeSubscriptionCollection throws this error. */
   nextResumeSubscriptionCollectionError: Error | null;
+  /** Next card returned by retrievePaymentMethodCard. Defaults to null. */
+  nextPaymentMethodCard: PaymentMethodCard | null;
+  /** When set, retrievePaymentMethodCard throws this error. */
+  nextRetrievePaymentMethodCardError: Error | null;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
@@ -135,6 +141,8 @@ export const buildFakeStripe = (): FakeStripe => {
     nextResumeSubscriptionCancellationError: null,
     nextPauseSubscriptionCollectionError: null,
     nextResumeSubscriptionCollectionError: null,
+    nextPaymentMethodCard: null,
+    nextRetrievePaymentMethodCardError: null,
     // eslint-disable-next-line @typescript-eslint/require-await
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -303,6 +311,14 @@ export const buildFakeStripe = (): FakeStripe => {
       if (fake.nextResumeSubscriptionCollectionError) {
         throw fake.nextResumeSubscriptionCollectionError;
       }
+    },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    retrievePaymentMethodCard: async (paymentIntentId: string) => {
+      fake.calls.push({ kind: 'retrievePaymentMethodCard', payload: { paymentIntentId } });
+      if (fake.nextRetrievePaymentMethodCardError) {
+        throw fake.nextRetrievePaymentMethodCardError;
+      }
+      return fake.nextPaymentMethodCard;
     },
   };
   return fake;

@@ -157,6 +157,13 @@ export type ResumeSubscriptionCollectionInput = {
   idempotencyKey: string;
 };
 
+/**
+ * Bandeira e final do cartao de um PaymentIntent, ou null quando o pagamento nao
+ * foi por cartao ou o dado nao esta disponivel. Usado apenas para exibicao no
+ * admin — nunca para decisao de cobranca.
+ */
+export type PaymentMethodCard = { brand: string; last4: string };
+
 export type StripeClient = {
   createPaymentIntent: (input: CreatePaymentIntentInput) => Promise<PaymentIntentResult>;
   createCheckoutSession: (input: CreateCheckoutSessionInput) => Promise<CheckoutSessionResult>;
@@ -231,6 +238,7 @@ export type StripeClient = {
   ) => Promise<void>;
   pauseSubscriptionCollection: (input: PauseSubscriptionCollectionInput) => Promise<void>;
   resumeSubscriptionCollection: (input: ResumeSubscriptionCollectionInput) => Promise<void>;
+  retrievePaymentMethodCard: (paymentIntentId: string) => Promise<PaymentMethodCard | null>;
 };
 
 export type OpenSubscriptionCheckoutSession = {
@@ -544,6 +552,14 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         { pause_collection: null },
         { idempotencyKey },
       );
+    },
+    retrievePaymentMethodCard: async (paymentIntentId) => {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['payment_method'],
+      });
+      const pm = pi.payment_method;
+      if (!pm || typeof pm === 'string' || pm.type !== 'card' || !pm.card) return null;
+      return { brand: pm.card.brand, last4: pm.card.last4 };
     },
   };
 };

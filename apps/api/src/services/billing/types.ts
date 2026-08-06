@@ -12,6 +12,19 @@ export type BillingPricing = {
   devFeeAmountCents: number;
   grossAmountCents: number;
   currency: string; // 'BRL' v1
+  /**
+   * Bandeira e final do cartao, quando o provider os fornece.
+   *
+   * Vivem em BillingPricing porque ele ja e o portador de snapshot dos tres
+   * eventos que reescrevem valores da assinatura (activated, renewed,
+   * tier_changed). Nenhuma variante nova de BillingEvent, nenhuma assinatura
+   * de funcao alterada.
+   *
+   * Opcionais de proposito. RevenueCat nunca preenche, e a Stripe so preenche
+   * quando a rota consegue resolver o PaymentIntent. Ausencia nunca e erro.
+   */
+  paymentBrand?: string;
+  paymentLast4?: string;
 };
 
 /** Invoice record carried on activated and renewed events. */

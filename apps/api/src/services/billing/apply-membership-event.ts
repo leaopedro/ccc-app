@@ -111,6 +111,8 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+        ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         addonsAmountCents,
       },
     });
@@ -130,6 +132,8 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+        ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         addonsAmountCents,
       },
     });
@@ -325,6 +329,10 @@ async function handleRenewed(
           devFeeAmountCents: pricing.devFeeAmountCents,
           grossAmountCents: pricing.grossAmountCents,
           currency: pricing.currency,
+          // Spread condicional, nao atribuicao direta: uma renovacao sem o dado
+          // nao pode apagar com null o snapshot bom gravado na ativacao.
+          ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+          ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         },
       })
     : existing;

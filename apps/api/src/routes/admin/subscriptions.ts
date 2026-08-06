@@ -16,8 +16,26 @@
  */
 
 import { prisma } from '@ccc/db';
-import { adminSubscriptionDetailSchema } from '@ccc/shared/admin-subscription';
-import type { FastifyPluginAsync } from 'fastify';
+import {
+  adminSubscriptionActionResponseSchema,
+  adminSubscriptionAddonAttachSchema,
+  adminSubscriptionAddonMutationResponseSchema,
+  adminSubscriptionChangePlanSchema,
+  adminSubscriptionDetailSchema,
+} from '@ccc/shared/admin-subscription';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+
+import { recordAudit } from '../../services/admin-audit.js';
+import { attachAddon, detachAddon } from '../../services/billing/addons.js';
+import { isBillingActionError } from '../../services/billing/errors.js';
+import {
+  changePlan,
+  pauseCollection,
+  resumeCancel,
+  resumeCollection,
+  scheduleCancel,
+} from '../../services/billing/subscription-actions.js';
+import { requireUser } from '../../plugins/auth.js';
 
 export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -118,5 +136,275 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
         })),
       }),
     );
+  });
+
+  type MembershipStatus = Awaited<
+    ReturnType<typeof prisma.premiumMembership.findUniqueOrThrow>
+  >['status'];
+
+  /**
+   * Status aceitos POR ACAO. Nao existe um conceito unico de "assinatura viva"
+   * que sirva para todas: resume precisa aceitar `paused`, que nao esta na lista
+   * LIVE_STATUSES usada pela superficie do membro.
+   */
+  const ALLOWED_STATUS: Record<string, ReadonlyArray<MembershipStatus>> = {
+    plan: ['active', 'past_due', 'cancel_scheduled'],
+    addon: ['active', 'past_due', 'cancel_scheduled'],
+    cancel: ['active', 'past_due', 'trialing'],
+    resume: ['cancel_scheduled', 'paused'],
+    pause: ['active', 'past_due', 'trialing'],
+  };
+
+  /**
+   * Ordem de avaliacao: existencia, flag, status, provider.
+   *
+   * Status antes de provider de proposito: o admin recebe o motivo mais
+   * especifico. Uma assinatura Apple expirada acusa o status, nao o provider.
+   */
+  const loadMutable = async (
+    id: string,
+    action: keyof typeof ALLOWED_STATUS,
+    reply: FastifyReply,
+  ) => {
+    const membership = await prisma.premiumMembership.findUnique({ where: { id } });
+    if (!membership) {
+      void reply.status(404).send({ error: 'NotFound', message: 'subscription not found' });
+      return null;
+    }
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      void reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+      return null;
+    }
+    if (!ALLOWED_STATUS[action]!.includes(membership.status)) {
+      void reply.status(409).send({
+        error: 'InvalidStatus',
+        message: `action not allowed while subscription is ${membership.status}`,
+        status: membership.status,
+      });
+      return null;
+    }
+    if (membership.provider !== 'stripe') {
+      void reply.status(409).send({
+        error: 'ProviderNotMutable',
+        message: 'subscription is managed by the App Store and cannot be changed here',
+      });
+      return null;
+    }
+    return membership;
+  };
+
+  /** Traduz BillingActionError para o corpo de resposta desta superficie. */
+  const sendBillingError = (err: unknown, reply: FastifyReply): boolean => {
+    if (!isBillingActionError(err)) return false;
+    const errorName =
+      err.code === 'MembershipNotFound' || err.code === 'ModuleNotFound' ? 'NotFound' : err.code;
+    void reply.status(err.httpStatus).send({ error: errorName, message: err.message });
+    return true;
+  };
+
+  app.post('/subscriptions/:id/plan', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const membership = await loadMutable(id, 'plan', reply);
+    if (!membership) return reply;
+
+    const parsed = adminSubscriptionChangePlanSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({
+        error: 'UnprocessableEntity',
+        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
+    }
+
+    try {
+      await changePlan({
+        membershipId: id,
+        tier: parsed.data.tier,
+        cadence: parsed.data.cadence,
+        stripe: app.stripe,
+      });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.plan_changed',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: {
+        fromTier: membership.tier,
+        fromCadence: membership.cadence,
+        toTier: parsed.data.tier,
+        toCadence: parsed.data.cadence,
+      },
+    });
+
+    return reply
+      .status(200)
+      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  });
+
+  app.post('/subscriptions/:id/addons', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const membership = await loadMutable(id, 'addon', reply);
+    if (!membership) return reply;
+
+    const parsed = adminSubscriptionAddonAttachSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({
+        error: 'UnprocessableEntity',
+        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
+    }
+
+    let result;
+    try {
+      result = await attachAddon({
+        membershipId: id,
+        addonKey: parsed.data.addonKey,
+        stripe: app.stripe,
+        logger: request.log,
+      });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.addon_attached',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: { addonKey: parsed.data.addonKey, addonsAmountCents: result.addonsAmountCents },
+    });
+
+    // pending false: attach grava no banco na hora, depois da chamada a Stripe.
+    return reply
+      .status(201)
+      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+  });
+
+  app.delete('/subscriptions/:id/addons/:addonKey', async (request, reply) => {
+    const { id, addonKey } = request.params as { id: string; addonKey: string };
+    const membership = await loadMutable(id, 'addon', reply);
+    if (!membership) return reply;
+
+    let result;
+    try {
+      result = await detachAddon({
+        membershipId: id,
+        addonKey,
+        stripe: app.stripe,
+        logger: request.log,
+      });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.addon_detached',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: { addonKey, addonsAmountCents: result.addonsAmountCents },
+    });
+
+    return reply
+      .status(200)
+      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+  });
+
+  app.post('/subscriptions/:id/cancel', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const membership = await loadMutable(id, 'cancel', reply);
+    if (!membership) return reply;
+
+    try {
+      await scheduleCancel({ membershipId: id, stripe: app.stripe });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.cancel_scheduled',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: { fromStatus: membership.status },
+    });
+
+    return reply
+      .status(200)
+      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  });
+
+  /**
+   * Um unico botao na interface. O backend decide pelo estado atual: retomar um
+   * cancelamento agendado e retomar uma cobranca pausada sao acoes diferentes na
+   * Stripe, mas a mesma intencao para quem opera.
+   */
+  app.post('/subscriptions/:id/resume', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const membership = await loadMutable(id, 'resume', reply);
+    if (!membership) return reply;
+
+    try {
+      if (membership.status === 'cancel_scheduled') {
+        await resumeCancel({ membershipId: id, stripe: app.stripe });
+      } else {
+        await resumeCollection({ membershipId: id, stripe: app.stripe });
+      }
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.resumed',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: { fromStatus: membership.status },
+    });
+
+    return reply
+      .status(200)
+      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  });
+
+  app.post('/subscriptions/:id/pause', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const membership = await loadMutable(id, 'pause', reply);
+    if (!membership) return reply;
+
+    try {
+      await pauseCollection({ membershipId: id, stripe: app.stripe });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const { sub } = requireUser(request);
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.paused',
+      entityType: 'premium_membership',
+      entityId: id,
+      metadata: { fromStatus: membership.status },
+    });
+
+    return reply
+      .status(200)
+      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
   });
 };

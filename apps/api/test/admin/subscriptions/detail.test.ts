@@ -5,8 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { bearer, createUser, makeApp, resetDatabase } from '../../helpers.js';
 
-const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
-const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
+import { seedSubscription } from './seed.js';
 
 // resetDatabase() deliberately does NOT truncate PremiumPlan, PremiumPlanPrice,
 // PremiumAddonModule or PremiumMembershipAddon (see test/helpers.ts). seedSubscription()
@@ -19,104 +18,6 @@ const resetCatalog = async (): Promise<void> => {
   await prisma.premiumPlan.deleteMany();
   await prisma.premiumAddonModule.deleteMany();
 };
-
-async function seedSubscription(provider: 'stripe' | 'apple_revenuecat' = 'stripe') {
-  const { user: member } = await createUser({ email: 'membro@example.com', name: 'Ana', verified: true });
-  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: member.id } });
-
-  const plan = await prisma.premiumPlan.create({
-    data: { tier: 'gold', slug: 'fundador', name: 'Fundador', sortOrder: 2 },
-  });
-  await prisma.premiumPlanPrice.create({
-    data: {
-      planId: plan.id,
-      cadence: 'monthly',
-      baseAmountCents: 149000,
-      currency: 'BRL',
-      stripePriceId: 'price_gold',
-    },
-  });
-  await prisma.premiumAddonModule.create({
-    data: {
-      key: 'detailing',
-      name: 'Detailing',
-      description: '3 acessos',
-      monthlyDeltaCents: 15000,
-      payoutAmountCents: 9000,
-      vendorName: 'Lava Rápido X',
-      quotaPerCycle: 3,
-      quotaUnit: 'access',
-      currency: 'BRL',
-      stripePriceId: 'price_detailing',
-    },
-  });
-
-  const membership = await prisma.premiumMembership.create({
-    data: {
-      garageId: garage.id,
-      provider,
-      providerCustomerRef: 'cus_1',
-      providerSubRef: 'sub_secreto_1',
-      tier: 'gold',
-      cadence: 'monthly',
-      status: 'active',
-      currentPeriodStart: PERIOD_START,
-      currentPeriodEnd: PERIOD_END,
-      baseAmountCents: 149000,
-      devFeePercent: 0,
-      devFeeAmountCents: 0,
-      grossAmountCents: 149000,
-      addonsAmountCents: 15000,
-      currency: 'BRL',
-      paymentBrand: 'visa',
-      paymentLast4: '4242',
-    },
-  });
-
-  const addon = await prisma.premiumMembershipAddon.create({
-    data: {
-      membershipId: membership.id,
-      addonKey: 'detailing',
-      status: 'active',
-      providerItemRef: 'si_secreto_1',
-      monthlyDeltaCents: 15000,
-      payoutAmountCents: 9000,
-      vendorName: 'Lava Rápido X',
-      quotaPerCycle: 3,
-      quotaUnit: 'access',
-      currency: 'BRL',
-    },
-  });
-  await prisma.premiumAddonUsage.create({
-    data: {
-      membershipAddonId: addon.id,
-      cycleStart: PERIOD_START,
-      cycleEnd: PERIOD_END,
-      quotaTotal: 3,
-      quotaUsed: 1,
-    },
-  });
-
-  await prisma.premiumMembershipInvoice.create({
-    data: {
-      membershipId: membership.id,
-      provider,
-      providerInvoiceRef: 'in_1',
-      periodStart: PERIOD_START,
-      periodEnd: PERIOD_END,
-      baseAmountCents: 149000,
-      devFeePercent: 0,
-      devFeeAmountCents: 0,
-      grossAmountCents: 164000,
-      addonsAmountCents: 15000,
-      currency: 'BRL',
-      paidAt: PERIOD_START,
-      status: 'paid',
-    },
-  });
-
-  return { membershipId: membership.id, memberId: member.id, garageId: garage.id };
-}
 
 describe('GET /admin/subscriptions/:id', () => {
   let app: Awaited<ReturnType<typeof makeApp>>;
@@ -208,7 +109,7 @@ describe('GET /admin/subscriptions/:id', () => {
   });
 
   it('assinatura Apple vem com mutable falso', async () => {
-    const { membershipId } = await seedSubscription('apple_revenuecat');
+    const { membershipId } = await seedSubscription({ provider: 'apple_revenuecat' });
     const { user: admin } = await createUser({ email: 'a3@example.com', role: 'admin', verified: true });
 
     const res = await app.inject({

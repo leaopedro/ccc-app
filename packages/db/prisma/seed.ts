@@ -551,6 +551,11 @@ const PREMIUM_ADDON_MODULES = [
     name: 'Detailing',
     description: '3 acessos/mês para lavagem & detailing',
     monthlyDeltaCents: 15000,
+    // Repasse real ainda nao definido pelo operador. Zero e null deliberadamente:
+    // o seed nao inventa dado financeiro. Ate ser preenchido, a margem exibida no
+    // admin iguala o valor cobrado.
+    payoutAmountCents: 0,
+    vendorName: null,
     quotaPerCycle: 3,
     quotaUnit: 'access' as const,
     sortOrder: 0,
@@ -560,6 +565,8 @@ const PREMIUM_ADDON_MODULES = [
     name: 'Oficina',
     description: '5 horas de oficina por mês',
     monthlyDeltaCents: 50000,
+    payoutAmountCents: 0,
+    vendorName: null,
     quotaPerCycle: 5,
     quotaUnit: 'hours' as const,
     sortOrder: 1,
@@ -606,6 +613,8 @@ const seedPremiumCatalog = async (): Promise<void> => {
         name: m.name,
         description: m.description,
         monthlyDeltaCents: m.monthlyDeltaCents,
+        payoutAmountCents: m.payoutAmountCents,
+        vendorName: m.vendorName,
         currency: 'BRL',
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,
@@ -617,6 +626,8 @@ const seedPremiumCatalog = async (): Promise<void> => {
         name: m.name,
         description: m.description,
         monthlyDeltaCents: m.monthlyDeltaCents,
+        payoutAmountCents: m.payoutAmountCents,
+        vendorName: m.vendorName,
         currency: 'BRL',
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,

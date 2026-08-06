@@ -555,6 +555,20 @@ async function handleResumed(
 ): Promise<void> {
   const { provider, providerSubRef } = evt;
 
+  // Fix round 2, finding 3: clearing cancelAtPeriodEnd/cancelledAt here is
+  // copied from handleUncancelled, mas retomar cobranca (pause_collection
+  // limpo) nao e a mesma intencao de reverter um cancelamento. Uma assinatura
+  // pausada E com cancel_at_period_end=true na Stripe, apos um resume,
+  // ficaria Ativo com "Cancelamento agendado: Nao" aqui, enquanto a Stripe
+  // ainda cancela no fim do periodo.
+  //
+  // A combinacao foi considerada de proposito e o clear continua deliberado:
+  // nao existe forma de o nosso admin produzir esse estado. Em
+  // routes/admin/subscriptions.ts, ALLOWED_STATUS.pause exclui
+  // cancel_scheduled e ALLOWED_STATUS.cancel exclui paused, entao
+  // pausar-e-cancelar a mesma assinatura so acontece com alguem agindo direto
+  // no dashboard da Stripe. Ficou registrado aqui em vez de mudar o
+  // comportamento.
   const membership = await tx.premiumMembership.update({
     where: { provider_providerSubRef: { provider, providerSubRef } },
     data: { status: 'active', cancelAtPeriodEnd: false, cancelledAt: null },

@@ -108,6 +108,12 @@ export const adminAuditActionSchema = z.enum([
   'badge.unpin',
   'xp.adjustment',
   'gamification.toggle',
+  'premium.subscription.plan_changed',
+  'premium.subscription.addon_attached',
+  'premium.subscription.addon_detached',
+  'premium.subscription.cancel_scheduled',
+  'premium.subscription.resumed',
+  'premium.subscription.paused',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 
@@ -141,6 +147,7 @@ export const adminAuditEntityTypeSchema = z.enum([
   'car',
   'garage_spot',
   'garage',
+  'premium_membership',
 ]);
 export type AdminAuditEntityType = z.infer<typeof adminAuditEntityTypeSchema>;
 
@@ -701,6 +708,14 @@ export const adminFinanceMembershipsQuerySchema = z.object({
   to: z.string().date().optional(),
   search: z.string().min(1).max(200).optional(),
   garageId: z.string().min(1).optional(),
+  /** Filtra assinaturas que possuem este modulo com status active ou cancel_scheduled. */
+  addonKey: z.string().min(1).max(40).optional(),
+  /**
+   * Filtra assinaturas que possuem qualquer modulo deste fornecedor, mesmos
+   * status. Casamento exato, nao contains: a origem dos valores e o proprio
+   * catalogo, nao texto livre do usuario.
+   */
+  vendorName: z.string().min(1).max(120).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -710,6 +725,8 @@ export const adminFinanceMembershipsItemSchema = z.object({
   membershipId: z.string().min(1),
   garageSlug: z.string(),
   userName: z.string(),
+  userId: z.string().min(1),
+  userEmail: z.string(),
   tier: z.enum(['bronze', 'silver', 'gold']),
   cadence: z.enum(['monthly', 'annual']),
   status: z.enum(['trialing', 'active', 'past_due', 'cancel_scheduled', 'expired', 'paused']),
@@ -719,6 +736,12 @@ export const adminFinanceMembershipsItemSchema = z.object({
   invoiceCount: z.number().int().nonnegative(),
   provider: z.enum(['stripe', 'apple_revenuecat']),
   providerSubRef: z.string(),
+  baseAmountCents: z.number().int().nonnegative(),
+  addonsAmountCents: z.number().int().nonnegative(),
+  paymentBrand: z.string().nullable(),
+  paymentLast4: z.string().nullable(),
+  /** Chaves dos modulos vinculados, para chips na tabela. */
+  addonKeys: z.array(z.string()),
 });
 export type AdminFinanceMembershipsItem = z.infer<typeof adminFinanceMembershipsItemSchema>;
 
@@ -1335,6 +1358,8 @@ export const adminPremiumAddonModuleSchema = z.object({
   name: z.string(),
   description: z.string(),
   monthlyDeltaCents: z.number().int().nonnegative(),
+  payoutAmountCents: z.number().int().nonnegative(),
+  vendorName: z.string().nullable(),
   currency: z.string(),
   quotaPerCycle: z.number().int(),
   quotaUnit: premiumAddonUnitSchema,
@@ -1410,6 +1435,8 @@ export const adminPremiumAddonModuleCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(240),
   monthlyDeltaCents: z.number().int().nonnegative(),
+  payoutAmountCents: z.number().int().nonnegative().default(0),
+  vendorName: z.string().trim().min(1).max(120).nullable().optional(),
   quotaPerCycle: z.number().int().nonnegative(),
   quotaUnit: premiumAddonUnitSchema,
   currency: z.string().length(3).default('BRL'),
@@ -1425,6 +1452,8 @@ export const adminPremiumAddonModuleUpdateSchema = z
     name: z.string().trim().min(1).max(80),
     description: z.string().trim().min(1).max(240),
     monthlyDeltaCents: z.number().int().nonnegative(),
+    payoutAmountCents: z.number().int().nonnegative().optional(),
+    vendorName: z.string().trim().min(1).max(120).nullable().optional(),
     quotaPerCycle: z.number().int().nonnegative(),
     quotaUnit: premiumAddonUnitSchema,
     currency: z.string().length(3),

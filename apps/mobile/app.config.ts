@@ -70,7 +70,7 @@ const config: ExpoConfig = {
   slug: brand.app.scheme,
   owner: 'leaopedro',
   scheme: brand.app.scheme,
-  version: '0.0.1',
+  version: '1.0.0',
   runtimeVersion: {
     policy: 'appVersion',
   },

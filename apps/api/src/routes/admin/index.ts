@@ -24,6 +24,7 @@ import { adminStoreProductRoutes } from './store/products.js';
 import { adminStoreVariantRoutes } from './store/variants.js';
 import { adminStoreProductTypeRoutes } from './store-product-types.js';
 import { adminStoreSettingsRoutes } from './store-settings.js';
+import { adminSubscriptionRoutes } from './subscriptions.js';
 import { adminSupportRoutes } from './support.js';
 import { adminTicketRoutes } from './tickets.js';
 import { adminTierRoutes } from './tiers.js';
@@ -69,6 +70,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminFeedModerationRoutes);
     await scope.register(adminGroupRoutes);
     await scope.register(adminPremiumCatalogRoutes);
+    await scope.register(adminSubscriptionRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

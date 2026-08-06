@@ -6067,23 +6067,30 @@ export default async function AssinaturaDetalhePage({
 }
 ```
 
-- [ ] **Step 4: Rodar o teste**
+- [ ] **Step 4: Passar o catálogo de módulos para o painel**
 
-Como a página importa os três painéis, que só existem na Task 16, crie stubs mínimos agora para destravar o teste. Crie `plan-actions.tsx`, `status-actions.tsx` e `addons-panel.tsx` exportando componentes vazios com as props corretas. A Task 16 substitui os três por implementações reais.
+Os três painéis já existem, criados na Task 16, que roda antes desta. Buscar o catálogo
+com o mesmo tratamento tolerante a falha usado na lista e repassar ao `AddonsPanel`.
+
+No topo da página, junto das outras buscas:
 
 ```tsx
-// apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx  (stub temporario)
-export function PlanActions(_props: {
-  membershipId: string;
-  mutable: boolean;
-  currentTier: 'bronze' | 'silver' | 'gold';
-  currentCadence: 'monthly' | 'annual';
-}) {
-  return null;
-}
+  // Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
+  let moduleOptions: Array<{ key: string; name: string }> = [];
+  try {
+    const catalog = await getAdminPremiumCatalog();
+    moduleOptions = catalog.modules
+      .filter((m) => m.active)
+      .map((m) => ({ key: m.key, name: m.name }));
+  } catch {
+    moduleOptions = [];
+  }
 ```
 
-Faça o equivalente para `StatusActions` (props `membershipId`, `mutable`, `status`) e `AddonsPanel` (props `membershipId`, `mutable`, `attachedKeys`).
+Acrescentar `getAdminPremiumCatalog` aos imports de `~/lib/admin-api`, e passar
+`moduleOptions={moduleOptions}` no `<AddonsPanel />`.
+
+- [ ] **Step 4b: Rodar o teste**
 
 ```bash
 pnpm --filter @ccc/admin exec vitest run "app/(authed)/assinaturas/[id]/__tests__/page.test.tsx"
@@ -6110,10 +6117,14 @@ git commit -m "feat(admin): tela de detalhe da assinatura com modulos e historic
 
 ### Task 16: Painéis de ação
 
+**Executar ANTES da Task 15.** As duas são independentes, e nesta ordem a Task 15 não
+precisa de stub nenhum. A Task 15 apenas importa e posiciona o que esta task cria.
+
 **Files:**
-- Modify: `apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx` (substituir o stub)
-- Modify: `apps/admin/app/(authed)/assinaturas/[id]/status-actions.tsx` (substituir o stub)
-- Modify: `apps/admin/app/(authed)/assinaturas/[id]/addons-panel.tsx` (substituir o stub)
+- Create: `apps/admin/app/(authed)/assinaturas/[id]/use-action-toast.tsx`
+- Create: `apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx`
+- Create: `apps/admin/app/(authed)/assinaturas/[id]/status-actions.tsx`
+- Create: `apps/admin/app/(authed)/assinaturas/[id]/addons-panel.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/__tests__/actions.interaction.test.tsx`
 
 **Interfaces:**
@@ -6628,34 +6639,16 @@ export function AddonsPanel({
 }
 ```
 
-- [ ] **Step 7: Passar o catálogo de módulos para o painel**
-
-Em `apps/admin/app/(authed)/assinaturas/[id]/page.tsx`, buscar o catálogo com o mesmo tratamento tolerante a falha usado na lista, e repassar:
-
-```tsx
-  let moduleOptions: Array<{ key: string; name: string }> = [];
-  try {
-    const catalog = await getAdminPremiumCatalog();
-    moduleOptions = catalog.modules
-      .filter((m) => m.active)
-      .map((m) => ({ key: m.key, name: m.name }));
-  } catch {
-    // Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
-    moduleOptions = [];
-  }
-```
-
-E no JSX, trocar o uso de `<AddonsPanel ... />` para incluir `moduleOptions={moduleOptions}`. Acrescentar o import de `getAdminPremiumCatalog` de `~/lib/admin-api`.
-
-- [ ] **Step 8: Rodar os testes de interação**
+- [ ] **Step 7: Rodar os testes de interação**
 
 ```bash
-pnpm --filter @ccc/admin exec vitest run "app/(authed)/assinaturas/[id]"
+pnpm --filter @ccc/admin exec vitest run "app/(authed)/assinaturas/[id]/__tests__/actions.interaction.test.tsx"
 ```
 
-Esperado: PASS. O teste de render estático da Task 15 continua passando porque ele stuba os três painéis.
+Esperado: PASS, 7 testes. A tela de detalhe ainda não existe; ela vem na Task 15 e
+importa estes três componentes.
 
-- [ ] **Step 9: Suíte e typecheck do admin**
+- [ ] **Step 8: Suíte e typecheck do admin**
 
 ```bash
 pnpm --filter @ccc/admin test && pnpm --filter @ccc/admin typecheck && pnpm --filter @ccc/admin lint
@@ -6663,11 +6656,11 @@ pnpm --filter @ccc/admin test && pnpm --filter @ccc/admin typecheck && pnpm --fi
 
 Esperado: PASS e zero erro.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add "apps/admin/app/(authed)/assinaturas/[id]"
-git commit -m "feat(admin): paineis de plano, status e modulos na tela de assinatura"
+git commit -m "feat(admin): paineis de plano, status e modulos da assinatura"
 ```
 
 ---
@@ -6746,7 +6739,13 @@ Abrir PR para `main`. Nunca para `production`.
 
 ## Notas para quem for executar
 
-**A ordem importa.** Tasks 1 e 2 destravam tudo. Tasks 3, 4 e 5 são independentes entre si e podem ser paralelizadas. Task 6 destrava 7 e 8. Tasks 9, 10 e 11 dependem de 7 e 8. Tasks 12 em diante dependem de 9, 10 e 11.
+**A ordem importa.** Tasks 1 e 2 destravam tudo. Tasks 3, 4 e 5 são independentes entre si
+e podem ser paralelizadas. Task 6 destrava 7 e 8. Tasks 9, 10 e 11 dependem de 7 e 8.
+Tasks 12 em diante dependem de 9, 10 e 11.
+
+**A Task 16 roda antes da Task 15.** As duas são independentes, e nesta ordem a tela de
+detalhe importa painéis que já existem, em vez de stubs que retornam `null`. Ordem de
+execução: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, **16, 15**, 17.
 
 **A Task 7 é a mais delicada em risco de regressão.** Ela move regra de negócio existente. O critério de aceite não é o teste novo passar: é o teste antigo passar sem edição.
 

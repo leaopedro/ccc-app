@@ -63,10 +63,7 @@ function paymentLabel(d: AdminSubscriptionDetail): string {
 
 function Tile({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <div
-      className="rounded-lg border border-[color:var(--color-border)] p-3"
-      data-testid={testId}
-    >
+    <div className="rounded-lg border border-[color:var(--color-border)] p-3" data-testid={testId}>
       <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
         {label}
       </div>
@@ -90,9 +87,7 @@ export default async function AssinaturaDetalhePage({
     throw err;
   }
 
-  const attachedKeys = detail.addons
-    .filter((a) => a.status !== 'cancelled')
-    .map((a) => a.key);
+  const attachedKeys = detail.addons.filter((a) => a.status !== 'cancelled').map((a) => a.key);
 
   // Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
   let moduleOptions: Array<{ key: string; name: string }> = [];
@@ -166,10 +161,7 @@ export default async function AssinaturaDetalhePage({
           testId="assinaturas-detalhe-total"
         />
         <Tile label="Renovação" value={fmtDate(detail.currentPeriodEnd)} />
-        <Tile
-          label="Cancelamento agendado"
-          value={detail.cancelAtPeriodEnd ? 'Sim' : 'Não'}
-        />
+        <Tile label="Cancelamento agendado" value={detail.cancelAtPeriodEnd ? 'Sim' : 'Não'} />
         <Tile
           label="Pagamento"
           value={paymentLabel(detail)}
@@ -223,9 +215,7 @@ export default async function AssinaturaDetalhePage({
                       <span className="text-[color:var(--color-muted)]">Não cadastrado</span>
                     )}
                   </td>
-                  <td className="pr-3 text-xs">
-                    {addonStatusLabel[addon.status] ?? addon.status}
-                  </td>
+                  <td className="pr-3 text-xs">{addonStatusLabel[addon.status] ?? addon.status}</td>
                   <td className="pr-3 text-xs">
                     {addon.currentCycle
                       ? `${addon.currentCycle.quotaUsed} de ${addon.currentCycle.quotaTotal} ${quotaUnitLabel[addon.quotaUnit] ?? addon.quotaUnit}`
@@ -292,9 +282,7 @@ export default async function AssinaturaDetalhePage({
                   </td>
                   <td className="pr-3">{fmtDate(inv.paidAt)}</td>
                   <td className="pr-3">{fmtBRL(inv.grossAmountCents)}</td>
-                  <td className="pr-3 text-xs">
-                    {invoiceStatusLabel[inv.status] ?? inv.status}
-                  </td>
+                  <td className="pr-3 text-xs">{invoiceStatusLabel[inv.status] ?? inv.status}</td>
                   <td className="pr-3 text-xs">
                     {inv.refundedAt
                       ? `${fmtDate(inv.refundedAt)} · ${fmtBRL(inv.refundedAmountCents ?? 0)}`

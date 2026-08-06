@@ -61,7 +61,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('devolve o detalhe completo, validado pelo schema', async () => {
     const { membershipId, memberId, garageId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -95,7 +99,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('nao vaza referencia de provider', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a2@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a2@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -110,7 +118,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('assinatura Apple vem com mutable falso', async () => {
     const { membershipId } = await seedSubscription({ provider: 'apple_revenuecat' });
-    const { user: admin } = await createUser({ email: 'a3@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a3@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -122,7 +134,11 @@ describe('GET /admin/subscriptions/:id', () => {
   });
 
   it('404 para id inexistente', async () => {
-    const { user: admin } = await createUser({ email: 'a4@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a4@example.com',
+      role: 'admin',
+      verified: true,
+    });
     const res = await app.inject({
       method: 'GET',
       url: '/admin/subscriptions/mem_inexistente',
@@ -133,7 +149,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('leitura funciona com a flag de billing desligada', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a5@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a5@example.com',
+      role: 'admin',
+      verified: true,
+    });
     const previous = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'false';
     const flaggedApp = await makeApp();

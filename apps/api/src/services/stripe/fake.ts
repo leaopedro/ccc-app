@@ -295,9 +295,7 @@ export const buildFakeStripe = (): FakeStripe => {
       }
     },
     // eslint-disable-next-line @typescript-eslint/require-await
-    pauseSubscriptionCollection: async (
-      input: PauseSubscriptionCollectionInput,
-    ): Promise<void> => {
+    pauseSubscriptionCollection: async (input: PauseSubscriptionCollectionInput): Promise<void> => {
       fake.calls.push({ kind: 'pauseSubscriptionCollection', payload: input });
       if (fake.nextPauseSubscriptionCollectionError) {
         throw fake.nextPauseSubscriptionCollectionError;

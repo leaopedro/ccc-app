@@ -100,7 +100,11 @@ describe('GET /admin/finance/memberships: filtros de modulo e fornecedor', () =>
     comOficina = await createSubscription({ email: 'o@example.com', addonKey: 'oficina' });
     semModulo = await createSubscription({ email: 'n@example.com' });
 
-    const { user: admin } = await createUser({ email: 'admin@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'admin@example.com',
+      role: 'admin',
+      verified: true,
+    });
     auth = bearer(loadEnv(), admin.id, 'admin');
   });
 

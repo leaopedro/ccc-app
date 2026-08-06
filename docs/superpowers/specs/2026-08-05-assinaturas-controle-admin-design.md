@@ -295,15 +295,15 @@ Arquivo novo `apps/api/src/routes/admin/subscriptions.ts`, registrado em
 `routes/admin/index.ts` no escopo `requireRole('organizer', 'admin')`, junto de
 `adminFinanceRoutes` e `adminPremiumCatalogRoutes`.
 
-| Método | Path | Corpo |
-| --- | --- | --- |
-| GET | `/admin/subscriptions/:id` | — |
-| POST | `/admin/subscriptions/:id/plan` | `{ tier, cadence }` |
-| POST | `/admin/subscriptions/:id/addons` | `{ addonKey }` |
-| DELETE | `/admin/subscriptions/:id/addons/:addonKey` | — |
-| POST | `/admin/subscriptions/:id/cancel` | — |
-| POST | `/admin/subscriptions/:id/resume` | — |
-| POST | `/admin/subscriptions/:id/pause` | — |
+| Método | Path                                        | Corpo               |
+| ------ | ------------------------------------------- | ------------------- |
+| GET    | `/admin/subscriptions/:id`                  | —                   |
+| POST   | `/admin/subscriptions/:id/plan`             | `{ tier, cadence }` |
+| POST   | `/admin/subscriptions/:id/addons`           | `{ addonKey }`      |
+| DELETE | `/admin/subscriptions/:id/addons/:addonKey` | —                   |
+| POST   | `/admin/subscriptions/:id/cancel`           | —                   |
+| POST   | `/admin/subscriptions/:id/resume`           | —                   |
+| POST   | `/admin/subscriptions/:id/pause`            | —                   |
 
 `POST /resume` cobre os dois sentidos de retomada. Se a assinatura está
 `cancel_scheduled`, chama `resumeCancel`. Se está `paused`, chama
@@ -314,15 +314,15 @@ Arquivo novo `apps/api/src/routes/admin/subscriptions.ts`, registrado em
 `me-premium-addons.ts` vale `active`, `past_due` e `cancel_scheduled`, e não serve
 para `resume`, que precisa aceitar `paused`.
 
-| Ação | Status aceitos |
-| --- | --- |
-| `GET /:id` | todos, inclusive `expired` |
-| `POST /plan` | `active`, `past_due`, `cancel_scheduled` |
-| `POST /addons` | `active`, `past_due`, `cancel_scheduled` |
+| Ação                       | Status aceitos                           |
+| -------------------------- | ---------------------------------------- |
+| `GET /:id`                 | todos, inclusive `expired`               |
+| `POST /plan`               | `active`, `past_due`, `cancel_scheduled` |
+| `POST /addons`             | `active`, `past_due`, `cancel_scheduled` |
 | `DELETE /addons/:addonKey` | `active`, `past_due`, `cancel_scheduled` |
-| `POST /cancel` | `active`, `past_due`, `trialing` |
-| `POST /resume` | `cancel_scheduled`, `paused` |
-| `POST /pause` | `active`, `past_due`, `trialing` |
+| `POST /cancel`             | `active`, `past_due`, `trialing`         |
+| `POST /resume`             | `cancel_scheduled`, `paused`             |
+| `POST /pause`              | `active`, `past_due`, `trialing`         |
 
 Status fora da lista responde 409 `InvalidStatus`, com o status atual na mensagem.
 O gate por status vem antes do gate por provider, para que o admin receba o motivo
@@ -345,8 +345,8 @@ Não existe endpoint novo de lista. A lista usa `GET /admin/finance/memberships`
 `adminFinanceMembershipsQuerySchema` ganha:
 
 ```ts
-addonKey:   z.string().min(1).max(40).optional()
-vendorName: z.string().min(1).max(120).optional()
+addonKey: z.string().min(1).max(40).optional();
+vendorName: z.string().min(1).max(120).optional();
 ```
 
 `addonKey` filtra assinaturas que têm aquele módulo com status `active` ou
@@ -365,13 +365,13 @@ expor na interface.
 `adminFinanceMembershipsItemSchema` ganha:
 
 ```ts
-userId: z.string().min(1)
-userEmail: z.string()
-baseAmountCents: z.number().int().nonnegative()
-addonsAmountCents: z.number().int().nonnegative()
-paymentBrand: z.string().nullable()
-paymentLast4: z.string().nullable()
-addonKeys: z.array(z.string())
+userId: z.string().min(1);
+userEmail: z.string();
+baseAmountCents: z.number().int().nonnegative();
+addonsAmountCents: z.number().int().nonnegative();
+paymentBrand: z.string().nullable();
+paymentLast4: z.string().nullable();
+addonKeys: z.array(z.string());
 ```
 
 `userId` permite link para `/users/:id`. `addonKeys` permite chips de módulo na
@@ -402,7 +402,7 @@ arquivo por domínio limitado:
 - `adminSubscriptionActionResponseSchema` — `{ ok: true, pending: true }`, usado por
   `plan`, `cancel`, `resume` e `pause`
 - `adminSubscriptionAddonMutationResponseSchema` — `{ ok: true, pending: false,
-  addonKey, status, addonsAmountCents, totalAmountCents }`, usado pelas duas rotas de
+addonKey, status, addonsAmountCents, totalAmountCents }`, usado pelas duas rotas de
   módulo
 
 A distinção é real, não cosmética. Vincular e desvincular módulo grava no banco de
@@ -424,19 +424,19 @@ e `@ccc/mobile`.
 Ordem de avaliação em toda mutação: existência, status, provider, corpo, catálogo,
 Stripe.
 
-| Situação | Resposta |
-| --- | --- |
-| Assinatura inexistente | 404 `NotFound` |
-| Status atual fora da lista da ação | 409 `InvalidStatus` |
-| `provider === 'apple_revenuecat'` em qualquer mutação | 409 `ProviderNotMutable` |
-| `GROWTH_PREMIUM_BILLING_ENABLED` desligado, em mutação | 503 `ServiceUnavailable` |
-| Módulo já vinculado | 409 `AlreadyExists` |
-| Módulo não vinculado, no desvínculo | 404 `NotFound` |
-| Módulo inativo no catálogo | 404 `NotFound` |
-| Troca para o plano e cadência atuais | 409 `NoChange` |
-| Plano alvo sem `stripePriceId` | 422 `UnprocessableEntity` |
-| Item de plano ambíguo na Stripe | 409 `AmbiguousPlanItem` |
-| Falha na Stripe | erro propagado, nada gravado |
+| Situação                                               | Resposta                     |
+| ------------------------------------------------------ | ---------------------------- |
+| Assinatura inexistente                                 | 404 `NotFound`               |
+| Status atual fora da lista da ação                     | 409 `InvalidStatus`          |
+| `provider === 'apple_revenuecat'` em qualquer mutação  | 409 `ProviderNotMutable`     |
+| `GROWTH_PREMIUM_BILLING_ENABLED` desligado, em mutação | 503 `ServiceUnavailable`     |
+| Módulo já vinculado                                    | 409 `AlreadyExists`          |
+| Módulo não vinculado, no desvínculo                    | 404 `NotFound`               |
+| Módulo inativo no catálogo                             | 404 `NotFound`               |
+| Troca para o plano e cadência atuais                   | 409 `NoChange`               |
+| Plano alvo sem `stripePriceId`                         | 422 `UnprocessableEntity`    |
+| Item de plano ambíguo na Stripe                        | 409 `AmbiguousPlanItem`      |
+| Falha na Stripe                                        | erro propagado, nada gravado |
 
 Ordem provider-first em todas as mutações. Stripe falha, banco não muda.
 
@@ -583,7 +583,7 @@ Stripe fake por `makeAppWithFakeStripe()`:
 - cada mutação: 409 quando o status atual não está na lista permitida da ação
 - leitura do detalhe funciona com `GROWTH_PREMIUM_BILLING_ENABLED` desligado
 - troca de plano: asserção de que o fake recebeu `proration_behavior:
-  'create_prorations'` e o `subscriptionItemId` do item de plano, não de um módulo
+'create_prorations'` e o `subscriptionItemId` do item de plano, não de um módulo
 - troca de plano em assinatura com dois módulos vinculados: prova que o item correto
   foi escolhido
 - item de plano ambíguo: 409 e nenhuma chamada ao fake

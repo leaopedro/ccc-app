@@ -41,45 +41,45 @@ pnpm --filter @ccc/mobile typecheck
 
 **Criados**
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `packages/db/prisma/migrations/<ts>_addon_payout_and_payment_method/migration.sql` | Seis colunas novas |
-| `packages/shared/src/admin-subscription.ts` | Schemas Zod do detalhe e das mutações admin |
-| `apps/api/src/services/billing/errors.ts` | `BillingActionError` com código e status HTTP |
-| `apps/api/src/services/billing/addons.ts` | `attachAddon` e `detachAddon`, extraídos do route do membro |
-| `apps/api/src/services/billing/subscription-actions.ts` | Troca de plano, cancelar, retomar, pausar, retomar cobrança |
-| `apps/api/src/services/billing/plan-item.ts` | Resolver qual item da Stripe é o item de plano |
-| `apps/api/src/routes/admin/subscriptions.ts` | Endpoints admin de assinatura |
-| `apps/admin/app/(authed)/assinaturas/page.tsx` | Lista |
-| `apps/admin/app/(authed)/assinaturas/assinaturas-table.tsx` | Tabela, chips, paginação |
-| `apps/admin/app/(authed)/assinaturas/[id]/page.tsx` | Detalhe |
-| `apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx` | Troca de plano |
-| `apps/admin/app/(authed)/assinaturas/[id]/status-actions.tsx` | Cancelar, retomar, pausar |
-| `apps/admin/app/(authed)/assinaturas/[id]/addons-panel.tsx` | Vincular e desvincular módulo |
-| `apps/admin/src/lib/assinaturas-actions.ts` | Server actions |
+| Arquivo                                                                            | Responsabilidade                                            |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `packages/db/prisma/migrations/<ts>_addon_payout_and_payment_method/migration.sql` | Seis colunas novas                                          |
+| `packages/shared/src/admin-subscription.ts`                                        | Schemas Zod do detalhe e das mutações admin                 |
+| `apps/api/src/services/billing/errors.ts`                                          | `BillingActionError` com código e status HTTP               |
+| `apps/api/src/services/billing/addons.ts`                                          | `attachAddon` e `detachAddon`, extraídos do route do membro |
+| `apps/api/src/services/billing/subscription-actions.ts`                            | Troca de plano, cancelar, retomar, pausar, retomar cobrança |
+| `apps/api/src/services/billing/plan-item.ts`                                       | Resolver qual item da Stripe é o item de plano              |
+| `apps/api/src/routes/admin/subscriptions.ts`                                       | Endpoints admin de assinatura                               |
+| `apps/admin/app/(authed)/assinaturas/page.tsx`                                     | Lista                                                       |
+| `apps/admin/app/(authed)/assinaturas/assinaturas-table.tsx`                        | Tabela, chips, paginação                                    |
+| `apps/admin/app/(authed)/assinaturas/[id]/page.tsx`                                | Detalhe                                                     |
+| `apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx`                        | Troca de plano                                              |
+| `apps/admin/app/(authed)/assinaturas/[id]/status-actions.tsx`                      | Cancelar, retomar, pausar                                   |
+| `apps/admin/app/(authed)/assinaturas/[id]/addons-panel.tsx`                        | Vincular e desvincular módulo                               |
+| `apps/admin/src/lib/assinaturas-actions.ts`                                        | Server actions                                              |
 
 **Modificados**
 
-| Arquivo | Mudança |
-| --- | --- |
-| `packages/db/prisma/schema.prisma` | Seis colunas |
-| `packages/db/prisma/seed.ts` | Campos de repasse nos dois módulos |
-| `packages/shared/src/admin.ts` | Ações de auditoria, `premium_membership` como entityType, filtros e campos da lista |
-| `packages/shared/package.json` | Subpath `./admin-subscription` |
-| `apps/api/src/services/billing/types.ts` | `paused`, `resumed`, campos de método de pagamento |
-| `apps/api/src/services/billing/normalize-stripe.ts` | Discriminador de `pause_collection` |
-| `apps/api/src/services/billing/apply-membership-event.ts` | `handlePaused`, `handleResumed`, persistir método de pagamento |
-| `apps/api/src/services/stripe/index.ts` | Quatro métodos novos no `StripeClient` |
-| `apps/api/src/services/stripe/fake.ts` | Fakes dos quatro métodos |
-| `apps/api/src/routes/stripe-billing-webhook.ts` | Resolver bandeira e final do cartão |
-| `apps/api/src/routes/me-premium-addons.ts` | Passa a chamar o serviço extraído |
-| `apps/api/src/routes/admin/index.ts` | Registrar `adminSubscriptionRoutes` |
-| `apps/api/src/routes/admin/finance.ts` | Filtros `addonKey` e `vendorName`, campos novos na linha |
-| `apps/admin/src/components/authed-nav.tsx` | Link `Assinaturas` |
-| `apps/admin/middleware.ts` | Matcher e gate de `staff` |
-| `apps/admin/src/lib/admin-api.ts` | Funções tipadas dos endpoints novos |
-| `apps/admin/app/(authed)/financeiro/membros/page.tsx` | Vira redirect |
-| `apps/admin/src/components/garage-membership-history.tsx` | Link para `/assinaturas` |
+| Arquivo                                                   | Mudança                                                                             |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `packages/db/prisma/schema.prisma`                        | Seis colunas                                                                        |
+| `packages/db/prisma/seed.ts`                              | Campos de repasse nos dois módulos                                                  |
+| `packages/shared/src/admin.ts`                            | Ações de auditoria, `premium_membership` como entityType, filtros e campos da lista |
+| `packages/shared/package.json`                            | Subpath `./admin-subscription`                                                      |
+| `apps/api/src/services/billing/types.ts`                  | `paused`, `resumed`, campos de método de pagamento                                  |
+| `apps/api/src/services/billing/normalize-stripe.ts`       | Discriminador de `pause_collection`                                                 |
+| `apps/api/src/services/billing/apply-membership-event.ts` | `handlePaused`, `handleResumed`, persistir método de pagamento                      |
+| `apps/api/src/services/stripe/index.ts`                   | Quatro métodos novos no `StripeClient`                                              |
+| `apps/api/src/services/stripe/fake.ts`                    | Fakes dos quatro métodos                                                            |
+| `apps/api/src/routes/stripe-billing-webhook.ts`           | Resolver bandeira e final do cartão                                                 |
+| `apps/api/src/routes/me-premium-addons.ts`                | Passa a chamar o serviço extraído                                                   |
+| `apps/api/src/routes/admin/index.ts`                      | Registrar `adminSubscriptionRoutes`                                                 |
+| `apps/api/src/routes/admin/finance.ts`                    | Filtros `addonKey` e `vendorName`, campos novos na linha                            |
+| `apps/admin/src/components/authed-nav.tsx`                | Link `Assinaturas`                                                                  |
+| `apps/admin/middleware.ts`                                | Matcher e gate de `staff`                                                           |
+| `apps/admin/src/lib/admin-api.ts`                         | Funções tipadas dos endpoints novos                                                 |
+| `apps/admin/app/(authed)/financeiro/membros/page.tsx`     | Vira redirect                                                                       |
+| `apps/admin/src/components/garage-membership-history.tsx` | Link para `/assinaturas`                                                            |
 
 **Removidos**
 
@@ -91,11 +91,13 @@ pnpm --filter @ccc/mobile typecheck
 ### Task 1: Migration e seed do repasse e do método de pagamento
 
 **Files:**
+
 - Modify: `packages/db/prisma/schema.prisma` (models `PremiumAddonModule`, `PremiumMembershipAddon`, `PremiumMembership`)
 - Modify: `packages/db/prisma/seed.ts:548-567`
 - Create: `packages/db/prisma/migrations/<timestamp>_addon_payout_and_payment_method/migration.sql` (gerado pelo Prisma)
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: colunas `PremiumAddonModule.payoutAmountCents: Int`, `PremiumAddonModule.vendorName: String | null`, `PremiumMembershipAddon.payoutAmountCents: Int`, `PremiumMembershipAddon.vendorName: String | null`, `PremiumMembership.paymentBrand: String | null`, `PremiumMembership.paymentLast4: String | null`. Todas as tasks seguintes leem esses nomes.
 
@@ -220,12 +222,14 @@ git commit -m "feat(db): repasse e fornecedor em modulos, metodo de pagamento na
 ### Task 2: Schemas compartilhados
 
 **Files:**
+
 - Create: `packages/shared/src/admin-subscription.ts`
 - Modify: `packages/shared/src/admin.ts` (`adminAuditActionSchema` ~linha 23, `adminAuditEntityTypeSchema` ~linha 117, `adminFinanceMembershipsQuerySchema` linha 693, `adminFinanceMembershipsItemSchema` linha 709)
 - Modify: `packages/shared/package.json` (mapa `exports`)
 - Test: `packages/shared/src/__tests__/admin-subscription.test.ts`
 
 **Interfaces:**
+
 - Consumes: nomes de coluna da Task 1.
 - Produces:
   - `adminSubscriptionDetailSchema`, tipo `AdminSubscriptionDetail`
@@ -337,10 +341,12 @@ describe('adminSubscriptionDetailSchema', () => {
 
 describe('adminSubscriptionChangePlanSchema', () => {
   it('aceita tier e cadence validos', () => {
-    expect(adminSubscriptionChangePlanSchema.parse({ tier: 'silver', cadence: 'monthly' })).toEqual({
-      tier: 'silver',
-      cadence: 'monthly',
-    });
+    expect(adminSubscriptionChangePlanSchema.parse({ tier: 'silver', cadence: 'monthly' })).toEqual(
+      {
+        tier: 'silver',
+        cadence: 'monthly',
+      },
+    );
   });
 
   it('rejeita corpo sem cadence', () => {
@@ -684,11 +690,13 @@ git commit -m "feat(shared): schemas de controle admin de assinatura e filtros d
 ### Task 3: Métodos novos no cliente Stripe
 
 **Files:**
+
 - Modify: `apps/api/src/services/stripe/index.ts` (tipo `StripeClient` linhas 124-192, implementação `buildStripe` a partir da linha 205)
 - Modify: `apps/api/src/services/stripe/fake.ts` (`FakeCall.kind` linhas 25-40, `FakeStripe` linhas 44-81, `buildFakeStripe`)
 - Test: `apps/api/test/billing/stripe-client-subscription-actions.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces, em `StripeClient`:
   - `updateSubscriptionItemPrice(input: { subscriptionItemId: string; priceId: string; idempotencyKey: string }): Promise<void>`
@@ -809,12 +817,10 @@ export type ResumeSubscriptionCollectionInput = {
 E dentro do tipo `StripeClient`, depois de `cancelSubscriptionAtPeriodEnd`:
 
 ```ts
-  updateSubscriptionItemPrice: (input: UpdateSubscriptionItemPriceInput) => Promise<void>;
-  resumeSubscriptionCancellation: (
-    input: ResumeSubscriptionCancellationInput,
-  ) => Promise<void>;
-  pauseSubscriptionCollection: (input: PauseSubscriptionCollectionInput) => Promise<void>;
-  resumeSubscriptionCollection: (input: ResumeSubscriptionCollectionInput) => Promise<void>;
+updateSubscriptionItemPrice: (input: UpdateSubscriptionItemPriceInput) => Promise<void>;
+resumeSubscriptionCancellation: (input: ResumeSubscriptionCancellationInput) => Promise<void>;
+pauseSubscriptionCollection: (input: PauseSubscriptionCollectionInput) => Promise<void>;
+resumeSubscriptionCollection: (input: ResumeSubscriptionCollectionInput) => Promise<void>;
 ```
 
 - [ ] **Step 4: Implementar em `buildStripe`**
@@ -870,14 +876,14 @@ Na união `FakeCall.kind`, acrescentar:
 No tipo `FakeStripe`, acrescentar:
 
 ```ts
-  /** When set, updateSubscriptionItemPrice throws this error. */
-  nextUpdateSubscriptionItemPriceError: Error | null;
-  /** When set, resumeSubscriptionCancellation throws this error. */
-  nextResumeSubscriptionCancellationError: Error | null;
-  /** When set, pauseSubscriptionCollection throws this error. */
-  nextPauseSubscriptionCollectionError: Error | null;
-  /** When set, resumeSubscriptionCollection throws this error. */
-  nextResumeSubscriptionCollectionError: Error | null;
+/** When set, updateSubscriptionItemPrice throws this error. */
+nextUpdateSubscriptionItemPriceError: Error | null;
+/** When set, resumeSubscriptionCancellation throws this error. */
+nextResumeSubscriptionCancellationError: Error | null;
+/** When set, pauseSubscriptionCollection throws this error. */
+nextPauseSubscriptionCollectionError: Error | null;
+/** When set, resumeSubscriptionCollection throws this error. */
+nextResumeSubscriptionCollectionError: Error | null;
 ```
 
 No objeto `fake`, junto dos outros defaults:
@@ -956,6 +962,7 @@ git commit -m "feat(api): metodos de troca de preco, retomada e pausa no cliente
 ### Task 4: Máquina de estados — pausar e retomar
 
 **Files:**
+
 - Modify: `apps/api/src/services/billing/types.ts` (união `BillingEvent`, linhas 52-120)
 - Modify: `apps/api/src/services/billing/normalize-stripe.ts` (bloco `customer.subscription.updated`, linhas 169-245)
 - Modify: `apps/api/src/services/billing/apply-membership-event.ts` (switch linhas 25-46, novos handlers)
@@ -963,6 +970,7 @@ git commit -m "feat(api): metodos de troca de preco, retomada e pausa no cliente
 - Test: `apps/api/test/billing/apply-membership-event-pause.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada de tasks anteriores.
 - Produces: variantes `{ kind: 'subscription.paused'; provider: PremiumProvider; providerSubRef: string }` e `{ kind: 'subscription.resumed'; provider: PremiumProvider; providerSubRef: string }` em `BillingEvent`. `normalizeStripeEvent` passa a emiti-las. `applyMembershipEvent` passa a tratá-las.
 
@@ -1111,31 +1119,31 @@ e ao tipo de `previous_attributes`:
 Depois, entre o bloco `// Discriminador 1: cancel_at_period_end flip` e o bloco `// Discriminador 2: price swap`, inserir:
 
 ```ts
-    // Discriminador 1.5: pause_collection flip.
-    //
-    // Avaliado DEPOIS do flip de cancel_at_period_end e ANTES do swap de preco.
-    // Ordem deliberada: um evento que cancela e pausa ao mesmo tempo e antes de
-    // tudo um cancelamento, que muda entitlement; pausa so muda cobranca. E a
-    // pausa da Stripe nao mexe em preco, entao vir antes do swap evita ler
-    // items.data[0] sem necessidade.
-    if (prev.pause_collection !== undefined) {
-      const wasPaused = prev.pause_collection !== null;
-      const isPaused = sub.pause_collection !== null;
-      if (!wasPaused && isPaused) {
-        return {
-          kind: 'subscription.paused',
-          provider: 'stripe',
-          providerSubRef: sub.id,
-        } satisfies BillingEvent & { kind: 'subscription.paused' };
-      }
-      if (wasPaused && !isPaused) {
-        return {
-          kind: 'subscription.resumed',
-          provider: 'stripe',
-          providerSubRef: sub.id,
-        } satisfies BillingEvent & { kind: 'subscription.resumed' };
-      }
-    }
+// Discriminador 1.5: pause_collection flip.
+//
+// Avaliado DEPOIS do flip de cancel_at_period_end e ANTES do swap de preco.
+// Ordem deliberada: um evento que cancela e pausa ao mesmo tempo e antes de
+// tudo um cancelamento, que muda entitlement; pausa so muda cobranca. E a
+// pausa da Stripe nao mexe em preco, entao vir antes do swap evita ler
+// items.data[0] sem necessidade.
+if (prev.pause_collection !== undefined) {
+  const wasPaused = prev.pause_collection !== null;
+  const isPaused = sub.pause_collection !== null;
+  if (!wasPaused && isPaused) {
+    return {
+      kind: 'subscription.paused',
+      provider: 'stripe',
+      providerSubRef: sub.id,
+    } satisfies BillingEvent & { kind: 'subscription.paused' };
+  }
+  if (wasPaused && !isPaused) {
+    return {
+      kind: 'subscription.resumed',
+      provider: 'stripe',
+      providerSubRef: sub.id,
+    } satisfies BillingEvent & { kind: 'subscription.resumed' };
+  }
+}
 ```
 
 - [ ] **Step 5: Rodar o teste do normalizador**
@@ -1387,12 +1395,14 @@ git commit -m "feat(api): estados paused e resumed na maquina de cobranca"
 ### Task 5: Snapshot de método de pagamento
 
 **Files:**
+
 - Modify: `apps/api/src/services/billing/types.ts` (`BillingPricing`, linhas 9-15)
 - Modify: `apps/api/src/services/billing/apply-membership-event.ts` (`handleActivated`, `handleRenewed`)
 - Modify: `apps/api/src/routes/stripe-billing-webhook.ts` (antes do `prisma.$transaction` da linha 537)
 - Test: `apps/api/test/billing/payment-method-snapshot.test.ts`
 
 **Interfaces:**
+
 - Consumes: colunas `paymentBrand` e `paymentLast4` da Task 1.
 - Produces: `BillingPricing.paymentBrand?: string` e `BillingPricing.paymentLast4?: string`. `handleActivated` e `handleRenewed` gravam esses valores quando presentes, e nunca sobrescrevem com `null`.
 
@@ -1449,10 +1459,7 @@ const activatedEvent = (
   addonsAmountCents: 0,
 });
 
-const renewedEvent = (payment: {
-  paymentBrand?: string;
-  paymentLast4?: string;
-}): BillingEvent => ({
+const renewedEvent = (payment: { paymentBrand?: string; paymentLast4?: string }): BillingEvent => ({
   kind: 'subscription.renewed',
   provider: 'stripe',
   providerSubRef: 'sub_1',
@@ -1593,37 +1600,36 @@ Esperado: PASS, 4 testes.
 Em `apps/api/src/routes/stripe-billing-webhook.ts`, imediatamente antes do bloco `await prisma.$transaction(...)` da linha 537, inserir:
 
 ```ts
-    // -----------------------------------------------------------------------
-    // Metodo de pagamento (conveniencia para o admin, nao dado de cobranca)
-    //
-    // O payload de invoice.paid traz `payment_intent` como id, nao expandido,
-    // entao a bandeira e o final do cartao NAO estao no evento. O normalizador e
-    // puro e nao pode buscar: a resolucao fica aqui.
-    //
-    // Falha desta chamada nao derruba o webhook. Perder um dado de exibicao nao
-    // pode impedir o processamento de uma cobranca.
-    // -----------------------------------------------------------------------
-    if (
-      (billingEvt.kind === 'subscription.activated' ||
-        billingEvt.kind === 'subscription.renewed') &&
-      !billingEvt.pricing.paymentBrand
-    ) {
-      const paymentIntentId = (event.data.object as { payment_intent?: unknown }).payment_intent;
-      if (typeof paymentIntentId === 'string' && paymentIntentId.length > 0) {
-        try {
-          const card = await app.stripe.retrievePaymentMethodCard(paymentIntentId);
-          if (card) {
-            billingEvt.pricing.paymentBrand = card.brand;
-            billingEvt.pricing.paymentLast4 = card.last4;
-          }
-        } catch (err) {
-          request.log.warn(
-            { eventId: event.id, paymentIntentId, err },
-            'stripe-billing webhook: falha ao resolver metodo de pagamento, seguindo sem ele',
-          );
-        }
+// -----------------------------------------------------------------------
+// Metodo de pagamento (conveniencia para o admin, nao dado de cobranca)
+//
+// O payload de invoice.paid traz `payment_intent` como id, nao expandido,
+// entao a bandeira e o final do cartao NAO estao no evento. O normalizador e
+// puro e nao pode buscar: a resolucao fica aqui.
+//
+// Falha desta chamada nao derruba o webhook. Perder um dado de exibicao nao
+// pode impedir o processamento de uma cobranca.
+// -----------------------------------------------------------------------
+if (
+  (billingEvt.kind === 'subscription.activated' || billingEvt.kind === 'subscription.renewed') &&
+  !billingEvt.pricing.paymentBrand
+) {
+  const paymentIntentId = (event.data.object as { payment_intent?: unknown }).payment_intent;
+  if (typeof paymentIntentId === 'string' && paymentIntentId.length > 0) {
+    try {
+      const card = await app.stripe.retrievePaymentMethodCard(paymentIntentId);
+      if (card) {
+        billingEvt.pricing.paymentBrand = card.brand;
+        billingEvt.pricing.paymentLast4 = card.last4;
       }
+    } catch (err) {
+      request.log.warn(
+        { eventId: event.id, paymentIntentId, err },
+        'stripe-billing webhook: falha ao resolver metodo de pagamento, seguindo sem ele',
+      );
     }
+  }
+}
 ```
 
 - [ ] **Step 8: Acrescentar `retrievePaymentMethodCard` ao cliente Stripe**
@@ -1642,7 +1648,7 @@ export type PaymentMethodCard = { brand: string; last4: string };
 No tipo `StripeClient`, depois de `resumeSubscriptionCollection`:
 
 ```ts
-  retrievePaymentMethodCard: (paymentIntentId: string) => Promise<PaymentMethodCard | null>;
+retrievePaymentMethodCard: (paymentIntentId: string) => Promise<PaymentMethodCard | null>;
 ```
 
 Na implementação de `buildStripe`:
@@ -1737,10 +1743,12 @@ git commit -m "feat(api): snapshot de bandeira e final do cartao na assinatura"
 ### Task 6: Erros de domínio de billing
 
 **Files:**
+
 - Create: `apps/api/src/services/billing/errors.ts`
 - Test: `apps/api/test/billing/errors.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces:
   - `type BillingActionCode = 'MembershipNotFound' | 'ModuleNotFound' | 'AddonAlreadyAttached' | 'AddonNotAttached' | 'InvalidStatus' | 'ProviderNotMutable' | 'NoChange' | 'PlanPriceMissing' | 'AmbiguousPlanItem'`
@@ -1879,13 +1887,16 @@ git commit -m "feat(api): erro de dominio tipado para acoes de billing"
 Esta é a task de refatoração. A prova de que ela deu certo é a suíte existente de `me-premium-addons` passar **sem nenhuma alteração**. Não edite nenhum teste em `apps/api/test/` que já exista para essa rota.
 
 **Files:**
+
 - Create: `apps/api/src/services/billing/addons.ts`
 - Modify: `apps/api/src/routes/me-premium-addons.ts` (handler de attach linhas 162-315, handler de detach linhas 324-408)
 - Test: `apps/api/test/billing/addons-service.test.ts`
 
 **Interfaces:**
+
 - Consumes: `BillingActionError` da Task 6; colunas `payoutAmountCents` e `vendorName` da Task 1; `StripeClient`.
 - Produces:
+
   ```ts
   type AddonMutationResult = {
     addonKey: string;
@@ -2043,7 +2054,9 @@ describe('attachAddon', () => {
     const { membershipId } = await seed();
     const stripe = buildFakeStripe();
 
-    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger }).catch(() => undefined);
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger }).catch(
+      () => undefined,
+    );
 
     const err = await attachAddon({ membershipId, addonKey: 'inexistente', stripe, logger }).catch(
       (e: unknown) => e,
@@ -2363,30 +2376,28 @@ Esperado: PASS, 9 testes.
 Em `apps/api/src/routes/me-premium-addons.ts`, substituir o corpo de `attachAddonHandler` a partir da linha que resolve o `module` (linha 198) até o `return reply.status(201)` inclusive, por:
 
 ```ts
-    try {
-      const result = await attachAddon({
-        membershipId: membership.id,
-        addonKey,
-        stripe: app.stripe,
-        logger: request.log,
-      });
-      return reply.status(201).send(addonMutationResponseSchema.parse(result));
-    } catch (err) {
-      if (isBillingActionError(err)) {
-        // Mapeamento explicito para preservar EXATAMENTE os codigos e mensagens
-        // que este endpoint ja retornava antes da extracao do servico. A suite
-        // existente de me-premium-addons e a prova disso e nao deve ser editada.
-        if (err.code === 'ModuleNotFound') {
-          return reply.status(404).send({ error: 'NotFound', message: 'add-on module not found' });
-        }
-        if (err.code === 'AddonAlreadyAttached') {
-          return reply
-            .status(409)
-            .send({ error: 'AlreadyExists', message: 'add-on already attached' });
-        }
-      }
-      throw err;
+try {
+  const result = await attachAddon({
+    membershipId: membership.id,
+    addonKey,
+    stripe: app.stripe,
+    logger: request.log,
+  });
+  return reply.status(201).send(addonMutationResponseSchema.parse(result));
+} catch (err) {
+  if (isBillingActionError(err)) {
+    // Mapeamento explicito para preservar EXATAMENTE os codigos e mensagens
+    // que este endpoint ja retornava antes da extracao do servico. A suite
+    // existente de me-premium-addons e a prova disso e nao deve ser editada.
+    if (err.code === 'ModuleNotFound') {
+      return reply.status(404).send({ error: 'NotFound', message: 'add-on module not found' });
     }
+    if (err.code === 'AddonAlreadyAttached') {
+      return reply.status(409).send({ error: 'AlreadyExists', message: 'add-on already attached' });
+    }
+  }
+  throw err;
+}
 ```
 
 Manter intactos, acima disso: o gate de `GROWTH_PREMIUM_BILLING_ENABLED`, o `safeParse` com 422, a resolução da garagem com 404, e a resolução da assinatura viva com 409 `NoActiveMembership`. Esses três continuam sendo responsabilidade da rota.
@@ -2403,20 +2414,20 @@ import { isBillingActionError } from '../services/billing/errors.js';
 Substituir, no handler de `DELETE /api/me/premium/addons/:addonKey`, o trecho da linha 353 (resolução do `addon`) até o `return reply.status(200)` inclusive, por:
 
 ```ts
-      try {
-        const result = await detachAddon({
-          membershipId: membership.id,
-          addonKey,
-          stripe: app.stripe,
-          logger: request.log,
-        });
-        return reply.status(200).send(addonMutationResponseSchema.parse(result));
-      } catch (err) {
-        if (isBillingActionError(err) && err.code === 'AddonNotAttached') {
-          return reply.status(404).send({ error: 'NotFound', message: 'add-on not attached' });
-        }
-        throw err;
-      }
+try {
+  const result = await detachAddon({
+    membershipId: membership.id,
+    addonKey,
+    stripe: app.stripe,
+    logger: request.log,
+  });
+  return reply.status(200).send(addonMutationResponseSchema.parse(result));
+} catch (err) {
+  if (isBillingActionError(err) && err.code === 'AddonNotAttached') {
+    return reply.status(404).send({ error: 'NotFound', message: 'add-on not attached' });
+  }
+  throw err;
+}
 ```
 
 - [ ] **Step 7: Remover o que ficou morto na rota**
@@ -2471,14 +2482,17 @@ git commit -m "refactor(api): extrai attach e detach de modulo para servico comp
 ### Task 8: Resolver o item de plano e as ações de assinatura
 
 **Files:**
+
 - Create: `apps/api/src/services/billing/plan-item.ts`
 - Create: `apps/api/src/services/billing/subscription-actions.ts`
 - Test: `apps/api/test/billing/plan-item.test.ts`
 - Test: `apps/api/test/billing/subscription-actions.test.ts`
 
 **Interfaces:**
+
 - Consumes: `BillingActionError` (Task 6); `updateSubscriptionItemPrice`, `resumeSubscriptionCancellation`, `pauseSubscriptionCollection`, `resumeSubscriptionCollection`, `retrieveSubscription`, `cancelSubscriptionAtPeriodEnd` do `StripeClient` (Task 3).
 - Produces:
+
   ```ts
   // plan-item.ts
   resolvePlanSubscriptionItemId(input: { subscription: Stripe.Subscription; planPriceIds: ReadonlySet<string> }): string
@@ -2490,6 +2504,7 @@ git commit -m "refactor(api): extrai attach e detach de modulo para servico comp
   pauseCollection(input: { membershipId: string; stripe: StripeClient }): Promise<void>
   resumeCollection(input: { membershipId: string; stripe: StripeClient }): Promise<void>
   ```
+
   Nenhuma delas escreve em `PremiumMembership`.
 
 - [ ] **Step 1: Escrever o teste do resolvedor de item de plano**
@@ -3072,11 +3087,13 @@ git commit -m "feat(api): acoes de assinatura e resolucao do item de plano"
 ### Task 9: Endpoint de detalhe da assinatura
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin/subscriptions.ts`
 - Modify: `apps/api/src/routes/admin/index.ts:71` (registrar no escopo `organizer`/`admin`)
 - Test: `apps/api/test/admin/subscriptions/detail.test.ts`
 
 **Interfaces:**
+
 - Consumes: `adminSubscriptionDetailSchema` (Task 2); colunas da Task 1.
 - Produces: `export const adminSubscriptionRoutes: FastifyPluginAsync`, com `GET /admin/subscriptions/:id`. As tasks seguintes acrescentam mutações ao mesmo arquivo.
 
@@ -3096,7 +3113,11 @@ const PERIOD_START = new Date('2026-08-01T00:00:00.000Z');
 const PERIOD_END = new Date('2026-09-01T00:00:00.000Z');
 
 async function seedSubscription(provider: 'stripe' | 'apple_revenuecat' = 'stripe') {
-  const { user: member } = await createUser({ email: 'membro@example.com', name: 'Ana', verified: true });
+  const { user: member } = await createUser({
+    email: 'membro@example.com',
+    name: 'Ana',
+    verified: true,
+  });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: member.id } });
 
   const plan = await prisma.premiumPlan.create({
@@ -3234,7 +3255,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('devolve o detalhe completo, validado pelo schema', async () => {
     const { membershipId, memberId, garageId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -3268,7 +3293,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('nao vaza referencia de provider', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a2@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a2@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -3283,7 +3312,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('assinatura Apple vem com mutable falso', async () => {
     const { membershipId } = await seedSubscription('apple_revenuecat');
-    const { user: admin } = await createUser({ email: 'a3@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a3@example.com',
+      role: 'admin',
+      verified: true,
+    });
 
     const res = await app.inject({
       method: 'GET',
@@ -3295,7 +3328,11 @@ describe('GET /admin/subscriptions/:id', () => {
   });
 
   it('404 para id inexistente', async () => {
-    const { user: admin } = await createUser({ email: 'a4@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a4@example.com',
+      role: 'admin',
+      verified: true,
+    });
     const res = await app.inject({
       method: 'GET',
       url: '/admin/subscriptions/mem_inexistente',
@@ -3306,7 +3343,11 @@ describe('GET /admin/subscriptions/:id', () => {
 
   it('leitura funciona com a flag de billing desligada', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: admin } = await createUser({ email: 'a5@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'a5@example.com',
+      role: 'admin',
+      verified: true,
+    });
     const previous = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
     process.env.GROWTH_PREMIUM_BILLING_ENABLED = 'false';
     const flaggedApp = await makeApp();
@@ -3372,7 +3413,9 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
     const membership = await prisma.premiumMembership.findUnique({
       where: { id },
       include: {
-        garage: { select: { id: true, slug: true, user: { select: { id: true, name: true, email: true } } } },
+        garage: {
+          select: { id: true, slug: true, user: { select: { id: true, name: true, email: true } } },
+        },
         addons: {
           orderBy: { createdAt: 'asc' },
           include: {
@@ -3472,7 +3515,7 @@ import { adminSubscriptionRoutes } from './subscriptions.js';
 E, dentro do escopo `requireRole('organizer', 'admin')`, depois de `adminPremiumCatalogRoutes` (linha 71):
 
 ```ts
-    await scope.register(adminSubscriptionRoutes);
+await scope.register(adminSubscriptionRoutes);
 ```
 
 - [ ] **Step 5: Rodar o teste**
@@ -3503,10 +3546,12 @@ git commit -m "feat(api): endpoint admin de detalhe de assinatura"
 ### Task 10: Mutações administrativas
 
 **Files:**
+
 - Modify: `apps/api/src/routes/admin/subscriptions.ts` (acrescentar seis rotas)
 - Test: `apps/api/test/admin/subscriptions/mutations.test.ts`
 
 **Interfaces:**
+
 - Consumes: `attachAddon`, `detachAddon` (Task 7); `changePlan`, `scheduleCancel`, `resumeCancel`, `pauseCollection`, `resumeCollection` (Task 8); `BillingActionError` (Task 6); schemas de request e response (Task 2); ações de auditoria (Task 2).
 - Produces: as seis rotas de mutação. Nada consome isso na API; o consumidor é `apps/admin`.
 
@@ -3548,7 +3593,11 @@ describe('mutacoes admin de assinatura', () => {
 
   it('403 para staff em toda mutacao', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: staff } = await createUser({ email: 's@example.com', role: 'staff', verified: true });
+    const { user: staff } = await createUser({
+      email: 's@example.com',
+      role: 'staff',
+      verified: true,
+    });
     const auth = bearer(loadEnv(), staff.id, 'staff');
 
     for (const [method, url] of [
@@ -3558,7 +3607,12 @@ describe('mutacoes admin de assinatura', () => {
       ['POST', `/admin/subscriptions/${membershipId}/resume`],
       ['POST', `/admin/subscriptions/${membershipId}/pause`],
     ] as const) {
-      const res = await ctx.app.inject({ method, url, headers: { authorization: auth }, payload: {} });
+      const res = await ctx.app.inject({
+        method,
+        url,
+        headers: { authorization: auth },
+        payload: {},
+      });
       expect(res.statusCode).toBe(403);
     }
   });
@@ -3809,71 +3863,71 @@ Esperado: FAIL, 404 nas rotas de mutação.
 Em `apps/api/src/routes/admin/subscriptions.ts`, depois do handler `GET` e ainda dentro de `adminSubscriptionRoutes`, inserir:
 
 ```ts
-  type MembershipStatus = Awaited<
-    ReturnType<typeof prisma.premiumMembership.findUniqueOrThrow>
-  >['status'];
+type MembershipStatus = Awaited<
+  ReturnType<typeof prisma.premiumMembership.findUniqueOrThrow>
+>['status'];
 
-  /**
-   * Status aceitos POR ACAO. Nao existe um conceito unico de "assinatura viva"
-   * que sirva para todas: resume precisa aceitar `paused`, que nao esta na lista
-   * LIVE_STATUSES usada pela superficie do membro.
-   */
-  const ALLOWED_STATUS: Record<string, ReadonlyArray<MembershipStatus>> = {
-    plan: ['active', 'past_due', 'cancel_scheduled'],
-    addon: ['active', 'past_due', 'cancel_scheduled'],
-    cancel: ['active', 'past_due', 'trialing'],
-    resume: ['cancel_scheduled', 'paused'],
-    pause: ['active', 'past_due', 'trialing'],
-  };
+/**
+ * Status aceitos POR ACAO. Nao existe um conceito unico de "assinatura viva"
+ * que sirva para todas: resume precisa aceitar `paused`, que nao esta na lista
+ * LIVE_STATUSES usada pela superficie do membro.
+ */
+const ALLOWED_STATUS: Record<string, ReadonlyArray<MembershipStatus>> = {
+  plan: ['active', 'past_due', 'cancel_scheduled'],
+  addon: ['active', 'past_due', 'cancel_scheduled'],
+  cancel: ['active', 'past_due', 'trialing'],
+  resume: ['cancel_scheduled', 'paused'],
+  pause: ['active', 'past_due', 'trialing'],
+};
 
-  /**
-   * Ordem de avaliacao: existencia, flag, status, provider.
-   *
-   * Status antes de provider de proposito: o admin recebe o motivo mais
-   * especifico. Uma assinatura Apple expirada acusa o status, nao o provider.
-   */
-  const loadMutable = async (
-    id: string,
-    action: keyof typeof ALLOWED_STATUS,
-    reply: FastifyReply,
-  ) => {
-    const membership = await prisma.premiumMembership.findUnique({ where: { id } });
-    if (!membership) {
-      void reply.status(404).send({ error: 'NotFound', message: 'subscription not found' });
-      return null;
-    }
-    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-      void reply
-        .status(503)
-        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
-      return null;
-    }
-    if (!ALLOWED_STATUS[action]!.includes(membership.status)) {
-      void reply.status(409).send({
-        error: 'InvalidStatus',
-        message: `action not allowed while subscription is ${membership.status}`,
-        status: membership.status,
-      });
-      return null;
-    }
-    if (membership.provider !== 'stripe') {
-      void reply.status(409).send({
-        error: 'ProviderNotMutable',
-        message: 'subscription is managed by the App Store and cannot be changed here',
-      });
-      return null;
-    }
-    return membership;
-  };
+/**
+ * Ordem de avaliacao: existencia, flag, status, provider.
+ *
+ * Status antes de provider de proposito: o admin recebe o motivo mais
+ * especifico. Uma assinatura Apple expirada acusa o status, nao o provider.
+ */
+const loadMutable = async (
+  id: string,
+  action: keyof typeof ALLOWED_STATUS,
+  reply: FastifyReply,
+) => {
+  const membership = await prisma.premiumMembership.findUnique({ where: { id } });
+  if (!membership) {
+    void reply.status(404).send({ error: 'NotFound', message: 'subscription not found' });
+    return null;
+  }
+  if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+    void reply
+      .status(503)
+      .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+    return null;
+  }
+  if (!ALLOWED_STATUS[action]!.includes(membership.status)) {
+    void reply.status(409).send({
+      error: 'InvalidStatus',
+      message: `action not allowed while subscription is ${membership.status}`,
+      status: membership.status,
+    });
+    return null;
+  }
+  if (membership.provider !== 'stripe') {
+    void reply.status(409).send({
+      error: 'ProviderNotMutable',
+      message: 'subscription is managed by the App Store and cannot be changed here',
+    });
+    return null;
+  }
+  return membership;
+};
 
-  /** Traduz BillingActionError para o corpo de resposta desta superficie. */
-  const sendBillingError = (err: unknown, reply: FastifyReply): boolean => {
-    if (!isBillingActionError(err)) return false;
-    const errorName =
-      err.code === 'MembershipNotFound' || err.code === 'ModuleNotFound' ? 'NotFound' : err.code;
-    void reply.status(err.httpStatus).send({ error: errorName, message: err.message });
-    return true;
-  };
+/** Traduz BillingActionError para o corpo de resposta desta superficie. */
+const sendBillingError = (err: unknown, reply: FastifyReply): boolean => {
+  if (!isBillingActionError(err)) return false;
+  const errorName =
+    err.code === 'MembershipNotFound' || err.code === 'ModuleNotFound' ? 'NotFound' : err.code;
+  void reply.status(err.httpStatus).send({ error: errorName, message: err.message });
+  return true;
+};
 ```
 
 Acrescentar aos imports do arquivo:
@@ -3906,217 +3960,221 @@ import { requireUser } from '../../plugins/auth.js';
 Ainda em `adminSubscriptionRoutes`:
 
 ```ts
-  app.post('/subscriptions/:id/plan', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const membership = await loadMutable(id, 'plan', reply);
-    if (!membership) return reply;
+app.post('/subscriptions/:id/plan', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const membership = await loadMutable(id, 'plan', reply);
+  if (!membership) return reply;
 
-    const parsed = adminSubscriptionChangePlanSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(422).send({
-        error: 'UnprocessableEntity',
-        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
-      });
-    }
-
-    try {
-      await changePlan({
-        membershipId: id,
-        tier: parsed.data.tier,
-        cadence: parsed.data.cadence,
-        stripe: app.stripe,
-      });
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
-    }
-
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.plan_changed',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: {
-        fromTier: membership.tier,
-        fromCadence: membership.cadence,
-        toTier: parsed.data.tier,
-        toCadence: parsed.data.cadence,
-      },
+  const parsed = adminSubscriptionChangePlanSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.status(422).send({
+      error: 'UnprocessableEntity',
+      issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
     });
+  }
 
-    return reply
-      .status(200)
-      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  try {
+    await changePlan({
+      membershipId: id,
+      tier: parsed.data.tier,
+      cadence: parsed.data.cadence,
+      stripe: app.stripe,
+    });
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
+
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.plan_changed',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: {
+      fromTier: membership.tier,
+      fromCadence: membership.cadence,
+      toTier: parsed.data.tier,
+      toCadence: parsed.data.cadence,
+    },
   });
+
+  return reply
+    .status(200)
+    .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+});
 ```
 
 - [ ] **Step 5: Implementar vincular e desvincular módulo**
 
 ```ts
-  app.post('/subscriptions/:id/addons', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const membership = await loadMutable(id, 'addon', reply);
-    if (!membership) return reply;
+app.post('/subscriptions/:id/addons', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const membership = await loadMutable(id, 'addon', reply);
+  if (!membership) return reply;
 
-    const parsed = adminSubscriptionAddonAttachSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(422).send({
-        error: 'UnprocessableEntity',
-        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
-      });
-    }
-
-    let result;
-    try {
-      result = await attachAddon({
-        membershipId: id,
-        addonKey: parsed.data.addonKey,
-        stripe: app.stripe,
-        logger: request.log,
-      });
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
-    }
-
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.addon_attached',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: { addonKey: parsed.data.addonKey, addonsAmountCents: result.addonsAmountCents },
+  const parsed = adminSubscriptionAddonAttachSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.status(422).send({
+      error: 'UnprocessableEntity',
+      issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
     });
+  }
 
-    // pending false: attach grava no banco na hora, depois da chamada a Stripe.
-    return reply
-      .status(201)
-      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+  let result;
+  try {
+    result = await attachAddon({
+      membershipId: id,
+      addonKey: parsed.data.addonKey,
+      stripe: app.stripe,
+      logger: request.log,
+    });
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
+
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.addon_attached',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: { addonKey: parsed.data.addonKey, addonsAmountCents: result.addonsAmountCents },
   });
 
-  app.delete('/subscriptions/:id/addons/:addonKey', async (request, reply) => {
-    const { id, addonKey } = request.params as { id: string; addonKey: string };
-    const membership = await loadMutable(id, 'addon', reply);
-    if (!membership) return reply;
+  // pending false: attach grava no banco na hora, depois da chamada a Stripe.
+  return reply
+    .status(201)
+    .send(
+      adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }),
+    );
+});
 
-    let result;
-    try {
-      result = await detachAddon({
-        membershipId: id,
-        addonKey,
-        stripe: app.stripe,
-        logger: request.log,
-      });
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
-    }
+app.delete('/subscriptions/:id/addons/:addonKey', async (request, reply) => {
+  const { id, addonKey } = request.params as { id: string; addonKey: string };
+  const membership = await loadMutable(id, 'addon', reply);
+  if (!membership) return reply;
 
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.addon_detached',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: { addonKey, addonsAmountCents: result.addonsAmountCents },
+  let result;
+  try {
+    result = await detachAddon({
+      membershipId: id,
+      addonKey,
+      stripe: app.stripe,
+      logger: request.log,
     });
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
 
-    return reply
-      .status(200)
-      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.addon_detached',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: { addonKey, addonsAmountCents: result.addonsAmountCents },
   });
+
+  return reply
+    .status(200)
+    .send(
+      adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }),
+    );
+});
 ```
 
 - [ ] **Step 6: Implementar cancelar, retomar e pausar**
 
 ```ts
-  app.post('/subscriptions/:id/cancel', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const membership = await loadMutable(id, 'cancel', reply);
-    if (!membership) return reply;
+app.post('/subscriptions/:id/cancel', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const membership = await loadMutable(id, 'cancel', reply);
+  if (!membership) return reply;
 
-    try {
-      await scheduleCancel({ membershipId: id, stripe: app.stripe });
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
-    }
+  try {
+    await scheduleCancel({ membershipId: id, stripe: app.stripe });
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
 
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.cancel_scheduled',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: { fromStatus: membership.status },
-    });
-
-    return reply
-      .status(200)
-      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.cancel_scheduled',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: { fromStatus: membership.status },
   });
 
-  /**
-   * Um unico botao na interface. O backend decide pelo estado atual: retomar um
-   * cancelamento agendado e retomar uma cobranca pausada sao acoes diferentes na
-   * Stripe, mas a mesma intencao para quem opera.
-   */
-  app.post('/subscriptions/:id/resume', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const membership = await loadMutable(id, 'resume', reply);
-    if (!membership) return reply;
+  return reply
+    .status(200)
+    .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+});
 
-    try {
-      if (membership.status === 'cancel_scheduled') {
-        await resumeCancel({ membershipId: id, stripe: app.stripe });
-      } else {
-        await resumeCollection({ membershipId: id, stripe: app.stripe });
-      }
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
+/**
+ * Um unico botao na interface. O backend decide pelo estado atual: retomar um
+ * cancelamento agendado e retomar uma cobranca pausada sao acoes diferentes na
+ * Stripe, mas a mesma intencao para quem opera.
+ */
+app.post('/subscriptions/:id/resume', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const membership = await loadMutable(id, 'resume', reply);
+  if (!membership) return reply;
+
+  try {
+    if (membership.status === 'cancel_scheduled') {
+      await resumeCancel({ membershipId: id, stripe: app.stripe });
+    } else {
+      await resumeCollection({ membershipId: id, stripe: app.stripe });
     }
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
 
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.resumed',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: { fromStatus: membership.status },
-    });
-
-    return reply
-      .status(200)
-      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.resumed',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: { fromStatus: membership.status },
   });
 
-  app.post('/subscriptions/:id/pause', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const membership = await loadMutable(id, 'pause', reply);
-    if (!membership) return reply;
+  return reply
+    .status(200)
+    .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+});
 
-    try {
-      await pauseCollection({ membershipId: id, stripe: app.stripe });
-    } catch (err) {
-      if (sendBillingError(err, reply)) return reply;
-      throw err;
-    }
+app.post('/subscriptions/:id/pause', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const membership = await loadMutable(id, 'pause', reply);
+  if (!membership) return reply;
 
-    const { sub } = requireUser(request);
-    await recordAudit({
-      actorId: sub,
-      action: 'premium.subscription.paused',
-      entityType: 'premium_membership',
-      entityId: id,
-      metadata: { fromStatus: membership.status },
-    });
+  try {
+    await pauseCollection({ membershipId: id, stripe: app.stripe });
+  } catch (err) {
+    if (sendBillingError(err, reply)) return reply;
+    throw err;
+  }
 
-    return reply
-      .status(200)
-      .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  const { sub } = requireUser(request);
+  await recordAudit({
+    actorId: sub,
+    action: 'premium.subscription.paused',
+    entityType: 'premium_membership',
+    entityId: id,
+    metadata: { fromStatus: membership.status },
   });
+
+  return reply
+    .status(200)
+    .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+});
 ```
 
 - [ ] **Step 7: Rodar o teste**
@@ -4155,10 +4213,12 @@ git commit -m "feat(api): mutacoes admin de plano, modulos e status de assinatur
 ### Task 11: Filtros de módulo e fornecedor na lista
 
 **Files:**
+
 - Modify: `apps/api/src/routes/admin/finance.ts` (`RawMembershipRow` linhas 344-361, `MembershipListItem` 363-376, `findMembershipRows` 378-458, `rowToListItem` 460-478)
 - Test: `apps/api/test/admin/finance/memberships-filters.test.ts`
 
 **Interfaces:**
+
 - Consumes: `addonKey` e `vendorName` na query, campos novos no item (Task 2).
 - Produces: `GET /admin/finance/memberships` aceitando `addonKey` e `vendorName`, e devolvendo `userId`, `userEmail`, `baseAmountCents`, `addonsAmountCents`, `paymentBrand`, `paymentLast4`, `addonKeys`.
 
@@ -4260,7 +4320,11 @@ describe('GET /admin/finance/memberships: filtros de modulo e fornecedor', () =>
     comOficina = await createSubscription({ email: 'o@example.com', addonKey: 'oficina' });
     semModulo = await createSubscription({ email: 'n@example.com' });
 
-    const { user: admin } = await createUser({ email: 'admin@example.com', role: 'admin', verified: true });
+    const { user: admin } = await createUser({
+      email: 'admin@example.com',
+      role: 'admin',
+      verified: true,
+    });
     auth = bearer(loadEnv(), admin.id, 'admin');
   });
 
@@ -4353,18 +4417,18 @@ Esperado: FAIL. Os filtros são ignorados e os campos novos não existem na resp
 Em `apps/api/src/routes/admin/finance.ts`, dentro de `findMembershipRows`, depois do bloco `if (query.garageId) where.garageId = query.garageId;`:
 
 ```ts
-  // Filtros de modulo. Ambos casam contra vinculos que ainda contam como ativos:
-  // `cancelled` fica de fora porque o membro ja nao tem o modulo.
-  if (query.addonKey || query.vendorName) {
-    const addonFilter: Prisma.PremiumMembershipAddonWhereInput = {
-      status: { in: ['active', 'cancel_scheduled'] },
-    };
-    // Casamento exato em vendorName, nao contains: a origem dos valores e o
-    // proprio catalogo, nao texto livre digitado pelo admin.
-    if (query.addonKey) addonFilter.addonKey = query.addonKey;
-    if (query.vendorName) addonFilter.vendorName = query.vendorName;
-    where.addons = { some: addonFilter };
-  }
+// Filtros de modulo. Ambos casam contra vinculos que ainda contam como ativos:
+// `cancelled` fica de fora porque o membro ja nao tem o modulo.
+if (query.addonKey || query.vendorName) {
+  const addonFilter: Prisma.PremiumMembershipAddonWhereInput = {
+    status: { in: ['active', 'cancel_scheduled'] },
+  };
+  // Casamento exato em vendorName, nao contains: a origem dos valores e o
+  // proprio catalogo, nao texto livre digitado pelo admin.
+  if (query.addonKey) addonFilter.addonKey = query.addonKey;
+  if (query.vendorName) addonFilter.vendorName = query.vendorName;
+  where.addons = { some: addonFilter };
+}
 ```
 
 - [ ] **Step 4: Selecionar os campos novos**
@@ -4454,12 +4518,15 @@ git commit -m "feat(api): filtro por modulo e fornecedor na lista de assinaturas
 ### Task 12: Camada de acesso do admin
 
 **Files:**
+
 - Modify: `apps/admin/src/lib/admin-api.ts` (`getFinanceMemberships` linhas 498-516, funções novas depois dela)
 - Create: `apps/admin/src/lib/assinaturas-actions.ts`
 
 **Interfaces:**
+
 - Consumes: schemas da Task 2; endpoints das Tasks 9, 10 e 11.
 - Produces, em `admin-api.ts`:
+
   ```ts
   getAdminSubscription(id: string): Promise<AdminSubscriptionDetail>
   changeAdminSubscriptionPlan(id: string, input: AdminSubscriptionChangePlan): Promise<AdminSubscriptionActionResponse>
@@ -4469,7 +4536,9 @@ git commit -m "feat(api): filtro por modulo e fornecedor na lista de assinaturas
   resumeAdminSubscription(id: string): Promise<AdminSubscriptionActionResponse>
   pauseAdminSubscription(id: string): Promise<AdminSubscriptionActionResponse>
   ```
+
   Em `assinaturas-actions.ts`, todas `'use server'`:
+
   ```ts
   type AssinaturaActionResult = { ok: true; pending: boolean } | { ok: false; error: string }
   fetchAdminSubscription(id: string): Promise<AdminSubscriptionDetail>
@@ -4486,8 +4555,8 @@ git commit -m "feat(api): filtro por modulo e fornecedor na lista de assinaturas
 Em `apps/admin/src/lib/admin-api.ts`, dentro de `getFinanceMemberships`, depois de `if (q?.garageId) params.set('garageId', q.garageId);`:
 
 ```ts
-  if (q?.addonKey) params.set('addonKey', q.addonKey);
-  if (q?.vendorName) params.set('vendorName', q.vendorName);
+if (q?.addonKey) params.set('addonKey', q.addonKey);
+if (q?.vendorName) params.set('vendorName', q.vendorName);
 ```
 
 - [ ] **Step 2: Acrescentar as funções de assinatura**
@@ -4587,9 +4656,7 @@ export async function fetchAdminSubscription(id: string): Promise<AdminSubscript
   return getAdminSubscription(id);
 }
 
-const run = async (
-  fn: () => Promise<{ pending: boolean }>,
-): Promise<AssinaturaActionResult> => {
+const run = async (fn: () => Promise<{ pending: boolean }>): Promise<AssinaturaActionResult> => {
   try {
     const res = await fn();
     return { ok: true, pending: res.pending };
@@ -4654,6 +4721,7 @@ git commit -m "feat(admin): camada de acesso e server actions de assinatura"
 ### Task 13: Navegação, gate de papel e redirect
 
 **Files:**
+
 - Modify: `apps/admin/src/components/authed-nav.tsx:11-20`
 - Modify: `apps/admin/middleware.ts:5` e `:47`
 - Modify: `apps/admin/app/(authed)/financeiro/membros/page.tsx` (substituição integral)
@@ -4664,6 +4732,7 @@ git commit -m "feat(admin): camada de acesso e server actions de assinatura"
 - Test: `apps/admin/middleware.test.ts` (existente, acrescentar casos)
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: rota `/assinaturas` acessível a `organizer` e `admin`, bloqueada para `staff`. `/financeiro/membros` redireciona preservando a query string.
 
@@ -4692,26 +4761,29 @@ Em `apps/admin/middleware.test.ts`, acrescentar ao `describe('admin auth middlew
 reusando o helper `makeRequest` que já existe no topo do arquivo (linha 6):
 
 ```ts
-  it('redirects staff away from /assinaturas', () => {
-    const res = middleware(
-      makeRequest('/assinaturas', 'session_role=staff; session_refresh=valid_refresh_token'),
-    );
-    expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/check-in');
-  });
+it('redirects staff away from /assinaturas', () => {
+  const res = middleware(
+    makeRequest('/assinaturas', 'session_role=staff; session_refresh=valid_refresh_token'),
+  );
+  expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/check-in');
+});
 
-  it('allows admin on /assinaturas', () => {
-    const res = middleware(
-      makeRequest('/assinaturas', 'session_role=admin; session_refresh=valid_refresh_token'),
-    );
-    expect(res.headers.get('location')).toBeNull();
-  });
+it('allows admin on /assinaturas', () => {
+  const res = middleware(
+    makeRequest('/assinaturas', 'session_role=admin; session_refresh=valid_refresh_token'),
+  );
+  expect(res.headers.get('location')).toBeNull();
+});
 
-  it('allows organizer on a subscription detail page', () => {
-    const res = middleware(
-      makeRequest('/assinaturas/mem-1', 'session_role=organizer; session_refresh=valid_refresh_token'),
-    );
-    expect(res.headers.get('location')).toBeNull();
-  });
+it('allows organizer on a subscription detail page', () => {
+  const res = middleware(
+    makeRequest(
+      '/assinaturas/mem-1',
+      'session_role=organizer; session_refresh=valid_refresh_token',
+    ),
+  );
+  expect(res.headers.get('location')).toBeNull();
+});
 ```
 
 - [ ] **Step 3: Rodar os testes para confirmar que falham**
@@ -4752,15 +4824,13 @@ export const config = {
 E no gate de papel da linha 47:
 
 ```ts
-  // Staff cannot touch /events/*, /financeiro/* or /assinaturas/*.
-  if (
-    authedRole === 'staff' &&
-    (path.startsWith('/events') ||
-      path.startsWith('/financeiro') ||
-      path.startsWith('/assinaturas'))
-  ) {
-    return NextResponse.redirect(new URL('/check-in', req.url));
-  }
+// Staff cannot touch /events/*, /financeiro/* or /assinaturas/*.
+if (
+  authedRole === 'staff' &&
+  (path.startsWith('/events') || path.startsWith('/financeiro') || path.startsWith('/assinaturas'))
+) {
+  return NextResponse.redirect(new URL('/check-in', req.url));
+}
 ```
 
 - [ ] **Step 6: Rodar os testes**
@@ -4852,11 +4922,13 @@ git commit -m "feat(admin): aba Assinaturas na navegacao e redirect de financeir
 ### Task 14: Lista de assinaturas
 
 **Files:**
+
 - Create: `apps/admin/app/(authed)/assinaturas/page.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/assinaturas-table.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/__tests__/page.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `fetchFinanceMemberships` de `~/lib/finance-actions`; `listAdminPremiumCatalog` (ou o nome real da função de catálogo em `admin-api.ts` — confirme com `grep -n "premium/catalog" apps/admin/src/lib/admin-api.ts`).
 - Produces: `export function AssinaturasTable(props: Props)` com `Props` contendo `items`, `page`, `pageSize`, `total`, `activeFilters`, `preservedParams`, `moduleOptions`, `vendorOptions`.
 
@@ -4937,10 +5009,7 @@ describe('AssinaturasTable', () => {
 
   it('cai para rotulo derivado do provider quando nao ha cartao', () => {
     const html = renderToStaticMarkup(
-      <AssinaturasTable
-        {...base}
-        items={[item({ paymentBrand: null, paymentLast4: null })]}
-      />,
+      <AssinaturasTable {...base} items={[item({ paymentBrand: null, paymentLast4: null })]} />,
     );
     expect(html).toContain('Cartão');
   });
@@ -4949,9 +5018,7 @@ describe('AssinaturasTable', () => {
     const html = renderToStaticMarkup(
       <AssinaturasTable
         {...base}
-        items={[
-          item({ provider: 'apple_revenuecat', paymentBrand: null, paymentLast4: null }),
-        ]}
+        items={[item({ provider: 'apple_revenuecat', paymentBrand: null, paymentLast4: null })]}
       />,
     );
     expect(html).toContain('App Store');
@@ -5354,7 +5421,10 @@ export function AssinaturasTable({
                   {item.addonKeys.length === 0 ? (
                     <span className="text-xs text-[color:var(--color-muted)]">—</span>
                   ) : (
-                    <span className="text-xs" data-testid={`assinaturas-addons-${item.membershipId}`}>
+                    <span
+                      className="text-xs"
+                      data-testid={`assinaturas-addons-${item.membershipId}`}
+                    >
                       {item.addonKeys.join(', ')}
                     </span>
                   )}
@@ -5583,10 +5653,12 @@ git commit -m "feat(admin): lista de assinaturas com filtros de modulo, forneced
 ### Task 15: Tela de detalhe
 
 **Files:**
+
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/page.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/__tests__/page.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `fetchAdminSubscription` (Task 12); `AdminSubscriptionDetail` (Task 2).
 - Produces: a página de detalhe. Os três painéis de ação da Task 16 são plugados nos pontos 6, 7 e 5 do layout.
 
@@ -5833,10 +5905,7 @@ function paymentLabel(d: AdminSubscriptionDetail): string {
 
 function Tile({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <div
-      className="rounded-lg border border-[color:var(--color-border)] p-3"
-      data-testid={testId}
-    >
+    <div className="rounded-lg border border-[color:var(--color-border)] p-3" data-testid={testId}>
       <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--color-muted)]">
         {label}
       </div>
@@ -5860,9 +5929,7 @@ export default async function AssinaturaDetalhePage({
     throw err;
   }
 
-  const attachedKeys = detail.addons
-    .filter((a) => a.status !== 'cancelled')
-    .map((a) => a.key);
+  const attachedKeys = detail.addons.filter((a) => a.status !== 'cancelled').map((a) => a.key);
 
   return (
     <section className="flex flex-col gap-6">
@@ -5925,10 +5992,7 @@ export default async function AssinaturaDetalhePage({
           testId="assinaturas-detalhe-total"
         />
         <Tile label="Renovação" value={fmtDate(detail.currentPeriodEnd)} />
-        <Tile
-          label="Cancelamento agendado"
-          value={detail.cancelAtPeriodEnd ? 'Sim' : 'Não'}
-        />
+        <Tile label="Cancelamento agendado" value={detail.cancelAtPeriodEnd ? 'Sim' : 'Não'} />
         <Tile
           label="Pagamento"
           value={paymentLabel(detail)}
@@ -5982,9 +6046,7 @@ export default async function AssinaturaDetalhePage({
                       <span className="text-[color:var(--color-muted)]">Não cadastrado</span>
                     )}
                   </td>
-                  <td className="pr-3 text-xs">
-                    {addonStatusLabel[addon.status] ?? addon.status}
-                  </td>
+                  <td className="pr-3 text-xs">{addonStatusLabel[addon.status] ?? addon.status}</td>
                   <td className="pr-3 text-xs">
                     {addon.currentCycle
                       ? `${addon.currentCycle.quotaUsed} de ${addon.currentCycle.quotaTotal} ${quotaUnitLabel[addon.quotaUnit] ?? addon.quotaUnit}`
@@ -6048,9 +6110,7 @@ export default async function AssinaturaDetalhePage({
                   </td>
                   <td className="pr-3">{fmtDate(inv.paidAt)}</td>
                   <td className="pr-3">{fmtBRL(inv.grossAmountCents)}</td>
-                  <td className="pr-3 text-xs">
-                    {invoiceStatusLabel[inv.status] ?? inv.status}
-                  </td>
+                  <td className="pr-3 text-xs">{invoiceStatusLabel[inv.status] ?? inv.status}</td>
                   <td className="pr-3 text-xs">
                     {inv.refundedAt
                       ? `${fmtDate(inv.refundedAt)} · ${fmtBRL(inv.refundedAmountCents ?? 0)}`
@@ -6075,16 +6135,16 @@ com o mesmo tratamento tolerante a falha usado na lista e repassar ao `AddonsPan
 No topo da página, junto das outras buscas:
 
 ```tsx
-  // Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
-  let moduleOptions: Array<{ key: string; name: string }> = [];
-  try {
-    const catalog = await getAdminPremiumCatalog();
-    moduleOptions = catalog.modules
-      .filter((m) => m.active)
-      .map((m) => ({ key: m.key, name: m.name }));
-  } catch {
-    moduleOptions = [];
-  }
+// Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
+let moduleOptions: Array<{ key: string; name: string }> = [];
+try {
+  const catalog = await getAdminPremiumCatalog();
+  moduleOptions = catalog.modules
+    .filter((m) => m.active)
+    .map((m) => ({ key: m.key, name: m.name }));
+} catch {
+  moduleOptions = [];
+}
 ```
 
 Acrescentar `getAdminPremiumCatalog` aos imports de `~/lib/admin-api`, e passar
@@ -6121,6 +6181,7 @@ git commit -m "feat(admin): tela de detalhe da assinatura com modulos e historic
 precisa de stub nenhum. A Task 15 apenas importa e posiciona o que esta task cria.
 
 **Files:**
+
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/use-action-toast.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/plan-actions.tsx`
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/status-actions.tsx`
@@ -6128,6 +6189,7 @@ precisa de stub nenhum. A Task 15 apenas importa e posiciona o que esta task cri
 - Create: `apps/admin/app/(authed)/assinaturas/[id]/__tests__/actions.interaction.test.tsx`
 
 **Interfaces:**
+
 - Consumes: as server actions da Task 12.
 - Produces: `PlanActions`, `StatusActions`, `AddonsPanel`, todos `'use client'`.
 
@@ -6226,14 +6288,10 @@ describe('StatusActions', () => {
   it('mostra retomar em vez de cancelar quando cancel_scheduled', async () => {
     resumeSubscriptionAction.mockResolvedValue({ ok: true, pending: true });
     await act(async () => {
-      root.render(
-        <StatusActions membershipId="mem-1" mutable={true} status="cancel_scheduled" />,
-      );
+      root.render(<StatusActions membershipId="mem-1" mutable={true} status="cancel_scheduled" />);
     });
 
-    expect(
-      container.querySelector('[data-testid="assinaturas-acao-cancelar"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-testid="assinaturas-acao-cancelar"]')).toBeNull();
     await click('assinaturas-acao-retomar');
     expect(resumeSubscriptionAction).toHaveBeenCalledWith('mem-1');
   });
@@ -6563,12 +6621,7 @@ type Props = {
   moduleOptions?: Array<{ key: string; name: string }>;
 };
 
-export function AddonsPanel({
-  membershipId,
-  mutable,
-  attachedKeys,
-  moduleOptions = [],
-}: Props) {
+export function AddonsPanel({ membershipId, mutable, attachedKeys, moduleOptions = [] }: Props) {
   const { pending, toast, run } = useActionToast();
   const available = moduleOptions.filter((m) => !attachedKeys.includes(m.key));
   const [selected, setSelected] = useState<string>(available[0]?.key ?? '');
@@ -6670,6 +6723,7 @@ git commit -m "feat(admin): paineis de plano, status e modulos da assinatura"
 **Files:** nenhum arquivo novo. Esta task só verifica e corrige o que aparecer.
 
 **Interfaces:**
+
 - Consumes: tudo.
 - Produces: evidência de que o trabalho está completo.
 
@@ -6752,4 +6806,3 @@ execução: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, **16, 15**, 17.
 **A Task 4 é a mais delicada em risco de correção.** Ela estende a máquina de estados de cobrança. Escreva os testes antes dos handlers, como o plano manda, e confie no `switch` exaustivo.
 
 **Ponto de incerteza conhecido, sinalizado no spec.** A forma de `payment_method_details` na versão de API `2026-04-22.dahlia` precisa ser confirmada contra o SDK na Task 5, Step 8. Se `payment_method` não expandir como esperado, o fallback é deixar as duas colunas sempre nulas e exibir só o rótulo derivado do provider. Isso não bloqueia nenhuma outra task.
-

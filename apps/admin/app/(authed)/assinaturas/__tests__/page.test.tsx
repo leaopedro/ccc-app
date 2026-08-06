@@ -70,10 +70,7 @@ describe('AssinaturasTable', () => {
 
   it('cai para rotulo derivado do provider quando nao ha cartao', () => {
     const html = renderToStaticMarkup(
-      <AssinaturasTable
-        {...base}
-        items={[item({ paymentBrand: null, paymentLast4: null })]}
-      />,
+      <AssinaturasTable {...base} items={[item({ paymentBrand: null, paymentLast4: null })]} />,
     );
     expect(html).toContain('Cartão');
   });
@@ -82,9 +79,7 @@ describe('AssinaturasTable', () => {
     const html = renderToStaticMarkup(
       <AssinaturasTable
         {...base}
-        items={[
-          item({ provider: 'apple_revenuecat', paymentBrand: null, paymentLast4: null }),
-        ]}
+        items={[item({ provider: 'apple_revenuecat', paymentBrand: null, paymentLast4: null })]}
       />,
     );
     expect(html).toContain('App Store');

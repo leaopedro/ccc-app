@@ -345,7 +345,10 @@ export function AssinaturasTable({
                   {item.addonKeys.length === 0 ? (
                     <span className="text-xs text-[color:var(--color-muted)]">—</span>
                   ) : (
-                    <span className="text-xs" data-testid={`assinaturas-addons-${item.membershipId}`}>
+                    <span
+                      className="text-xs"
+                      data-testid={`assinaturas-addons-${item.membershipId}`}
+                    >
                       {item.addonKeys.join(', ')}
                     </span>
                   )}

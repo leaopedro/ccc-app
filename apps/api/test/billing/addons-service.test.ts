@@ -149,7 +149,9 @@ describe('attachAddon', () => {
     const { membershipId } = await seed();
     const stripe = buildFakeStripe();
 
-    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger }).catch(() => undefined);
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger }).catch(
+      () => undefined,
+    );
 
     const err = await attachAddon({ membershipId, addonKey: 'inexistente', stripe, logger }).catch(
       (e: unknown) => e,

@@ -190,9 +190,9 @@ describe('tela de detalhe da assinatura', () => {
     fetchAdminSubscription.mockRejectedValueOnce(
       new ApiError(404, 'not_found', 'Assinatura não encontrada'),
     );
-    await expect(
-      Page({ params: Promise.resolve({ id: 'mem-inexistente' }) }),
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(Page({ params: Promise.resolve({ id: 'mem-inexistente' }) })).rejects.toThrow(
+      'NEXT_NOT_FOUND',
+    );
     expect(notFoundMock).toHaveBeenCalledTimes(1);
   });
 

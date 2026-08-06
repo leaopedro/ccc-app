@@ -92,10 +92,12 @@ describe('adminSubscriptionDetailSchema', () => {
 
 describe('adminSubscriptionChangePlanSchema', () => {
   it('aceita tier e cadence validos', () => {
-    expect(adminSubscriptionChangePlanSchema.parse({ tier: 'silver', cadence: 'monthly' })).toEqual({
-      tier: 'silver',
-      cadence: 'monthly',
-    });
+    expect(adminSubscriptionChangePlanSchema.parse({ tier: 'silver', cadence: 'monthly' })).toEqual(
+      {
+        tier: 'silver',
+        cadence: 'monthly',
+      },
+    );
   });
 
   it('rejeita corpo sem cadence', () => {

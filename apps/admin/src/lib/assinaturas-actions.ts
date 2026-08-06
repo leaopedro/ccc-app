@@ -26,9 +26,7 @@ export async function fetchAdminSubscription(id: string): Promise<AdminSubscript
   return getAdminSubscription(id);
 }
 
-const run = async (
-  fn: () => Promise<{ pending: boolean }>,
-): Promise<AssinaturaActionResult> => {
+const run = async (fn: () => Promise<{ pending: boolean }>): Promise<AssinaturaActionResult> => {
   try {
     const res = await fn();
     return { ok: true, pending: res.pending };

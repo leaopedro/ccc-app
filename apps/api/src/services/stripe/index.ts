@@ -233,9 +233,7 @@ export type StripeClient = {
     input: CancelSubscriptionAtPeriodEndInput,
   ) => Promise<CancelSubscriptionAtPeriodEndResult>;
   updateSubscriptionItemPrice: (input: UpdateSubscriptionItemPriceInput) => Promise<void>;
-  resumeSubscriptionCancellation: (
-    input: ResumeSubscriptionCancellationInput,
-  ) => Promise<void>;
+  resumeSubscriptionCancellation: (input: ResumeSubscriptionCancellationInput) => Promise<void>;
   pauseSubscriptionCollection: (input: PauseSubscriptionCollectionInput) => Promise<void>;
   resumeSubscriptionCollection: (input: ResumeSubscriptionCollectionInput) => Promise<void>;
   retrievePaymentMethodCard: (paymentIntentId: string) => Promise<PaymentMethodCard | null>;

@@ -14,7 +14,11 @@ export async function seedSubscription(
 ) {
   const { provider = 'stripe', status = 'active', withAddon = true } = options;
 
-  const { user: member } = await createUser({ email: 'membro@example.com', name: 'Ana', verified: true });
+  const { user: member } = await createUser({
+    email: 'membro@example.com',
+    name: 'Ana',
+    verified: true,
+  });
   const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: member.id } });
 
   const plan = await prisma.premiumPlan.create({

@@ -51,7 +51,9 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
     const membership = await prisma.premiumMembership.findUnique({
       where: { id },
       include: {
-        garage: { select: { id: true, slug: true, user: { select: { id: true, name: true, email: true } } } },
+        garage: {
+          select: { id: true, slug: true, user: { select: { id: true, name: true, email: true } } },
+        },
         addons: {
           orderBy: { createdAt: 'asc' },
           include: {
@@ -286,7 +288,9 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
     // pending false: attach grava no banco na hora, depois da chamada a Stripe.
     return reply
       .status(201)
-      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+      .send(
+        adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }),
+      );
   });
 
   app.delete('/subscriptions/:id/addons/:addonKey', async (request, reply) => {
@@ -318,7 +322,9 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
 
     return reply
       .status(200)
-      .send(adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }));
+      .send(
+        adminSubscriptionAddonMutationResponseSchema.parse({ ok: true, pending: false, ...result }),
+      );
   });
 
   app.post('/subscriptions/:id/cancel', async (request, reply) => {

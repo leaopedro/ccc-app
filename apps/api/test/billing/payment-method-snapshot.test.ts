@@ -48,10 +48,7 @@ const activatedEvent = (
   addonsAmountCents: 0,
 });
 
-const renewedEvent = (payment: {
-  paymentBrand?: string;
-  paymentLast4?: string;
-}): BillingEvent => ({
+const renewedEvent = (payment: { paymentBrand?: string; paymentLast4?: string }): BillingEvent => ({
   kind: 'subscription.renewed',
   provider: 'stripe',
   providerSubRef: 'sub_1',

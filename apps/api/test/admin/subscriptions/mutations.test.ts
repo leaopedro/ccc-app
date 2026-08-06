@@ -49,7 +49,11 @@ describe('mutacoes admin de assinatura', () => {
 
   it('403 para staff em toda mutacao', async () => {
     const { membershipId } = await seedSubscription();
-    const { user: staff } = await createUser({ email: 's@example.com', role: 'staff', verified: true });
+    const { user: staff } = await createUser({
+      email: 's@example.com',
+      role: 'staff',
+      verified: true,
+    });
     const auth = bearer(loadEnv(), staff.id, 'staff');
 
     for (const [method, url] of [
@@ -59,7 +63,12 @@ describe('mutacoes admin de assinatura', () => {
       ['POST', `/admin/subscriptions/${membershipId}/resume`],
       ['POST', `/admin/subscriptions/${membershipId}/pause`],
     ] as const) {
-      const res = await ctx.app.inject({ method, url, headers: { authorization: auth }, payload: {} });
+      const res = await ctx.app.inject({
+        method,
+        url,
+        headers: { authorization: auth },
+        payload: {},
+      });
       expect(res.statusCode).toBe(403);
     }
   });

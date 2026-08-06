@@ -2,6 +2,8 @@ import type { AdminSubscriptionDetail } from '@ccc/shared/admin-subscription';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ApiError } from '~/lib/api';
+
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
@@ -10,10 +12,27 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+const { notFoundMock } = vi.hoisted(() => ({
+  notFoundMock: vi.fn(() => {
+    throw new Error('NEXT_NOT_FOUND');
+  }),
+}));
+vi.mock('next/navigation', () => ({
+  notFound: notFoundMock,
+}));
+
 const fetchAdminSubscription = vi.fn();
 vi.mock('~/lib/assinaturas-actions', () => ({
   fetchAdminSubscription: (id: string) => fetchAdminSubscription(id),
 }));
+
+const getAdminPremiumCatalog = vi.fn();
+vi.mock('~/lib/admin-api', () => ({
+  getAdminPremiumCatalog: () => getAdminPremiumCatalog(),
+}));
+// Padrao: sem override, o catalogo resolve vazio. O teste de falha do
+// catalogo sobrescreve so a proxima chamada com mockRejectedValueOnce.
+getAdminPremiumCatalog.mockResolvedValue({ plans: [], modules: [] });
 
 // Os paineis de acao sao client components com estado; aqui so importa que a
 // pagina os posiciona e passa `mutable`. Stub simples mantem o teste em node.
@@ -164,5 +183,40 @@ describe('tela de detalhe da assinatura', () => {
     expect(html).toMatch(/data-testid="assinaturas-plan-actions"/);
     expect(html).toMatch(/data-testid="assinaturas-status-actions"/);
     expect(html).toMatch(/data-testid="assinaturas-addons-panel"/);
+  });
+
+  it('chama notFound quando a API responde 404', async () => {
+    notFoundMock.mockClear();
+    fetchAdminSubscription.mockRejectedValueOnce(
+      new ApiError(404, 'not_found', 'Assinatura não encontrada'),
+    );
+    await expect(
+      Page({ params: Promise.resolve({ id: 'mem-inexistente' }) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFoundMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('propaga erro que nao e 404, sem chamar notFound', async () => {
+    notFoundMock.mockClear();
+    fetchAdminSubscription.mockRejectedValueOnce(
+      new ApiError(500, 'internal', 'Erro interno inesperado'),
+    );
+    await expect(Page({ params: Promise.resolve({ id: 'mem-1' }) })).rejects.toThrow(
+      'Erro interno inesperado',
+    );
+    expect(notFoundMock).not.toHaveBeenCalled();
+  });
+
+  it('renderiza com planSlug e planName nulos, caindo no rotulo do tier', async () => {
+    const html = await render(detail({ planSlug: null, planName: null }));
+    expect(html).toMatch(/data-testid="assinaturas-detalhe-plano"/);
+    expect(html).toContain('Gold');
+  });
+
+  it('renderiza a assinatura mesmo quando o catalogo de modulos falha', async () => {
+    getAdminPremiumCatalog.mockRejectedValueOnce(new Error('catalogo indisponivel'));
+    const html = await render(detail());
+    expect(html).toContain('Ana');
+    expect(html).toMatch(/data-testid="assinaturas-detalhe-total"/);
   });
 });

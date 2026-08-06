@@ -23,6 +23,8 @@ const baseItem: AdminFinanceMembershipsItem = {
   membershipId: 'mem-1',
   garageSlug: 'garage-slug-1',
   userName: 'Fulano da Silva',
+  userId: 'usr-1',
+  userEmail: 'fulano.silva@example.com',
   tier: 'gold',
   cadence: 'monthly',
   status: 'active',
@@ -32,6 +34,11 @@ const baseItem: AdminFinanceMembershipsItem = {
   invoiceCount: 3,
   provider: 'stripe',
   providerSubRef: 'sub_123',
+  baseAmountCents: 9900,
+  addonsAmountCents: 0,
+  paymentBrand: 'visa',
+  paymentLast4: '4242',
+  addonKeys: [],
 };
 
 const emptyFilters = { status: null, cadence: null, tier: null, provider: null };

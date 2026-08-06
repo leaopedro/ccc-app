@@ -299,6 +299,31 @@ const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => (
       />
     </label>
     <label className={labelCls}>
+      Repasse ao fornecedor (centavos)
+      <input
+        name="payoutAmountCents"
+        type="number"
+        defaultValue={mod?.payoutAmountCents ?? 0}
+        min={0}
+        className={`${inputCls} w-32`}
+      />
+    </label>
+    <label className={labelCls}>
+      Fornecedor
+      <input
+        name="vendorName"
+        defaultValue={mod?.vendorName ?? ''}
+        maxLength={120}
+        className={inputCls}
+      />
+    </label>
+    <span className={labelCls}>
+      Margem (centavos)
+      <span className="py-1 text-sm text-[color:var(--color-foreground)]">
+        {(mod?.monthlyDeltaCents ?? 0) - (mod?.payoutAmountCents ?? 0)}
+      </span>
+    </span>
+    <label className={labelCls}>
       Cota por ciclo
       <input
         name="quotaPerCycle"

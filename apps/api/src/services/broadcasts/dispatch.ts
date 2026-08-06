@@ -39,9 +39,12 @@ const buildPushData = (
 /**
  * Claim and dispatch one due broadcast per tick.
  *
- * Every audience member receives a Notification inbox row regardless of
- * delivery mode. Push is emitted only when `deliveryMode === 'in_app_plus_push'`
- * and the recipient is marketing-opted-in with at least one token.
+ * Broadcasts are marketing communications, so both channels require active
+ * marketing consent (push_marketing). Only consenting members receive a
+ * Notification inbox row; non-consenting members are recorded as skipped
+ * (failureCode 'no_marketing_consent') and receive nothing. Push is emitted
+ * only when `deliveryMode === 'in_app_plus_push'` and the consenting recipient
+ * has at least one token.
  *
  * Idempotency: BroadcastDelivery rows guard against duplicate per-recipient
  * processing, and Notification dedupe is (userId, 'broadcast', broadcastId).
@@ -97,17 +100,33 @@ export const runBroadcastDispatchTick = async (deps: DispatchDeps): Promise<void
     const destination = parseDestination(broadcast.destination);
     const baseData = (broadcast.data ?? {}) as Record<string, unknown>;
 
-    // Insert delivery rows idempotently before sending
+    // Insert delivery rows idempotently before sending (records who was targeted)
     await prisma.broadcastDelivery.createMany({
       data: audience.map((r) => ({ broadcastId: broadcast.id, userId: r.userId })),
       skipDuplicates: true,
     });
 
-    // Mint inbox rows for the full audience. Dedupe via the existing
+    // Marketing broadcasts require active marketing consent. Members without it
+    // are recorded as skipped and receive neither an inbox row nor push.
+    const consented = audience.filter((r) => r.marketingOptedIn);
+    const notConsented = audience.filter((r) => !r.marketingOptedIn);
+    if (notConsented.length > 0) {
+      await prisma.broadcastDelivery.updateMany({
+        where: { broadcastId: broadcast.id, userId: { in: notConsented.map((r) => r.userId) } },
+        data: {
+          status: 'skipped',
+          failureCode: 'no_marketing_consent',
+          attemptCount: 1,
+          lastAttemptAt: now,
+        },
+      });
+    }
+
+    // Mint inbox rows for consenting members only. Dedupe via the existing
     // (userId, kind, dedupeKey) unique index so retries don't duplicate.
     const destinationJson = destination ? (destination as Prisma.InputJsonValue) : Prisma.JsonNull;
     await prisma.notification.createMany({
-      data: audience.map((r) => ({
+      data: consented.map((r) => ({
         userId: r.userId,
         kind: 'broadcast',
         dedupeKey: broadcast.id,
@@ -122,7 +141,7 @@ export const runBroadcastDispatchTick = async (deps: DispatchDeps): Promise<void
     // Link delivery -> notification for traceability.
     const notifications = await prisma.notification.findMany({
       where: {
-        userId: { in: audience.map((r) => r.userId) },
+        userId: { in: consented.map((r) => r.userId) },
         kind: 'broadcast',
         dedupeKey: broadcast.id,
       },
@@ -130,7 +149,7 @@ export const runBroadcastDispatchTick = async (deps: DispatchDeps): Promise<void
     });
     const notifByUser = new Map(notifications.map((n) => [n.userId, n.id] as const));
 
-    for (const r of audience) {
+    for (const r of consented) {
       const notificationId = notifByUser.get(r.userId);
       if (notificationId) {
         await prisma.broadcastDelivery.updateMany({
@@ -146,30 +165,31 @@ export const runBroadcastDispatchTick = async (deps: DispatchDeps): Promise<void
 
     let totalSent = 0;
     let totalFailed = 0;
-    let totalSkipped = 0;
+    let totalSkipped = notConsented.length;
 
     const pushEligible =
       broadcast.deliveryMode === 'in_app_plus_push'
-        ? audience.filter((r) => r.marketingOptedIn && r.tokens.length > 0)
+        ? consented.filter((r) => r.tokens.length > 0)
         : [];
 
     if (broadcast.deliveryMode === 'in_app_only') {
-      // Inbox-only: mark every delivery as sent (the inbox row is the delivery).
+      // Inbox-only: mark consenting deliveries as sent (the inbox row is the
+      // delivery). Non-consenting rows are already marked skipped above.
       await prisma.broadcastDelivery.updateMany({
         where: { broadcastId: broadcast.id, status: 'pending' },
         data: { status: 'sent', sentAt: now, attemptCount: 1, lastAttemptAt: now },
       });
-      totalSent = audience.length;
+      totalSent = consented.length;
     } else {
-      // Audience members not push-eligible: mark skipped (inbox row still exists).
+      // Consenting members not push-eligible: mark skipped (inbox row still exists).
       const eligibleIds = new Set(pushEligible.map((r) => r.userId));
-      const skipped = audience.filter((r) => !eligibleIds.has(r.userId));
+      const skipped = consented.filter((r) => !eligibleIds.has(r.userId));
       if (skipped.length > 0) {
         await prisma.broadcastDelivery.updateMany({
           where: { broadcastId: broadcast.id, userId: { in: skipped.map((r) => r.userId) } },
           data: { status: 'skipped', attemptCount: 1, lastAttemptAt: now },
         });
-        totalSkipped = skipped.length;
+        totalSkipped += skipped.length;
       }
 
       for (let i = 0; i < pushEligible.length; i += batchSize) {

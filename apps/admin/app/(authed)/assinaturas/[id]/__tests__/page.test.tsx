@@ -123,6 +123,13 @@ describe('tela de detalhe da assinatura', () => {
     expect(html).toContain('Cartão');
   });
 
+  it('cai para App Store quando o provider e apple e nao ha cartao', async () => {
+    const html = await render(
+      detail({ provider: 'apple_revenuecat', paymentBrand: null, paymentLast4: null }),
+    );
+    expect(html).toContain('App Store');
+  });
+
   it('mostra o modulo com fornecedor, repasse e margem', async () => {
     const html = await render(detail());
     expect(html).toMatch(/data-testid="assinaturas-detalhe-modulo-detailing"/);

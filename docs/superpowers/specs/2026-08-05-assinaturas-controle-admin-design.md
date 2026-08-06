@@ -103,6 +103,12 @@ paymentLast4 String? @db.VarChar(4)
 Margem por módulo é derivada em tempo de leitura, nunca persistida:
 `monthlyDeltaCents - payoutAmountCents`.
 
+O admin precisa conseguir **cadastrar** esses valores, senão o repasse fica sempre zero.
+Isso acontece na tela de catálogo que já existe, `/premium/catalogo`, não em tela nova:
+`adminPremiumAddonModuleSchema` e os schemas de create e update ganham
+`payoutAmountCents` e `vendorName`, `premium-catalog-admin.ts` os propaga, e o
+formulário de módulo ganha os dois campos mais a margem derivada ao lado.
+
 O snapshot em `PremiumMembershipAddon` é load-bearing. Editar o repasse no catálogo
 não deve alterar retroativamente o repasse de um módulo já vinculado, pelo mesmo
 motivo que já vale para preço e cota.

@@ -88,6 +88,10 @@ export default async function AssinaturaDetalhePage({
   }
 
   const attachedKeys = detail.addons.filter((a) => a.status !== 'cancelled').map((a) => a.key);
+  // Fix round 2, finding 2: so modulo 'active' pode ser removido de fato.
+  // 'cancel_scheduled' ja teve o SubscriptionItem apagado na Stripe — um
+  // segundo clique so reencontra o cache de idempotencia ou um 500.
+  const removableKeys = detail.addons.filter((a) => a.status === 'active').map((a) => a.key);
 
   // Sem catalogo o admin ainda ve a assinatura; so nao consegue vincular modulo.
   let moduleOptions: Array<{ key: string; name: string }> = [];
@@ -234,6 +238,7 @@ export default async function AssinaturaDetalhePage({
           mutable={detail.mutable}
           status={detail.status}
           attachedKeys={attachedKeys}
+          removableKeys={removableKeys}
           moduleOptions={moduleOptions}
         />
       </div>

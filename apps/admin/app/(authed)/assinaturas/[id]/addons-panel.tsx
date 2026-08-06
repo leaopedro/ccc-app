@@ -12,8 +12,19 @@ type Props = {
   membershipId: string;
   mutable: boolean;
   status: Status;
-  /** Chaves ja vinculadas, para nao oferecer duplicata no select. */
+  /** Chaves ja vinculadas (qualquer status exceto cancelled), para nao
+   * oferecer duplicata no select. NAO usar para o botao de remover: inclui
+   * cancel_scheduled, cujo providerItemRef a Stripe ja apagou. */
   attachedKeys: string[];
+  /**
+   * Chaves com botao de remover — apenas status 'active'. Um cancel_scheduled
+   * ja teve seu SubscriptionItem removido na Stripe; reenviar
+   * removeSubscriptionItem ou responde do cache de idempotencia (<24h) ou
+   * 500 em resource_missing (>24h), e re-anexar tambem falha (attachAddon so
+   * aceita 'cancelled'). Opcional e cai em attachedKeys quando omitido, para
+   * nao quebrar quem ainda nao passa este prop.
+   */
+  removableKeys?: string[];
   /** Catalogo de modulos ativos. Vem do server component pai. */
   moduleOptions?: Array<{ key: string; name: string }>;
 };
@@ -30,12 +41,14 @@ export function AddonsPanel({
   mutable,
   status,
   attachedKeys,
+  removableKeys,
   moduleOptions = [],
 }: Props) {
   const { pending, toast, run } = useActionToast();
   const statusAllowed = ALLOWED_STATUS.includes(status);
   const controlsDisabled = !mutable || !statusAllowed || pending;
   const available = moduleOptions.filter((m) => !attachedKeys.includes(m.key));
+  const removable = removableKeys ?? attachedKeys;
 
   // O catalogo pode chegar depois de um refresh, e a selecao anterior pode
   // deixar de existir. Guarda so a escolha explicita do usuario e deriva o
@@ -78,9 +91,9 @@ export function AddonsPanel({
         </button>
       </div>
 
-      {attachedKeys.length > 0 ? (
+      {removable.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {attachedKeys.map((key) => (
+          {removable.map((key) => (
             <button
               key={key}
               type="button"

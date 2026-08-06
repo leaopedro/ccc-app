@@ -286,7 +286,7 @@ describe('PublicGarageView — ProfileStats (chunk 41)', () => {
         badgeCatalog={catalog}
       />,
     );
-    const idxSlug = html.indexOf(`casacarclub.com.br/g/${garage.slug}`);
+    const idxSlug = html.indexOf(`casacar.club/g/${garage.slug}`);
     const idxScoreboard = html.indexOf('Veterano');
     const idxBadgeRow = html.indexOf('Conquista CCC-003');
     expect(idxSlug).toBeGreaterThan(-1);

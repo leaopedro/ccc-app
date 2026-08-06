@@ -17,7 +17,7 @@ Nossos dados de contato:
 - **Razão social:** Casa Car Club
 - **CNPJ:** a ser publicado antes do lançamento em produção
 - **Endereço:** a ser publicado antes do lançamento em produção
-- **E-mail comercial:** contato@casacarclub.com.br`,
+- **E-mail comercial:** contato@casacar.club`,
   },
   {
     id: 'encarregado',
@@ -26,7 +26,7 @@ Nossos dados de contato:
 
 - **Nome:** Pedro Leão
 - **Cargo:** CEO e fundador
-- **E-mail:** privacidade@casacarclub.com.br
+- **E-mail:** privacidade@casacar.club
 - **Prazo de resposta:** acuse de recebimento em até 2 dias úteis; resposta substantiva em até 15 dias (LGPD Art. 19 § 1º)
 
 Você pode enviar dúvidas, solicitações de direitos, reclamações e comunicações sobre proteção de dados diretamente para o e-mail acima.`,
@@ -156,7 +156,7 @@ Você pode revogar ou alterar suas preferências de cookies a qualquer momento n
 **Como exercer seus direitos:**
 
 1. Pelo aplicativo: Perfil → Configurações → Privacidade
-2. Por e-mail: privacidade@casacarclub.com.br
+2. Por e-mail: privacidade@casacar.club
 3. Respondemos em até 15 dias corridos (LGPD Art. 19 § 1º)
 
 Para solicitações de eliminação de dados, a conta será anonimizada após período de carência de 30 dias e os registros fiscais serão preservados pelo prazo legal.`,
@@ -168,7 +168,7 @@ Para solicitações de eliminação de dados, a conta será anonimizada após pe
 
 Não coletamos intencionalmente dados de menores de 18 anos sem consentimento dos pais ou responsáveis legais. Se identificarmos que um menor cadastrou-se sem autorização adequada, a conta será suspensa e os dados eliminados.
 
-Se você é pai, mãe ou responsável e acredita que seu filho menor cadastrou-se em nossa plataforma sem autorização, entre em contato pelo e-mail: privacidade@casacarclub.com.br.`,
+Se você é pai, mãe ou responsável e acredita que seu filho menor cadastrou-se em nossa plataforma sem autorização, entre em contato pelo e-mail: privacidade@casacar.club.`,
   },
   {
     id: 'seguranca',
@@ -207,6 +207,6 @@ Em caso de incidente de segurança com risco real aos titulares, notificaremos a
 - **E-mail:** comunicacao@anpd.gov.br
 - **Formulário de petição:** disponível no portal da ANPD
 
-Recomendamos que você entre em contato conosco primeiro (privacidade@casacarclub.com.br) para que possamos resolver sua questão diretamente.`,
+Recomendamos que você entre em contato conosco primeiro (privacidade@casacar.club) para que possamos resolver sua questão diretamente.`,
   },
 ];

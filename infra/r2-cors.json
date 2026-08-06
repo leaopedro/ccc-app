@@ -4,8 +4,8 @@
       "http://localhost:3000",
       "http://localhost:8081",
       "http://localhost:19006",
-      "https://admin.casacarclub.com.br",
-      "https://app.casacarclub.com.br",
+      "https://admin.casacar.club",
+      "https://app.casacar.club",
       "https://*.vercel.app"
     ],
     "AllowedMethods": ["GET", "PUT", "HEAD"],

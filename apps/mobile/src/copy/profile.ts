@@ -35,7 +35,26 @@ export const profileCopy = {
     assinaturaHint: 'Conheça os planos e torne-se membro',
     support: 'Suporte',
     supportHint: 'Abra um chamado ou acompanhe seus tickets',
+    privacy: 'Privacidade e dados',
+    privacyHint: 'Exporte seus dados ou exclua sua conta',
     logoutHint: 'Encerrar sessão neste aparelho',
+  },
+  privacy: {
+    title: 'Privacidade e dados',
+    intro:
+      'Você pode exportar uma cópia dos seus dados ou excluir sua conta. Para outras solicitações (correção, portabilidade), escreva para privacidade@casacar.club.',
+    deleteTitle: 'Excluir conta',
+    deleteExplainer:
+      'Sua conta é desativada imediatamente e anonimizada após 30 dias de carência. Registros fiscais de compras são mantidos pelo prazo exigido por lei. Esta ação não pode ser desfeita.',
+    deleteButton: 'Excluir minha conta',
+    deleting: 'Excluindo…',
+    deleteConfirmTitle: 'Excluir sua conta?',
+    deleteConfirmBody:
+      'Sua conta será desativada agora e anonimizada em 30 dias. Esta ação não pode ser desfeita.',
+    deleteConfirmCta: 'Excluir',
+    deleteConfirmCancel: 'Cancelar',
+    deleteScheduled: 'Conta agendada para exclusão. Você será desconectado.',
+    deleteFailed: 'Não foi possível excluir a conta. Tente novamente.',
   },
   consent: {
     title: 'Comunicações de marketing',

@@ -13,6 +13,14 @@ const MODULES = [
   { key: 'oficina', name: 'Oficina', vendorName: 'Oficina Y', cents: 50000 },
 ] as const;
 
+// resetDatabase() (test/helpers.ts) deliberately does not truncate the addon
+// catalog tables — clean them in both hooks, mirroring resetCatalog() in
+// admin/subscriptions/detail.test.ts.
+const resetCatalog = async (): Promise<void> => {
+  await prisma.premiumMembershipAddon.deleteMany();
+  await prisma.premiumAddonModule.deleteMany();
+};
+
 async function createSubscription(opts: {
   email: string;
   addonKey?: 'detailing' | 'oficina';
@@ -69,11 +77,7 @@ describe('GET /admin/finance/memberships: filtros de modulo e fornecedor', () =>
 
   beforeEach(async () => {
     await resetDatabase();
-    // resetDatabase() deliberately does not truncate the addon catalog
-    // tables (see premium-subscription.test.ts) — clean them locally so
-    // repeated `it`s in this file don't collide on PremiumAddonModule.key.
-    await prisma.premiumMembershipAddon.deleteMany();
-    await prisma.premiumAddonModule.deleteMany();
+    await resetCatalog();
     app = await makeApp();
 
     for (const m of MODULES) {
@@ -102,6 +106,7 @@ describe('GET /admin/finance/memberships: filtros de modulo e fornecedor', () =>
 
   afterEach(async () => {
     await app.close();
+    await resetCatalog();
   });
 
   const list = async (qs: string) => {

@@ -40,6 +40,11 @@ describe('mutacoes admin de assinatura', () => {
   });
   afterEach(async () => {
     await ctx.app.close();
+    // resetCatalog() below Restricts deletion of PremiumAddonModule while a
+    // PremiumMembershipAddon still references it by addonKey — resetDatabase()
+    // must run first so its cascade from PremiumMembership clears those rows.
+    await resetDatabase();
+    await resetCatalog();
   });
 
   it('403 para staff em toda mutacao', async () => {

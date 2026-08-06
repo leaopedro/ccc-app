@@ -53,6 +53,8 @@ export const authCopy = {
     termsAnd: ' e a ',
     privacyLink: 'Política de privacidade',
     termsRequired: 'Aceite os termos para continuar.',
+    ageAttest: 'Declaro que tenho 18 anos ou mais.',
+    ageRequired: 'Você precisa ter 18 anos ou mais para criar uma conta.',
     haveAccountPrefix: 'Já tem conta? ',
     haveAccountLink: 'Entrar',
   },

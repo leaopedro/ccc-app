@@ -1,5 +1,5 @@
 import { prisma } from '@ccc/db';
-import { authResponseSchema, signupSchema } from '@ccc/shared/auth';
+import { authResponseSchema, signupRequestSchema } from '@ccc/shared/auth';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verificationMail } from '../../services/auth/mail-templates.js';
@@ -19,10 +19,10 @@ import { defaultGarageSlugForUserId, findFreeGarageSlug } from '../../services/g
 // User row + Garage row are created in one tx. Garage defaults are neutral
 // (name='Garagem', slug='user-<id8>', isPublic=false). NEVER derived from
 // User.name — see docs/superpowers/specs/2026-05-20-garage-per-user-pivot-design.md §2.1, §5.3.
-// eslint-disable-next-line @typescript-eslint/require-await
+
 export const signupRoute: FastifyPluginAsync = async (app) => {
   app.post('/signup', async (request, reply) => {
-    const input = signupSchema.parse(request.body);
+    const input = signupRequestSchema.parse(request.body);
 
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
@@ -37,6 +37,7 @@ export const signupRoute: FastifyPluginAsync = async (app) => {
           email: input.email,
           name: input.name,
           passwordHash,
+          ageAttestedAt: new Date(),
         },
       });
       const baseSlug = defaultGarageSlugForUserId(created.id);

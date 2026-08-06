@@ -90,6 +90,7 @@ vi.mock('lucide-react-native', async () => {
     MessageCircle: icon,
     Package: icon,
     PencilLine: icon,
+    ShieldCheck: icon,
   };
 });
 

@@ -127,7 +127,7 @@ describe('runBroadcastDispatchTick — draft vs dispatchable boundary', () => {
     expect(delivery.status).toBe('sent');
   });
 
-  it('skips push for marketing-opted-out recipients but still mints inbox + delivery rows', async () => {
+  it('skips marketing-opted-out recipients entirely — no push, no inbox row', async () => {
     const admin = await seedAdmin();
     const recipient = await seedRecipient();
     await withdrawConsent(recipient.id, 'push_marketing');
@@ -135,8 +135,8 @@ describe('runBroadcastDispatchTick — draft vs dispatchable boundary', () => {
     const past = new Date(Date.now() - 60 * 1000);
     const scheduled = await prisma.broadcast.create({
       data: {
-        title: 'Inbox-only for opt-out',
-        body: 'no push, inbox yes',
+        title: 'Consent-gated broadcast',
+        body: 'only consenting members receive this',
         targetKind: 'all',
         status: 'scheduled',
         scheduledAt: past,
@@ -154,10 +154,11 @@ describe('runBroadcastDispatchTick — draft vs dispatchable boundary', () => {
       where: { broadcastId_userId: { broadcastId: scheduled.id, userId: recipient.id } },
     });
     expect(delivery.status).toBe('skipped');
+    expect(delivery.failureCode).toBe('no_marketing_consent');
     const inbox = await prisma.notification.findMany({
       where: { userId: recipient.id, kind: 'broadcast', dedupeKey: scheduled.id },
     });
-    expect(inbox).toHaveLength(1);
+    expect(inbox).toHaveLength(0);
   });
 
   it('in_app_only mode mints inbox rows for the audience and emits zero push', async () => {

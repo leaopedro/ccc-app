@@ -1,5 +1,5 @@
 import type { PublicUser } from '@ccc/shared/auth';
-import type { LoginInput, SignupInput } from '@ccc/shared/auth';
+import type { LoginInput, SignupRequestInput } from '@ccc/shared/auth';
 import {
   createContext,
   useCallback,
@@ -29,7 +29,7 @@ type AuthState = {
 };
 
 type AuthContextValue = AuthState & {
-  signup: (input: SignupInput) => Promise<PublicUser>;
+  signup: (input: SignupRequestInput) => Promise<PublicUser>;
   login: (input: LoginInput) => Promise<PublicUser>;
   setSession: (tokens: StoredTokens, user: PublicUser) => Promise<void>;
   logout: () => Promise<void>;

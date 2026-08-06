@@ -90,6 +90,10 @@ const config: ExpoConfig = {
     supportsTablet: false,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
+      NSPhotoLibraryUsageDescription:
+        'O Casa Car Club acessa suas fotos para definir seu avatar, adicionar fotos de veículos e anexar imagens ao suporte.',
+      NSPhotoLibraryAddUsageDescription:
+        'O Casa Car Club salva o QR Code do seu ingresso na sua galeria de fotos.',
     },
   },
   android: {

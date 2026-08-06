@@ -24,6 +24,7 @@ describe('POST /auth/signup creates Garage atomically with User', () => {
         email: 'novato@jdm.test',
         password: 'correct-horse-battery-staple',
         name: 'Tiago Apellido Pessoal',
+        ageAttestation: true,
       },
     });
     expect(res.statusCode).toBe(201);

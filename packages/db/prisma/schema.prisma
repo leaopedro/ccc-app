@@ -38,6 +38,9 @@ model User {
   role               UserRole   @default(user)
   status             UserStatus @default(active)
   emailVerifiedAt    DateTime?
+  // 18+ self-attestation captured at signup. We store only the fact/timestamp
+  // of acceptance, never a date of birth (privacy policy: no DOB collected).
+  ageAttestedAt      DateTime?
   tokenInvalidatedAt DateTime?
   deletedAt          DateTime?
   anonymizedAt       DateTime?

@@ -1,8 +1,9 @@
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import { describe, expect, it } from 'vitest';
 
 import { needsBanner, parseStoredConsent } from '../cookie-banner';
 
-const CURRENT_VERSION = 'privacy-2026-05-14';
+const CURRENT_VERSION = PRIVACY_POLICY_VERSION;
 
 describe('parseStoredConsent', () => {
   it('returns null for null input', () => {

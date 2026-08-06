@@ -240,6 +240,126 @@ describe('runRetentionTick', () => {
     expect(await prisma.notification.count()).toBe(1);
   });
 
+  it('scrubs IP/user-agent from consents older than 90 days, keeping the record', async () => {
+    const { user } = await createUser({ verified: true });
+    const old = await prisma.consent.create({
+      data: {
+        userId: user.id,
+        purpose: 'push_marketing',
+        version: 'v1',
+        channel: 'mobile',
+        ipAddress: '203.0.113.7',
+        userAgent: 'ExpoClient/1.0',
+        evidence: {},
+        givenAt: new Date(Date.now() - 91 * MS_PER_DAY),
+      },
+    });
+    const recent = await prisma.consent.create({
+      data: {
+        userId: user.id,
+        purpose: 'newsletter',
+        version: 'v1',
+        channel: 'mobile',
+        ipAddress: '203.0.113.8',
+        userAgent: 'ExpoClient/1.0',
+        evidence: {},
+        givenAt: new Date(Date.now() - 30 * MS_PER_DAY),
+      },
+    });
+
+    const results = await runRetentionTick({ now: new Date(), uploads });
+
+    const c = results.find((r) => r.table === 'Consent')!;
+    expect(c.deletedCount).toBe(1);
+    const oldAfter = await prisma.consent.findUniqueOrThrow({ where: { id: old.id } });
+    expect(oldAfter.ipAddress).toBeNull();
+    expect(oldAfter.userAgent).toBeNull();
+    const recentAfter = await prisma.consent.findUniqueOrThrow({ where: { id: recent.id } });
+    expect(recentAfter.ipAddress).toBe('203.0.113.8');
+  });
+
+  it('deletes support tickets closed over 2 years ago and queues their attachments', async () => {
+    const { user } = await createUser({ verified: true });
+    const old = await prisma.supportTicket.create({
+      data: {
+        userId: user.id,
+        phone: '+5541999990000',
+        message: 'old ticket',
+        attachmentObjectKey: 'support/old-attachment.jpg',
+        status: 'closed',
+        closedAt: new Date(Date.now() - 731 * MS_PER_DAY),
+      },
+    });
+    const recent = await prisma.supportTicket.create({
+      data: {
+        userId: user.id,
+        phone: '+5541999990001',
+        message: 'recent ticket',
+        status: 'closed',
+        closedAt: new Date(Date.now() - 30 * MS_PER_DAY),
+      },
+    });
+
+    const results = await runRetentionTick({ now: new Date(), uploads });
+
+    const s = results.find((r) => r.table === 'SupportTicket')!;
+    expect(s.deletedCount).toBe(1);
+    expect(await prisma.supportTicket.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await prisma.supportTicket.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    const queued = await prisma.uploadDeletionQueue.findUnique({
+      where: { objectKey: 'support/old-attachment.jpg' },
+    });
+    expect(queued).not.toBeNull();
+  });
+
+  it('deletes admin audit rows older than 2 years', async () => {
+    const oldId = 'old-audit-fixture';
+    await prisma.adminAudit.create({
+      data: {
+        id: oldId,
+        actorId: 'admin-1',
+        action: 'test.action',
+        entityType: 'test',
+        entityId: 'x',
+        createdAt: new Date(Date.now() - 731 * MS_PER_DAY),
+      },
+    });
+
+    await runRetentionTick({ now: new Date(), uploads });
+
+    expect(await prisma.adminAudit.findUnique({ where: { id: oldId } })).toBeNull();
+  });
+
+  it('deletes subscription webhook events older than 90 days', async () => {
+    const old = await prisma.subscriptionWebhookEvent.create({
+      data: {
+        provider: 'apple_revenuecat',
+        providerEventId: 'evt_old_1',
+        type: 'INITIAL_PURCHASE',
+        payload: {},
+        receivedAt: new Date(Date.now() - 91 * MS_PER_DAY),
+      },
+    });
+    const recent = await prisma.subscriptionWebhookEvent.create({
+      data: {
+        provider: 'apple_revenuecat',
+        providerEventId: 'evt_recent_1',
+        type: 'RENEWAL',
+        payload: {},
+        receivedAt: new Date(Date.now() - 30 * MS_PER_DAY),
+      },
+    });
+
+    const results = await runRetentionTick({ now: new Date(), uploads });
+
+    const w = results.find((r) => r.table === 'SubscriptionWebhookEvent')!;
+    expect(w.deletedCount).toBe(1);
+    expect(await prisma.subscriptionWebhookEvent.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(
+      await prisma.subscriptionWebhookEvent.findUnique({ where: { id: recent.id } }),
+    ).not.toBeNull();
+  });
+
   it('deletes broadcast deliveries older than 1 year', async () => {
     const { user } = await createUser({ verified: true });
     const { user: user2 } = await createUser({ verified: true, email: 'user2@jdm.test' });

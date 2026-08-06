@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Package,
   PencilLine,
+  ShieldCheck,
 } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -243,6 +244,12 @@ export default function ProfileMenuScreen() {
           label={profileCopy.menu.support}
           hint={profileCopy.menu.supportHint}
           onPress={() => router.push('/profile/support' as never)}
+        />
+        <MenuRow
+          icon={<ShieldCheck color={theme.colors.fg} size={18} strokeWidth={1.75} />}
+          label={profileCopy.menu.privacy}
+          hint={profileCopy.menu.privacyHint}
+          onPress={() => router.push('/profile/privacy' as never)}
         />
         <MenuRow
           icon={<LogOut color={theme.colors.accent} size={18} strokeWidth={1.75} />}

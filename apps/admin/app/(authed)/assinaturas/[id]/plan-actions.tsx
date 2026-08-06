@@ -8,10 +8,12 @@ import { ActionToast, useActionToast } from './use-action-toast';
 
 type Tier = 'bronze' | 'silver' | 'gold';
 type Cadence = 'monthly' | 'annual';
+type Status = 'trialing' | 'active' | 'past_due' | 'cancel_scheduled' | 'expired' | 'paused';
 
 type Props = {
   membershipId: string;
   mutable: boolean;
+  status: Status;
   currentTier: Tier;
   currentCadence: Cadence;
 };
@@ -19,16 +21,25 @@ type Props = {
 const tierLabel: Record<Tier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
 const cadenceLabel: Record<Cadence, string> = { monthly: 'Mensal', annual: 'Anual' };
 
+/**
+ * Espelha ALLOWED_STATUS.plan em apps/api/src/routes/admin/subscriptions.ts.
+ * As duas listas precisam mudar juntas: divergir aqui deixa o botão
+ * habilitado numa ação que a API vai recusar com 409.
+ */
+const ALLOWED_STATUS: Status[] = ['active', 'past_due', 'cancel_scheduled'];
+
 const field =
   'rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--color-fg)]';
 
-export function PlanActions({ membershipId, mutable, currentTier, currentCadence }: Props) {
+export function PlanActions({ membershipId, mutable, status, currentTier, currentCadence }: Props) {
   const { pending, toast, run } = useActionToast();
   const [tier, setTier] = useState<Tier>(currentTier);
   const [cadence, setCadence] = useState<Cadence>(currentCadence);
 
+  const statusAllowed = ALLOWED_STATUS.includes(status);
   const unchanged = tier === currentTier && cadence === currentCadence;
-  const disabled = !mutable || pending || unchanged;
+  const fieldDisabled = !mutable || !statusAllowed || pending;
+  const disabled = fieldDisabled || unchanged;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-[color:var(--color-border)] p-4">
@@ -39,7 +50,7 @@ export function PlanActions({ membershipId, mutable, currentTier, currentCadence
           <select
             className={field}
             value={tier}
-            disabled={!mutable || pending}
+            disabled={fieldDisabled}
             data-testid="assinaturas-plano-tier"
             onChange={(e) => setTier(e.target.value as Tier)}
           >
@@ -55,7 +66,7 @@ export function PlanActions({ membershipId, mutable, currentTier, currentCadence
           <select
             className={field}
             value={cadence}
-            disabled={!mutable || pending}
+            disabled={fieldDisabled}
             data-testid="assinaturas-plano-cadencia"
             onChange={(e) => setCadence(e.target.value as Cadence)}
           >

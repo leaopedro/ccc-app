@@ -6,22 +6,35 @@ import { attachAddonAction, detachAddonAction } from '~/lib/assinaturas-actions'
 
 import { ActionToast, useActionToast } from './use-action-toast';
 
+type Status = 'trialing' | 'active' | 'past_due' | 'cancel_scheduled' | 'expired' | 'paused';
+
 type Props = {
   membershipId: string;
   mutable: boolean;
+  status: Status;
   /** Chaves ja vinculadas, para nao oferecer duplicata no select. */
   attachedKeys: string[];
   /** Catalogo de modulos ativos. Vem do server component pai. */
   moduleOptions?: Array<{ key: string; name: string }>;
 };
 
+/**
+ * Espelha ALLOWED_STATUS.addon em apps/api/src/routes/admin/subscriptions.ts.
+ * As duas listas precisam mudar juntas: divergir aqui deixa o botão
+ * habilitado numa ação que a API vai recusar com 409.
+ */
+const ALLOWED_STATUS: Status[] = ['active', 'past_due', 'cancel_scheduled'];
+
 export function AddonsPanel({
   membershipId,
   mutable,
+  status,
   attachedKeys,
   moduleOptions = [],
 }: Props) {
   const { pending, toast, run } = useActionToast();
+  const statusAllowed = ALLOWED_STATUS.includes(status);
+  const controlsDisabled = !mutable || !statusAllowed || pending;
   const available = moduleOptions.filter((m) => !attachedKeys.includes(m.key));
 
   // O catalogo pode chegar depois de um refresh, e a selecao anterior pode
@@ -29,7 +42,7 @@ export function AddonsPanel({
   // valor efetivo no render — sem efeito, sem setState fora de um handler.
   const [override, setOverride] = useState<string | null>(null);
   const selected =
-    override && available.some((m) => m.key === override) ? override : available[0]?.key ?? '';
+    override && available.some((m) => m.key === override) ? override : (available[0]?.key ?? '');
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-[color:var(--color-border)] p-4">
@@ -39,7 +52,7 @@ export function AddonsPanel({
           <select
             className="rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--color-fg)]"
             value={selected}
-            disabled={!mutable || pending || available.length === 0}
+            disabled={controlsDisabled || available.length === 0}
             data-testid="assinaturas-modulo-select"
             onChange={(e) => setOverride(e.target.value)}
           >
@@ -57,7 +70,7 @@ export function AddonsPanel({
         <button
           type="button"
           className="rounded border border-[color:var(--color-border)] px-3 py-1.5 text-sm disabled:opacity-40"
-          disabled={!mutable || pending || !selected}
+          disabled={controlsDisabled || !selected}
           data-testid="assinaturas-acao-vincular-modulo"
           onClick={() => run(() => attachAddonAction(membershipId, selected))}
         >
@@ -72,7 +85,7 @@ export function AddonsPanel({
               key={key}
               type="button"
               className="rounded-full border border-[color:var(--color-border)] px-3 py-1 text-xs disabled:opacity-40"
-              disabled={!mutable || pending}
+              disabled={controlsDisabled}
               data-testid={`assinaturas-acao-remover-modulo-${key}`}
               onClick={() => run(() => detachAddonAction(membershipId, key))}
             >

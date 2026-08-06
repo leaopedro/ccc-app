@@ -25,6 +25,7 @@ vi.mock('~/lib/assinaturas-actions', () => ({
 
 const { StatusActions } = await import('../status-actions');
 const { PlanActions } = await import('../plan-actions');
+const { AddonsPanel } = await import('../addons-panel');
 
 let container: HTMLDivElement;
 let root: Root;
@@ -79,23 +80,26 @@ describe('StatusActions', () => {
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={false} status="active" />);
     });
-    const btn = container.querySelector<HTMLButtonElement>(
-      '[data-testid="assinaturas-acao-cancelar"]',
+    // status="active" renders both Cancelar and Pausar (Retomar is not
+    // applicable for this status). Assert every rendered action button is
+    // disabled, not just one, so dropping `disabled` from any of them fails
+    // this test regardless of which button it is.
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[data-testid^="assinaturas-acao-"]'),
     );
-    expect(btn?.disabled).toBe(true);
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.disabled).toBe(true);
+    }
   });
 
   it('mostra retomar em vez de cancelar quando cancel_scheduled', async () => {
     resumeSubscriptionAction.mockResolvedValue({ ok: true, pending: true });
     await act(async () => {
-      root.render(
-        <StatusActions membershipId="mem-1" mutable={true} status="cancel_scheduled" />,
-      );
+      root.render(<StatusActions membershipId="mem-1" mutable={true} status="cancel_scheduled" />);
     });
 
-    expect(
-      container.querySelector('[data-testid="assinaturas-acao-cancelar"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-testid="assinaturas-acao-cancelar"]')).toBeNull();
     await click('assinaturas-acao-retomar');
     expect(resumeSubscriptionAction).toHaveBeenCalledWith('mem-1');
   });
@@ -117,6 +121,7 @@ describe('PlanActions', () => {
         <PlanActions
           membershipId="mem-1"
           mutable={true}
+          status="active"
           currentTier="gold"
           currentCadence="monthly"
         />,
@@ -142,11 +147,70 @@ describe('PlanActions', () => {
         <PlanActions
           membershipId="mem-1"
           mutable={true}
+          status="active"
           currentTier="gold"
           currentCadence="monthly"
         />,
       );
     });
     expect(container.textContent).toContain('próxima fatura');
+  });
+
+  it('desabilita os controles quando o status nao permite troca de plano', async () => {
+    await act(async () => {
+      root.render(
+        <PlanActions
+          membershipId="mem-1"
+          mutable={true}
+          status="trialing"
+          currentTier="gold"
+          currentCadence="monthly"
+        />,
+      );
+    });
+
+    const tierSelect = container.querySelector<HTMLSelectElement>(
+      '[data-testid="assinaturas-plano-tier"]',
+    );
+    const cadenceSelect = container.querySelector<HTMLSelectElement>(
+      '[data-testid="assinaturas-plano-cadencia"]',
+    );
+    const submit = container.querySelector<HTMLButtonElement>(
+      '[data-testid="assinaturas-acao-trocar-plano"]',
+    );
+
+    expect(tierSelect?.disabled).toBe(true);
+    expect(cadenceSelect?.disabled).toBe(true);
+    expect(submit?.disabled).toBe(true);
+  });
+});
+
+describe('AddonsPanel', () => {
+  it('desabilita os controles quando o status nao permite vincular/remover modulo', async () => {
+    await act(async () => {
+      root.render(
+        <AddonsPanel
+          membershipId="mem-1"
+          mutable={true}
+          status="paused"
+          attachedKeys={['track-days']}
+          moduleOptions={[{ key: 'valet', name: 'Valet' }]}
+        />,
+      );
+    });
+
+    const select = container.querySelector<HTMLSelectElement>(
+      '[data-testid="assinaturas-modulo-select"]',
+    );
+    const attachButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="assinaturas-acao-vincular-modulo"]',
+    );
+    const detachButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="assinaturas-acao-remover-modulo-track-days"]',
+    );
+
+    expect(select?.disabled).toBe(true);
+    expect(attachButton?.disabled).toBe(true);
+    expect(detachButton?.disabled).toBe(true);
   });
 });

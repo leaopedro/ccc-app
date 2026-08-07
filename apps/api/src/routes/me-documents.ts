@@ -49,46 +49,43 @@ export const meDocumentRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
+  // hook: 'preHandler' is required because the keyGenerator reads
+  // request.user, which only exists after app.authenticate runs. Without it
+  // the rate-limit plugin keys on the earlier onRequest hook and falls back
+  // to req.ip, rate-limiting every user behind one NAT as a single caller.
   await app.register(async (scoped) => {
-    // Same shape as me-support.ts: an identity document is a heavy, rare
-    // write, and the presign is the expensive half.
+    scoped.addHook('preHandler', app.authenticate);
     await scoped.register(rateLimit, {
       max: 5,
       timeWindow: '15 minutes',
-      keyGenerator: (req) => {
-        const auth = (req as unknown as { user?: { sub?: string } }).user;
-        return auth?.sub ? `documents:${auth.sub}` : `documents-ip:${req.ip}`;
-      },
+      hook: 'preHandler',
+      keyGenerator: (req) => `documents:${req.user?.sub ?? req.ip}`,
     });
 
-    scoped.post(
-      '/me/documents/upload',
-      { preHandler: [scoped.authenticate] },
-      async (request, reply) => {
-        const { sub } = requireUser(request);
-        const input = documentUploadRequestSchema.parse(request.body);
+    scoped.post('/me/documents/upload', async (request, reply) => {
+      const { sub } = requireUser(request);
+      const input = documentUploadRequestSchema.parse(request.body);
 
-        const presigned = await app.uploads.presignPut({
-          // Server-injected: the client cannot repoint this presign at another
-          // upload category. Same guard as POST /me/garage/cover/upload.
-          kind: 'identity_document',
-          userId: sub,
-          contentType: input.contentType,
-          size: input.size,
-        });
+      const presigned = await app.uploads.presignPut({
+        // Server-injected: the client cannot repoint this presign at another
+        // upload category. Same guard as POST /me/garage/cover/upload.
+        kind: 'identity_document',
+        userId: sub,
+        contentType: input.contentType,
+        size: input.size,
+      });
 
-        return reply.status(201).send(
-          documentUploadResponseSchema.parse({
-            uploadUrl: presigned.uploadUrl,
-            objectKey: presigned.objectKey,
-            expiresAt: presigned.expiresAt.toISOString(),
-            headers: presigned.headers,
-          }),
-        );
-      },
-    );
+      return reply.status(201).send(
+        documentUploadResponseSchema.parse({
+          uploadUrl: presigned.uploadUrl,
+          objectKey: presigned.objectKey,
+          expiresAt: presigned.expiresAt.toISOString(),
+          headers: presigned.headers,
+        }),
+      );
+    });
 
-    scoped.post('/me/documents', { preHandler: [scoped.authenticate] }, async (request, reply) => {
+    scoped.post('/me/documents', async (request, reply) => {
       const { sub } = requireUser(request);
       const input = createDocumentBodySchema.parse(request.body);
 

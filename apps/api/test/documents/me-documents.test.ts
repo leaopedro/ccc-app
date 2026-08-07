@@ -214,4 +214,37 @@ describe('me documents', () => {
     const res = await app.inject({ method: 'GET', url: '/me/documents', headers: auth(user.id) });
     expect(userDocumentListResponseSchema.parse(res.json()).items).toHaveLength(0);
   });
+
+  it('rate limits per user, not per shared IP', async () => {
+    const { user: userA } = await createUser({ verified: true, email: 'a@ccc.test' });
+    const { user: userB } = await createUser({ verified: true, email: 'b@ccc.test' });
+
+    // app.inject requests all share the same req.ip, so this only stays under
+    // 5 per user if the bucket key is the sub, not the ip.
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/me/documents/upload',
+        headers: auth(userA.id),
+        payload: { contentType: 'image/jpeg', size: 2048 },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    const sixth = await app.inject({
+      method: 'POST',
+      url: '/me/documents/upload',
+      headers: auth(userA.id),
+      payload: { contentType: 'image/jpeg', size: 2048 },
+    });
+    expect(sixth.statusCode).toBe(429);
+
+    const forUserB = await app.inject({
+      method: 'POST',
+      url: '/me/documents/upload',
+      headers: auth(userB.id),
+      payload: { contentType: 'image/jpeg', size: 2048 },
+    });
+    expect(forUserB.statusCode).toBe(201);
+  });
 });

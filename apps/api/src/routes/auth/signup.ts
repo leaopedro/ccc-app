@@ -6,6 +6,7 @@ import { verificationMail } from '../../services/auth/mail-templates.js';
 import { hashPassword } from '../../services/auth/password.js';
 import { createAccessToken, issueRefreshToken } from '../../services/auth/tokens.js';
 import { issueVerificationToken } from '../../services/auth/verification.js';
+import { encryptField } from '../../services/crypto/field-encryption.js';
 import { awardBadge } from '../../services/garage/awarder.js';
 import { checkEligibility as checkSignupEligibility } from '../../services/garage/eligibility/signup.js';
 import { defaultGarageSlugForUserId, findFreeGarageSlug } from '../../services/garage/index.js';
@@ -37,6 +38,10 @@ export const signupRoute: FastifyPluginAsync = async (app) => {
           email: input.email,
           name: input.name,
           passwordHash,
+          // Permissive signup: both optional. Written in the same tx as the
+          // User + Garage create so a half-filled profile never lands.
+          ...(input.cpf ? { cpf: encryptField(input.cpf, app.env.FIELD_ENCRYPTION_KEY) } : {}),
+          ...(input.phone ? { phone: input.phone } : {}),
         },
       });
       const baseSlug = defaultGarageSlugForUserId(created.id);

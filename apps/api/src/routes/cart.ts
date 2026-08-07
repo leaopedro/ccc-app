@@ -32,6 +32,7 @@ import {
 import type { ValidatedCartItem } from '../services/cart/index.js';
 import { withOrderIdParam } from '../services/cart/success-url.js';
 import { ORDER_EXPIRY_MS } from '../services/orders/expire.js';
+import { enforceProfileGate } from '../services/profile/gate.js';
 import {
   EventPickupValidationError,
   validateEventPickupSelection,
@@ -466,6 +467,12 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
   // POST /cart/checkout
   app.post('/cart/checkout', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { sub } = requireUser(request);
+
+    // Gate before anything mutates: below this line the cart flips to
+    // `checking_out` and tiers get reserved.
+    const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+    if (gated) return gated;
+
     const parsed = beginCheckoutRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(422).send({

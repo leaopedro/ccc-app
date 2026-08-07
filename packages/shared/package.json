@@ -66,6 +66,10 @@
       "types": "./src/feed.ts",
       "default": "./dist/feed.js"
     },
+    "./fridge": {
+      "types": "./src/fridge.ts",
+      "default": "./dist/fridge.js"
+    },
     "./mfa": {
       "types": "./src/mfa.ts",
       "default": "./dist/mfa.js"

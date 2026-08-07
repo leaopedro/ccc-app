@@ -1,5 +1,6 @@
 export * from './ids.js';
 export * from './health.js';
+export * from './fridge.js';
 export * from './profile.js';
 export * from './cars.js';
 export * from './uploads.js';

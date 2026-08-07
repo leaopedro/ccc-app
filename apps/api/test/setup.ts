@@ -14,6 +14,8 @@ process.env.STRIPE_WEBHOOK_SECRET = 'test_stripe_webhook_secret_32_chars_min_xx'
 process.env.TICKET_CODE_SECRET = 'test_ticket_code_secret_32_chars_min_xx';
 process.env.FIELD_ENCRYPTION_KEY = 'ab'.repeat(32);
 process.env.MFA_ENCRYPTION_KEY = 'test-mfa-encryption-key-32chars!!';
+process.env.FRIDGE_DEVICE_SECRET = 'f'.repeat(48);
+process.env.FRIDGE_UNLOCK_API_KEY = 'g'.repeat(48);
 
 // vitest.config.ts runs this suite with pool 'forks' + singleFork: true, so
 // every test file shares one process.env. GROWTH_PREMIUM_BILLING_ENABLED is

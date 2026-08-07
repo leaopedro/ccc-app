@@ -3736,8 +3736,14 @@ const daysBefore = (now: Date, days: number): Date =>
  * Idempotent: rows already stamped are skipped, so a re-run queues nothing.
  * Returns how many rows were purged this pass.
  */
+export const DOCUMENT_PURGE_BATCH = 500;
+
 export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
   const due = await prisma.userDocument.findMany({
+    // Capped like purgeQueuedUploadDeletions, which takes 500. The first tick
+    // after the feature has been live for 90 days can have a large backlog, and
+    // this loop does two writes per row.
+    take: DOCUMENT_PURGE_BATCH,
     where: {
       fileDeletedAt: null,
       OR: [
@@ -3749,7 +3755,19 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
   });
 
   for (const doc of due) {
-    await queueObjectDeletion({ objectKey: doc.objectKey, reason: 'document_retention' });
+    // retentionDays: 0 is load-bearing. queueObjectDeletion defaults to 30 days
+    // of grace, and purgeQueuedUploadDeletions only removes rows whose
+    // deleteAfter has passed. With the default, an approved document's file would
+    // leave R2 at reviewedAt + 120 days while legal.ts promises 90, and
+    // fileDeletedAt would be stamped 30 days before the object actually went,
+    // so GET /me/documents would report fileUrl: null and the admin endpoint
+    // would return 410 for a month while the file was still retrievable.
+    // The 90 and 30 day windows ARE the grace period; a second one defeats them.
+    await queueObjectDeletion({
+      objectKey: doc.objectKey,
+      reason: 'document_retention',
+      retentionDays: 0,
+    });
     await prisma.userDocument.update({
       where: { id: doc.id },
       data: { fileDeletedAt: now },

@@ -293,7 +293,7 @@ git commit -m "feat(shared): schemas de CPF e telefone no perfil"
   - `INCOMPLETE_PROFILE_CODE = 'INCOMPLETE_PROFILE'`, `INCOMPLETE_PROFILE_STATUS = 'incomplete_profile'`.
   - `buildIncompleteProfileError(missing: MissingFieldKey[]): IncompleteProfileError`.
   - `profileStatusSchema`, `incompleteProfileErrorSchema`.
-  - `USER_DOCUMENT_TYPES = ['cnh', 'rg']`, `USER_DOCUMENT_STATUSES = ['pending', 'approved', 'rejected']`.
+  - `USER_DOCUMENT_TYPES = ['cnh', 'rg']`, `USER_DOCUMENT_STATUSES = ['pending', 'approved', 'rejected']`, `LIVE_DOCUMENT_STATUSES = ['pending', 'approved']`.
   - `ALLOWED_DOCUMENT_TYPES`, `MAX_DOCUMENT_BYTES`.
   - `documentUploadRequestSchema`, `documentUploadResponseSchema`, `createDocumentBodySchema`, `userDocumentSchema`, `userDocumentListResponseSchema`.
   - `signupSchema` com `cpf?: string` e `phone?: string`.
@@ -580,6 +580,12 @@ export const userDocumentListResponseSchema = z.object({
 });
 
 export const DOCUMENT_ALREADY_PENDING_CODE = 'DOCUMENT_ALREADY_PENDING' as const;
+
+// A "live" document is one that satisfies the subscription gate. Single source
+// of truth: services/profile/completeness.ts filters on it, and
+// routes/me-documents.ts enforces one-live-at-a-time with it. Optimistic
+// auto-approval is exactly the decision that `pending` belongs in this list.
+export const LIVE_DOCUMENT_STATUSES = ['pending', 'approved'] as const;
 ```
 
 Em `packages/shared/src/auth.ts`, importar os schemas e estender o signup:
@@ -1018,6 +1024,7 @@ Criar `apps/api/src/services/profile/completeness.ts`:
 
 ```ts
 import { prisma } from '@ccc/db';
+import { LIVE_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import type { MissingFieldKey, ProfileScope } from '@ccc/shared/profile-status';
 
 // The single source of truth for what each gate demands. Routes never
@@ -1052,7 +1059,7 @@ export const loadProfileCompleteness = async (
       cpf: true,
       phone: true,
       documents: {
-        where: { status: { in: ['pending', 'approved'] } },
+        where: { status: { in: [...LIVE_DOCUMENT_STATUSES] } },
         select: { id: true },
         take: 1,
       },
@@ -2703,6 +2710,7 @@ import {
   documentUploadRequestSchema,
   documentUploadResponseSchema,
   DOCUMENT_ALREADY_PENDING_CODE,
+  LIVE_DOCUMENT_STATUSES,
   userDocumentListResponseSchema,
   userDocumentSchema,
   type UserDocument as SharedUserDocument,
@@ -2713,11 +2721,6 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 import type { Uploads } from '../services/uploads/index.js';
-
-// A live document is one that satisfies the subscription gate. Kept in sync
-// with the `status in (pending, approved)` filter in
-// services/profile/completeness.ts — change both together.
-const LIVE_DOCUMENT_STATUSES = ['pending', 'approved'] as const;
 
 const serializeDocument = async (
   doc: DbUserDocument,

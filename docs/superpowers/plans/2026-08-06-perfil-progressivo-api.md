@@ -3146,12 +3146,20 @@ describe('admin document review', () => {
     });
     const doc = await seedDoc(user.id);
 
-    await app.inject({
+    const res = await app.inject({
       method: 'POST',
       url: `/admin/documents/${doc.id}/reject`,
       headers,
       payload: { reason: 'Foto ilegível' },
     });
+
+    // Assert the rejection ACTUALLY happened before asserting on the membership.
+    // Without these two lines the test passes vacuously: any future precondition
+    // that made reject return 409 would leave the membership trivially active
+    // and this guard would stop guarding the invariant.
+    expect(res.statusCode).toBe(200);
+    const doc_ = await prisma.userDocument.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(doc_.status).toBe('rejected');
 
     const row = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membership.id } });
     expect(row.status).toBe('active');
@@ -3329,7 +3337,8 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const url = await app.uploads.buildSignedGetUrl(doc.objectKey, 60);
-    return reply.redirect(302, url);
+    // Fastify 5 signature is redirect(url, code). The v4 order was inverted.
+    return reply.redirect(url, 302);
   });
 
   const review = async (
@@ -3337,19 +3346,43 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
     actorId: string,
     next: 'approved' | 'rejected',
     reason: string | null,
+    action: AdminAuditAction,
   ) => {
-    // updateMany with a status guard makes the pending→reviewed transition
-    // atomic: two reviewers clicking at once produce one winner and one 409.
-    const guarded = await prisma.userDocument.updateMany({
-      where: { id, status: 'pending' },
-      data: {
-        status: next,
-        rejectionReason: reason,
-        reviewedByAdminId: actorId,
-        reviewedAt: new Date(),
-      },
+    // The status change and its audit row share ONE transaction. If the audit
+    // insert fails, the review rolls back: a member must never end up
+    // `rejected` with no record of who did it or why, and the rejection reason
+    // is the only durable record of that. This is the repo's established
+    // pattern for pairing an admin mutation with its audit row, enforced by a
+    // prior review BLOCK — see admin/garage-xp-adjustment.ts:82-94, which
+    // passes `tx` to recordAudit for exactly this reason.
+    //
+    // updateMany with a status guard keeps the pending→reviewed transition
+    // atomic inside the transaction: two reviewers clicking at once produce one
+    // winner and one 409.
+    return prisma.$transaction(async (tx) => {
+      const guarded = await tx.userDocument.updateMany({
+        where: { id, status: 'pending' },
+        data: {
+          status: next,
+          rejectionReason: reason,
+          reviewedByAdminId: actorId,
+          reviewedAt: new Date(),
+        },
+      });
+      if (guarded.count === 0) return 0;
+
+      await recordAudit(
+        {
+          actorId,
+          action,
+          entityType: 'user_document',
+          entityId: id,
+          ...(reason ? { metadata: { reason } } : {}),
+        },
+        tx,
+      );
+      return guarded.count;
     });
-    return guarded.count;
   };
 
   app.post<{ Params: { id: string } }>('/documents/:id/approve', async (request, reply) => {

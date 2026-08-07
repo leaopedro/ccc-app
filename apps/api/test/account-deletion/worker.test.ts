@@ -6,7 +6,7 @@ import { loadEnv } from '../../src/env.js';
 import { anonymizeUser } from '../../src/services/account-deletion/anonymize.js';
 import { runVendorFanout } from '../../src/services/account-deletion/vendor-fanout.js';
 import { runDeletionWorkerTick } from '../../src/workers/account-deletion.js';
-import { createUser, makeApp, resetDatabase } from '../helpers.js';
+import { createUser, makeApp, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 
 const env = loadEnv();
 
@@ -134,7 +134,9 @@ describe('runVendorFanout', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    app = await makeApp();
+    // Fake Stripe: real client makes a live deleteCustomersByEmail call that
+    // errors offline in CI, flipping the step to 'error'.
+    app = (await makeAppWithFakeStripe()).app;
   });
 
   afterEach(async () => {
@@ -154,7 +156,8 @@ describe('runDeletionWorkerTick', () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    app = await makeApp();
+    // Fake Stripe so the deletion worker's vendor fanout stays offline in CI.
+    app = (await makeAppWithFakeStripe()).app;
   });
 
   afterEach(async () => {

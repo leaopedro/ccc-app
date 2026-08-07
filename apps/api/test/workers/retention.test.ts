@@ -306,10 +306,13 @@ describe('runRetentionTick', () => {
     expect(s.deletedCount).toBe(1);
     expect(await prisma.supportTicket.findUnique({ where: { id: old.id } })).toBeNull();
     expect(await prisma.supportTicket.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    // Enqueued and consumed in the same tick (see purgeOldSupportTickets): the
+    // UploadDeletionQueue pass deletes the R2 object and removes the queue row.
+    expect(deleteObjectSpy).toHaveBeenCalledWith('support/old-attachment.jpg');
     const queued = await prisma.uploadDeletionQueue.findUnique({
       where: { objectKey: 'support/old-attachment.jpg' },
     });
-    expect(queued).not.toBeNull();
+    expect(queued).toBeNull();
   });
 
   it('deletes admin audit rows older than 2 years', async () => {

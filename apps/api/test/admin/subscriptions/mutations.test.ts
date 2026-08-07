@@ -266,7 +266,11 @@ describe('mutacoes admin de assinatura', () => {
 
     expect(res.statusCode).toBe(503);
     await flagged.app.close();
-    process.env.GROWTH_PREMIUM_BILLING_ENABLED = previous;
+    if (previous === undefined) {
+      delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+    } else {
+      process.env.GROWTH_PREMIUM_BILLING_ENABLED = previous;
+    }
   });
 
   it('troca para o plano atual da 409 NoChange', async () => {

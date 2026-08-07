@@ -15,6 +15,10 @@ describe('cpfSchema', () => {
     expect(cpfSchema.safeParse('529.982.247-26').success).toBe(false);
   });
 
+  it('rejects a CPF whose first check digit is wrong', () => {
+    expect(cpfSchema.safeParse('52998224735').success).toBe(false);
+  });
+
   it('rejects repeated-digit sequences that pass the arithmetic', () => {
     expect(cpfSchema.safeParse('11111111111').success).toBe(false);
     expect(cpfSchema.safeParse('00000000000').success).toBe(false);

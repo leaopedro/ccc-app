@@ -50,6 +50,34 @@ describe('POST /api/fridge/unlock', () => {
     expect(events[0]?.status).toBe('failed_offline');
   });
 
+  it('returns 503 and persists failed_offline when socket closes between isOnline and sendUnlock (TOCTOU)', async () => {
+    // readyState returns OPEN (1) on the first read (isOnline check), then CLOSED (3) on the
+    // second read (sendUnlock check), simulating a socket that dropped between the two calls.
+    let readCount = 0;
+    const racySocket: FridgeSocket = {
+      get readyState() {
+        return readCount++ === 0 ? 1 : 3;
+      },
+      send: () => {},
+      ping: () => {},
+      terminate: () => {},
+    };
+    app.fridge.register(FRIDGE_DEVICE_ID, racySocket);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/fridge/unlock',
+      headers: { 'x-api-key': API_KEY },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: 'ServiceUnavailable', message: 'device offline' });
+    const events = await prisma.fridgeUnlockEvent.findMany();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status).toBe('failed_offline');
+  });
+
   it('sends UNLOCK and returns 200 when device is online', async () => {
     const socket = onlineSocket();
     app.fridge.register(FRIDGE_DEVICE_ID, socket);

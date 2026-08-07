@@ -31,7 +31,14 @@ export const fridgeUnlockRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(503).send({ error: 'ServiceUnavailable', message: 'device offline' });
       }
 
-      app.fridge.sendUnlock(FRIDGE_DEVICE_ID, app.env.FRIDGE_DEVICE_SECRET ?? '');
+      const delivered = app.fridge.sendUnlock(FRIDGE_DEVICE_ID, app.env.FRIDGE_DEVICE_SECRET ?? '');
+      if (!delivered) {
+        await prisma.fridgeUnlockEvent.create({
+          data: { deviceId: FRIDGE_DEVICE_ID, status: 'failed_offline' },
+        });
+        app.log.warn({ deviceId: FRIDGE_DEVICE_ID }, '[fridge-unlock] device offline at send');
+        return reply.status(503).send({ error: 'ServiceUnavailable', message: 'device offline' });
+      }
       await prisma.fridgeUnlockEvent.create({
         data: { deviceId: FRIDGE_DEVICE_ID, status: 'sent' },
       });

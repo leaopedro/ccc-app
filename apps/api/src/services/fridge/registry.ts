@@ -40,6 +40,8 @@ export const createFridgeRegistry = (deps: FridgeRegistryDeps): FridgeRegistry =
       const entry = entries.get(deviceId);
       if (entry) entry.alive = true;
     },
+    // Reflects only socket readyState, not heartbeat liveness (alive).
+    // A socket that missed a pong but hasn't hit the next heartbeat tick still reports online.
     isOnline(deviceId) {
       const entry = entries.get(deviceId);
       return Boolean(entry) && entry!.socket.readyState === OPEN;

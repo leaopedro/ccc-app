@@ -32,7 +32,17 @@
 pnpm --filter @ccc/api exec vitest run test/<caminho>
 ```
 
-  Ressalva: `exec` pula o hook `pretest` do `@ccc/api`, que roda `db:generate`. Depois de qualquer alteração em `schema.prisma`, rode `pnpm --filter @ccc/db db:generate` antes. A suíte completa continua sendo `pnpm --filter @ccc/api test`, que executa o `pretest` normalmente.
+  A suíte **completa** também precisa de `exec`, pelo mesmo motivo mais um:
+
+```bash
+pnpm --filter @ccc/api exec vitest run
+```
+
+- **`pnpm --filter @ccc/api test` está quebrado neste ambiente.** O hook `pretest` roda `prisma generate`, que falha com `EPERM: operation not permitted, rename ... query_engine-windows.dll.node`. Algum processo de vida longa mantém a DLL aberta, e o repositório fica dentro do OneDrive, que também tranca arquivos durante sync. O `node_modules/.prisma/client/` acumula vários `.tmp` de renames falhados, prova de que isso vem ocorrendo há tempo.
+
+  Isso **não** invalida os testes. A DLL é o engine binário e não muda com o schema; o que muda são o JS e os tipos, e esses regeneram normalmente. O client no disco está atual: `grep -c UserDocument node_modules/.prisma/client/index.d.ts` retorna 739. Portanto rodar o vitest direto, pulando o `pretest`, testa o schema correto.
+
+  Depois de alterar `schema.prisma`, gere o client com `pnpm --filter @ccc/db exec prisma migrate dev`, que já regenera, ou tente `db:generate` e confirme pelo grep acima que os tipos novos entraram, mesmo que o rename da DLL falhe no fim.
 
 ## File Structure
 

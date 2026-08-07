@@ -40,12 +40,17 @@ export const buildUploads = (env: Env): Uploads => {
     );
   }
 
+  // Refuse to boot rather than warn: with real R2 configured and no private
+  // bucket, identity documents would land in the public bucket. The
+  // documentsBucket ?? bucket fallback in R2Uploads then only ever applies
+  // when this function returns DevUploads below.
+  if (r2Ready && !env.R2_DOCUMENTS_BUCKET) {
+    throw new Error(
+      'R2_DOCUMENTS_BUCKET is required when R2 is configured — identity documents must never land in the public bucket',
+    );
+  }
+
   if (r2Ready) {
-    if (!env.R2_DOCUMENTS_BUCKET && env.NODE_ENV === 'production') {
-      console.warn(
-        '[uploads] R2_DOCUMENTS_BUCKET unset — identity documents would land in the PUBLIC bucket',
-      );
-    }
     return new R2Uploads(
       {
         accountId: env.R2_ACCOUNT_ID,

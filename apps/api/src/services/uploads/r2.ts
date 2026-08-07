@@ -64,7 +64,9 @@ export class R2Uploads implements Uploads {
     return {
       uploadUrl,
       objectKey,
-      publicUrl: this.buildPublicUrl(objectKey),
+      // An identity document has no public URL by design: callers must
+      // request a short-lived signed URL via buildSignedGetUrl instead.
+      publicUrl: isDocument ? '' : this.buildPublicUrl(objectKey),
       expiresAt: new Date(Date.now() + this.ttlSeconds * 1000),
       headers: {
         'content-type': input.contentType,

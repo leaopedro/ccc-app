@@ -87,7 +87,9 @@ const envSchema = z.object({
   PROFILE_GATE_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
   // Private bucket for identity documents. Falls back to R2_BUCKET only so
   // local dev and tests work; production MUST set a dedicated private bucket.
-  R2_DOCUMENTS_BUCKET: z.string().optional(),
+  // .min(1) so an empty string is rejected rather than silently treated as
+  // "unset" here while bucketFor()'s `??` would treat it as "present".
+  R2_DOCUMENTS_BUCKET: z.string().min(1).optional(),
   // Shorter than UPLOAD_URL_TTL_SECONDS on purpose: 300s is too long for a
   // link to someone's ID.
   DOCUMENT_URL_TTL_SECONDS: z.coerce.number().int().positive().default(60),

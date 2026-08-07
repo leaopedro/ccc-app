@@ -2177,7 +2177,9 @@ describe('subscription profile gate', () => {
 });
 ```
 
-Conferir em `apps/api/src/services/stripe/fake.ts` o nome real do array que registra sessões de assinatura, e ajustar `stripe.subscriptionCheckoutSessions` para casar com ele.
+A asserção acima já usa a API real do `FakeStripe`: ele registra tudo em `calls`, cada entrada com um discriminador `kind`, e `'createSubscriptionCheckoutSession'` é um dos membros da união ([fake.ts:29-51](../../../apps/api/src/services/stripe/fake.ts:29)). Não existe array `subscriptionCheckoutSessions`.
+
+Os campos obrigatórios de `PremiumMembership` no fixture do último teste também já estão completos e conferidos contra [schema.prisma:319](../../../packages/db/prisma/schema.prisma:319): `tier`, `currentPeriodStart`, `baseAmountCents`, `devFeePercent`, `devFeeAmountCents`, `grossAmountCents` e `currency` não têm default.
 
 - [ ] **Step 2: Run test to verify it fails**
 

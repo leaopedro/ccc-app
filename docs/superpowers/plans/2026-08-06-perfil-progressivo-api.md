@@ -26,6 +26,13 @@
 - Cada tarefa termina com lint, typecheck e os testes do escopo verdes antes do commit.
 - **Lint e typecheck sempre com filtro de pacote**, nunca no repo inteiro. `pnpm lint` sem filtro estoura o heap do Node neste repo, mesmo com 8 GB, e a falha é pré-existente e não relacionada a esta feature. Use `pnpm --filter @ccc/shared lint`, `pnpm --filter @ccc/api lint`, e o mesmo para `typecheck`.
 - **Testes de integração da API exigem o daemon do Docker** rodando, porque `apps/api/test/global-setup.ts` levanta um Postgres via Testcontainers. Sem daemon, a suíte não roda e a tarefa não pode ser declarada pronta com base só em typecheck.
+- **Teste focado não usa `pnpm ... test -- <padrão>`.** Nesta versão do pnpm o `--` chega ao vitest como argumento literal, o filtro é ignorado e a suíte inteira roda em silêncio. Numa suíte de 800 testes com Testcontainers isso parece travamento. Use `exec`, que não passa pelo encaminhamento de argumentos do runner de scripts:
+
+```bash
+pnpm --filter @ccc/api exec vitest run test/<caminho>
+```
+
+  Ressalva: `exec` pula o hook `pretest` do `@ccc/api`, que roda `db:generate`. Depois de qualquer alteração em `schema.prisma`, rode `pnpm --filter @ccc/db db:generate` antes. A suíte completa continua sendo `pnpm --filter @ccc/api test`, que executa o `pretest` normalmente.
 
 ## File Structure
 

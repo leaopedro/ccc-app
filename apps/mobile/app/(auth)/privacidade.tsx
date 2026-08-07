@@ -51,7 +51,7 @@ export default function PrivacidadeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text variant="caption" tone="muted" style={{ marginBottom: 24 }}>
-          Versão: {PRIVACY_POLICY_VERSION} · Vigência: 14 de maio de 2026
+          Versão: {PRIVACY_POLICY_VERSION} · Vigência: 6 de agosto de 2026
         </Text>
 
         {privacyPolicySections.map((section) => (

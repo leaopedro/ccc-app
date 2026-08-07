@@ -150,6 +150,12 @@ export type StripeClient = {
     input: CreateSubscriptionCheckoutSessionInput,
   ) => Promise<SubscriptionCheckoutSessionResult>;
   findOrCreateCustomer: (input: FindOrCreateCustomerInput) => Promise<FindOrCreateCustomerResult>;
+  /**
+   * Delete (Stripe-side "forget") every live customer matching this email.
+   * Used by the account-deletion vendor fan-out to purge customer PII from
+   * Stripe. Returns the number of customers deleted.
+   */
+  deleteCustomersByEmail: (email: string) => Promise<number>;
   createBillingPortalSession: (
     input: CreateBillingPortalSessionInput,
   ) => Promise<BillingPortalSessionResult>;
@@ -407,6 +413,16 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         metadata: { garageId },
       });
       return { customerId: customer.id };
+    },
+    deleteCustomersByEmail: async (email) => {
+      const existing = await stripe.customers.list({ email, limit: 100 });
+      let deleted = 0;
+      for (const c of existing.data) {
+        if (c.deleted) continue;
+        await stripe.customers.del(c.id);
+        deleted += 1;
+      }
+      return deleted;
     },
     createBillingPortalSession: async ({ customerId, returnUrl }) => {
       const session = await stripe.billingPortal.sessions.create({

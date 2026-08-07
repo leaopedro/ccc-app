@@ -65,7 +65,7 @@ export function PublicGarageView({
               ) : null}
             </div>
             <div className="text-muted text-[11.5px] font-mono mt-0.5">
-              casacarclub.com.br/g/{garage.slug}
+              casacar.club/g/{garage.slug}
             </div>
           </div>
         </div>

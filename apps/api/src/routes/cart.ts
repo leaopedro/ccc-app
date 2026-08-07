@@ -119,7 +119,6 @@ async function storeDisabled(): Promise<boolean> {
   return !settings.storeEnabled;
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const cartRoutes: FastifyPluginAsync = async (app) => {
   // GET /cart
   app.get('/cart', { preHandler: [app.authenticate] }, async (request) => {
@@ -705,8 +704,8 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
 
     const productName = data.orders.map((o) => o.description).join(' + ');
 
-    const baseSuccessUrl = input.successUrl ?? 'https://app.casacarclub.com.br/checkout/success';
-    const cancelUrl = input.cancelUrl ?? 'https://app.casacarclub.com.br/checkout/cancel';
+    const baseSuccessUrl = input.successUrl ?? 'https://app.casacar.club/checkout/success';
+    const cancelUrl = input.cancelUrl ?? 'https://app.casacar.club/checkout/cancel';
 
     const firstOrderId = data.orders[0]?.id;
     const successUrl = firstOrderId

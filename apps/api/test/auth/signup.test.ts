@@ -23,7 +23,12 @@ describe('POST /auth/signup', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/signup',
-      payload: { email: 'new@jdm.test', password: 'correct-horse-battery-staple', name: 'New' },
+      payload: {
+        email: 'new@jdm.test',
+        password: 'correct-horse-battery-staple',
+        name: 'New',
+        ageAttestation: true,
+      },
     });
     expect(res.statusCode).toBe(201);
     const body = authResponseSchema.parse(res.json());
@@ -34,6 +39,7 @@ describe('POST /auth/signup', () => {
 
     const saved = await prisma.user.findUnique({ where: { email: 'new@jdm.test' } });
     expect(saved?.passwordHash).not.toBeNull();
+    expect(saved?.ageAttestedAt).not.toBeNull();
 
     const captured = (app.mailer as DevMailer).find('new@jdm.test');
     expect(captured?.subject).toMatch(/verifique/i);
@@ -45,6 +51,7 @@ describe('POST /auth/signup', () => {
       email: 'dup@jdm.test',
       password: 'correct-horse-battery-staple',
       name: 'Dup',
+      ageAttestation: true,
     };
     const first = await app.inject({ method: 'POST', url: '/auth/signup', payload });
     expect(first.statusCode).toBe(201);
@@ -65,9 +72,25 @@ describe('POST /auth/signup', () => {
     await app.inject({
       method: 'POST',
       url: '/auth/signup',
-      payload: { email: 'Alice@JDM.Test', password: 'correct-horse-battery-staple', name: 'Alice' },
+      payload: {
+        email: 'Alice@JDM.Test',
+        password: 'correct-horse-battery-staple',
+        name: 'Alice',
+        ageAttestation: true,
+      },
     });
     const saved = await prisma.user.findUnique({ where: { email: 'alice@jdm.test' } });
     expect(saved).not.toBeNull();
+  });
+
+  it('rejects signup without the 18+ attestation', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: { email: 'minor@jdm.test', password: 'correct-horse-battery-staple', name: 'Minor' },
+    });
+    expect(res.statusCode).toBe(400);
+    const saved = await prisma.user.findUnique({ where: { email: 'minor@jdm.test' } });
+    expect(saved).toBeNull();
   });
 });

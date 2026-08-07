@@ -43,3 +43,10 @@ handoff.md
 # Shared package exports resolve to dist files at runtime in EAS builds.
 !packages/shared/dist/
 !packages/shared/dist/**
+
+# app.config.ts imports the compiled @ccc/design/brand (dist/brand.js) during
+# the "Read app config" build phase via Node's ESM loader (can't load .ts src).
+# Without this, dist/ is stripped and the config phase fails. Rebuild design
+# (pnpm --filter @ccc/design build) before any EAS build so dist is current.
+!packages/design/dist/
+!packages/design/dist/**

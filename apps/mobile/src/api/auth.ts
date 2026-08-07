@@ -7,7 +7,7 @@ import {
   type LoginResponse,
   type ResendVerifyInput,
   type ResetPasswordInput,
-  type SignupInput,
+  type SignupRequestInput,
   type VerifyEmailInput,
   messageResponseSchema,
   type MessageResponse,
@@ -17,7 +17,7 @@ import {
 
 import { authedRequest, request } from './client';
 
-export const signupRequest = (input: SignupInput): Promise<AuthResponse> =>
+export const signupRequest = (input: SignupRequestInput): Promise<AuthResponse> =>
   request('/auth/signup', authResponseSchema, { method: 'POST', body: input });
 
 export const loginRequest = (input: LoginInput): Promise<LoginResponse> =>

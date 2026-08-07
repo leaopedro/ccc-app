@@ -77,6 +77,20 @@ const envSchema = z.object({
   REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().min(1).optional(),
   REVENUECAT_REST_API_KEY: z.string().min(1).optional(),
   RECONCILE_ALERT_DEPTH: z.coerce.number().int().positive().default(200),
+  // Progressive-profile gates. Default OFF: the feature deploys inert, and
+  // Railway variables drive the rollout. Percent is a deterministic bucket
+  // over userId, not a sampling rate.
+  PROFILE_GATE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  PROFILE_GATE_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
+  // Private bucket for identity documents. Falls back to R2_BUCKET only so
+  // local dev and tests work; production MUST set a dedicated private bucket.
+  R2_DOCUMENTS_BUCKET: z.string().optional(),
+  // Shorter than UPLOAD_URL_TTL_SECONDS on purpose: 300s is too long for a
+  // link to someone's ID.
+  DOCUMENT_URL_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 type RawEnv = z.infer<typeof envSchema>;

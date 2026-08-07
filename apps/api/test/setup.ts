@@ -40,4 +40,10 @@ process.env.MFA_ENCRYPTION_KEY = 'test-mfa-encryption-key-32chars!!';
 // behavior ("absent -> defaults true") tests rely on.
 beforeEach(() => {
   delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+  // Same leak hazard as the flag above: vitest runs this suite in a single
+  // fork, so a file that turns the gate on and forgets to restore it would
+  // poison every later file. Clear here; files that want it set it in their
+  // own beforeEach, which runs after this root hook.
+  delete process.env.PROFILE_GATE_ENABLED;
+  delete process.env.PROFILE_GATE_ROLLOUT_PERCENT;
 });

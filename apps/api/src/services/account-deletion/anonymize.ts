@@ -24,7 +24,11 @@ export const anonymizeUser = async (
   void uploads;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { status: true, avatarObjectKey: true },
+    select: {
+      status: true,
+      avatarObjectKey: true,
+      documents: { select: { objectKey: true } },
+    },
   });
 
   if (!user) return { ok: false, error: 'user_not_found' };
@@ -37,6 +41,7 @@ export const anonymizeUser = async (
   // Collect R2 keys to delete
   const objectKeys: string[] = [];
   if (user.avatarObjectKey) objectKeys.push(user.avatarObjectKey);
+  for (const doc of user.documents) objectKeys.push(doc.objectKey);
 
   const carPhotos = await prisma.carPhoto.findMany({
     where: { car: { userId } },
@@ -125,11 +130,18 @@ export const anonymizeUser = async (
         city: null,
         stateCode: null,
         avatarObjectKey: null,
+        cpf: null,
+        phone: null,
         status: 'anonymized',
         anonymizedAt: now,
         pushPrefs: { transactional: false, marketing: false } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // UserDocument rows would cascade-delete with the User row, but
+    // anonymization keeps the User row alive (fiscal FK on orders), so we
+    // delete the documents explicitly here instead.
+    await tx.userDocument.deleteMany({ where: { userId } });
 
     const existingGarage = await tx.garage.findUnique({ where: { userId } });
     if (existingGarage) {
@@ -167,6 +179,7 @@ export const anonymizeUser = async (
     }
   });
   steps.push({ step: 'anonymize_user_row', status: 'ok', at: new Date().toISOString() });
+  steps.push({ step: 'delete_user_documents', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'anonymize_garage', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'delete_garage_badges', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'delete_xp_events', status: 'ok', at: new Date().toISOString() });

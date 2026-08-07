@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
 import { recordAudit } from '../services/admin-audit.js';
+import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';
 import type { Uploads } from '../services/uploads/index.js';
 
 type PurgeResult = {
@@ -118,6 +119,44 @@ async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise
   return { table: 'UploadDeletionQueue', deletedCount, skippedHolds: 0, failedCount };
 }
 
+// Identity-document files are the most sensitive object this system stores.
+// The approval decision is what needs to survive, not the image: keep the row
+// for audit and purge the object. 90 days after approval leaves room for a
+// dispute; 30 after rejection is enough for a resend.
+export const DOCUMENT_APPROVED_RETENTION_DAYS = 90;
+export const DOCUMENT_REJECTED_RETENTION_DAYS = 30;
+
+const daysBefore = (now: Date, days: number): Date =>
+  new Date(now.getTime() - days * 24 * 3600 * 1000);
+
+/**
+ * Queues expired document objects for deletion and stamps `fileDeletedAt`.
+ * Idempotent: rows already stamped are skipped, so a re-run queues nothing.
+ * Returns how many rows were purged this pass.
+ */
+export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
+  const due = await prisma.userDocument.findMany({
+    where: {
+      fileDeletedAt: null,
+      OR: [
+        { status: 'approved', reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) } },
+        { status: 'rejected', reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) } },
+      ],
+    },
+    select: { id: true, objectKey: true },
+  });
+
+  for (const doc of due) {
+    await queueObjectDeletion({ objectKey: doc.objectKey, reason: 'document_retention' });
+    await prisma.userDocument.update({
+      where: { id: doc.id },
+      data: { fileDeletedAt: now },
+    });
+  }
+
+  return due.length;
+};
+
 const PURGE_JOBS = [
   purgeExpiredRefreshTokens,
   purgeConsumedVerificationTokens,
@@ -162,6 +201,21 @@ export const runRetentionTick = async (deps: RetentionWorkerDeps): Promise<Purge
         skippedHolds: uploadResult.skippedHolds,
         failed: uploadResult.failedCount,
       },
+      '[retention] purged',
+    );
+  }
+
+  const documentPurgedCount = await purgeExpiredDocumentFiles(now);
+  const documentResult: PurgeResult = {
+    table: 'UserDocument',
+    deletedCount: documentPurgedCount,
+    skippedHolds: 0,
+    failedCount: 0,
+  };
+  results.push(documentResult);
+  if (documentPurgedCount > 0) {
+    deps.log?.info(
+      { table: documentResult.table, deleted: documentResult.deletedCount },
       '[retention] purged',
     );
   }

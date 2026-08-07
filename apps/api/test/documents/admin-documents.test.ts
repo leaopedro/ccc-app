@@ -213,12 +213,19 @@ describe('admin document review', () => {
     });
     const doc = await seedDoc(user.id);
 
-    await app.inject({
+    const res = await app.inject({
       method: 'POST',
       url: `/admin/documents/${doc.id}/reject`,
       headers,
       payload: { reason: 'Foto ilegível' },
     });
+
+    // Guard the guard: if the rejection itself didn't happen (e.g. a future
+    // precondition makes this fixture 409), the membership assertion below
+    // would pass vacuously and stop meaning anything.
+    expect(res.statusCode).toBe(200);
+    const reviewed = await prisma.userDocument.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(reviewed.status).toBe('rejected');
 
     const row = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membership.id } });
     expect(row.status).toBe('active');

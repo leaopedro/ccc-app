@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import type { AdminAuditAction } from '@ccc/shared/admin';
 import { USER_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -104,25 +105,46 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
     return reply.redirect(url, 302);
   });
 
+  // The status write and its audit row share ONE transaction. A committed
+  // rejection with a failed audit insert would leave a member permanently
+  // rejected with no durable record of who decided it or why — the
+  // rejectionReason column is that record's only home. Same precedent as
+  // apps/api/src/routes/admin/garage-xp-adjustment.ts:79-94 (fix-canon §4 +
+  // review BLOCK chunk 35): no persisted unaudited admin action. The guarded
+  // updateMany stays inside the transaction, so the two-reviewer race still
+  // yields one winner and one 409 — returning 0 before the audit write means
+  // no audit row is written for a transition that did not happen.
   const review = async (
     id: string,
     actorId: string,
     next: 'approved' | 'rejected',
     reason: string | null,
-  ) => {
-    // updateMany with a status guard makes the pending→reviewed transition
-    // atomic: two reviewers clicking at once produce one winner and one 409.
-    const guarded = await prisma.userDocument.updateMany({
-      where: { id, status: 'pending' },
-      data: {
-        status: next,
-        rejectionReason: reason,
-        reviewedByAdminId: actorId,
-        reviewedAt: new Date(),
-      },
+    action: AdminAuditAction,
+  ): Promise<number> =>
+    prisma.$transaction(async (tx) => {
+      const guarded = await tx.userDocument.updateMany({
+        where: { id, status: 'pending' },
+        data: {
+          status: next,
+          rejectionReason: reason,
+          reviewedByAdminId: actorId,
+          reviewedAt: new Date(),
+        },
+      });
+      if (guarded.count === 0) return 0;
+
+      await recordAudit(
+        {
+          actorId,
+          action,
+          entityType: 'user_document',
+          entityId: id,
+          ...(reason ? { metadata: { reason } } : {}),
+        },
+        tx,
+      );
+      return guarded.count;
     });
-    return guarded.count;
-  };
 
   app.post<{ Params: { id: string } }>('/documents/:id/approve', async (request, reply) => {
     const { sub } = requireUser(request);
@@ -132,19 +154,12 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
     });
     if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
-    const count = await review(request.params.id, sub, 'approved', null);
+    const count = await review(request.params.id, sub, 'approved', null, 'document_approved');
     if (count === 0) {
       return reply
         .status(409)
         .send({ error: 'Conflict', message: 'document was already reviewed' });
     }
-
-    await recordAudit({
-      actorId: sub,
-      action: 'document_approved',
-      entityType: 'user_document',
-      entityId: request.params.id,
-    });
 
     const row = await prisma.userDocument.findUniqueOrThrow({ where: { id: request.params.id } });
     return reply.status(200).send({
@@ -168,20 +183,12 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
     });
     if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
-    const count = await review(request.params.id, sub, 'rejected', reason);
+    const count = await review(request.params.id, sub, 'rejected', reason, 'document_rejected');
     if (count === 0) {
       return reply
         .status(409)
         .send({ error: 'Conflict', message: 'document was already reviewed' });
     }
-
-    await recordAudit({
-      actorId: sub,
-      action: 'document_rejected',
-      entityType: 'user_document',
-      entityId: request.params.id,
-      metadata: { reason },
-    });
 
     const row = await prisma.userDocument.findUniqueOrThrow({ where: { id: request.params.id } });
     return reply.status(200).send({

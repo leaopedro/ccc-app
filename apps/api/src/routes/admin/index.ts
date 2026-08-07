@@ -6,6 +6,7 @@ import { adminBroadcastRoutes } from './broadcasts.js';
 import { adminCheckInRoutes } from './check-in.js';
 import { adminCollectionRoutes } from './collections.js';
 import { adminConsentRoutes } from './consents.js';
+import { adminDocumentRoutes } from './documents.js';
 import { adminDsrRoutes } from './dsr.js';
 import { adminEventRoutes } from './events.js';
 import { adminExtraRoutes } from './extras.js';
@@ -71,6 +72,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminGroupRoutes);
     await scope.register(adminPremiumCatalogRoutes);
     await scope.register(adminSubscriptionRoutes);
+    await scope.register(adminDocumentRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

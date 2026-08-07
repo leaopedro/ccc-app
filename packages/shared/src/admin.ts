@@ -114,6 +114,9 @@ export const adminAuditActionSchema = z.enum([
   'premium.subscription.cancel_scheduled',
   'premium.subscription.resumed',
   'premium.subscription.paused',
+  'document_viewed',
+  'document_approved',
+  'document_rejected',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 
@@ -476,6 +479,19 @@ export const adminUserGroupSchema = z.object({
 });
 export type AdminUserGroup = z.infer<typeof adminUserGroupSchema>;
 
+// Presence flags only — never the CPF (plaintext or ciphertext) itself. See
+// perfil progressivo canon: the admin surface must confirm a document was
+// sent without ever handing back the value or a file URL.
+export const adminUserDetailDocumentSchema = z.object({
+  id: z.string().min(1),
+  type: z.string(),
+  status: z.string(),
+  sentAt: z.string().datetime(),
+  reviewedAt: z.string().datetime().nullable(),
+  rejectionReason: z.string().nullable(),
+});
+export type AdminUserDetailDocument = z.infer<typeof adminUserDetailDocumentSchema>;
+
 export const adminUserDetailSchema = z.object({
   id: z.string().min(1),
   email: z.string().email(),
@@ -488,6 +504,8 @@ export const adminUserDetailSchema = z.object({
   city: z.string().nullable(),
   stateCode: z.string().nullable(),
   avatarUrl: z.string().nullable(),
+  hasCpf: z.boolean(),
+  hasPhone: z.boolean(),
   stats: z.object({
     totalTickets: z.number().int().nonnegative(),
     totalOrders: z.number().int().nonnegative(),
@@ -495,6 +513,7 @@ export const adminUserDetailSchema = z.object({
   recentTickets: z.array(adminUserDetailTicketSchema),
   recentOrders: z.array(adminUserDetailOrderSchema),
   groups: z.array(adminUserGroupSchema),
+  documents: z.array(adminUserDetailDocumentSchema),
 });
 export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
 

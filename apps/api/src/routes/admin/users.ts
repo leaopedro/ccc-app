@@ -104,11 +104,13 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
         city: true,
         stateCode: true,
         avatarObjectKey: true,
+        cpf: true,
+        phone: true,
       },
     });
     if (!user) return reply.status(404).send({ error: 'NotFound' });
 
-    const [totalTickets, totalOrders, recentTickets, recentOrders, groupMemberships] =
+    const [totalTickets, totalOrders, recentTickets, recentOrders, groupMemberships, documents] =
       await Promise.all([
         prisma.ticket.count({ where: { userId: id } }),
         prisma.order.count({ where: { userId: id } }),
@@ -142,6 +144,20 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
           select: { group: { select: { id: true, name: true } } },
           orderBy: { group: { name: 'asc' } },
         }),
+        // Presence flags + metadata only — never the objectKey. The file url
+        // is only ever minted through the audited GET /admin/documents/:id/file.
+        prisma.userDocument.findMany({
+          where: { userId: id },
+          orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            sentAt: true,
+            reviewedAt: true,
+            rejectionReason: true,
+          },
+        }),
       ]);
 
     return adminUserDetailSchema.parse({
@@ -156,6 +172,8 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
       city: user.city ?? null,
       stateCode: user.stateCode ?? null,
       avatarUrl: avatarUrl(user, app.uploads),
+      hasCpf: user.cpf !== null && user.cpf.length > 0,
+      hasPhone: user.phone !== null && user.phone.length > 0,
       stats: { totalTickets, totalOrders },
       recentTickets: recentTickets.map((t) => ({
         id: t.id,
@@ -173,6 +191,14 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
         createdAt: o.createdAt.toISOString(),
       })),
       groups: groupMemberships.map((m) => ({ id: m.group.id, name: m.group.name })),
+      documents: documents.map((d) => ({
+        id: d.id,
+        type: d.type,
+        status: d.status,
+        sentAt: d.sentAt.toISOString(),
+        reviewedAt: d.reviewedAt ? d.reviewedAt.toISOString() : null,
+        rejectionReason: d.rejectionReason,
+      })),
     });
   });
 };

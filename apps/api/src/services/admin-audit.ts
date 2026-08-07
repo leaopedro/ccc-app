@@ -32,7 +32,8 @@ export type RecordAuditInput = {
     | 'car'
     | 'garage_spot'
     | 'garage'
-    | 'premium_membership';
+    | 'premium_membership'
+    | 'user_document';
   entityId: string;
   metadata?: Record<string, unknown>;
 };

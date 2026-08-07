@@ -126,6 +126,11 @@ async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise
 export const DOCUMENT_APPROVED_RETENTION_DAYS = 90;
 export const DOCUMENT_REJECTED_RETENTION_DAYS = 30;
 
+// Matches purgeQueuedUploadDeletions's take: 500 neighbour. Caps how many
+// rows one tick processes (two writes each); a large first-run backlog just
+// catches up over successive nightly ticks instead of blocking the tick.
+export const DOCUMENT_PURGE_BATCH = 500;
+
 const daysBefore = (now: Date, days: number): Date =>
   new Date(now.getTime() - days * 24 * 3600 * 1000);
 
@@ -144,10 +149,29 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
       ],
     },
     select: { id: true, objectKey: true },
+    take: DOCUMENT_PURGE_BATCH,
   });
 
   for (const doc of due) {
-    await queueObjectDeletion({ objectKey: doc.objectKey, reason: 'document_retention' });
+    // retentionDays: 0 — the 90/30-day windows above ARE the grace period.
+    // queueObjectDeletion's own 30-day default exists for the avatar-replaced
+    // case, where the user might have made a mistake seconds ago; a document
+    // whose retention window already expired needs no second grace. Leaving
+    // the default would push the actual R2 deletion to
+    // reviewedAt + (90 or 30) + 30 days — 30 days past the window
+    // packages/shared/src/legal.ts publishes to data subjects — while
+    // fileDeletedAt is stamped immediately below, making GET /me/documents
+    // and the admin file endpoint report the file gone for that whole month
+    // even though it is still sitting in the bucket. `now` is passed through
+    // explicitly so deleteAfter lines up exactly with fileDeletedAt instead
+    // of drifting by the few ms between this call and queueObjectDeletion's
+    // own `new Date()` default.
+    await queueObjectDeletion({
+      objectKey: doc.objectKey,
+      reason: 'document_retention',
+      retentionDays: 0,
+      now,
+    });
     await prisma.userDocument.update({
       where: { id: doc.id },
       data: { fileDeletedAt: now },

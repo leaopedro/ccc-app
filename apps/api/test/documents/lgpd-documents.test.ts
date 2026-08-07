@@ -101,6 +101,30 @@ describe('LGPD handling for cpf, phone and documents', () => {
     expect(await prisma.uploadDeletionQueue.findUnique({ where: { objectKey } })).not.toBeNull();
   });
 
+  it('queues the object to leave R2 immediately, not 30 more days after the published window', async () => {
+    const { user } = await createUser({ verified: true });
+    const objectKey = `identity-document/${user.id}/overdue-approved.jpg`;
+    await prisma.userDocument.create({
+      data: {
+        userId: user.id,
+        type: 'cnh',
+        objectKey,
+        status: 'approved',
+        reviewedAt: daysAgo(DOCUMENT_APPROVED_RETENTION_DAYS + 1),
+      },
+    });
+
+    const now = new Date();
+    expect(await purgeExpiredDocumentFiles(now)).toBe(1);
+
+    // The 90/30-day windows ARE the grace period. If queueObjectDeletion's
+    // own 30-day default were still in effect, deleteAfter would be 30 days
+    // in the future here, and the object would sit in R2 for a month after
+    // fileDeletedAt already told the app (and the data subject) it was gone.
+    const queued = await prisma.uploadDeletionQueue.findUniqueOrThrow({ where: { objectKey } });
+    expect(queued.deleteAfter.getTime()).toBeLessThanOrEqual(now.getTime());
+  });
+
   it('purges a rejected document file on the shorter window', async () => {
     const { user } = await createUser({ verified: true });
     await prisma.userDocument.create({

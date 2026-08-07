@@ -840,7 +840,10 @@ Expected: PASS, 4 testes.
 - [ ] **Step 7: Verify no existing test regressed**
 
 Run: `pnpm --filter @ccc/api test`
-Expected: PASS. Colunas nullable e tabela nova não alteram nenhum caminho existente.
+
+Expected: PASS **exceto** `apps/api/test/me/patch.test.ts`, que falha em três asserts (`:69`, `:84`, `:145`). Ele chama `publicProfileSchema.parse(res.json())`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. Falha esperada e transitória, **não** causada por esta tarefa: não tente corrigir aqui, e não altere o schema para acomodar. A Task 5 fecha isso.
+
+Qualquer outra falha é regressão desta tarefa. Colunas nullable e tabela nova não alteram nenhum caminho existente.
 
 - [ ] **Step 8: Commit**
 
@@ -1487,7 +1490,10 @@ Expected: PASS, 10 testes.
 - [ ] **Step 5: Verify the existing /me suite still passes**
 
 Run: `pnpm --filter @ccc/api test -- me`
-Expected: PASS. `serializeUser` ganhou um parâmetro; qualquer chamador esquecido falha no typecheck.
+
+Expected: PASS, incluindo `apps/api/test/me/patch.test.ts`, que está vermelho desde a Task 1. Ele chama `publicProfileSchema.parse(res.json())` nos asserts `:69`, `:84` e `:145`, e o schema exige `cpf` e `phone` desde a Task 1. Esta tarefa é a que passa a devolvê-los, então ela fecha essa falha. Se `patch.test.ts` continuar vermelho aqui, o serializer não está devolvendo os dois campos.
+
+`serializeUser` ganhou um parâmetro; qualquer chamador esquecido falha no typecheck.
 
 Run: `pnpm --filter @ccc/api typecheck`
 Expected: PASS.

@@ -2341,11 +2341,22 @@ No `UPLOAD_KIND_PATH_PREFIX`, acrescentar a entrada:
   identity_document: 'identity-document',
 ```
 
-No fim do arquivo:
+`DOCUMENT_PATH_PREFIX` precisa ser declarado **antes** de `UPLOAD_KIND_PATH_PREFIX`, e a entrada do mapa referencia a constante em vez de repetir a string:
+
+```ts
+  identity_document: DOCUMENT_PATH_PREFIX,
+```
+
+Isso não é estilo. `presignPut` monta o objectKey a partir do mapa e `isDocumentKey` decide o roteamento a partir da constante. Com duas strings independentes, editar uma só faz `isDocumentKey` devolver `false` para documentos reais, e daí todo documento de identidade cai no bucket público, `inline`, com cache imutável de um ano.
+
+Bloco de constantes, declarado acima do mapa:
 
 ```ts
 // Identity documents live behind their own prefix so bucket routing and
 // access control can key off the objectKey alone, with no extra lookup.
+// UPLOAD_KIND_PATH_PREFIX references this constant rather than repeating the
+// string: presignPut builds the key from the map and isDocumentKey routes on
+// this value, so two independent literals would be a silent security hole.
 export const DOCUMENT_PATH_PREFIX = 'identity-document';
 
 // Never `public, max-age=...`: an ID must not be cached by any intermediary.
@@ -2476,15 +2487,19 @@ Em `apps/api/src/services/uploads/index.ts`, passar o bucket novo:
     );
 ```
 
-Logo antes desse `return`, avisar em produção quando o bucket privado não estiver configurado:
+Logo antes desse `return`, **falhar alto** quando o R2 está configurado e o bucket privado não está. Decisão do usuário, tomada durante a execução: recusar subir é coerente com o `throw` de "provide all or none" que já existe onze linhas acima na mesma função. Se há bucket R2 real, tem que haver bucket de documentos real. O fallback `documentsBucket ?? this.bucket` passa a valer só para `DevUploads`, que é exatamente o que o comentário do construtor afirma.
 
 ```ts
-  if (r2Ready && !env.R2_DOCUMENTS_BUCKET && env.NODE_ENV === 'production') {
-    console.warn(
-      '[uploads] R2_DOCUMENTS_BUCKET unset — identity documents would land in the PUBLIC bucket',
+  if (r2Ready && !env.R2_DOCUMENTS_BUCKET) {
+    throw new Error(
+      'R2_DOCUMENTS_BUCKET is required when R2 is configured — identity documents must never land in the public bucket',
     );
   }
 ```
+
+Consequência operacional aceita: sem a variável no Railway, a API não sobe, em vez de degradar em silêncio. Isso precisa constar no runbook, e a variável deixa de ser opcional na prática em qualquer ambiente com R2.
+
+`R2_DOCUMENTS_BUCKET` também passa a ser `z.string().min(1).optional()` em `env.ts`, para que `R2_DOCUMENTS_BUCKET=""` seja rejeitado no parse em vez de virar um bucket vazio. Sem isso, `!env.R2_DOCUMENTS_BUCKET` e o `??` de `bucketFor` discordam: o primeiro trata `''` como ausente, o segundo como presente.
 
 - [ ] **Step 4: Run test to verify it passes**
 

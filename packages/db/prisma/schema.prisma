@@ -87,6 +87,7 @@ model User {
   dsrRequests         DataSubjectRequest[]
   dsrResolutions      DataSubjectRequest[]  @relation("DsrResolver")
   groupMemberships    UserGroupMembership[]
+  fridgeUnlockEvents  FridgeUnlockEvent[]
 
   @@index([createdAt])
   @@index([deletedAt])
@@ -1681,4 +1682,21 @@ model UserGroupMembership {
   @@unique([groupId, userId])
   @@index([userId])
   @@index([groupId])
+}
+
+enum FridgeUnlockStatus {
+  sent
+  failed_offline
+}
+
+model FridgeUnlockEvent {
+  id        String             @id @default(cuid())
+  deviceId  String
+  userId    String?
+  user      User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status    FridgeUnlockStatus
+  createdAt DateTime           @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([userId])
 }

@@ -3784,9 +3784,13 @@ Criar um bucket separado:
 - Mesma credencial de API do bucket principal, ou uma credencial própria com
   escopo só nele.
 
-Setar `R2_DOCUMENTS_BUCKET` com o nome dele. Sem essa variável, a API loga
-`R2_DOCUMENTS_BUCKET unset` na subida em produção e grava documento no bucket
-público — situação a corrigir imediatamente.
+Setar `R2_DOCUMENTS_BUCKET` com o nome dele. Com o R2 configurado e essa variável
+ausente ou vazia, `buildUploads` lança erro e a API não sobe. Isso é deliberado:
+um documento de identidade nunca deve cair no bucket público em silêncio.
+
+A variável precisa existir no Railway antes do deploy que carrega este código,
+senão o serviço não inicia. O fallback para `R2_BUCKET` passa a valer só para
+`DevUploads`, em desenvolvimento local e em teste.
 
 Leitura sempre por signed GET com TTL de `DOCUMENT_URL_TTL_SECONDS` (default
 60s). Nunca `buildPublicUrl`.
@@ -3799,7 +3803,7 @@ Em `docs/secrets.md` e `docs/railway.md`, na tabela de variáveis:
 ```markdown
 | `PROFILE_GATE_ENABLED` | `false` | Liga os gates de perfil no checkout e na assinatura. |
 | `PROFILE_GATE_ROLLOUT_PERCENT` | `0` | Percentual de usuários sob o gate. Bucket determinístico por `userId`. |
-| `R2_DOCUMENTS_BUCKET` | — | Bucket R2 privado de documentos de identidade. Obrigatório em produção. |
+| `R2_DOCUMENTS_BUCKET` | — | Bucket R2 privado de documentos de identidade. Obrigatório sempre que o R2 estiver configurado. Sem ela a API não sobe. |
 | `DOCUMENT_URL_TTL_SECONDS` | `60` | TTL do signed GET de documento. |
 ```
 

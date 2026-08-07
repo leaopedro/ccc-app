@@ -41,6 +41,11 @@ export const buildUploads = (env: Env): Uploads => {
   }
 
   if (r2Ready) {
+    if (!env.R2_DOCUMENTS_BUCKET && env.NODE_ENV === 'production') {
+      console.warn(
+        '[uploads] R2_DOCUMENTS_BUCKET unset — identity documents would land in the PUBLIC bucket',
+      );
+    }
     return new R2Uploads(
       {
         accountId: env.R2_ACCOUNT_ID,
@@ -50,6 +55,7 @@ export const buildUploads = (env: Env): Uploads => {
       env.R2_BUCKET,
       env.R2_PUBLIC_BASE_URL,
       env.UPLOAD_URL_TTL_SECONDS,
+      env.R2_DOCUMENTS_BUCKET,
     );
   }
 

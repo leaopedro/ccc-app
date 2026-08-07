@@ -1,7 +1,14 @@
 import { createId } from '@paralleldrive/cuid2';
 
 import type { PresignInput, PresignResult, UploadKind, Uploads } from './types.js';
-import { EXT_FOR_MIME, UPLOAD_CACHE_CONTROL, UPLOAD_KIND_PATH_PREFIX } from './types.js';
+import {
+  DOCUMENT_CACHE_CONTROL,
+  DOCUMENT_CONTENT_DISPOSITION,
+  EXT_FOR_MIME,
+  isDocumentKey,
+  UPLOAD_CACHE_CONTROL,
+  UPLOAD_KIND_PATH_PREFIX,
+} from './types.js';
 
 export class DevUploads implements Uploads {
   constructor(
@@ -14,6 +21,9 @@ export class DevUploads implements Uploads {
     const ext = EXT_FOR_MIME[input.contentType] ?? 'bin';
     const prefix = UPLOAD_KIND_PATH_PREFIX[input.kind];
     const objectKey = `${prefix}/${input.userId}/${createId()}.${ext}`;
+    const isDocument = isDocumentKey(objectKey);
+    const disposition = isDocument ? DOCUMENT_CONTENT_DISPOSITION : 'inline';
+    const cacheControl = isDocument ? DOCUMENT_CACHE_CONTROL : UPLOAD_CACHE_CONTROL;
     return {
       uploadUrl: `${this.publicBase}/put/${objectKey}`,
       objectKey,
@@ -22,8 +32,8 @@ export class DevUploads implements Uploads {
       headers: {
         'content-type': input.contentType,
         'content-length': String(input.size),
-        'content-disposition': 'inline',
-        'cache-control': UPLOAD_CACHE_CONTROL,
+        'content-disposition': disposition,
+        'cache-control': cacheControl,
         'x-amz-meta-kind': input.kind,
       },
     };

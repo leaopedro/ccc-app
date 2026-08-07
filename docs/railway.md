@@ -64,7 +64,7 @@ runs `prisma migrate deploy`, then `startCommand` boots
 | --- | --- | --- |
 | `PROFILE_GATE_ENABLED` | `false` | Liga os gates de perfil no checkout e na assinatura. |
 | `PROFILE_GATE_ROLLOUT_PERCENT` | `0` | Percentual de usuários sob o gate. Bucket determinístico por `userId`. |
-| `R2_DOCUMENTS_BUCKET` | Sem default | Bucket R2 privado de documentos de identidade. Obrigatório em produção. |
+| `R2_DOCUMENTS_BUCKET` | Sem default | Bucket R2 privado de documentos de identidade. Obrigatório sempre que o R2 está configurado. A API não sobe sem essa variável. |
 | `DOCUMENT_URL_TTL_SECONDS` | `60` | TTL do signed GET de documento. |
 
 ## Deploy
@@ -157,6 +157,10 @@ Every successful deploy should show:
 - PR environments spin up within ~3 minutes of opening a PR.
 
 ## Rollout do gate de perfil
+
+Pré-requisito: se o R2 já está configurado neste ambiente, setar
+`R2_DOCUMENTS_BUCKET` no Railway antes deste deploy. Sem essa variável, a
+API não sobe.
 
 1. Deploy com `PROFILE_GATE_ENABLED=false`. Cadastro já coleta CPF e
    telefone. Nada bloqueia.

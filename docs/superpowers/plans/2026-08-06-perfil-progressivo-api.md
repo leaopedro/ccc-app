@@ -23,7 +23,9 @@
 - Chaves de `missing` são exatamente `cpf`, `phone`, `document`, nesta ordem.
 - Payload de bloqueio carrega `status: "incomplete_profile"` **e** `code: "INCOMPLETE_PROFILE"`. Os dois. `status` atende o contrato pedido; `code` é o que `getApiErrorCode` do mobile já lê.
 - Gate roda antes de qualquer reserva de estoque, transição de `Cart.status` ou chamada a provedor de pagamento.
-- Cada tarefa termina com `pnpm lint`, `pnpm typecheck` e os testes do escopo verdes antes do commit.
+- Cada tarefa termina com lint, typecheck e os testes do escopo verdes antes do commit.
+- **Lint e typecheck sempre com filtro de pacote**, nunca no repo inteiro. `pnpm lint` sem filtro estoura o heap do Node neste repo, mesmo com 8 GB, e a falha é pré-existente e não relacionada a esta feature. Use `pnpm --filter @ccc/shared lint`, `pnpm --filter @ccc/api lint`, e o mesmo para `typecheck`.
+- **Testes de integração da API exigem o daemon do Docker** rodando, porque `apps/api/test/global-setup.ts` levanta um Postgres via Testcontainers. Sem daemon, a suíte não roda e a tarefa não pode ser declarada pronta com base só em typecheck.
 
 ## File Structure
 
@@ -3704,7 +3706,7 @@ git commit -m "feat(api): export, anonimizacao e retencao de cpf, telefone e doc
 **Files:**
 - Modify: `docs/r2.md`
 - Modify: `docs/secrets.md`
-- Modify: `RAILWAY.md`
+- Modify: `docs/railway.md` (o runbook canônico. `RAILWAY.md` na raiz é só um ponteiro de 36 linhas e deve continuar assim)
 
 **Interfaces:**
 - Consumes: as quatro variáveis da Task 4.
@@ -3739,7 +3741,7 @@ Leitura sempre por signed GET com TTL de `DOCUMENT_URL_TTL_SECONDS` (default
 
 - [ ] **Step 2: Document the four variables**
 
-Em `docs/secrets.md` e `RAILWAY.md`, na tabela de variáveis:
+Em `docs/secrets.md` e `docs/railway.md`, na tabela de variáveis:
 
 ```markdown
 | `PROFILE_GATE_ENABLED` | `false` | Liga os gates de perfil no checkout e na assinatura. |
@@ -3750,7 +3752,7 @@ Em `docs/secrets.md` e `RAILWAY.md`, na tabela de variáveis:
 
 - [ ] **Step 3: Write the rollout runbook**
 
-Em `RAILWAY.md`, seção nova:
+Em `docs/railway.md`, seção nova:
 
 ```markdown
 ## Rollout do gate de perfil
@@ -3779,8 +3781,17 @@ a flag desligada.
 
 - [ ] **Step 4: Verify the whole suite is green before closing the plan**
 
-Run: `pnpm lint && pnpm typecheck && pnpm --filter @ccc/shared test && pnpm --filter @ccc/api test`
-Expected: PASS em tudo. Colar a saída no handoff.
+Um comando por pacote. `pnpm lint` sem filtro estoura o heap neste repo.
+
+```bash
+pnpm --filter @ccc/shared lint && pnpm --filter @ccc/shared typecheck && pnpm --filter @ccc/shared test
+```
+
+```bash
+pnpm --filter @ccc/api lint && pnpm --filter @ccc/api typecheck && pnpm --filter @ccc/api test
+```
+
+Expected: PASS em tudo. A suíte da API exige o daemon do Docker rodando. Colar a saída no handoff.
 
 - [ ] **Step 5: Commit**
 

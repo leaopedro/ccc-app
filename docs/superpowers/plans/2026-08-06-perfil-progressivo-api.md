@@ -3569,6 +3569,13 @@ describe('LGPD handling for cpf, phone and documents', () => {
     await prisma.user.update({
       where: { id: user.id },
       data: {
+        // `status: 'deleted'` is a PRECONDITION, not decoration.
+        // anonymize.ts:37 returns { ok: false, error: 'user_not_deleted' } for
+        // any other status, so without this the anonymisation never runs and the
+        // `result.ok` assertion below fails. Every existing call site in
+        // test/account-deletion/ sets it the same way.
+        status: 'deleted',
+        deletedAt: new Date(),
         cpf: encryptField('52998224725', loadEnv().FIELD_ENCRYPTION_KEY),
         phone: '11987654321',
       },

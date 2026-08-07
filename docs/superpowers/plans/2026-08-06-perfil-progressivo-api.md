@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Idioma primário PT-BR. Toda mensagem voltada ao usuário em português. Chaves de contrato e identificadores em inglês.
-- Comentário de código em inglês, seguindo o repo.
+- Comentário de código em inglês, seguindo o estilo do arquivo que você está editando. A regra de não usar em-dash vale para prosa em markdown e para texto voltado ao usuário, não para comentários de código: `schema.prisma` já tem em-dashes pré-existentes, e exigir o contrário dentro de uma tarefa criaria inconsistência local sem varredura no repo.
 - `Order` só vira `paid` por webhook verificado. Nenhuma tarefa aqui toca status de pedido ou de assinatura.
 - Estado de assinatura só muda por webhook verificado. Rejeitar documento **não** escreve em `PremiumMembership`.
 - CPF cifrado em repouso com `encryptField`, chave `FIELD_ENCRYPTION_KEY`. Nunca em log, breadcrumb, serializer de admin ou payload de feed.
@@ -858,7 +858,7 @@ Expected: 2035 passando, e **9 falhas em 3 arquivos**, todas com uma única caus
 | `apps/api/test/me/get.test.ts` | 2 |
 | `apps/api/test/me/email-change.test.ts` | 1 |
 
-Causa raiz: `serializeUser` em [me.ts:31](../../../apps/api/src/routes/me.ts:31) chama `publicProfileSchema.parse`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. O parse lança antes de devolver 200, então `GET /me` ([me.ts:53](../../../apps/api/src/routes/me.ts:53)) e `PATCH /me` ([me.ts:92](../../../apps/api/src/routes/me.ts:92)) devolvem 500 nesta branch até a Task 5. Qualquer teste que leia `/me` cai junto.
+Causa raiz: `serializeUser` em [me.ts:31](../../../apps/api/src/routes/me.ts:31) chama `publicProfileSchema.parse`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. O parse lança antes de devolver 200, e o `errorHandler` mapeia `ZodError` para **400** ([error-handler.ts](../../../apps/api/src/plugins/error-handler.ts)), então `GET /me` ([me.ts:53](../../../apps/api/src/routes/me.ts:53)) e `PATCH /me` ([me.ts:92](../../../apps/api/src/routes/me.ts:92)) devolvem 400 nesta branch até a Task 5. Os testes falham no `expect(res.statusCode).toBe(200)`, não no `parse` deles. Qualquer teste que leia `/me` cai junto.
 
 Falha esperada e transitória, **não** causada por esta tarefa: não tente corrigir aqui, e não altere o schema para acomodar. A Task 5 fecha as três de uma vez, porque a correção é no serializer, não nos testes.
 

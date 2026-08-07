@@ -850,7 +850,17 @@ Expected: PASS, 4 testes.
 
 Run: `pnpm --filter @ccc/api test`
 
-Expected: PASS **exceto** `apps/api/test/me/patch.test.ts`, que falha em três asserts (`:69`, `:84`, `:145`). Ele chama `publicProfileSchema.parse(res.json())`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. Falha esperada e transitória, **não** causada por esta tarefa: não tente corrigir aqui, e não altere o schema para acomodar. A Task 5 fecha isso.
+Expected: 2035 passando, e **9 falhas em 3 arquivos**, todas com uma única causa raiz:
+
+| Arquivo | Asserts |
+| --- | --- |
+| `apps/api/test/me/patch.test.ts` | 6 |
+| `apps/api/test/me/get.test.ts` | 2 |
+| `apps/api/test/me/email-change.test.ts` | 1 |
+
+Causa raiz: `serializeUser` em [me.ts:31](../../../apps/api/src/routes/me.ts:31) chama `publicProfileSchema.parse`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. O parse lança antes de devolver 200, então `GET /me` ([me.ts:53](../../../apps/api/src/routes/me.ts:53)) e `PATCH /me` ([me.ts:92](../../../apps/api/src/routes/me.ts:92)) devolvem 500 nesta branch até a Task 5. Qualquer teste que leia `/me` cai junto.
+
+Falha esperada e transitória, **não** causada por esta tarefa: não tente corrigir aqui, e não altere o schema para acomodar. A Task 5 fecha as três de uma vez, porque a correção é no serializer, não nos testes.
 
 Qualquer outra falha é regressão desta tarefa. Colunas nullable e tabela nova não alteram nenhum caminho existente.
 
@@ -1500,7 +1510,9 @@ Expected: PASS, 10 testes.
 
 Run: `pnpm --filter @ccc/api test -- me`
 
-Expected: PASS, incluindo `apps/api/test/me/patch.test.ts`, que está vermelho desde a Task 1. Ele chama `publicProfileSchema.parse(res.json())` nos asserts `:69`, `:84` e `:145`, e o schema exige `cpf` e `phone` desde a Task 1. Esta tarefa é a que passa a devolvê-los, então ela fecha essa falha. Se `patch.test.ts` continuar vermelho aqui, o serializer não está devolvendo os dois campos.
+Expected: PASS, e esta tarefa precisa fechar **todas as 9 falhas nos 3 arquivos** que estão vermelhos desde a Task 1: `me/patch.test.ts` (6), `me/get.test.ts` (2), `me/email-change.test.ts` (1). Causa raiz única: `serializeUser` chama `publicProfileSchema.parse` e o schema exige `cpf` e `phone` desde a Task 1, então o parse lança e `/me` devolve 500. Esta tarefa é a que passa a devolver os dois campos, e a correção no serializer resolve os três arquivos de uma vez. Não edite nenhum dos três testes: se algum continuar vermelho, o serializer é que está errado.
+
+Rodar também `pnpm --filter @ccc/api test` completo antes do commit, para confirmar que a contagem de falhas caiu de 9 para 0.
 
 `serializeUser` ganhou um parâmetro; qualquer chamador esquecido falha no typecheck.
 

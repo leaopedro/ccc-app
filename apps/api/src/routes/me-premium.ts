@@ -29,6 +29,7 @@ import { z } from 'zod';
 
 import { requireUser } from '../plugins/auth.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
+import { enforceProfileGate } from '../services/profile/gate.js';
 
 const billingPortalBodySchema = z.object({
   returnUrl: z.string().url().optional(),
@@ -64,6 +65,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const { sub } = requireUser(request);
+
+      // Precedence: 503 (feature off) → 403 (incomplete profile) → 409
+      // (already subscribed). An unavailable feature is not a profile problem.
+      const gated = await enforceProfileGate(app, sub, reply, 'subscription');
+      if (gated) return gated;
 
       const garage = await prisma.garage.findUnique({
         where: { userId: sub },
@@ -131,6 +137,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { sub } = requireUser(request);
+
+    // Repeated here on purpose. The precheck is advisory; the window between
+    // GET and POST is the same one the AlreadySubscribed check below closes.
+    const gated = await enforceProfileGate(app, sub, reply, 'subscription');
+    if (gated) return gated;
 
     const parsed = premiumCheckoutRequestSchema.safeParse(request.body);
     if (!parsed.success) {

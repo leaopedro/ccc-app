@@ -1720,7 +1720,11 @@ const seedTicketCart = async (userId: string) => {
     data: {
       title: 'Encontro CCC',
       slug: `encontro-${Date.now()}`,
-      type: 'meetup',
+      // EventType is `meeting | drift | other` — there is no `meetup`.
+      // `description` and `capacity` are required with no default.
+      description: 'Encontro de teste',
+      capacity: 100,
+      type: 'meeting',
       status: 'published',
       startsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
       endsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000 + 3600 * 1000),
@@ -1746,7 +1750,10 @@ const seedTicketCart = async (userId: string) => {
       tierId: tier.id,
       quantity: 1,
       amountCents: 5000,
-      tickets: [{}],
+      // `extras: []` is required on the READ path (`cartItemTicketSchema`), even
+      // though the request-side schemas default it. A bare `{}` here parses on
+      // write and then fails when the cart is read back.
+      tickets: [{ extras: [] }],
     },
   });
   return { event, tier, cart };

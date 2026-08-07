@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { cpfSchema, phoneSchema } from './profile.js';
+
 export const MIN_PASSWORD_LENGTH = 10;
 
 export const emailInputSchema = z
@@ -37,6 +39,11 @@ export const signupSchema = z.object({
   email: emailInputSchema,
   password: passwordSchema,
   name: z.string().trim().min(1).max(100),
+  // Permissive signup: collected when offered, never required. An invalid
+  // value is still a 400, since silently dropping bad input would leave the
+  // user believing the field was saved.
+  cpf: cpfSchema.optional(),
+  phone: phoneSchema.optional(),
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 

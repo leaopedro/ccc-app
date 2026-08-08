@@ -110,7 +110,10 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       entityId: doc.id,
     });
 
-    const url = await app.uploads.buildSignedGetUrl(doc.objectKey, app.env.DOCUMENT_URL_TTL_SECONDS);
+    const url = await app.uploads.buildSignedGetUrl(
+      doc.objectKey,
+      app.env.DOCUMENT_URL_TTL_SECONDS,
+    );
     return reply.redirect(url, 302);
   });
 
@@ -161,7 +164,8 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.params.id },
       select: { id: true },
     });
-    if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
+    if (!exists)
+      return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
     const count = await review(request.params.id, sub, 'approved', null, 'document_approved');
     if (count === 0) {
@@ -190,7 +194,8 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.params.id },
       select: { id: true },
     });
-    if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
+    if (!exists)
+      return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
     const count = await review(request.params.id, sub, 'rejected', reason, 'document_rejected');
     if (count === 0) {

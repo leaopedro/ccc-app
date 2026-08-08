@@ -114,8 +114,7 @@ export class R2Uploads implements Uploads {
       // Any other error (network, auth, R2 outage) must propagate: treating
       // it as "does not exist" would reject a legitimate upload.
       const name = (err as { name?: string }).name;
-      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata
-        ?.httpStatusCode;
+      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
       if (name === 'NotFound' || status === 404) {
         return false;
       }

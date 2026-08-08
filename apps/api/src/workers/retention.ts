@@ -150,8 +150,14 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
     where: {
       fileDeletedAt: null,
       OR: [
-        { status: 'approved', reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) } },
-        { status: 'rejected', reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) } },
+        {
+          status: 'approved',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) },
+        },
+        {
+          status: 'rejected',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) },
+        },
         { status: 'pending', sentAt: { lt: daysBefore(now, DOCUMENT_PENDING_RETENTION_DAYS) } },
       ],
     },
@@ -160,7 +166,7 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
   });
 
   for (const doc of due) {
-    // retentionDays: 0 — the 90/30-day windows above ARE the grace period.
+    // retentionDays: 0 — the 90/30/180-day windows above ARE the grace period.
     // queueObjectDeletion's own 30-day default exists for the avatar-replaced
     // case, where the user might have made a mistake seconds ago; a document
     // whose retention window already expired needs no second grace. Leaving

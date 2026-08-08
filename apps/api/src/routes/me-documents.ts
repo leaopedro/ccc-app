@@ -30,9 +30,7 @@ const serializeDocument = async (
     rejectionReason: doc.rejectionReason,
     // Signed GET only, short TTL. buildPublicUrl would hand out a URL in the
     // public bucket's namespace, which is exactly what this feature avoids.
-    fileUrl: doc.fileDeletedAt
-      ? null
-      : await uploads.buildSignedGetUrl(doc.objectKey, ttlSeconds),
+    fileUrl: doc.fileDeletedAt ? null : await uploads.buildSignedGetUrl(doc.objectKey, ttlSeconds),
   });
 
 export const meDocumentRoutes: FastifyPluginAsync = async (app) => {

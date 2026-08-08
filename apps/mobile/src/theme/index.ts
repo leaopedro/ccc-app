@@ -6,6 +6,10 @@ export const theme = {
     fg: brand.color.textPrimary,
     accent: brand.color.brand,
     success: '#22C55E',
+    // brand.color (packages/design/src/brand.ts) has no warning tone; the
+    // separate tokens.color export does (#F59E0B), so mirror that value here
+    // rather than introduce a different one.
+    warning: '#F59E0B',
     muted: brand.color.textMuted,
     border: '#1F1F24',
   },

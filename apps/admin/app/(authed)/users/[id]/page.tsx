@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { AddUserToGroupModal } from '~/components/add-user-to-group-modal';
+import { AdminUserDocumentsPanel } from '~/components/admin-user-documents-panel';
 import { AdminXpAdjustmentTrigger } from '~/components/admin-xp-adjustment-trigger';
 import { GarageBadgesPanel } from '~/components/garage-badges-panel';
 import { GarageMembershipHistory } from '~/components/garage-membership-history';
@@ -10,6 +11,7 @@ import { RemoveMemberButton } from '~/components/remove-member-button';
 import { UserAvatar } from '~/components/user-avatar';
 import { UserGaragePanel } from '~/components/user-garage-panel';
 import { UserStatusActions } from '~/components/user-status-actions';
+import { UserStatusChip } from '~/components/user-status-chip';
 import { getAdminUser, getMe, listAdminEvents, listAdminGroups } from '~/lib/admin-api';
 import { getAdminUserGarage } from '~/lib/admin-garage-api';
 import { ApiError } from '~/lib/api';
@@ -20,6 +22,31 @@ export const dynamic = 'force-dynamic';
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
 const fmtCurrency = (cents: number, currency: string) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(cents / 100);
+
+const fmtCpf = (cpf: string) => {
+  const d = cpf.replace(/\D/g, '');
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+};
+
+const fmtPhone = (phone: string) => {
+  const d = phone.replace(/\D/g, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return phone;
+};
+
+// Three-way rendering, load-bearing per the product decision: `hasX` tells
+// us whether the member ever filled the field; `x === null` on top of
+// `hasX === true` means it exists but this viewer's role cannot see it
+// (only `admin` gets the full value from the API). Never collapse the
+// second case into "Não informado" — that would misreport an organizer's
+// view as if the member had never filled it.
+const fmtOptionalPii = (has: boolean, value: string | null, format: (v: string) => string) => {
+  if (!has) return 'Não informado';
+  if (value === null) return 'Cadastrado, visível apenas para admin';
+  return format(value);
+};
 
 const roleLabelMap: Record<string, string> = {
   user: 'Usuário',
@@ -152,6 +179,81 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      {/* Dados da conta (view only, exceto o documento abaixo) */}
+      <div className="rounded border border-[color:var(--color-border)] p-4">
+        <h2 className="mb-3 text-lg font-semibold">Dados da conta</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">ID</div>
+            <div className="text-sm">{user.id}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Email</div>
+            <div className="text-sm">{user.email}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Perfil</div>
+            <div className="text-sm">{roleLabelMap[user.role] ?? user.role}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Status</div>
+            <div className="text-sm">
+              <UserStatusChip status={user.status} />
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Email verificado em</div>
+            <div className="text-sm">
+              {user.emailVerifiedAt ? fmtDate(user.emailVerifiedAt) : 'Não verificado'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Criado em</div>
+            <div className="text-sm">{fmtDate(user.createdAt)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Cidade</div>
+            <div className="text-sm">{user.city ?? 'Não informado'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">UF</div>
+            <div className="text-sm">{user.stateCode ?? 'Não informado'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Avatar</div>
+            <div className="text-sm">
+              {user.avatarUrl ? (
+                <a
+                  href={user.avatarUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  Ver foto
+                </a>
+              ) : (
+                'Não informado'
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">CPF</div>
+            <div className="text-sm">{fmtOptionalPii(user.hasCpf, user.cpf, fmtCpf)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[color:var(--color-muted)]">Telefone</div>
+            <div className="text-sm">{fmtOptionalPii(user.hasPhone, user.phone, fmtPhone)}</div>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <div className="text-xs text-[color:var(--color-muted)]">Bio</div>
+            {/* `|| ` on purpose, not `??`: bio defaults to an empty string
+                (not null) for most accounts, and an empty string must read
+                as "not filled in" the same as null does. */}
+            <div className="text-sm">{user.bio || 'Não informado'}</div>
+          </div>
+        </div>
+      </div>
+
       {/* Stats */}
       <div className="flex gap-4">
         <div className="rounded border border-[color:var(--color-border)] px-4 py-3 text-center">
@@ -247,6 +349,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
       {/* Membership history (F8.16) */}
       {adminGarage ? <GarageMembershipHistory garageId={adminGarage.garage.id} /> : null}
+
+      {/* Documento de identidade */}
+      <AdminUserDocumentsPanel
+        userId={user.id}
+        documents={user.documents}
+        isAdmin={me.role === 'admin'}
+      />
 
       {/* Group memberships */}
       <div>

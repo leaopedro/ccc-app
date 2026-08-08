@@ -60,6 +60,14 @@ export class DevUploads implements Uploads {
     return objectKey.startsWith(`${prefix}/${userId}/`);
   }
 
+  async objectExists(_objectKey: string): Promise<boolean> {
+    // DevUploads has no real storage backing it, so it cannot actually
+    // answer this question. Returning true keeps local development and the
+    // test suite working; tests that need to exercise the "not found" path
+    // stub this method (see me-documents.test.ts).
+    return true;
+  }
+
   async deleteObject(_objectKey: string): Promise<void> {
     // no-op in dev
   }

@@ -93,6 +93,16 @@ export const meDocumentRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(400).send({ error: 'BadRequest', message: 'invalid document key' });
       }
 
+      // Without this, a member can satisfy the subscription's "we hold a
+      // document to review" gate by naming a key that was never actually
+      // uploaded: the row is born pending, review has nothing to review.
+      if (!(await app.uploads.objectExists(input.objectKey))) {
+        return reply.status(400).send({
+          error: 'BadRequest',
+          message: 'upload não foi concluído',
+        });
+      }
+
       const live = await prisma.userDocument.findFirst({
         where: { userId: sub, status: { in: [...LIVE_DOCUMENT_STATUSES] } },
         select: { id: true },

@@ -5,7 +5,7 @@ import {
   userDocumentListResponseSchema,
 } from '@ccc/shared/documents';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
@@ -108,6 +108,24 @@ describe('me documents', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(await prisma.userDocument.count()).toBe(0);
+  });
+
+  it('rejects a well-formed but non-existent object key', async () => {
+    const { user } = await createUser({ verified: true });
+    const spy = vi.spyOn(app.uploads, 'objectExists').mockResolvedValue(false);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/me/documents',
+        headers: auth(user.id),
+        payload: { type: 'cnh', objectKey: `identity-document/${user.id}/never-uploaded.jpg` },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(await prisma.userDocument.count()).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('rejects a key from another upload kind', async () => {

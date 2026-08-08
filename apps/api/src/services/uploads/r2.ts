@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -99,6 +100,27 @@ export class R2Uploads implements Uploads {
   isOwnedKey(objectKey: string, userId: string, kind: UploadKind): boolean {
     const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
     return objectKey.startsWith(`${prefix}/${userId}/`);
+  }
+
+  async objectExists(objectKey: string): Promise<boolean> {
+    try {
+      await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucketFor(objectKey), Key: objectKey }),
+      );
+      return true;
+    } catch (err) {
+      // The SDK surfaces a missing object either as err.name === 'NotFound'
+      // or as a 404 in $metadata.httpStatusCode, depending on SDK version.
+      // Any other error (network, auth, R2 outage) must propagate: treating
+      // it as "does not exist" would reject a legitimate upload.
+      const name = (err as { name?: string }).name;
+      const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode;
+      if (name === 'NotFound' || status === 404) {
+        return false;
+      }
+      throw err;
+    }
   }
 
   async deleteObject(objectKey: string): Promise<void> {

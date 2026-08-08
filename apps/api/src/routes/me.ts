@@ -6,7 +6,7 @@ import {
   type PushPrefs,
 } from '@ccc/shared';
 import { publicProfileSchema, updateProfileSchema } from '@ccc/shared/profile';
-import { profileStatusSchema } from '@ccc/shared/profile-status';
+import { buildCpfImmutableError, profileStatusSchema } from '@ccc/shared/profile-status';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -66,7 +66,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     const { sub } = requireUser(request);
     const existing = await prisma.user.findUnique({
       where: { id: sub },
-      select: { avatarObjectKey: true },
+      select: { avatarObjectKey: true, cpf: true },
     });
     if (!existing) return reply.status(401).send({ error: 'Unauthorized' });
     // Strip undefined values: Prisma's exactOptionalPropertyTypes rejects `string | undefined`
@@ -74,10 +74,38 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     const data = Object.fromEntries(
       Object.entries(updateProfileSchema.parse(request.body)).filter(([, v]) => v !== undefined),
     );
-    // CPF is encrypted at rest. Do this after Zod has normalized it to digits
-    // so the ciphertext always wraps the same canonical form.
+    // CPF is a fiscal identifier tied to orders already issued and it is
+    // encrypted at rest, so once a member has one on file it is immutable.
+    // Resubmitting the same value (e.g. an edit form round-tripping it) is a
+    // no-op, not an error. Compare after Zod normalization so a masked and
+    // a bare value compare equal.
     if (typeof data.cpf === 'string') {
-      data.cpf = encryptField(data.cpf, app.env.FIELD_ENCRYPTION_KEY);
+      if (existing.cpf) {
+        // decryptField swallows decryption errors (e.g. a rotated
+        // FIELD_ENCRYPTION_KEY) and returns null instead of throwing, but we
+        // wrap it anyway in case that contract ever changes. Either way, if
+        // we can't recover the stored value we can't prove the incoming one
+        // matches it. Refuse the change rather than risk silently
+        // overwriting an unrecoverable fiscal identifier.
+        let storedCpf: string | null;
+        try {
+          storedCpf = decryptField(existing.cpf, app.env.FIELD_ENCRYPTION_KEY);
+        } catch (err) {
+          app.log.warn({ err, userId: sub }, 'failed to decrypt stored cpf during PATCH /me');
+          storedCpf = null;
+        }
+        if (storedCpf === null) {
+          app.log.warn({ userId: sub }, 'could not verify stored cpf during PATCH /me');
+          return reply.status(409).send(buildCpfImmutableError());
+        }
+        if (storedCpf === data.cpf) {
+          delete data.cpf;
+        } else {
+          return reply.status(409).send(buildCpfImmutableError());
+        }
+      } else {
+        data.cpf = encryptField(data.cpf, app.env.FIELD_ENCRYPTION_KEY);
+      }
     }
     if (
       typeof data.avatarObjectKey === 'string' &&

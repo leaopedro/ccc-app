@@ -40,6 +40,30 @@ export const buildIncompleteProfileError = (
   message: INCOMPLETE_PROFILE_MESSAGE,
 });
 
+// CPF is a fiscal identifier tied to orders already issued, and it is
+// encrypted at rest, so a silent overwrite is unrecoverable. Once a member
+// has one on file, PATCH /me refuses to change it. 409 because this is a
+// conflict with existing state, not a malformed request.
+export const CPF_IMMUTABLE_CODE = 'CPF_IMMUTABLE' as const;
+export const CPF_IMMUTABLE_STATUS = 'cpf_immutable' as const;
+export const CPF_IMMUTABLE_MESSAGE =
+  'Seu CPF já está cadastrado e não pode ser alterado. Fale com o suporte se precisar corrigi-lo.';
+
+export const cpfImmutableErrorSchema = z.object({
+  error: z.literal('Conflict'),
+  status: z.literal(CPF_IMMUTABLE_STATUS),
+  code: z.literal(CPF_IMMUTABLE_CODE),
+  message: z.string().min(1),
+});
+export type CpfImmutableError = z.infer<typeof cpfImmutableErrorSchema>;
+
+export const buildCpfImmutableError = (): CpfImmutableError => ({
+  error: 'Conflict',
+  status: CPF_IMMUTABLE_STATUS,
+  code: CPF_IMMUTABLE_CODE,
+  message: CPF_IMMUTABLE_MESSAGE,
+});
+
 const scopeStatusSchema = z.object({
   complete: z.boolean(),
   missing: z.array(missingFieldKeySchema),

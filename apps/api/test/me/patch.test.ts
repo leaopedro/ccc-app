@@ -1,4 +1,6 @@
+import { prisma } from '@ccc/db';
 import { publicProfileSchema } from '@ccc/shared/profile';
+import { CPF_IMMUTABLE_CODE } from '@ccc/shared/profile-status';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -144,5 +146,119 @@ describe('PATCH /me', () => {
     expect(res.statusCode).toBe(200);
     const body = publicProfileSchema.parse(res.json());
     expect(body.avatarUrl).toContain(`avatar/${user.id}/new.jpg`);
+  });
+
+  describe('cpf immutability', () => {
+    it('accepts and encrypts cpf when the column is null', async () => {
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '529.982.247-25' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = publicProfileSchema.parse(res.json());
+      expect(body.cpf).toBe('52998224725');
+
+      const row = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(row.cpf).not.toBeNull();
+      expect(row.cpf).toMatch(/^enc_v1:/);
+    });
+
+    it('rejects changing to a different cpf once one is stored', async () => {
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '529.982.247-25' },
+      });
+      const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '111.444.777-35' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({ error: 'Conflict', code: CPF_IMMUTABLE_CODE });
+
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.cpf).toBe(stored.cpf);
+    });
+
+    it('accepts resubmitting the same cpf, masked, as a no-op', async () => {
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '52998224725' },
+      });
+      const stored = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '529.982.247-25' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = publicProfileSchema.parse(res.json());
+      expect(body.cpf).toBe('52998224725');
+
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.cpf).toBe(stored.cpf);
+    });
+
+    it('keeps phone freely editable once a cpf is stored', async () => {
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '529.982.247-25', phone: '(11) 98765-4321' },
+      });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { phone: '(21) 91234-5678' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = publicProfileSchema.parse(res.json());
+      expect(body.phone).toBe('21912345678');
+      expect(body.cpf).toBe('52998224725');
+    });
+
+    it('rejects an invalid cpf with a 400, checked before the immutability rule', async () => {
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '529.982.247-25' },
+      });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '111.111.111-11' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
   });
 });

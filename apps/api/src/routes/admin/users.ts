@@ -15,6 +15,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../../plugins/auth.js';
 import { recordAudit } from '../../services/admin-audit.js';
+import { decryptField } from '../../services/crypto/field-encryption.js';
 import type { Uploads } from '../../services/uploads/index.js';
 
 const encodeCursor = (u: Pick<DbUser, 'createdAt' | 'id'>): string =>
@@ -89,6 +90,7 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/users/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const actor = requireUser(request);
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -160,6 +162,29 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
         }),
       ]);
 
+    // Full CPF/phone values are an `admin`-only surface: any other role that
+    // can reach this route (e.g. organizer) gets null for both, same as a
+    // member who never filled them. decryptField returns null on a ciphertext
+    // it cannot decrypt rather than throwing, so that case also renders as
+    // absent instead of a 500.
+    const isAdmin = actor.role === 'admin';
+    const cpf = isAdmin && user.cpf ? decryptField(user.cpf, app.env.FIELD_ENCRYPTION_KEY) : null;
+    const phone = isAdmin && user.phone ? user.phone : null;
+
+    // Audit only when a value is genuinely handed back — a routine page load
+    // for a member with no CPF/phone on file must not flood the log. Never
+    // put the values themselves in the metadata, only which fields went out.
+    const returnedFields = [...(cpf !== null ? ['cpf'] : []), ...(phone !== null ? ['phone'] : [])];
+    if (returnedFields.length > 0) {
+      await recordAudit({
+        actorId: actor.sub,
+        action: 'user.pii_viewed',
+        entityType: 'user',
+        entityId: id,
+        metadata: { fields: returnedFields },
+      });
+    }
+
     return adminUserDetailSchema.parse({
       id: user.id,
       email: user.email,
@@ -174,6 +199,8 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
       avatarUrl: avatarUrl(user, app.uploads),
       hasCpf: user.cpf !== null && user.cpf.length > 0,
       hasPhone: user.phone !== null && user.phone.length > 0,
+      cpf,
+      phone,
       stats: { totalTickets, totalOrders },
       recentTickets: recentTickets.map((t) => ({
         id: t.id,

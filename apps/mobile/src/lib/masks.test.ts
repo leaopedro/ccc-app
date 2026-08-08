@@ -25,6 +25,20 @@ describe('maskCpf', () => {
     expect(maskCpf('')).toBe('');
     expect(maskCpf('abc')).toBe('');
   });
+
+  it('never gets stuck when backspaced one character at a time down to empty', () => {
+    let value = maskCpf('52998224725');
+    const seen = new Set<string>();
+    let guard = 0;
+    while (value.length > 0) {
+      guard += 1;
+      expect(guard).toBeLessThan(30);
+      expect(seen.has(value)).toBe(false);
+      seen.add(value);
+      value = maskCpf(value.slice(0, -1));
+    }
+    expect(value).toBe('');
+  });
 });
 
 describe('unmaskCpf', () => {
@@ -45,7 +59,7 @@ describe('unmaskCpf', () => {
 describe('maskPhone', () => {
   it('formats progressively for a mobile number (11 digits)', () => {
     expect(maskPhone('1')).toBe('(1');
-    expect(maskPhone('11')).toBe('(11)');
+    expect(maskPhone('11')).toBe('(11');
     expect(maskPhone('119')).toBe('(11) 9');
     expect(maskPhone('11987')).toBe('(11) 987');
     expect(maskPhone('1198765')).toBe('(11) 9876-5');
@@ -64,6 +78,34 @@ describe('maskPhone', () => {
   it('returns empty string for empty or non-digit input', () => {
     expect(maskPhone('')).toBe('');
     expect(maskPhone('abc')).toBe('');
+  });
+
+  it('never gets stuck when backspaced one character at a time down to empty (mobile)', () => {
+    let value = maskPhone('11987654321');
+    const seen = new Set<string>();
+    let guard = 0;
+    while (value.length > 0) {
+      guard += 1;
+      expect(guard).toBeLessThan(30);
+      expect(seen.has(value)).toBe(false);
+      seen.add(value);
+      value = maskPhone(value.slice(0, -1));
+    }
+    expect(value).toBe('');
+  });
+
+  it('never gets stuck when backspaced one character at a time down to empty (landline)', () => {
+    let value = maskPhone('1132654321');
+    const seen = new Set<string>();
+    let guard = 0;
+    while (value.length > 0) {
+      guard += 1;
+      expect(guard).toBeLessThan(30);
+      expect(seen.has(value)).toBe(false);
+      seen.add(value);
+      value = maskPhone(value.slice(0, -1));
+    }
+    expect(value).toBe('');
   });
 });
 

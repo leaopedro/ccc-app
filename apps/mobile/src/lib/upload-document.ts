@@ -19,13 +19,12 @@ export class DocumentTooLargeError extends Error {
 
 // Composes the identity-document upload pipeline: blob -> presign -> PUT to
 // R2 -> confirm. Takes an already-picked image (from pickImage() in
-// ~/lib/upload-image) rather than picking itself, because the document
-// screen's state machine has a "preview" step (pick, then show the image
-// with "trocar"/"enviar") between capture and upload: the network calls must
-// not start until the user confirms "enviar", so picking cannot live inside
-// this same call. Errors (ApiError, DocumentTooLargeError, network) propagate
-// for the screen to map to copy.
-export const pickAndUploadDocument = async (
+// ~/lib/upload-image) rather than picking itself: both callers (the document
+// screen's preview step, and signup's inline row) pick first and only
+// upload later, on an explicit "enviar"/submit action, so the network calls
+// must not be bundled with the picker. Errors (ApiError,
+// DocumentTooLargeError, network) propagate for the caller to map to copy.
+export const uploadDocument = async (
   type: UserDocumentType,
   picked: PickedImage,
 ): Promise<UserDocument> => {

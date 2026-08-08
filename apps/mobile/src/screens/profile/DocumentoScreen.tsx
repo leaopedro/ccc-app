@@ -1,8 +1,10 @@
 // Identity document upload screen. State machine per
-// plans/perfil-progressivo-plan.md §4.5:
+// plans/perfil-progressivo-plan.md §4.5 (see documento-state.ts for the pure
+// reducer that implements the table):
 //
 //   selecting_type -> capturing -> preview -> uploading -> sent | error
-//   error -> preview (retryable)
+//   error -> preview (retryable), or hidden when a rate limit makes an
+//   immediate retry pointless
 //   sent -> navigates to `next`, or shows `pending`
 //   pending/approved/rejected are read from GET /me/documents on mount, so a
 //   returning user with a live or reviewed document skips the picker.
@@ -10,10 +12,14 @@
 // `sent` has no distinct rendered state: the 201 response either navigates
 // away immediately (when `next` is set) or lands directly on `pending`
 // (when it is not), which is the same thing the table describes.
+//
+// Reached only from the profile menu and from the subscription flow (Mobile
+// B), both post-verification, so the email-verification gate in
+// app/_layout.tsx never intercepts a navigation to this screen.
 import { DOCUMENT_ALREADY_PENDING_CODE, USER_DOCUMENT_TYPES } from '@ccc/shared/documents';
-import type { UserDocument, UserDocumentType } from '@ccc/shared/documents';
+import type { UserDocumentType } from '@ccc/shared/documents';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -27,95 +33,82 @@ import {
 import { ApiError } from '~/api/client';
 import { listDocuments } from '~/api/documents';
 import { getApiErrorCode } from '~/api/errors';
+import { sanitizeNext } from '~/auth/redirect-intent';
 import { profileCopy } from '~/copy/profile';
-import { pickImage, type PickedImage } from '~/lib/upload-image';
-import { DocumentTooLargeError, pickAndUploadDocument } from '~/lib/upload-document';
+import { ImagePickerPermissionDeniedError, pickImage, type PickedImage } from '~/lib/upload-image';
+import { DocumentTooLargeError, uploadDocument } from '~/lib/upload-document';
 import { theme } from '~/theme';
+
+import { documentoReducer, initialDocumentoState } from './documento-state';
 
 const copy = profileCopy.documento;
 
 const typeLabel = (type: UserDocumentType): string => (type === 'cnh' ? copy.typeCnh : copy.typeRg);
 
-// A more permissive companion to auth/redirect-intent's sanitizeNext: that
-// helper's allowlist is scoped to post-login redirects and does not include
-// routes like /verify-email-pending, which this screen must support when
-// reached from signup (and /assinaturas/... when reached from the
-// subscription flow). Same core safety checks, no prefix allowlist: this
-// param always comes from an in-app navigation, not a public redirect target.
-const sanitizeDocumentNext = (raw: unknown): string | null => {
-  if (typeof raw !== 'string') return null;
-  if (raw.length === 0 || raw.length > 512) return null;
-  if (!raw.startsWith('/')) return null;
-  if (raw.startsWith('//') || raw.startsWith('/\\')) return null;
-  if (raw.includes('://')) return null;
-  if (raw.includes('\n') || raw.includes('\r') || raw.includes('\t')) return null;
-  return raw;
-};
-
-type ScreenState =
-  | { kind: 'loading' }
-  | { kind: 'selecting_type' }
-  | { kind: 'capturing'; type: UserDocumentType }
-  | { kind: 'preview'; type: UserDocumentType; picked: PickedImage }
-  | { kind: 'uploading'; type: UserDocumentType; picked: PickedImage }
-  | { kind: 'error'; type: UserDocumentType; picked: PickedImage; message: string }
-  | { kind: 'pending'; document: UserDocument | null }
-  | { kind: 'approved'; document: UserDocument | null }
-  | { kind: 'rejected'; document: UserDocument | null };
-
 export default function DocumentoScreen() {
   const router = useRouter();
   const { next: nextParam } = useLocalSearchParams<{ next?: string }>();
-  const next = sanitizeDocumentNext(nextParam);
-  const [state, setState] = useState<ScreenState>({ kind: 'loading' });
+  const next = sanitizeNext(nextParam);
+  const [state, dispatch] = useReducer(documentoReducer, initialDocumentoState);
+  const mountedRef = useRef(true);
 
-  const refreshLatestState = async () => {
-    setState({ kind: 'loading' });
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const refreshLatestState = useCallback(async () => {
+    dispatch({ type: 'LOAD_STARTED' });
     try {
       const res = await listDocuments();
-      const latest = res.items[0] ?? null;
-      if (latest && (latest.status === 'pending' || latest.status === 'approved')) {
-        setState({ kind: latest.status, document: latest });
-        return;
-      }
-      if (latest && latest.status === 'rejected') {
-        setState({ kind: 'rejected', document: latest });
-        return;
-      }
-      setState({ kind: 'selecting_type' });
+      if (!mountedRef.current) return;
+      dispatch({ type: 'LOAD_RESOLVED', latest: res.items[0] ?? null });
     } catch {
-      // Fail open to the picker: worst case, a live document mid-flight
-      // surfaces as a 409 on submit, handled the same way below.
-      setState({ kind: 'selecting_type' });
+      if (!mountedRef.current) return;
+      dispatch({ type: 'LOAD_FAILED' });
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshLatestState();
-  }, []);
+  }, [refreshLatestState]);
 
-  const startCapture = async (type: UserDocumentType) => {
-    setState({ kind: 'capturing', type });
-    const picked = await pickImage();
-    if (!picked) {
-      setState({ kind: 'selecting_type' });
-      return;
+  const startCapture = async (docType: UserDocumentType) => {
+    dispatch({ type: 'CAPTURE_STARTED', docType });
+    try {
+      const picked = await pickImage();
+      if (!picked) {
+        dispatch({ type: 'CAPTURE_CANCELLED' });
+        return;
+      }
+      dispatch({ type: 'CAPTURE_PICKED', picked });
+    } catch (err) {
+      if (err instanceof ImagePickerPermissionDeniedError) {
+        dispatch({ type: 'CAPTURE_DENIED', message: copy.pickFailed });
+        return;
+      }
+      dispatch({ type: 'CAPTURE_CANCELLED' });
     }
-    setState({ kind: 'preview', type, picked });
   };
 
-  const handleSend = async (type: UserDocumentType, picked: PickedImage) => {
-    setState({ kind: 'uploading', type, picked });
+  const handleSend = async (docType: UserDocumentType, picked: PickedImage) => {
+    dispatch({ type: 'SEND_STARTED' });
     try {
-      const document = await pickAndUploadDocument(type, picked);
+      const document = await uploadDocument(docType, picked);
       if (next) {
         router.replace(next as never);
         return;
       }
-      setState({ kind: 'pending', document });
+      dispatch({ type: 'SEND_SUCCEEDED', document });
     } catch (err) {
       if (err instanceof DocumentTooLargeError) {
-        setState({ kind: 'error', type, picked, message: copy.tooLarge });
+        dispatch({ type: 'SEND_FAILED', message: copy.tooLarge, retryable: true });
+        return;
+      }
+      if (err instanceof ApiError && err.status === 429) {
+        dispatch({ type: 'SEND_FAILED', message: copy.rateLimited, retryable: false });
         return;
       }
       if (
@@ -123,10 +116,12 @@ export default function DocumentoScreen() {
         err.status === 409 &&
         getApiErrorCode(err) === DOCUMENT_ALREADY_PENDING_CODE
       ) {
+        // Handled as state, not as an error toast: the 409 means the same
+        // thing a live document found on mount means.
         await refreshLatestState();
         return;
       }
-      setState({ kind: 'error', type, picked, message: copy.uploadFailed });
+      dispatch({ type: 'SEND_FAILED', message: copy.uploadFailed, retryable: true });
     }
   };
 
@@ -148,6 +143,7 @@ export default function DocumentoScreen() {
         <View style={styles.card}>
           <Text style={styles.title}>{copy.selectTypeTitle}</Text>
           <Text style={styles.hint}>{copy.selectTypeHint}</Text>
+          {state.message ? <Text style={styles.errorText}>{state.message}</Text> : null}
           <View style={styles.typeRow}>
             {USER_DOCUMENT_TYPES.map((type) => (
               <Pressable
@@ -168,6 +164,7 @@ export default function DocumentoScreen() {
 
   if (state.kind === 'preview' || state.kind === 'uploading' || state.kind === 'error') {
     const busy = state.kind === 'uploading';
+    const showPrimaryAction = state.kind !== 'error' || state.retryable;
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.card}>
@@ -188,27 +185,29 @@ export default function DocumentoScreen() {
             >
               <Text style={styles.secondaryButtonText}>{copy.retake}</Text>
             </Pressable>
-            <Pressable
-              onPress={() =>
-                state.kind === 'error'
-                  ? setState({ kind: 'preview', type: state.type, picked: state.picked })
-                  : void handleSend(state.type, state.picked)
-              }
-              accessibilityRole="button"
-              accessibilityLabel={
-                state.kind === 'error' ? copy.retry : busy ? copy.sending : copy.send
-              }
-              disabled={busy}
-              style={[styles.primaryButton, busy && styles.buttonDisabled]}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color={theme.colors.bg} />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {state.kind === 'error' ? copy.retry : copy.send}
-                </Text>
-              )}
-            </Pressable>
+            {showPrimaryAction ? (
+              <Pressable
+                onPress={() =>
+                  state.kind === 'error'
+                    ? dispatch({ type: 'RETRY_REQUESTED' })
+                    : void handleSend(state.type, state.picked)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={
+                  state.kind === 'error' ? copy.retry : busy ? copy.sending : copy.send
+                }
+                disabled={busy}
+                style={[styles.primaryButton, busy && styles.buttonDisabled]}
+              >
+                {busy ? (
+                  <ActivityIndicator size="small" color={theme.colors.bg} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>
+                    {state.kind === 'error' ? copy.retry : copy.send}
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </ScrollView>
@@ -230,19 +229,20 @@ export default function DocumentoScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>{title}</Text>
         {state.kind === 'rejected' ? (
-          <Text style={styles.hint}>{document?.rejectionReason}</Text>
+          <>
+            <Text style={styles.hint}>{copy.rejectedReasonLabel}</Text>
+            <Text style={styles.hint}>{document.rejectionReason ?? copy.rejectedBody}</Text>
+          </>
         ) : (
           <Text style={styles.hint}>{body}</Text>
         )}
-        {document ? (
-          <Text style={styles.metaText}>
-            {typeLabel(document.type)} · {copy.sentOn}{' '}
-            {new Date(document.sentAt).toLocaleDateString('pt-BR')}
-          </Text>
-        ) : null}
+        <Text style={styles.metaText}>
+          {typeLabel(document.type)} · {copy.sentOn}{' '}
+          {new Date(document.sentAt).toLocaleDateString('pt-BR')}
+        </Text>
         {state.kind === 'rejected' ? (
           <Pressable
-            onPress={() => setState({ kind: 'selecting_type' })}
+            onPress={() => dispatch({ type: 'RESET_TO_SELECTING' })}
             accessibilityRole="button"
             accessibilityLabel={copy.rejectedRetry}
             style={styles.primaryButton}

@@ -57,7 +57,10 @@ export const authCopy = {
     phoneHint: 'Pode informar agora ou depois, no seu perfil.',
     documentTitle: 'Documento de identidade (opcional)',
     documentHint: 'CNH ou RG. Pode enviar agora ou depois, no seu perfil.',
-    documentSelectedHint: 'Você vai enviar o documento assim que a conta for criada.',
+    documentSelectedHint: 'Vamos enviar esse documento depois de criar sua conta.',
+    documentRemove: 'Remover',
+    documentUploadFailedNotice:
+      'Não foi possível enviar seu documento agora. Você pode enviar depois, no seu perfil.',
     submit: 'Criar conta',
     termsAccept: 'Aceito os ',
     termsLink: 'Termos',

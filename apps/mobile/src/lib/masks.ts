@@ -27,8 +27,11 @@ export const unmaskPhone = (value: string): string => onlyDigits(value).slice(0,
 export const maskPhone = (digits: string): string => {
   const d = unmaskPhone(digits);
   if (d.length === 0) return '';
-  if (d.length === 1) return `(${d}`;
-  if (d.length === 2) return `(${d})`;
+  // No closing paren until a 3rd digit exists. Closing it at exactly 2
+  // digits (`(11)`) creates a backspace trap: unmasking `(11)` and
+  // `(11` both yield the same 2 digits, so re-masking always re-adds the
+  // paren and the field can never be cleared past that point.
+  if (d.length <= 2) return `(${d}`;
   const ddd = d.slice(0, 2);
   const rest = d.slice(2);
   // 11 total digits is a mobile number (5-digit subscriber block), 10 or

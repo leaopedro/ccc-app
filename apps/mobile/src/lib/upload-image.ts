@@ -51,7 +51,12 @@ export const pickImage = async (): Promise<PickedImage | null> => {
   };
 };
 
-export const uploadBlobToR2 = async (blob: Blob, presign: PresignResponse): Promise<void> => {
+// Narrower than PresignResponse: only uploadUrl and headers are used for the
+// PUT itself, so this also accepts DocumentUploadResponse (no `publicUrl`,
+// by design, since an identity document has no public URL).
+type PutPresign = Pick<PresignResponse, 'uploadUrl' | 'headers'>;
+
+export const uploadBlobToR2 = async (blob: Blob, presign: PutPresign): Promise<void> => {
   const res = await fetch(presign.uploadUrl, {
     method: 'PUT',
     headers: presign.headers,

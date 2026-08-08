@@ -14,12 +14,37 @@ import {
   ScrollView,
   View,
 } from 'react-native';
+import { z } from 'zod';
 
 import { ApiError } from '~/api/client';
+import { getValidationFieldErrors } from '~/api/errors';
 import { useAuth } from '~/auth/context';
 import { buildLoginHref, sanitizeNext } from '~/auth/redirect-intent';
 import { TextField } from '~/components/TextField';
 import { authCopy } from '~/copy/auth';
+import { maskCpf, maskPhone, unmaskCpf, unmaskPhone } from '~/lib/masks';
+
+// Relaxes cpf/phone to plain optional strings for the client-side resolver.
+// The canonical cpfSchema/phoneSchema (via signupSchema) still run
+// server-side on every submit; duplicating their checksum/format validation
+// here would only block on an empty field ("" fails cpfSchema.optional(),
+// since optional only skips validation for `undefined`) and would still
+// need the server's 400 as the source of truth for the field-level error
+// copy. Blank stays untouched by the resolver; onSubmit converts "" to
+// `undefined` before calling signup().
+const signupFormSchema = signupSchema.extend({
+  cpf: z.string().optional(),
+  phone: z.string().optional(),
+});
+
+// Builds the href for the verify-email step so the document screen can hand
+// off to it after a successful upload, the same destination signup already
+// reaches when no document was requested.
+const buildVerifyPendingHref = (email: string, originalNext: string | null): string => {
+  const params = [`email=${encodeURIComponent(email)}`];
+  if (originalNext) params.push(`next=${encodeURIComponent(originalNext)}`);
+  return `/verify-email-pending?${params.join('&')}`;
+};
 
 export default function SignupScreen() {
   const { signup } = useAuth();
@@ -28,14 +53,15 @@ export default function SignupScreen() {
   const next = sanitizeNext(nextParam);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
+  const [documentIntent, setDocumentIntent] = useState(false);
   const {
     control,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SignupInput>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { email: '', password: '', name: '' },
+    resolver: zodResolver(signupFormSchema),
+    defaultValues: { email: '', password: '', name: '', cpf: '', phone: '' },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -44,8 +70,24 @@ export default function SignupScreen() {
       return;
     }
     setTermsError(null);
+    const cpfDigits = unmaskCpf(values.cpf ?? '');
+    const phoneDigits = unmaskPhone(values.phone ?? '');
     try {
-      await signup(values);
+      await signup({
+        ...values,
+        // Blank stays undefined rather than becoming an empty string, which
+        // would fail cpfSchema/phoneSchema server-side (optional() only
+        // skips validation for undefined, not "").
+        cpf: cpfDigits.length > 0 ? cpfDigits : undefined,
+        phone: phoneDigits.length > 0 ? phoneDigits : undefined,
+      });
+      if (documentIntent) {
+        router.replace({
+          pathname: '/profile/documento',
+          params: { next: buildVerifyPendingHref(values.email, next) },
+        } as never);
+        return;
+      }
       router.replace({
         pathname: '/verify-email-pending',
         params: next ? { email: values.email, next } : { email: values.email },
@@ -53,7 +95,16 @@ export default function SignupScreen() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError('email', { message: authCopy.errors.emailExists });
-      } else if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
+      } else if (err instanceof ApiError && err.status === 400) {
+        const fieldErrors = getValidationFieldErrors(err);
+        if (fieldErrors?.cpf?.[0]) {
+          setError('cpf', { message: fieldErrors.cpf[0] });
+        } else if (fieldErrors?.phone?.[0]) {
+          setError('phone', { message: fieldErrors.phone[0] });
+        } else {
+          setError('password', { message: authCopy.errors.weakPassword });
+        }
+      } else if (err instanceof ApiError && err.status === 422) {
         setError('password', { message: authCopy.errors.weakPassword });
       } else if (err instanceof ApiError && err.status === 429) {
         setError('password', { message: authCopy.errors.rateLimited });
@@ -152,6 +203,68 @@ export default function SignupScreen() {
                 </Text>
               ) : null}
             </View>
+
+            <Controller
+              control={control}
+              name="cpf"
+              render={({ field: { onChange, value } }) => (
+                <TextField
+                  label={authCopy.signup.cpfLabel}
+                  placeholder={authCopy.signup.cpfPlaceholder}
+                  hint={authCopy.signup.cpfHint}
+                  keyboardType="number-pad"
+                  maxLength={14}
+                  value={value ?? ''}
+                  onChangeText={(text) => onChange(maskCpf(text))}
+                  error={errors.cpf?.message}
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field: { onChange, value } }) => (
+                <TextField
+                  label={authCopy.signup.phoneLabel}
+                  placeholder={authCopy.signup.phonePlaceholder}
+                  hint={authCopy.signup.phoneHint}
+                  keyboardType="number-pad"
+                  maxLength={15}
+                  value={value ?? ''}
+                  onChangeText={(text) => onChange(maskPhone(text))}
+                  error={errors.phone?.message}
+                />
+              )}
+            />
+
+            <Pressable
+              onPress={() => setDocumentIntent((v) => !v)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: documentIntent }}
+              accessibilityLabel={authCopy.signup.documentTitle}
+              hitSlop={8}
+              className="flex-row items-start gap-3 active:opacity-70"
+            >
+              <View
+                className={
+                  'h-6 w-6 rounded-md border items-center justify-center mt-0.5 ' +
+                  (documentIntent ? 'bg-brand border-brand' : 'border-border-strong')
+                }
+              >
+                {documentIntent ? <Check color="#0A0A0A" size={16} strokeWidth={3} /> : null}
+              </View>
+              <View className="flex-1">
+                <Text variant="bodySm" tone="secondary">
+                  {authCopy.signup.documentTitle}
+                </Text>
+                <Text variant="caption" tone="muted" className="mt-1">
+                  {documentIntent
+                    ? authCopy.signup.documentSelectedHint
+                    : authCopy.signup.documentHint}
+                </Text>
+              </View>
+            </Pressable>
 
             <View className="flex-row items-start pt-2 gap-3">
               <Pressable

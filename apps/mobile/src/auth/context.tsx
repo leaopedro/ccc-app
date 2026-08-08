@@ -1,14 +1,6 @@
 import type { PublicUser } from '@ccc/shared/auth';
 import type { LoginInput, SignupRequestInput } from '@ccc/shared/auth';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { clearTokens, loadTokens, saveTokens, type StoredTokens } from './storage';
 
@@ -39,6 +31,15 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Auth tokens live in a MODULE-LEVEL store, not a per-instance useRef. The token
+// provider is registered globally (registerTokenProvider) and its getAccessToken
+// closes over this store. AuthProvider can mount/register more than once per
+// launch; with a per-instance ref, a boot() could race a re-registration and
+// read a different mount's null ref, throw "no access token", and its catch would
+// signOut() and wipe the just-loaded session. A shared module store removes the
+// race: every registration and every boot read/write the same tokens.
+const tokensRef: { current: StoredTokens | null } = { current: null };
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<AuthState>({
     status: 'loading',
@@ -46,7 +47,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     tokens: null,
     flashMessage: null,
   });
-  const tokensRef = useRef<StoredTokens | null>(null);
 
   const setFlashMessage = useCallback((message: string | null) => {
     setState((prev) => ({ ...prev, flashMessage: message }));

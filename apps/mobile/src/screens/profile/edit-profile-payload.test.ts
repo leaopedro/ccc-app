@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildUpdateProfilePayload, type EditProfileFormValues } from './edit-profile-payload';
+import {
+  buildUpdateProfilePayload,
+  isPhoneClearingBlocked,
+  type EditProfileFormValues,
+} from './edit-profile-payload';
 
 const baseValues: EditProfileFormValues = {
   name: 'Ana Silva',
@@ -46,5 +50,23 @@ describe('buildUpdateProfilePayload', () => {
     expect(payload.bio).toBe('Fã de carros clássicos');
     expect(payload.city).toBe('Curitiba');
     expect(payload.stateCode).toBe('PR');
+  });
+});
+
+describe('isPhoneClearingBlocked', () => {
+  it('blocks clearing a phone that was already saved', () => {
+    expect(isPhoneClearingBlocked({ ...baseValues, phone: '' }, true)).toBe(true);
+  });
+
+  it('does not block a saved phone being kept (still filled)', () => {
+    expect(isPhoneClearingBlocked({ ...baseValues, phone: '41987654321' }, true)).toBe(false);
+  });
+
+  it('does not block leaving a never-saved phone blank', () => {
+    expect(isPhoneClearingBlocked({ ...baseValues, phone: '' }, false)).toBe(false);
+  });
+
+  it('does not block filling in a phone for the first time', () => {
+    expect(isPhoneClearingBlocked({ ...baseValues, phone: '41987654321' }, false)).toBe(false);
   });
 });

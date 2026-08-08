@@ -1,4 +1,5 @@
 import { brand } from '@ccc/design';
+import { CPF_IMMUTABLE_MESSAGE } from '@ccc/shared/profile-status';
 
 export const profileCopy = {
   profile: {
@@ -8,6 +9,7 @@ export const profileCopy = {
     save: 'Salvar',
     cancel: 'Cancelar',
     nameLabel: 'Nome',
+    nameRequired: 'Informe seu nome.',
     bioLabel: 'Bio',
     bioHint: 'Não inclua documentos, senhas ou informações bancárias.',
     cityLabel: 'Cidade',
@@ -16,10 +18,10 @@ export const profileCopy = {
     cpfPlaceholder: '000.000.000-00',
     cpfHint: 'Opcional. Depois de salvo, não pode ser alterado.',
     cpfLockedHint: 'CPF cadastrado. Não pode ser alterado.',
-    cpfImmutable:
-      'Seu CPF já está cadastrado e não pode ser alterado. Fale com o suporte se precisar corrigi-lo.',
+    cpfImmutable: CPF_IMMUTABLE_MESSAGE,
     phoneLabel: 'Telefone',
     phonePlaceholder: '(11) 98765-4321',
+    phoneRequired: 'Informe um telefone.',
     avatarChange: 'Alterar foto',
     avatarUploading: 'Enviando foto…',
     saved: 'Perfil atualizado.',
@@ -30,7 +32,7 @@ export const profileCopy = {
   },
   menu: {
     subtitle: 'Gerencie seus dados, endereços e sua garagem.',
-    editHint: 'Atualize nome, bio e localização',
+    editHint: 'Atualize nome, bio, localização, CPF, telefone e documento',
     pushPreferences: 'Notificações de marketing',
     pushPreferencesHint: 'Escolha se quer receber campanhas e novidades',
     orders: 'Meus pedidos',
@@ -171,6 +173,7 @@ export const profileCopy = {
     statusValidatedHint: 'Documento enviado. Toque para ver detalhes.',
     statusPendingHint: 'Nenhum documento enviado ainda. Toque para enviar.',
     statusLoading: 'Carregando status…',
+    statusLoadFailed: 'Não foi possível carregar. Toque para tentar novamente.',
   },
   errors: {
     network: 'Sem conexão. Tente novamente.',

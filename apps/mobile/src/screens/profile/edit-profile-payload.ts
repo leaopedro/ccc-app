@@ -34,3 +34,15 @@ export const buildUpdateProfilePayload = (
 
   return payload;
 };
+
+// Product decision: once a member has ever saved a phone number, it cannot
+// be blanked back out. buildUpdateProfilePayload's blank -> `undefined`
+// mapping is correct for a phone that was never saved (a legitimately
+// empty optional field), but applied to an already-saved one it silently
+// keeps the old value while the UI reports success. Call this before
+// building the payload so the caller can show a field error instead of
+// submitting. Mobile-only: the API and updateProfileSchema are unchanged.
+export const isPhoneClearingBlocked = (
+  values: EditProfileFormValues,
+  phoneAlreadySaved: boolean,
+): boolean => phoneAlreadySaved && unmaskPhone(values.phone ?? '').length === 0;

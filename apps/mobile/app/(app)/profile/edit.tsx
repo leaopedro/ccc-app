@@ -1,7 +1,5 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import {
   BRAZIL_STATE_CODES,
-  updateProfileSchema,
   type PublicProfile,
   type UpdateProfileInput,
 } from '@ccc/shared/profile';
@@ -12,7 +10,6 @@ import { ChevronRight, Flag, ShieldCheck } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { z } from 'zod';
 
 import { ApiError } from '~/api/client';
 import { getApiErrorCode, getApiErrorMessage, getValidationFieldErrors } from '~/api/errors';
@@ -20,20 +17,13 @@ import { getProfile, getProfileStatus, updateProfile } from '~/api/profile';
 import { TextField } from '~/components/TextField';
 import { profileCopy } from '~/copy/profile';
 import { maskCpf, maskPhone } from '~/lib/masks';
-import { buildUpdateProfilePayload } from '~/screens/profile/edit-profile-payload';
+import { editProfileFormResolver } from '~/screens/profile/edit-profile-form-schema';
+import {
+  buildUpdateProfilePayload,
+  isPhoneClearingBlocked,
+} from '~/screens/profile/edit-profile-payload';
 import { resolveDocumentBadge } from '~/screens/profile/document-status-badge';
 import { theme } from '~/theme';
-
-// Relaxes cpf/phone to plain optional strings for the client-side resolver,
-// same trade-off as signupFormSchema in app/(auth)/signup.tsx: the real
-// cpfSchema/phoneSchema checksum validation still runs server-side on every
-// PATCH, and duplicating it here would only block on a blank optional field
-// (`''` fails `.optional()`'s underlying refine, since optional only skips
-// validation for `undefined`) without adding real client-side protection.
-const editProfileFormSchema = updateProfileSchema.extend({
-  cpf: z.string().optional(),
-  phone: z.string().optional(),
-});
 
 const FORM_FIELDS = ['name', 'bio', 'city', 'stateCode', 'cpf', 'phone'] as const;
 type FormField = (typeof FORM_FIELDS)[number];
@@ -42,20 +32,27 @@ const isFormField = (field: string): field is FormField =>
 
 type DocumentStatusRowProps = {
   latestDocument: ProfileStatus['latestDocument'] | undefined;
+  // True only when the most recent fetch failed AND nothing has ever loaded
+  // successfully (latestDocument is still undefined) -- a refetch failure
+  // after a prior success stays quiet and keeps showing the last known
+  // badge, see loadDocumentStatus below.
+  failed: boolean;
   onPress: () => void;
 };
 
 // `latestDocument === undefined` means "not fetched yet" (quiet placeholder,
 // distinct from the fetched-and-empty `null` case, which is the genuine
 // pending/no-document state).
-function DocumentStatusRow({ latestDocument, onPress }: DocumentStatusRowProps) {
+function DocumentStatusRow({ latestDocument, failed, onPress }: DocumentStatusRowProps) {
   const badge = latestDocument === undefined ? null : resolveDocumentBadge(latestDocument);
   const tone = badge?.tone === 'success' ? theme.colors.success : theme.colors.warning;
-  const hint = badge
-    ? badge.tone === 'success'
-      ? profileCopy.documento.statusValidatedHint
-      : profileCopy.documento.statusPendingHint
-    : profileCopy.documento.statusLoading;
+  const hint = failed
+    ? profileCopy.documento.statusLoadFailed
+    : badge
+      ? badge.tone === 'success'
+        ? profileCopy.documento.statusValidatedHint
+        : profileCopy.documento.statusPendingHint
+      : profileCopy.documento.statusLoading;
 
   return (
     <Pressable
@@ -67,7 +64,9 @@ function DocumentStatusRow({ latestDocument, onPress }: DocumentStatusRowProps) 
     >
       <View style={styles.documentRowLead}>
         <View style={styles.documentIconWrap}>
-          {badge ? (
+          {failed ? (
+            <Flag color={theme.colors.warning} size={18} strokeWidth={1.75} />
+          ) : badge ? (
             badge.tone === 'success' ? (
               <ShieldCheck color={tone} size={18} strokeWidth={1.75} />
             ) : (
@@ -109,7 +108,7 @@ export default function ProfileEditScreen() {
   };
 
   const form = useForm<UpdateProfileInput>({
-    resolver: zodResolver(editProfileFormSchema),
+    resolver: editProfileFormResolver,
     defaultValues: { name: '', bio: '', city: '', stateCode: undefined, cpf: '', phone: '' },
   });
 
@@ -138,13 +137,19 @@ export default function ProfileEditScreen() {
     })();
   }, [form]);
 
+  // Tracks the most recent fetch outcome. Only surfaced in the UI when
+  // latestDocument is still undefined (see DocumentStatusRow's `failed`
+  // prop at the call site below): a refetch failure after a prior success
+  // stays quiet and keeps showing the last known badge, same as before.
+  const [documentStatusFailed, setDocumentStatusFailed] = useState(false);
+
   const loadDocumentStatus = useCallback(async () => {
     try {
       const status = await getProfileStatus();
       setLatestDocument(status.latestDocument);
+      setDocumentStatusFailed(false);
     } catch {
-      // Quiet failure: keep whatever badge state is already shown rather
-      // than blanking the row or blocking the rest of the form.
+      setDocumentStatusFailed(true);
     }
   }, []);
 
@@ -160,10 +165,16 @@ export default function ProfileEditScreen() {
 
   // CPF non-null on the profile currently held in state (not the value
   // loaded at mount) is what locks the field, so a save that sets the CPF
-  // locks it immediately without a reload.
+  // locks it immediately without a reload. Same reasoning for phone: once
+  // the loaded/saved profile has one, it cannot be blanked back out.
   const cpfLocked = profile?.cpf != null;
+  const phoneAlreadySaved = profile?.phone != null;
 
   const onSave = form.handleSubmit(async (values) => {
+    if (isPhoneClearingBlocked(values, phoneAlreadySaved)) {
+      form.setError('phone', { message: profileCopy.profile.phoneRequired });
+      return;
+    }
     const payload = buildUpdateProfilePayload(values, cpfLocked);
     try {
       const updated = await updateProfile(payload);
@@ -190,6 +201,11 @@ export default function ProfileEditScreen() {
         return;
       }
 
+      // Server-side safety net: the resolver (editProfileFormSchema) already
+      // blocks invalid cpf/phone and blank required fields before this
+      // request is ever sent, so this branch is for whatever it does not
+      // cover client-side (e.g. name/bio/city length caps, which have no
+      // input limiter in the UI) or any future gap between the two schemas.
       if (err instanceof ApiError && err.status === 400) {
         const fieldErrors = getValidationFieldErrors(err);
         let handled = false;
@@ -206,8 +222,18 @@ export default function ProfileEditScreen() {
     }
   });
 
+  // No `next` param: DocumentoScreen's own router.replace(next) after upload
+  // or "Continuar" would swap this screen's route for a fresh instance of
+  // itself (StackActions.replace only swaps the top of the stack), which
+  // refetches, drops any typed-but-unsaved input, and skips the "Documento
+  // em análise" confirmation panel. Returning by normal back navigation
+  // lets the useFocusEffect badge refetch below do its job instead.
   const goToDocumento = () => {
-    router.push({ pathname: '/profile/documento', params: { next: '/profile/edit' } } as never);
+    router.push('/profile/documento' as never);
+  };
+
+  const retryDocumentStatus = () => {
+    void loadDocumentStatus();
   };
 
   if (loading) {
@@ -325,7 +351,13 @@ export default function ProfileEditScreen() {
         onPress={() => void onSave()}
       />
 
-      <DocumentStatusRow latestDocument={latestDocument} onPress={goToDocumento} />
+      <DocumentStatusRow
+        latestDocument={latestDocument}
+        failed={latestDocument === undefined && documentStatusFailed}
+        onPress={
+          latestDocument === undefined && documentStatusFailed ? retryDocumentStatus : goToDocumento
+        }
+      />
     </ScrollView>
   );
 }

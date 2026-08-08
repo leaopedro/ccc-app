@@ -1,10 +1,11 @@
 import { prisma } from '@ccc/db';
 import { publicProfileSchema } from '@ccc/shared/profile';
-import { CPF_IMMUTABLE_CODE } from '@ccc/shared/profile-status';
+import { CPF_IMMUTABLE_CODE, cpfImmutableErrorSchema } from '@ccc/shared/profile-status';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
+import { encryptField } from '../../src/services/crypto/field-encryption.js';
 import * as deletionQueue from '../../src/services/uploads/deletion-queue.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 
@@ -186,10 +187,43 @@ describe('PATCH /me', () => {
       });
 
       expect(res.statusCode).toBe(409);
-      expect(res.json()).toMatchObject({ error: 'Conflict', code: CPF_IMMUTABLE_CODE });
+      const body = cpfImmutableErrorSchema.parse(res.json());
+      expect(body).toMatchObject({ error: 'Conflict', code: CPF_IMMUTABLE_CODE });
 
       const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
       expect(after.cpf).toBe(stored.cpf);
+    });
+
+    it('returns 409 without updating when the stored cpf cannot be decrypted', async () => {
+      // Corrupts a genuinely-encrypted value's auth tag by flipping one hex
+      // digit: same segment lengths as encryptField's real output (so
+      // isEncrypted() still reads it as encrypted), but GCM tag
+      // verification fails on decrypt, so decryptField's try/catch returns
+      // null. Writing this directly to the DB (bypassing the API) avoids
+      // mocking any shared module, which would race with other test files
+      // sharing this suite's single-fork process.
+      const { user } = await createUser({ verified: true });
+      const env = loadEnv();
+      const encrypted = encryptField('52998224725', env.FIELD_ENCRYPTION_KEY);
+      const parts = encrypted.split(':');
+      const tag = parts[3]!;
+      const corruptedTag = (tag[0] === '0' ? '1' : '0') + tag.slice(1);
+      const corrupted = `${parts[0]}:${parts[1]}:${parts[2]}:${corruptedTag}`;
+      await prisma.user.update({ where: { id: user.id }, data: { cpf: corrupted } });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: '/me',
+        headers: { authorization: bearer(env, user.id) },
+        payload: { cpf: '111.444.777-35' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const body = cpfImmutableErrorSchema.parse(res.json());
+      expect(body).toMatchObject({ error: 'Conflict', code: CPF_IMMUTABLE_CODE });
+
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(after.cpf).toBe(corrupted);
     });
 
     it('accepts resubmitting the same cpf, masked, as a no-op', async () => {

@@ -8,7 +8,11 @@ import {
   userDocumentSchema,
 } from '../documents.js';
 import {
+  buildCpfImmutableError,
   buildIncompleteProfileError,
+  cpfImmutableErrorSchema,
+  CPF_IMMUTABLE_CODE,
+  CPF_IMMUTABLE_STATUS,
   incompleteProfileErrorSchema,
   MISSING_FIELD_KEYS,
   profileStatusSchema,
@@ -60,13 +64,23 @@ describe('profile-status contracts', () => {
     });
     expect(parsed.latestDocument).toBeNull();
   });
+
+  it('builds a 409 cpf-immutable payload carrying both status and code', () => {
+    const payload = buildCpfImmutableError();
+    expect(payload.error).toBe('Conflict');
+    expect(payload.status).toBe(CPF_IMMUTABLE_STATUS);
+    expect(payload.code).toBe(CPF_IMMUTABLE_CODE);
+    expect(payload.message.length).toBeGreaterThan(0);
+    expect(cpfImmutableErrorSchema.parse(payload)).toEqual(payload);
+  });
 });
 
 describe('document contracts', () => {
   it('accepts an allowed image type within the size cap', () => {
-    expect(
-      documentUploadRequestSchema.parse({ contentType: 'image/jpeg', size: 1024 }),
-    ).toEqual({ contentType: 'image/jpeg', size: 1024 });
+    expect(documentUploadRequestSchema.parse({ contentType: 'image/jpeg', size: 1024 })).toEqual({
+      contentType: 'image/jpeg',
+      size: 1024,
+    });
   });
 
   it('rejects pdf', () => {
@@ -93,9 +107,9 @@ describe('document contracts', () => {
   });
 
   it('rejects an unknown document type', () => {
-    expect(
-      createDocumentBodySchema.safeParse({ type: 'passport', objectKey: 'x' }).success,
-    ).toBe(false);
+    expect(createDocumentBodySchema.safeParse({ type: 'passport', objectKey: 'x' }).success).toBe(
+      false,
+    );
   });
 
   it('allows a null fileUrl for a purged document', () => {

@@ -85,8 +85,11 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   PROFILE_GATE_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
-  // Private bucket for identity documents. Falls back to R2_BUCKET only so
-  // local dev and tests work; production MUST set a dedicated private bucket.
+  // Private bucket for identity documents. Required in ANY environment where
+  // R2 is configured — buildUploads (services/uploads/index.ts) refuses to
+  // boot otherwise. The fallback to R2_BUCKET in R2Uploads.bucketFor() never
+  // actually applies there; it only applies to DevUploads, i.e. local dev
+  // and tests with no real R2 configured.
   // .min(1) so an empty string is rejected rather than silently treated as
   // "unset" here while bucketFor()'s `??` would treat it as "present".
   R2_DOCUMENTS_BUCKET: z.string().min(1).optional(),

@@ -32,15 +32,24 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
   app.get('/documents', async (request, reply) => {
     const { status, cursor, limit } = listQuerySchema.parse(request.query);
 
+    let decodedCursor: { sentAt: Date; id: string } | null = null;
+    if (cursor) {
+      try {
+        decodedCursor = decodeCursor(cursor);
+      } catch {
+        return reply.status(400).send({ error: 'BadRequest', message: 'invalid cursor' });
+      }
+    }
+
     const where = status ? { status } : {};
     const rows = await prisma.userDocument.findMany({
-      where: cursor
+      where: decodedCursor
         ? {
             ...where,
-            OR: (() => {
-              const c = decodeCursor(cursor);
-              return [{ sentAt: { lt: c.sentAt } }, { sentAt: c.sentAt, id: { lt: c.id } }];
-            })(),
+            OR: [
+              { sentAt: { lt: decodedCursor.sentAt } },
+              { sentAt: decodedCursor.sentAt, id: { lt: decodedCursor.id } },
+            ],
           }
         : where,
       orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
@@ -101,7 +110,7 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       entityId: doc.id,
     });
 
-    const url = await app.uploads.buildSignedGetUrl(doc.objectKey, 60);
+    const url = await app.uploads.buildSignedGetUrl(doc.objectKey, app.env.DOCUMENT_URL_TTL_SECONDS);
     return reply.redirect(url, 302);
   });
 

@@ -25,9 +25,13 @@ export class R2Uploads implements Uploads {
     private readonly bucket: string,
     private readonly publicBase: string,
     private readonly ttlSeconds: number,
-    // Dedicated private bucket for identity documents. Falls back to the main
-    // bucket only so local dev and tests work — production MUST set it, since
-    // the main bucket is readable through R2_PUBLIC_BASE_URL.
+    // Dedicated private bucket for identity documents. Required in ANY
+    // environment where R2 is configured, since the main bucket is readable
+    // through R2_PUBLIC_BASE_URL — buildUploads (services/uploads/index.ts)
+    // refuses to boot without it. Every real call path goes through
+    // buildUploads, so the `?? this.bucket` fallback below never fires in
+    // production; it exists only so tests can construct R2Uploads directly
+    // without wiring a documents bucket.
     private readonly documentsBucket?: string,
   ) {
     this.client = new S3Client({

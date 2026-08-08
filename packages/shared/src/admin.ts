@@ -504,8 +504,13 @@ export const adminUserDetailSchema = z.object({
   city: z.string().nullable(),
   stateCode: z.string().nullable(),
   avatarUrl: z.string().nullable(),
-  hasCpf: z.boolean(),
-  hasPhone: z.boolean(),
+  // Defaulted rather than required: an older API build predating "perfil
+  // progressivo" would omit these fields entirely, and a hard-parsing caller
+  // (apps/admin/src/lib/admin-api.ts) must not throw on that response just
+  // because both apps auto-deploy from the same merge with no ordering
+  // guarantee between them.
+  hasCpf: z.boolean().default(false),
+  hasPhone: z.boolean().default(false),
   stats: z.object({
     totalTickets: z.number().int().nonnegative(),
     totalOrders: z.number().int().nonnegative(),
@@ -513,7 +518,7 @@ export const adminUserDetailSchema = z.object({
   recentTickets: z.array(adminUserDetailTicketSchema),
   recentOrders: z.array(adminUserDetailOrderSchema),
   groups: z.array(adminUserGroupSchema),
-  documents: z.array(adminUserDetailDocumentSchema),
+  documents: z.array(adminUserDetailDocumentSchema).default([]),
 });
 export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
 

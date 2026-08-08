@@ -63,7 +63,19 @@ export const anonymizeUser = async (
     ...supportAttachments.map((s) => s.attachmentObjectKey).filter((k): k is string => k !== null),
   );
 
-  // Queue R2 objects for retention-window sweep (best-effort, log failures)
+  // Queue R2 objects for retention-window sweep (best-effort, log failures).
+  // No retentionDays here, so queueObjectDeletion's 30-day default applies —
+  // deliberately, and deliberately different from the retention purge worker
+  // (retention.ts), which passes retentionDays: 0. That is not an
+  // inconsistency to "fix": the retention purge's 90/30/180-day windows
+  // already ARE the grace period for a document nobody acted on, so a second
+  // 30-day grace there would push the real R2 deletion a month past the
+  // window packages/shared/src/legal.ts publishes to data subjects. Here, on
+  // the erasure path, there is no such published window to protect — this
+  // loop enqueues every object type on the account (avatar, car photos, feed
+  // photos, support attachments, documents) uniformly, and 30 days is simply
+  // the platform-wide convention for "user might have made a mistake
+  // seconds ago" on every one of them. Documents get no special case.
   for (const key of objectKeys) {
     try {
       await queueObjectDeletion({

@@ -49,7 +49,7 @@ describe('admin document review', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('rejects staff — documents are organizer/admin only', async () => {
+  it('rejects staff — documents are admin only', async () => {
     const { user } = await createUser({ verified: true, email: 's@ccc.test', role: 'staff' });
     const res = await app.inject({
       method: 'GET',
@@ -57,6 +57,28 @@ describe('admin document review', () => {
       headers: { authorization: bearer(loadEnv(), user.id, 'staff') },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it('rejects an organizer — documents are admin only', async () => {
+    const { user } = await createUser({ verified: true, email: 'o@ccc.test', role: 'organizer' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/documents',
+      headers: { authorization: bearer(loadEnv(), user.id, 'organizer') },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('lets an admin reach the queue', async () => {
+    const { headers } = await asAdmin();
+    const res = await app.inject({ method: 'GET', url: '/admin/documents', headers });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 400 for a malformed cursor instead of 500', async () => {
+    const { headers } = await asAdmin();
+    const res = await app.inject({ method: 'GET', url: '/admin/documents?cursor=zzz', headers });
+    expect(res.statusCode).toBe(400);
   });
 
   it('lists the pending queue', async () => {

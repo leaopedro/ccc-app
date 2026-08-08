@@ -72,7 +72,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminGroupRoutes);
     await scope.register(adminPremiumCatalogRoutes);
     await scope.register(adminSubscriptionRoutes);
-    await scope.register(adminDocumentRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.
@@ -110,6 +109,28 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminUserMutationRoutes);
+  });
+
+  // Identity documents: admin-only (exposes PII — see the consent/DSR block
+  // above for the same rationale) with an isolated 30/min/admin bucket. An
+  // identity-document image is more sensitive than a consent record; each
+  // read already writes an audit row, but that is detection, not prevention.
+  // Separate register block so the bucket does NOT collide with any other.
+  // hook: 'preHandler' so the rate-limit keyGenerator runs AFTER auth
+  // populates `request.user` — without it the plugin runs on the earlier
+  // `onRequest` hook and falls through to an IP-shared bucket.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-documents:${auth.sub}` : `admin-documents-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminDocumentRoutes);
   });
 
   // XP adjustment: admin-only with isolated 30/min/admin bucket (§C7).

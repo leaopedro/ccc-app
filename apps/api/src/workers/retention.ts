@@ -125,6 +125,12 @@ async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise
 // dispute; 30 after rejection is enough for a resend.
 export const DOCUMENT_APPROVED_RETENTION_DAYS = 90;
 export const DOCUMENT_REJECTED_RETENTION_DAYS = 30;
+// Under optimistic auto-approval, `pending` (reviewedAt: null) is the steady
+// state, not a transient one — most documents are never reviewed at all.
+// Keyed on `sentAt`, not `reviewedAt`, since a pending row has no review.
+// 180 days is deliberately double the approved window, to leave room for
+// review before the file disappears out from under a reviewer.
+export const DOCUMENT_PENDING_RETENTION_DAYS = 180;
 
 // Matches purgeQueuedUploadDeletions's take: 500 neighbour. Caps how many
 // rows one tick processes (two writes each); a large first-run backlog just
@@ -146,6 +152,7 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
       OR: [
         { status: 'approved', reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) } },
         { status: 'rejected', reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) } },
+        { status: 'pending', sentAt: { lt: daysBefore(now, DOCUMENT_PENDING_RETENTION_DAYS) } },
       ],
     },
     select: { id: true, objectKey: true },

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { buildIncompleteProfileError, type ProfileScope } from '@ccc/shared/profile-status';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { loadProfileCompleteness, missingFor } from './completeness.js';
 
@@ -22,15 +22,22 @@ export const isInRollout = (userId: string, percent: number): boolean => {
  * Returns null when the request may proceed. Returns the already-sent reply
  * when it may not, so callers write:
  *
- *   const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+ *   const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
  *   if (gated) return gated;
  *
  * MUST be called before any stock reservation, Cart status transition, or
  * payment-provider call. A late block would leave a cart stuck in
  * `checking_out` with tiers reserved for a purchase that cannot complete.
+ *
+ * `request` is threaded through (rather than logging via `app.log`) so the
+ * log line carries the request id — the rollout runbook
+ * (docs/railway.md:170-176) watches `403 INCOMPLETE_PROFILE / checkout
+ * attempts > 40%` at every step of the ladder, and this is the only line
+ * that emits it.
  */
 export const enforceProfileGate = async (
   app: FastifyInstance,
+  request: FastifyRequest,
   userId: string,
   reply: FastifyReply,
   scope: ProfileScope,
@@ -46,5 +53,6 @@ export const enforceProfileGate = async (
   const missing = missingFor(completeness, scope);
   if (missing.length === 0) return null;
 
+  request.log.info({ userId, scope, missing }, 'profile gate blocked');
   return reply.status(403).send(buildIncompleteProfileError(missing));
 };

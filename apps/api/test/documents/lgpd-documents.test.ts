@@ -10,6 +10,7 @@ import { _collectUserDataForTest as collectUserData } from '../../src/services/d
 import { DevUploads } from '../../src/services/uploads/dev.js';
 import {
   DOCUMENT_APPROVED_RETENTION_DAYS,
+  DOCUMENT_PENDING_RETENTION_DAYS,
   DOCUMENT_REJECTED_RETENTION_DAYS,
   purgeExpiredDocumentFiles,
 } from '../../src/workers/retention.js';
@@ -138,6 +139,41 @@ describe('LGPD handling for cpf, phone and documents', () => {
       },
     });
     expect(await purgeExpiredDocumentFiles(new Date())).toBe(1);
+  });
+
+  it('purges a pending document file 180 days after it was sent', async () => {
+    const { user } = await createUser({ verified: true });
+    const objectKey = `identity-document/${user.id}/old-pending.jpg`;
+    const doc = await prisma.userDocument.create({
+      data: {
+        userId: user.id,
+        type: 'cnh',
+        objectKey,
+        sentAt: daysAgo(DOCUMENT_PENDING_RETENTION_DAYS + 1),
+      },
+    });
+
+    const purged = await purgeExpiredDocumentFiles(new Date());
+    expect(purged).toBe(1);
+
+    const row = await prisma.userDocument.findUniqueOrThrow({ where: { id: doc.id } });
+    expect(row.status).toBe('pending');
+    expect(row.fileDeletedAt).not.toBeNull();
+    expect(await prisma.uploadDeletionQueue.findUnique({ where: { objectKey } })).not.toBeNull();
+  });
+
+  it('does not purge a pending document sent 179 days ago', async () => {
+    const { user } = await createUser({ verified: true });
+    await prisma.userDocument.create({
+      data: {
+        userId: user.id,
+        type: 'cnh',
+        objectKey: `identity-document/${user.id}/not-old-enough.jpg`,
+        sentAt: daysAgo(DOCUMENT_PENDING_RETENTION_DAYS - 1),
+      },
+    });
+
+    expect(await purgeExpiredDocumentFiles(new Date())).toBe(0);
   });
 
   it('leaves a fresh decision and a pending document alone', async () => {

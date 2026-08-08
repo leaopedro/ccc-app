@@ -121,6 +121,7 @@ Os fornecedores que ainda não possuem SCC formalizados serão adequados antes d
 | Dados de erro (Sentry) | 90 dias na plataforma Sentry | Interesse legítimo |
 | Documento de identidade (aprovado) | 90 dias após a análise | Prevenção a fraude |
 | Documento de identidade (rejeitado) | 30 dias após a análise | Prevenção a fraude |
+| Documento de identidade (em análise) | 180 dias após o envio | Prevenção a fraude |
 
 Após os prazos acima, os dados são excluídos ou anonimizados de forma irreversível.`,
   },

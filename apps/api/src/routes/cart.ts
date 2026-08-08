@@ -470,7 +470,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
 
     // Gate before anything mutates: below this line the cart flips to
     // `checking_out` and tiers get reserved.
-    const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+    const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
     if (gated) return gated;
 
     const parsed = beginCheckoutRequestSchema.safeParse(request.body);

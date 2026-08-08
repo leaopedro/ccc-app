@@ -172,6 +172,8 @@ describe('profile cpf/phone and GET /me/profile-status', () => {
       url: '/me',
       headers: { authorization: bearer(loadEnv(), user.id) },
     });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('52998224725');
     expect(res.body).not.toContain('enc_v1:');
   });
 });

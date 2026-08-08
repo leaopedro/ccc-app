@@ -30,7 +30,7 @@ import { adminSupportRoutes } from './support.js';
 import { adminTicketRoutes } from './tickets.js';
 import { adminTierRoutes } from './tiers.js';
 import { adminUserGarageRoutes } from './user-garage.js';
-import { adminUserMutationRoutes, adminUserRoutes } from './users.js';
+import { adminUserDetailRoutes, adminUserMutationRoutes, adminUserRoutes } from './users.js';
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', app.authenticate);
@@ -131,6 +131,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminDocumentRoutes);
+  });
+
+  // User detail: hands plaintext CPF/phone to `admin` viewers (organizer
+  // viewers get null for both — see users.ts). Isolated 30/min/actor bucket,
+  // mirroring admin-documents/admin-user-mut: each read is audited, but that
+  // is detection, not prevention, so a stolen token must not be able to
+  // enumerate every member's CPF at network speed. Separate register block,
+  // scoped to just this one route, so the bucket does NOT collide with the
+  // shared organizer/admin block above (which still serves GET /users, the
+  // no-PII list, via adminUserRoutes).
+  // hook: 'preHandler' so the rate-limit keyGenerator runs AFTER auth
+  // populates `request.user` — without it the plugin runs on the earlier
+  // `onRequest` hook and falls through to an IP-shared bucket.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('organizer', 'admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-user-detail:${auth.sub}` : `admin-user-detail-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminUserDetailRoutes);
   });
 
   // XP adjustment: admin-only with isolated 30/min/admin bucket (§C7).

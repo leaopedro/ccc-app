@@ -42,9 +42,24 @@ const fmtPhone = (phone: string) => {
 // (only `admin` gets the full value from the API). Never collapse the
 // second case into "Não informado" — that would misreport an organizer's
 // view as if the member had never filled it.
-const fmtOptionalPii = (has: boolean, value: string | null, format: (v: string) => string) => {
+//
+// For an `admin` viewer specifically, `hasX === true` with `x === null` can
+// only mean decryptField failed on unreadable ciphertext (a data-integrity
+// problem, e.g. a rotated or lost FIELD_ENCRYPTION_KEY) — an admin always
+// gets the real value otherwise, so "visível apenas para admin" would be
+// nonsense read back to the one role it claims to be visible for.
+const fmtOptionalPii = (
+  has: boolean,
+  value: string | null,
+  format: (v: string) => string,
+  isAdminViewer: boolean,
+) => {
   if (!has) return 'Não informado';
-  if (value === null) return 'Cadastrado, visível apenas para admin';
+  if (value === null) {
+    return isAdminViewer
+      ? 'Erro ao decifrar valor. Verifique a chave de criptografia.'
+      : 'Cadastrado, visível apenas para admin';
+  }
   return format(value);
 };
 
@@ -179,7 +194,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
-      {/* Dados da conta (view only, exceto o documento abaixo) */}
+      {/* Account data card (view only, except the document panel below) */}
       <div className="rounded border border-[color:var(--color-border)] p-4">
         <h2 className="mb-3 text-lg font-semibold">Dados da conta</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -238,17 +253,21 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           </div>
           <div>
             <div className="text-xs text-[color:var(--color-muted)]">CPF</div>
-            <div className="text-sm">{fmtOptionalPii(user.hasCpf, user.cpf, fmtCpf)}</div>
+            <div className="text-sm">
+              {fmtOptionalPii(user.hasCpf, user.cpf, fmtCpf, me.role === 'admin')}
+            </div>
           </div>
           <div>
             <div className="text-xs text-[color:var(--color-muted)]">Telefone</div>
-            <div className="text-sm">{fmtOptionalPii(user.hasPhone, user.phone, fmtPhone)}</div>
+            <div className="text-sm">
+              {fmtOptionalPii(user.hasPhone, user.phone, fmtPhone, me.role === 'admin')}
+            </div>
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <div className="text-xs text-[color:var(--color-muted)]">Bio</div>
-            {/* `|| ` on purpose, not `??`: bio defaults to an empty string
-                (not null) for most accounts, and an empty string must read
-                as "not filled in" the same as null does. */}
+            {/* `|| ` on purpose, not `??`: bio is nullable with no default in
+                the schema (NULL for any account that never set one), and an
+                empty string must read as "not filled in" the same as null does. */}
             <div className="text-sm">{user.bio || 'Não informado'}</div>
           </div>
         </div>

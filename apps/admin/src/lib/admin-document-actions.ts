@@ -14,11 +14,30 @@ export type DocumentReviewResult =
     }
   | { ok: false; error: string };
 
+// Next App Router signals navigation by throwing an error with
+// `digest: 'NEXT_REDIRECT;...'`. Any try/catch around apiFetch (which calls
+// redirect('/login?reauth=1') on a failed refresh in lib/api.ts) must rethrow
+// that error or the framework never performs the redirect — see
+// node_modules/next/dist/docs/01-app/02-guides/redirecting.md ("redirect
+// throws an error so it should be called outside the try block"). Same
+// helper as apps/admin/app/premium/page.tsx, duplicated locally since it
+// isn't exported from a shared module.
+const isRedirectError = (e: unknown): boolean =>
+  typeof e === 'object' &&
+  e !== null &&
+  'digest' in e &&
+  typeof (e as { digest: unknown }).digest === 'string' &&
+  (e as { digest: string }).digest.startsWith('NEXT_REDIRECT');
+
+// Never echo err.message: it can be the API's raw English text (e.g.
+// "insufficient role" from requireRole, or "Bad Request" from res.statusText
+// when a ValidationError body carries no message at all). Always fall back
+// to fixed PT-BR copy instead.
 const errFromApi = (err: unknown, fallback: string): string => {
   if (err instanceof ApiError) {
     if (err.status === 404) return 'Documento não encontrado.';
     if (err.status === 409) return 'Documento já foi revisado.';
-    return err.message || fallback;
+    return fallback;
   }
   return fallback;
 };
@@ -32,6 +51,7 @@ export const approveAdminDocumentAction = async (
     revalidatePath(`/users/${userId}`);
     return { ok: true, status: 'approved', reviewedAt: data.reviewedAt, rejectionReason: null };
   } catch (err) {
+    if (isRedirectError(err)) throw err;
     return { ok: false, error: errFromApi(err, 'Falha ao aprovar documento.') };
   }
 };
@@ -54,6 +74,7 @@ export const rejectAdminDocumentAction = async (
       rejectionReason: data.rejectionReason ?? trimmed,
     };
   } catch (err) {
+    if (isRedirectError(err)) throw err;
     return { ok: false, error: errFromApi(err, 'Falha ao rejeitar documento.') };
   }
 };
@@ -70,10 +91,11 @@ export const getAdminDocumentFileUrlAction = async (
     const url = await getAdminDocumentFileUrl(documentId);
     return { ok: true, url };
   } catch (err) {
+    if (isRedirectError(err)) throw err;
     if (err instanceof ApiError) {
       if (err.status === 404) return { ok: false, error: 'Documento não encontrado.' };
       if (err.status === 410) return { ok: false, error: 'Arquivo não está mais disponível.' };
-      return { ok: false, error: err.message || 'Falha ao obter arquivo.' };
+      return { ok: false, error: 'Falha ao obter arquivo.' };
     }
     return { ok: false, error: 'Erro inesperado. Tente novamente.' };
   }

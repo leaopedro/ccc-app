@@ -87,7 +87,15 @@ export const adminUserRoutes: FastifyPluginAsync = async (app) => {
       nextCursor: hasMore && last ? encodeCursor(last) : null,
     });
   });
+};
 
+// Split out from adminUserRoutes so it can carry its own isolated rate-limit
+// bucket in admin/index.ts (same reasoning as adminUserMutationRoutes below):
+// this route hands back plaintext CPF/phone to `admin` viewers, so it needs
+// the admin-documents-style 30/min/actor limiter without throttling the
+// unrelated GET /users list above or any other route sharing that scope.
+// eslint-disable-next-line @typescript-eslint/require-await
+export const adminUserDetailRoutes: FastifyPluginAsync = async (app) => {
   app.get('/users/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const actor = requireUser(request);

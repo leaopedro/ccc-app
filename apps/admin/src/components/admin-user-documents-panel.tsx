@@ -2,7 +2,7 @@
 
 import type { AdminUserDetailDocument } from '@ccc/shared/admin';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 
 import {
   approveAdminDocumentAction,
@@ -33,6 +33,11 @@ interface PanelProps {
 }
 
 export function AdminUserDocumentsPanel({ userId, documents, isAdmin }: PanelProps) {
+  // The whole surface is admin-only: /admin/documents/* is requireRole('admin')
+  // on the API, so an organizer's "Ver arquivo" click would just 403, and
+  // showing document type/status/rejection reason to an organizer contradicts
+  // the PII-gating decision already made for the panel below it.
+  if (!isAdmin) return null;
   return (
     <div>
       <h2 className="mb-2 text-lg font-semibold">Documento de identidade</h2>
@@ -40,8 +45,8 @@ export function AdminUserDocumentsPanel({ userId, documents, isAdmin }: PanelPro
         <p className="text-sm text-[color:var(--color-muted)]">Nenhum documento enviado.</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {documents.map((doc) => (
-            <DocumentCard key={doc.id} userId={userId} document={doc} isAdmin={isAdmin} />
+          {documents.map((d) => (
+            <DocumentCard key={d.id} userId={userId} doc={d} isAdmin={isAdmin} />
           ))}
         </div>
       )}
@@ -51,49 +56,77 @@ export function AdminUserDocumentsPanel({ userId, documents, isAdmin }: PanelPro
 
 function DocumentCard({
   userId,
-  document,
+  doc,
   isAdmin,
 }: {
   userId: string;
-  document: AdminUserDetailDocument;
+  doc: AdminUserDetailDocument;
   isAdmin: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [status, setStatus] = useState(document.status);
-  const [reviewedAt, setReviewedAt] = useState(document.reviewedAt);
-  const [rejectionReason, setRejectionReason] = useState(document.rejectionReason);
+  const [status, setStatus] = useState(doc.status);
+  const [reviewedAt, setReviewedAt] = useState(doc.reviewedAt);
+  const [rejectionReason, setRejectionReason] = useState(doc.rejectionReason);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
+  // React's isPending flips asynchronously, so two clicks fired back-to-back
+  // (double-click) can both pass the `disabled={isPending}` check before the
+  // first re-render lands. This ref is set synchronously, closing that gap:
+  // the second click bails out before ever calling the server action, so we
+  // never race the API's guarded updateMany into a spurious 409.
+  const submittingRef = useRef(false);
 
   const handleViewFile = () => {
     setFileError(null);
     setIsLoadingFile(true);
+    // window.open must be called synchronously, inside the click's user-gesture
+    // task, or the browser silently blocks the popup: a Server Action always
+    // round-trips over the network (Next.js docs, mutating-data.md: "You can
+    // call them from the client through a network request"), so by the time
+    // the awaited result below comes back we are no longer inside that
+    // gesture window. Open a blank tab now and point it at the file URL once
+    // we have it. `tab.opener = null` replaces the `noopener` feature string
+    // here, since passing `noopener` to window.open makes it return null,
+    // which would leave nothing to navigate later.
+    const tab = window.open();
+    if (tab) tab.opener = null;
     void (async () => {
-      const result = await getAdminDocumentFileUrlAction(document.id);
+      const result = await getAdminDocumentFileUrlAction(doc.id);
       setIsLoadingFile(false);
       if (result.ok) {
-        window.open(result.url, '_blank', 'noopener,noreferrer');
+        if (tab) {
+          tab.location.href = result.url;
+        } else {
+          setFileError('Não foi possível abrir uma nova aba. Verifique o bloqueador de pop-ups.');
+        }
       } else {
+        tab?.close();
         setFileError(result.error);
       }
     })();
   };
 
   const handleApprove = () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     startTransition(async () => {
-      const result = await approveAdminDocumentAction(userId, document.id);
-      if (result.ok) {
-        setStatus(result.status);
-        setReviewedAt(result.reviewedAt);
-        setRejectionReason(result.rejectionReason);
-        router.refresh();
-      } else {
-        setError(result.error);
+      try {
+        const result = await approveAdminDocumentAction(userId, doc.id);
+        if (result.ok) {
+          setStatus(result.status);
+          setReviewedAt(result.reviewedAt);
+          setRejectionReason(result.rejectionReason);
+          router.refresh();
+        } else {
+          setError(result.error);
+        }
+      } finally {
+        submittingRef.current = false;
       }
     });
   };
@@ -103,18 +136,24 @@ function DocumentCard({
       setError('Informe o motivo da rejeição.');
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     startTransition(async () => {
-      const result = await rejectAdminDocumentAction(userId, document.id, reason);
-      if (result.ok) {
-        setStatus(result.status);
-        setReviewedAt(result.reviewedAt);
-        setRejectionReason(result.rejectionReason);
-        setRejecting(false);
-        setReason('');
-        router.refresh();
-      } else {
-        setError(result.error);
+      try {
+        const result = await rejectAdminDocumentAction(userId, doc.id, reason);
+        if (result.ok) {
+          setStatus(result.status);
+          setReviewedAt(result.reviewedAt);
+          setRejectionReason(result.rejectionReason);
+          setRejecting(false);
+          setReason('');
+          router.refresh();
+        } else {
+          setError(result.error);
+        }
+      } finally {
+        submittingRef.current = false;
       }
     });
   };
@@ -123,9 +162,7 @@ function DocumentCard({
     <div className="rounded border border-[color:var(--color-border)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">
-            {documentTypeLabel[document.type] ?? document.type}
-          </span>
+          <span className="text-sm font-semibold">{documentTypeLabel[doc.type] ?? doc.type}</span>
           <span className="rounded bg-[color:var(--color-border)] px-2 py-0.5 text-xs font-semibold">
             {documentStatusLabel[status] ?? status}
           </span>
@@ -143,7 +180,7 @@ function DocumentCard({
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <div className="text-xs text-[color:var(--color-muted)]">Enviado em</div>
-          <div className="text-sm">{fmtDate(document.sentAt)}</div>
+          <div className="text-sm">{fmtDate(doc.sentAt)}</div>
         </div>
         <div>
           <div className="text-xs text-[color:var(--color-muted)]">Revisado em</div>

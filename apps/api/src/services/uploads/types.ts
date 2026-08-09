@@ -5,7 +5,10 @@ export type UploadKind =
   | 'feed_photo'
   | 'product_photo'
   | 'support_attachment'
-  | 'garage_cover';
+  | 'garage_cover'
+  | 'box_item'
+  | 'partner_logo'
+  | 'partner_module';
 
 // Maps a UploadKind to its R2 path prefix. Identity for pre-existing kinds
 // that already use the snake_case kind id verbatim in their R2 paths;
@@ -20,6 +23,9 @@ export const UPLOAD_KIND_PATH_PREFIX: Record<UploadKind, string> = {
   product_photo: 'product_photo',
   support_attachment: 'support_attachment',
   garage_cover: 'garage-cover',
+  box_item: 'box_item',
+  partner_logo: 'partner_logo',
+  partner_module: 'partner_module',
 };
 
 export type PresignInput = {

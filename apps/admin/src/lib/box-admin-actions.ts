@@ -3,6 +3,7 @@
 import {
   adminBoxCatalogItemCreateSchema,
   adminBoxCatalogItemUpdateSchema,
+  adminBoxSettingsUpdateSchema,
   adminPartnerCreateSchema,
   adminPartnerModuleCreateSchema,
   adminPartnerModuleUpdateSchema,
@@ -21,6 +22,7 @@ import {
   updateBoxCatalogItem,
   updateBoxPartner,
   updateBoxPartnerModule,
+  updateBoxSettings,
 } from './admin-api';
 import { ApiError, apiFetch } from './api';
 
@@ -258,5 +260,43 @@ export const deletePartnerModuleAction = async (
     return { error: 'Erro ao desativar modulo.' };
   }
   revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+// --- Settings ---
+
+const SETTINGS_PATH = '/box/config';
+
+// CEP ranges arrive as newline-separated "from:to" lines from a textarea.
+const parseCepRanges = (raw: string | undefined): { from: string; to: string }[] =>
+  (raw ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [from, to] = line.split(':');
+      return { from: (from ?? '').trim(), to: (to ?? '').trim() };
+    });
+
+export const updateBoxSettingsAction = async (
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const parsed = adminBoxSettingsUpdateSchema.safeParse({
+    boxEnabled: bool(fd, 'boxEnabled'),
+    cutoffDaysBeforeRenewal: num(fd, 'cutoffDaysBeforeRenewal'),
+    headerTitle: str(fd, 'headerTitle') ?? null,
+    headerSubtitle: str(fd, 'headerSubtitle') ?? null,
+    shippingFeeCents: num(fd, 'shippingFeeCents'),
+    freeShippingCepRanges: parseCepRanges(str(fd, 'freeShippingCepRanges')),
+  });
+  if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
+  try {
+    await updateBoxSettings(parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao salvar configuracoes.' };
+  }
+  revalidatePath(SETTINGS_PATH);
   return { error: null };
 };

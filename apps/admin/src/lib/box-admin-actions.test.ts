@@ -25,6 +25,7 @@ vi.mock('./admin-api', () => ({
 
 import { createBoxCatalogItemAction } from './box-admin-actions';
 import { createPartnerAction, createPartnerModuleAction } from './box-admin-actions';
+import { updateBoxSettingsAction } from './box-admin-actions';
 
 describe('box-admin-actions catalog', () => {
   beforeEach(() => {
@@ -90,5 +91,40 @@ describe('box-admin-actions partners', () => {
       'p1',
       expect.objectContaining({ name: 'Kit', priceCents: 9900 }),
     );
+  });
+});
+
+describe('box-admin-actions settings', () => {
+  beforeEach(() => {
+    updateBoxSettings.mockReset().mockResolvedValue({});
+  });
+
+  it('parses cutoff, fee, and cep ranges from form data', async () => {
+    const fd = new FormData();
+    fd.set('boxEnabled', 'on');
+    fd.set('cutoffDaysBeforeRenewal', '7');
+    fd.set('shippingFeeCents', '1990');
+    fd.set('freeShippingCepRanges', '80000-000:83800-999\n81000-000:81999-999');
+    const result = await updateBoxSettingsAction({ error: null }, fd);
+    expect(result).toEqual({ error: null });
+    expect(updateBoxSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boxEnabled: true,
+        cutoffDaysBeforeRenewal: 7,
+        shippingFeeCents: 1990,
+        freeShippingCepRanges: [
+          { from: '80000-000', to: '83800-999' },
+          { from: '81000-000', to: '81999-999' },
+        ],
+      }),
+    );
+  });
+
+  it('rejects a malformed cep line', async () => {
+    const fd = new FormData();
+    fd.set('freeShippingCepRanges', 'bad-line');
+    const result = await updateBoxSettingsAction({ error: null }, fd);
+    expect(result.error).not.toBeNull();
+    expect(updateBoxSettings).not.toHaveBeenCalled();
   });
 });

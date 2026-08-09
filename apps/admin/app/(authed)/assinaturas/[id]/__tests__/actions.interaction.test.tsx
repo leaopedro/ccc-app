@@ -5,14 +5,21 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AssinaturaActionResult } from '~/lib/assinaturas-actions';
+
 const refresh = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 
-const cancelSubscriptionAction = vi.fn();
-const resumeSubscriptionAction = vi.fn();
-const pauseSubscriptionAction = vi.fn();
-const changePlanAction = vi.fn();
-const detachAddonAction = vi.fn();
+// Tipar os mocks com a assinatura real evita que os wrappers do factory
+// devolvam `any` (regra no-unsafe-return) e mantem os mockResolvedValue
+// presos ao contrato das actions.
+type ActionMock = (...args: unknown[]) => Promise<AssinaturaActionResult>;
+
+const cancelSubscriptionAction = vi.fn<ActionMock>();
+const resumeSubscriptionAction = vi.fn<ActionMock>();
+const pauseSubscriptionAction = vi.fn<ActionMock>();
+const changePlanAction = vi.fn<ActionMock>();
+const detachAddonAction = vi.fn<ActionMock>();
 
 vi.mock('~/lib/assinaturas-actions', () => ({
   cancelSubscriptionAction: (...a: unknown[]) => cancelSubscriptionAction(...a),
@@ -47,6 +54,7 @@ const click = async (testId: string) => {
   if (!el) throw new Error(`missing ${testId}`);
   await act(async () => {
     el.click();
+    await Promise.resolve();
   });
 };
 
@@ -55,6 +63,7 @@ describe('StatusActions', () => {
     cancelSubscriptionAction.mockResolvedValue({ ok: true, pending: true });
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={true} status="active" />);
+      await Promise.resolve();
     });
 
     await click('assinaturas-acao-cancelar');
@@ -68,6 +77,7 @@ describe('StatusActions', () => {
     cancelSubscriptionAction.mockResolvedValue({ ok: false, error: 'assinatura Apple' });
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={true} status="active" />);
+      await Promise.resolve();
     });
 
     await click('assinaturas-acao-cancelar');
@@ -79,6 +89,7 @@ describe('StatusActions', () => {
   it('desabilita tudo quando mutable e falso', async () => {
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={false} status="active" />);
+      await Promise.resolve();
     });
     // status="active" renders both Cancelar and Pausar (Retomar is not
     // applicable for this status). Assert every rendered action button is
@@ -97,6 +108,7 @@ describe('StatusActions', () => {
     resumeSubscriptionAction.mockResolvedValue({ ok: true, pending: true });
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={true} status="cancel_scheduled" />);
+      await Promise.resolve();
     });
 
     expect(container.querySelector('[data-testid="assinaturas-acao-cancelar"]')).toBeNull();
@@ -107,6 +119,7 @@ describe('StatusActions', () => {
   it('mostra retomar quando paused e nao mostra pausar', async () => {
     await act(async () => {
       root.render(<StatusActions membershipId="mem-1" mutable={true} status="paused" />);
+      await Promise.resolve();
     });
     expect(container.querySelector('[data-testid="assinaturas-acao-retomar"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="assinaturas-acao-pausar"]')).toBeNull();
@@ -126,6 +139,7 @@ describe('PlanActions', () => {
           currentCadence="monthly"
         />,
       );
+      await Promise.resolve();
     });
 
     const select = container.querySelector<HTMLSelectElement>(
@@ -134,6 +148,7 @@ describe('PlanActions', () => {
     await act(async () => {
       select!.value = 'silver';
       select!.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
     });
 
     await click('assinaturas-acao-trocar-plano');
@@ -152,6 +167,7 @@ describe('PlanActions', () => {
           currentCadence="monthly"
         />,
       );
+      await Promise.resolve();
     });
     expect(container.textContent).toContain('próxima fatura');
   });
@@ -167,6 +183,7 @@ describe('PlanActions', () => {
           currentCadence="monthly"
         />,
       );
+      await Promise.resolve();
     });
 
     const tierSelect = container.querySelector<HTMLSelectElement>(
@@ -197,6 +214,7 @@ describe('AddonsPanel', () => {
           moduleOptions={[{ key: 'valet', name: 'Valet' }]}
         />,
       );
+      await Promise.resolve();
     });
 
     const select = container.querySelector<HTMLSelectElement>(

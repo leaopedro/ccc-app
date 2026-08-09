@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useCallback, useState, useTransition } from 'react';
 
 import type { AssinaturaActionResult } from '~/lib/assinaturas-actions';
 

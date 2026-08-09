@@ -1,3 +1,4 @@
+import type { AdminPremiumCatalogResponse } from '@ccc/shared/admin';
 import type { AdminSubscriptionDetail } from '@ccc/shared/admin-subscription';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,12 +22,12 @@ vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
 }));
 
-const fetchAdminSubscription = vi.fn();
+const fetchAdminSubscription = vi.fn<(id: string) => Promise<AdminSubscriptionDetail>>();
 vi.mock('~/lib/assinaturas-actions', () => ({
   fetchAdminSubscription: (id: string) => fetchAdminSubscription(id),
 }));
 
-const getAdminPremiumCatalog = vi.fn();
+const getAdminPremiumCatalog = vi.fn<() => Promise<AdminPremiumCatalogResponse>>();
 vi.mock('~/lib/admin-api', () => ({
   getAdminPremiumCatalog: () => getAdminPremiumCatalog(),
 }));

@@ -77,6 +77,7 @@ const serializePlan = (plan: PlanWithRelations) => ({
   description: plan.description,
   active: plan.active,
   sortOrder: plan.sortOrder,
+  monthlyBoxBudgetCents: plan.monthlyBoxBudgetCents,
   prices: plan.prices.map(serializePrice),
   benefits: plan.benefits.map(serializeBenefit),
   createdAt: plan.createdAt.toISOString(),
@@ -100,7 +101,6 @@ const serializeModule = (m: DbPremiumAddonModule) => ({
   updatedAt: m.updatedAt.toISOString(),
 });
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
   // Full editor payload: every plan (incl. inactive) with all prices +
   // benefits, plus every addon module (incl. inactive).
@@ -133,6 +133,7 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
           description: input.description ?? null,
           active: input.active,
           sortOrder: input.sortOrder ?? 0,
+          monthlyBoxBudgetCents: input.monthlyBoxBudgetCents ?? 0,
         },
         include: PLAN_INCLUDE,
       });
@@ -163,6 +164,8 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (input.description !== undefined) data.description = input.description;
     if (input.active !== undefined) data.active = input.active;
     if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
+    if (input.monthlyBoxBudgetCents !== undefined)
+      data.monthlyBoxBudgetCents = input.monthlyBoxBudgetCents;
 
     const updated = await prisma.premiumPlan.update({
       where: { id },

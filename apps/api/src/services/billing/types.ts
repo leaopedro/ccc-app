@@ -57,6 +57,10 @@ export type BillingAddonLine = {
   addonKey: string;
   providerItemRef: string | null;
   monthlyDeltaCents: number;
+  /** Snapshot do repasse ao fornecedor, igual ao que attachAddon grava. */
+  payoutAmountCents: number;
+  /** Snapshot do fornecedor. Null = catalogo ainda sem fornecedor cadastrado. */
+  vendorName: string | null;
   quotaPerCycle: number;
   quotaUnit: PremiumAddonUnit;
   currency: string;

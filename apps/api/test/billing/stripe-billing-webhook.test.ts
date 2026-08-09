@@ -709,6 +709,10 @@ describe('multi-line invoice resolution', () => {
         name: 'Detailing',
         description: 'Lavagem detalhada',
         monthlyDeltaCents: 15000,
+        // Nao-default de proposito: com 0/null o teste de snapshot abaixo
+        // passaria mesmo se o webhook nunca copiasse estes campos.
+        payoutAmountCents: 9000,
+        vendorName: 'Lava Rapido X',
         currency: 'BRL',
         quotaPerCycle: 3,
         quotaUnit: 'access',
@@ -1288,6 +1292,11 @@ describe('multi-line invoice resolution', () => {
     expect(addon.providerItemRef).toBe('si_addon_2');
     expect(addon.monthlyDeltaCents).toBe(15000);
     expect(addon.quotaPerCycle).toBe(3);
+    // Snapshot de repasse e fornecedor, igual ao que attachAddon grava. Sem
+    // isso a tela de admin mostra repasse 0 e fornecedor vazio para um modulo
+    // que a Stripe criou junto com a assinatura.
+    expect(addon.payoutAmountCents).toBe(9000);
+    expect(addon.vendorName).toBe('Lava Rapido X');
 
     const usage = await prisma.premiumAddonUsage.findFirstOrThrow({
       where: { membershipAddonId: addon.id },

@@ -1,22 +1,29 @@
 'use client';
 
 import {
+  ADMIN_SUBSCRIPTION_ALLOWED_STATUS,
+  type AdminSubscriptionStatus,
+} from '@ccc/shared/admin-subscription';
+
+import { ActionToast, useActionToast } from './use-action-toast';
+
+import {
   cancelSubscriptionAction,
   pauseSubscriptionAction,
   resumeSubscriptionAction,
 } from '~/lib/assinaturas-actions';
 
-import { ActionToast, useActionToast } from './use-action-toast';
-
 type Props = {
   membershipId: string;
   mutable: boolean;
-  status: 'trialing' | 'active' | 'past_due' | 'cancel_scheduled' | 'expired' | 'paused';
+  status: AdminSubscriptionStatus;
 };
 
-const CANCELABLE = ['active', 'past_due', 'trialing'];
-const RESUMABLE = ['cancel_scheduled', 'paused'];
-const PAUSABLE = ['active', 'past_due', 'trialing'];
+const {
+  cancel: CANCELABLE,
+  resume: RESUMABLE,
+  pause: PAUSABLE,
+} = ADMIN_SUBSCRIPTION_ALLOWED_STATUS;
 
 const btn =
   'rounded border border-[color:var(--color-border)] px-3 py-1.5 text-sm disabled:opacity-40';

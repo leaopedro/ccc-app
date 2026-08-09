@@ -1,12 +1,16 @@
 'use client';
 
+import {
+  ADMIN_SUBSCRIPTION_ALLOWED_STATUS,
+  type AdminSubscriptionStatus,
+} from '@ccc/shared/admin-subscription';
 import { useState } from 'react';
-
-import { attachAddonAction, detachAddonAction } from '~/lib/assinaturas-actions';
 
 import { ActionToast, useActionToast } from './use-action-toast';
 
-type Status = 'trialing' | 'active' | 'past_due' | 'cancel_scheduled' | 'expired' | 'paused';
+import { attachAddonAction, detachAddonAction } from '~/lib/assinaturas-actions';
+
+type Status = AdminSubscriptionStatus;
 
 type Props = {
   membershipId: string;
@@ -29,13 +33,6 @@ type Props = {
   moduleOptions?: Array<{ key: string; name: string }>;
 };
 
-/**
- * Espelha ALLOWED_STATUS.addon em apps/api/src/routes/admin/subscriptions.ts.
- * As duas listas precisam mudar juntas: divergir aqui deixa o botão
- * habilitado numa ação que a API vai recusar com 409.
- */
-const ALLOWED_STATUS: Status[] = ['active', 'past_due', 'cancel_scheduled'];
-
 export function AddonsPanel({
   membershipId,
   mutable,
@@ -45,7 +42,7 @@ export function AddonsPanel({
   moduleOptions = [],
 }: Props) {
   const { pending, toast, run } = useActionToast();
-  const statusAllowed = ALLOWED_STATUS.includes(status);
+  const statusAllowed = ADMIN_SUBSCRIPTION_ALLOWED_STATUS.addon.includes(status);
   const controlsDisabled = !mutable || !statusAllowed || pending;
   const available = moduleOptions.filter((m) => !attachedKeys.includes(m.key));
   const removable = removableKeys ?? attachedKeys;

@@ -24,6 +24,32 @@ const membershipStatusSchema = z.enum([
 const addonStatusSchema = z.enum(['active', 'cancel_scheduled', 'cancelled']);
 const quotaUnitSchema = z.enum(['access', 'hours']);
 
+export type AdminSubscriptionStatus = z.infer<typeof membershipStatusSchema>;
+
+/**
+ * Status aceitos POR ACAO no controle admin de assinatura.
+ *
+ * Mora aqui para ser fonte unica: a API recusa com 409 fora da lista e o admin
+ * desabilita o controle com a mesma lista. Enquanto eram duas copias, divergir
+ * deixava o botao habilitado numa acao que a API ia recusar.
+ *
+ * Separadas por acao de proposito. Nao existe um conceito unico de "assinatura
+ * viva" que sirva para todas: resume precisa aceitar `paused`, que nao esta na
+ * lista LIVE_STATUSES usada pela superficie do membro.
+ */
+export const ADMIN_SUBSCRIPTION_ALLOWED_STATUS: Record<
+  'plan' | 'addon' | 'cancel' | 'resume' | 'pause',
+  ReadonlyArray<AdminSubscriptionStatus>
+> = {
+  plan: ['active', 'past_due', 'cancel_scheduled'],
+  addon: ['active', 'past_due', 'cancel_scheduled'],
+  cancel: ['active', 'past_due', 'trialing'],
+  resume: ['cancel_scheduled', 'paused'],
+  pause: ['active', 'past_due', 'trialing'],
+};
+
+export type AdminSubscriptionAction = keyof typeof ADMIN_SUBSCRIPTION_ALLOWED_STATUS;
+
 export const adminSubscriptionAddonCycleSchema = z.object({
   cycleStart: z.string().datetime(),
   cycleEnd: z.string().datetime(),

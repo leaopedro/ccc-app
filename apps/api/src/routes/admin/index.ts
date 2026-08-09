@@ -134,10 +134,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // User detail: hands plaintext CPF/phone to `admin` viewers (organizer
-  // viewers get null for both — see users.ts). Isolated 30/min/actor bucket,
-  // mirroring admin-documents/admin-user-mut: each read is audited, but that
-  // is detection, not prevention, so a stolen token must not be able to
-  // enumerate every member's CPF at network speed. Separate register block,
+  // viewers get null for both — see users.ts). Isolated 120/min/actor bucket,
+  // deliberately looser than admin-documents/admin-user-mut/admin-xp-adj
+  // (30/min): those guard mutations, this is a read that fires on every
+  // render of this page, and one document approval already costs three
+  // renders via revalidatePath + router.refresh(). An admin working a
+  // support queue can plausibly open 30 member pages in a minute, so 30/min
+  // was tripping on normal use. At 2 reads/sec (120/min) an admin never
+  // notices it, while bulk enumeration still trips it; the real deterrent
+  // on this route is the `user.pii_viewed` audit row plus the 15-minute
+  // access-token lifetime, not this limiter. Separate register block,
   // scoped to just this one route, so the bucket does NOT collide with the
   // shared organizer/admin block above (which still serves GET /users, the
   // no-PII list, via adminUserRoutes).
@@ -147,7 +153,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   await app.register(async (scope) => {
     scope.addHook('preHandler', scope.requireRole('organizer', 'admin'));
     await scope.register(rateLimit, {
-      max: 30,
+      max: 120,
       timeWindow: '1 minute',
       hook: 'preHandler',
       keyGenerator: (req) => {

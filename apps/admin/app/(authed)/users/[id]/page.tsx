@@ -98,6 +98,23 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     user = await getAdminUser(id);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) notFound();
+    // Expected error, not a crash: the isolated read-rate bucket on this
+    // route (120/min/actor, see apps/api/src/routes/admin/index.ts) tripped.
+    // Degrade this one card instead of letting the 429 propagate and take
+    // down the whole render — see Next's Server Components guidance on
+    // expected errors (node_modules/next/dist/docs/01-app/01-getting-started/10-error-handling.md).
+    if (err instanceof ApiError && err.status === 429) {
+      return (
+        <section className="flex flex-col gap-6">
+          <Link href="/users" className="text-sm text-[color:var(--color-muted)] hover:underline">
+            ← Usuários
+          </Link>
+          <div className="rounded border border-[color:var(--color-border)] p-4 text-sm">
+            Limite de leituras atingido. Aguarde um minuto e tente novamente.
+          </div>
+        </section>
+      );
+    }
     throw err;
   }
 

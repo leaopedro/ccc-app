@@ -103,6 +103,35 @@ Para cada box com cutoff vencido:
 - Item sem estoque no momento da reserva é derrubado da caixa (LIFO), com aviso.
 - `stockPerCycle` decrementa na reserva; libera no corte/cancelamento.
 
+## Handoff de design
+
+Referência de UI em `docs/design/box-builder/` (15 telas mobile alta fidelidade,
+4 wireframes de admin, componentes, microcopy PT-BR, tokens, animações).
+
+## Questões do handoff (Q1-Q9) — abertas
+
+Levantadas pelo agente de design. Algumas afetam schema (bloqueiam Fase 1).
+
+- Q1 Frete (schema): R6 recomendou incluso mas não confirmado. Tela 05 mostra
+  "Frete: Grátis". Se cobrado, entra no `chargeCents` e precisa de campo.
+- Q2 Aviso do corte: push/e-mail no momento do corte e aviso preventivo 24h
+  antes com extras não pagos. Não definido. Afeta Fase 5.
+- Q3 Cancelar Pix pendente: cancelar volta o box pra `open` (libera reserva,
+  edita) ou só cancela o Order mantendo travado? Afeta máquina de estados.
+- Q4 Item derrubado por falta de estoque no confirm: usuário revisa antes de
+  pagar? Sugestão: confirm recalcula, mostra o que caiu, pede reconfirmação.
+- Q5 Estoque visível no catálogo: mostrar "últimas unidades" com estoque baixo
+  ou só "Sem estoque" em zero? Telas assumem só o segundo.
+- Q6 Rastreio (schema): timeline mostra código de rastreio; Order não tem esse
+  campo. Se não existir, tela 09 fica só com 3 marcos.
+- Q7 Box budget-only sem Order (schema): fulfillment não vive em
+  `Order.fulfillmentStatus`. Qual campo o app lê? Precisa fonte (ex.:
+  `MonthlyBox.fulfillmentStatus` ou Order zero pra budget-only).
+- Q8 Voltar depois de pular: tela 11 reverte até o cutoff. Spec não define
+  transição `skipped` → `open`. Confirmar ou tornar skip definitivo.
+- Q9 Quantidade máxima por item (schema): sem teto além do estoque. Vale um
+  `maxPerCycle` por item pra evitar revenda?
+
 ---
 
 # Deep review — riscos e decisões em aberto

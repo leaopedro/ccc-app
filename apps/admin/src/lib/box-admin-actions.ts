@@ -3,11 +3,25 @@
 import {
   adminBoxCatalogItemCreateSchema,
   adminBoxCatalogItemUpdateSchema,
+  adminPartnerCreateSchema,
+  adminPartnerModuleCreateSchema,
+  adminPartnerModuleUpdateSchema,
+  adminPartnerUpdateSchema,
 } from '@ccc/shared/admin-box';
 import { presignRequestSchema, presignResponseSchema } from '@ccc/shared/uploads';
 import { revalidatePath } from 'next/cache';
 
-import { createBoxCatalogItem, deleteBoxCatalogItem, updateBoxCatalogItem } from './admin-api';
+import {
+  createBoxCatalogItem,
+  createBoxPartner,
+  createBoxPartnerModule,
+  deleteBoxCatalogItem,
+  deleteBoxPartner,
+  deleteBoxPartnerModule,
+  updateBoxCatalogItem,
+  updateBoxPartner,
+  updateBoxPartnerModule,
+} from './admin-api';
 import { ApiError, apiFetch } from './api';
 
 type BoxImageKind = 'box_item' | 'partner_logo' | 'partner_module';
@@ -112,5 +126,137 @@ export const deleteBoxCatalogItemAction = async (
     return { error: 'Erro ao desativar item.' };
   }
   revalidatePath(CATALOG_PATH);
+  return { error: null };
+};
+
+// --- Partners ---
+
+const PARTNERS_PATH = '/box/parceiros';
+
+export const createPartnerAction = async (
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const parsed = adminPartnerCreateSchema.safeParse({
+    slug: str(fd, 'slug'),
+    name: str(fd, 'name'),
+    description: str(fd, 'description') ?? null,
+    logoObjectKey: str(fd, 'logoObjectKey') ?? null,
+    active: bool(fd, 'active'),
+    sortOrder: num(fd, 'sortOrder'),
+  });
+  if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
+  try {
+    await createBoxPartner(parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.status === 409 ? 'Slug ja existe.' : e.message };
+    return { error: 'Erro ao criar parceiro.' };
+  }
+  revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+export const updatePartnerAction = async (
+  id: string,
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const parsed = adminPartnerUpdateSchema.safeParse({
+    name: str(fd, 'name'),
+    description: str(fd, 'description') ?? null,
+    logoObjectKey: str(fd, 'logoObjectKey') ?? null,
+    active: bool(fd, 'active'),
+    sortOrder: num(fd, 'sortOrder'),
+  });
+  if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
+  try {
+    await updateBoxPartner(id, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao salvar parceiro.' };
+  }
+  revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+export const deletePartnerAction = async (
+  id: string,
+  _prev: BoxFormState,
+  _fd: FormData,
+): Promise<BoxFormState> => {
+  void _prev;
+  void _fd;
+  try {
+    await deleteBoxPartner(id);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao desativar parceiro.' };
+  }
+  revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+export const createPartnerModuleAction = async (
+  partnerId: string,
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const parsed = adminPartnerModuleCreateSchema.safeParse({
+    name: str(fd, 'name'),
+    description: str(fd, 'description') ?? null,
+    priceCents: num(fd, 'priceCents'),
+    imageObjectKey: str(fd, 'imageObjectKey') ?? null,
+    active: bool(fd, 'active'),
+    sortOrder: num(fd, 'sortOrder'),
+  });
+  if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
+  try {
+    await createBoxPartnerModule(partnerId, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao criar modulo.' };
+  }
+  revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+export const updatePartnerModuleAction = async (
+  moduleId: string,
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const parsed = adminPartnerModuleUpdateSchema.safeParse({
+    name: str(fd, 'name'),
+    description: str(fd, 'description') ?? null,
+    priceCents: num(fd, 'priceCents'),
+    imageObjectKey: str(fd, 'imageObjectKey') ?? null,
+    active: bool(fd, 'active'),
+    sortOrder: num(fd, 'sortOrder'),
+  });
+  if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
+  try {
+    await updateBoxPartnerModule(moduleId, parsed.data);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao salvar modulo.' };
+  }
+  revalidatePath(PARTNERS_PATH);
+  return { error: null };
+};
+
+export const deletePartnerModuleAction = async (
+  moduleId: string,
+  _prev: BoxFormState,
+  _fd: FormData,
+): Promise<BoxFormState> => {
+  void _prev;
+  void _fd;
+  try {
+    await deleteBoxPartnerModule(moduleId);
+  } catch (e) {
+    if (e instanceof ApiError) return { error: e.message };
+    return { error: 'Erro ao desativar modulo.' };
+  }
+  revalidatePath(PARTNERS_PATH);
   return { error: null };
 };

@@ -24,6 +24,7 @@ vi.mock('./admin-api', () => ({
 }));
 
 import { createBoxCatalogItemAction } from './box-admin-actions';
+import { createPartnerAction, createPartnerModuleAction } from './box-admin-actions';
 
 describe('box-admin-actions catalog', () => {
   beforeEach(() => {
@@ -57,5 +58,37 @@ describe('box-admin-actions catalog', () => {
     const result = await createBoxCatalogItemAction({ error: null }, fd);
     expect(result.error).not.toBeNull();
     expect(createBoxCatalogItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('box-admin-actions partners', () => {
+  beforeEach(() => {
+    createBoxPartner.mockReset().mockResolvedValue({});
+    createBoxPartnerModule.mockReset().mockResolvedValue({});
+  });
+
+  it('creates a partner from form data', async () => {
+    const fd = new FormData();
+    fd.set('slug', 'oficina-x');
+    fd.set('name', 'Oficina X');
+    fd.set('active', 'on');
+    const result = await createPartnerAction({ error: null }, fd);
+    expect(result).toEqual({ error: null });
+    expect(createBoxPartner).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'oficina-x', name: 'Oficina X', active: true }),
+    );
+  });
+
+  it('creates a module bound to a partner id', async () => {
+    const fd = new FormData();
+    fd.set('name', 'Kit');
+    fd.set('priceCents', '9900');
+    fd.set('active', 'on');
+    const result = await createPartnerModuleAction('p1', { error: null }, fd);
+    expect(result).toEqual({ error: null });
+    expect(createBoxPartnerModule).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ name: 'Kit', priceCents: 9900 }),
+    );
   });
 });

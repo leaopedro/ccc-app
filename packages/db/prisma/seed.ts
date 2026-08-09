@@ -632,6 +632,21 @@ const seedPremiumCatalog = async (): Promise<void> => {
   );
 };
 
+const seedBoxSettings = async (): Promise<void> => {
+  const existing = await prisma.boxSettings.findFirst();
+  if (existing) return;
+  await prisma.boxSettings.create({
+    data: {
+      boxEnabled: false,
+      cutoffDaysBeforeRenewal: 5,
+      headerTitle: 'Sua caixa do mes',
+      shippingFeeCents: 0,
+      freeShippingCepRanges: [{ from: '80000-000', to: '83800-999' }],
+    },
+  });
+  console.log('Seeded box settings.');
+};
+
 const main = async (): Promise<void> => {
   for (const e of events) {
     const { tiers, ...rest } = e;
@@ -664,6 +679,8 @@ const main = async (): Promise<void> => {
   await seedBadgeCatalog();
 
   await seedPremiumCatalog();
+
+  await seedBoxSettings();
 };
 
 main()

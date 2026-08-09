@@ -434,9 +434,10 @@ model PremiumPlan {
   name        String            @db.VarChar(80)
   description String?           @db.VarChar(500)
   active      Boolean           @default(true)
-  sortOrder   Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  sortOrder             Int               @default(0)
+  monthlyBoxBudgetCents Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   prices   PremiumPlanPrice[]
   benefits PremiumPlanBenefit[]
@@ -550,6 +551,74 @@ model PremiumAddonRedemption {
   usage PremiumAddonUsage @relation(fields: [usageId], references: [id], onDelete: Cascade)
 
   @@index([usageId])
+}
+
+// Box Builder config models (Fase 1)
+
+model BoxCatalogItem {
+  id             String   @id @default(cuid())
+  slug           String   @unique @db.VarChar(140)
+  title          String   @db.VarChar(140)
+  description    String   @db.Text
+  priceCents     Int
+  currency       String   @default("BRL") @db.VarChar(3)
+  category       String   @db.VarChar(60)
+  imageObjectKey String?  @db.VarChar(300)
+  stockPerCycle  Int?
+  maxPerCycle    Int?
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([active, sortOrder])
+  @@index([category, active])
+}
+
+model Partner {
+  id            String   @id @default(cuid())
+  slug          String   @unique @db.VarChar(60)
+  name          String   @db.VarChar(80)
+  description   String?  @db.VarChar(240)
+  logoObjectKey String?  @db.VarChar(300)
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  modules PartnerModule[]
+
+  @@index([active, sortOrder])
+}
+
+model PartnerModule {
+  id             String   @id @default(cuid())
+  partnerId      String
+  name           String   @db.VarChar(80)
+  description    String?  @db.VarChar(240)
+  priceCents     Int
+  currency       String   @default("BRL") @db.VarChar(3)
+  imageObjectKey String?  @db.VarChar(300)
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, active, sortOrder])
+}
+
+model BoxSettings {
+  id                      String   @id @default(cuid())
+  boxEnabled              Boolean  @default(false)
+  cutoffDaysBeforeRenewal Int      @default(5)
+  headerTitle             String?  @db.VarChar(140)
+  headerSubtitle          String?  @db.VarChar(240)
+  freeShippingCepRanges   Json     @default("[]")
+  shippingFeeCents        Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }
 
 model Car {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   adminBoxCatalogItemCreateSchema,
   adminBoxCatalogItemSchema,
+  adminBoxSettingsUpdateSchema,
   adminPartnerModuleCreateSchema,
 } from '../admin-box.js';
 
@@ -57,5 +58,30 @@ describe('admin-box catalog + partner schemas', () => {
       sortOrder: 0,
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe('admin-box settings schema', () => {
+  it('accepts settings with cep ranges', () => {
+    const parsed = adminBoxSettingsUpdateSchema.safeParse({
+      boxEnabled: true,
+      cutoffDaysBeforeRenewal: 5,
+      headerTitle: 'Sua caixa',
+      freeShippingCepRanges: [{ from: '80000-000', to: '83800-999' }],
+      shippingFeeCents: 1990,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('rejects a malformed cep', () => {
+    const parsed = adminBoxSettingsUpdateSchema.safeParse({
+      freeShippingCepRanges: [{ from: 'abc', to: '83800-999' }],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects cutoff out of range', () => {
+    const parsed = adminBoxSettingsUpdateSchema.safeParse({ cutoffDaysBeforeRenewal: 40 });
+    expect(parsed.success).toBe(false);
   });
 });

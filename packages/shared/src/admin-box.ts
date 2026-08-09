@@ -138,3 +138,38 @@ export const adminPartnerListSchema = z.object({
   partners: z.array(adminPartnerSchema),
 });
 export type AdminPartnerList = z.infer<typeof adminPartnerListSchema>;
+
+// ----- Box settings -----
+
+const cep = z
+  .string()
+  .trim()
+  .regex(/^\d{5}-?\d{3}$/, 'CEP invalido');
+
+export const cepRangeSchema = z
+  .object({ from: cep, to: cep })
+  .refine((r) => r.from.replace('-', '') <= r.to.replace('-', ''), {
+    message: 'from deve ser <= to',
+    path: ['to'],
+  });
+export type CepRange = z.infer<typeof cepRangeSchema>;
+
+export const adminBoxSettingsSchema = z.object({
+  boxEnabled: z.boolean(),
+  cutoffDaysBeforeRenewal: z.number().int(),
+  headerTitle: z.string().nullable(),
+  headerSubtitle: z.string().nullable(),
+  freeShippingCepRanges: z.array(cepRangeSchema),
+  shippingFeeCents: z.number().int(),
+});
+export type AdminBoxSettings = z.infer<typeof adminBoxSettingsSchema>;
+
+export const adminBoxSettingsUpdateSchema = z.object({
+  boxEnabled: z.boolean().optional(),
+  cutoffDaysBeforeRenewal: z.number().int().min(0).max(28).optional(),
+  headerTitle: z.string().trim().max(140).nullable().optional(),
+  headerSubtitle: z.string().trim().max(240).nullable().optional(),
+  freeShippingCepRanges: z.array(cepRangeSchema).max(50).optional(),
+  shippingFeeCents: z.number().int().nonnegative().optional(),
+});
+export type AdminBoxSettingsUpdate = z.infer<typeof adminBoxSettingsUpdateSchema>;

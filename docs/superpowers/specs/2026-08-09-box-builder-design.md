@@ -107,7 +107,9 @@ Para cada box com cutoff vencido:
 
 # Deep review — riscos e decisões em aberto
 
-Marcados com recomendação. Precisam de confirmação antes do spec final.
+RESOLVIDO. As decisões finais estão em "Decisões do review (confirmadas)" no
+topo, que prevalece. O texto abaixo é o registro original das recomendações.
+Onde divergir do topo (ex.: R5, R6), vale o topo.
 
 ## R1. Pagamento não pode ser automático no cutoff (CRÍTICO)
 

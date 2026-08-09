@@ -18,6 +18,10 @@
       "types": "./src/admin-garage.ts",
       "default": "./dist/admin-garage.js"
     },
+    "./admin-box": {
+      "types": "./src/admin-box.ts",
+      "default": "./dist/admin-box.js"
+    },
     "./admin-garage-xp": {
       "types": "./src/admin-garage-xp.ts",
       "default": "./dist/admin-garage-xp.js"

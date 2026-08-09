@@ -155,8 +155,119 @@ Levantadas pelo agente de design. Algumas afetam schema (bloqueiam Fase 1).
   `MonthlyBox.fulfillmentStatus` ou Order zero pra budget-only).
 - Q8 Voltar depois de pular: tela 11 reverte até o cutoff. Spec não define
   transição `skipped` → `open`. Confirmar ou tornar skip definitivo.
-- Q9 Quantidade máxima por item (schema): sem teto além do estoque. Vale um
-  `maxPerCycle` por item pra evitar revenda?
+- Q9 Quantidade máxima por item (schema): RESOLVIDO — `maxPerCycle Int?` em
+  `BoxCatalogItem`, validado no Zod. Ver hardening abaixo.
+
+## Correções pós-review (4 reviewers, aplicadas)
+
+Achados verificados contra o código real (padrões de `cancel.ts`,
+`apply-membership-event.ts`, `stripe-billing-webhook.ts`, `Variant`). Incorporados
+ao design.
+
+### Schema
+
+- Unicidade do ciclo: `MonthlyBox` ganha `cycleKey String` estável (derivado do
+  período da membership) e `@@unique([membershipId, cycleKey])`. O job de abertura
+  engole P2002 (padrão do invoice insert). Não confiar só em `cycleStart` cru.
+- Estoque com race safety: `stockPerCycle` no `BoxCatalogItem` é capacidade;
+  a reserva NÃO decrementa esse campo. Novo ledger por ciclo
+  `BoxCatalogItemCycleStock { catalogItemId, cycleKey, total, reserved }` com
+  `@@unique([catalogItemId, cycleKey])`; decremento atômico condicional
+  (`UPDATE ... SET reserved = reserved + q WHERE reserved + q <= total`),
+  0-rows = esgotado. Espelha `Variant.quantitySold`.
+- Fulfillment do box budget-only (resolve Q7): `MonthlyBox.fulfillmentStatus
+FulfillmentStatus @default(unfulfilled)` é a fonte de verdade do box. Quando há
+  `Order`, mantém sincronizado. Não inventar "Order zero".
+- Snapshots nas linhas: `MonthlyBoxItem`/`MonthlyBoxPartnerItem` gravam
+  `titleSnapshot`/`nameSnapshot` + `currency` além de `unitPriceCents` (padrão do
+  `PremiumMembershipAddon`). Picking list e histórico leem o snapshot.
+- Corte auditável: linhas ganham `included Boolean @default(true)` +
+  `droppedAt DateTime?` + `dropReason`. A picking list filtra `included=true`.
+  Preserva o que o membro escolheu vs o que foi enviado.
+- Moeda: `currency String @default("BRL") @db.VarChar(3)` em `BoxCatalogItem`,
+  `PartnerModule`, `MonthlyBox` e snapshots (convenção do schema).
+- Ordenação p/ LIFO: `MonthlyBoxItem.addedAt` (ou `seq` monotônico). O PUT de
+  seleção passa a ser diff-merge por `catalogItemId` (preserva `addedAt` de itens
+  já presentes), não delete-insert cego. Ajusta R14: last-write-wins nas
+  quantidades, mas a ordem de adição é preservada.
+- `maxPerCycle Int?` em `BoxCatalogItem` (resolve Q9), validado no Zod.
+- Relações/índices: box→linhas `onDelete: Cascade`; linhas→catalogItem/
+  partnerModule `Restrict`; partner→module `Restrict`; `MonthlyBox.orderId
+String? @unique` + back-relation em `Order` (`SetNull`). Índices:
+  `@@index([status, cutoffAt])` (worker), índice p/ picking list
+  (`[cycleKey, fulfillmentStatus]`), `@@index([membershipId])`. `garageId` fica
+  como cópia denormalizada, não autoritativa (elegibilidade vem da membership).
+
+### Abertura do ciclo (billing)
+
+- Job pós-commit `MonthlyBoxOpenJob`, enfileirado só nos branches
+  forward-advance (`didAdvancePeriod`), espelhando
+  `enqueuePremiumTicketBackfillIfActivated` (stripe-billing-webhook.ts:544).
+  Ativação/renovação stale (out-of-order) NÃO abre box. O worker lê o ciclo da
+  ROW da membership, não do evento.
+
+### Worker de cutoff (correção de corridas)
+
+- Transição por box em UMA transação, com `SELECT ... FOR UPDATE` na Garage
+  (canon §F8.5) e gate `WHERE status IN ('open','awaiting_payment')`. Efeitos
+  (decremento de estoque, cancel do Order, flip de status) commitam juntos;
+  re-run é no-op.
+- Cancelar Order via `updateMany({where:{id,status:'pending'}})` + checagem de
+  count (padrão cancel.ts:77-81). Se count===0, o Pix já liquidou → seguir o
+  caminho pago, não cancelar. Serializa contra o webhook.
+- Corte unit-level: decrementa `quantity` em LIFO até `itemsTotal <= budget`;
+  remove a linha só quando chega a 0. Recalcula subtotal a cada passo.
+- Pós-corte com seleção vazia → `skipped`, não `ready` (não envia caixa vazia).
+
+### Cobrança e refund
+
+- Ordem do cálculo: `chargeCents = overflow + parceiros + frete`. O branch
+  `chargeCents==0 → ready direto` roda DEPOIS de somar o frete (fora de Curitiba
+  vira cobrança só de frete → passa pelo pagamento).
+- Assertiva server-side: o confirm rejeita se o `chargeCents` calculado no server
+  for > 0 quando o cliente pediu o caminho grátis.
+- Snapshot no Order: `Order.amountCents = box.chargeCents`, `currency='BRL'`;
+  totais do box imutáveis a partir de `awaiting_payment` (R10).
+- Cancelar Pix (Q3, recomendado): só cancela o Order e mantém o box travado
+  (evita segundo Order órfão). Além disso, chamar AbacatePay pra cancelar/expirar
+  a cobrança (nosso cancel local não anula o QR; risco do path pix-manual-refund).
+- Refund do box (R13): flip Order `refunded` (Pix e cartão) → libera reserva de
+  estoque → box `cancelled` → bloqueia picking se ainda não enviado. Transições
+  explícitas: `awaiting_payment`/`ready` → `cancelled`.
+- Dev fee: DECIDIR (ver Q11). Order tem `devFeePercent @default(10)`; não deixar
+  defaultado sem intenção.
+
+### Admin / UX / a11y
+
+- Admin (wireframe D) ganha log do cutoff / relatório de itens derrubados e
+  tratamento de box budget-only sem endereço.
+- Indicador de "cobrado à parte" não pode ser só cor (verde). Adicionar rótulo/
+  ícone p/ daltônicos.
+- Microcopy vai pra chaves i18n (não literal), retenção LGPD de histórico de box
+  e endereço documentada.
+- Correção factual: o handoff afirma "nenhum campo novo"; falso — `tracking` (Q6)
+  e `MonthlyBox.fulfillmentStatus` (Q7) são campos novos.
+
+## Novas questões do review (Q10-Q17) — abertas
+
+- Q10 (CONFLITO, crítico) Auto-confirm sem consentimento: o cutoff auto-confirma
+  box `open` com itens e ENVIA (escolha R5b), mas R4 diz "não confirma → não
+  envia" e enviar sem confirmação é remessa não solicitada. Reconciliar:
+  (a) só box confirmado/pago envia (open+itens não confirmado → `skipped`), ou
+  (b) flag opt-in "enviar automático". Conflita com decisão anterior (R5b).
+- Q11 Dev fee no Order do box: 0 ou split padrão da plataforma?
+- Q12 Estoque de módulo de parceiro: `PartnerModule` tem estoque por ciclo? MVP:
+  não. Se sim, precisa campo + estado esgotado na tela 04.
+- Q13 Membership expira entre `ready` e envio: envia a caixa (base já inclusa no
+  plano) ou segura? Extras já pagos por Order à parte.
+- Q14 Primeiro box / meio de ciclo: quem assina depois do cutoff vê o quê? Budget
+  de `trialing` é igual? Ponto de entrada do primeiro box.
+- Q15 Auto-confirm sem endereço: box budget-only no cutoff sem `ShippingAddress`
+  → `skipped` ou `ready` não-enviável? (liga com Q10)
+- Q16 Algoritmo da região de frete grátis: faixa de CEP ou lista de cidades da
+  região de Curitiba? Load-bearing e propenso a erro.
+- Q17 Q6 rastreio: adicionar campo `tracking` no Order (+ notificação com
+  rastreio) ou remover o marco de rastreio da tela 09?
 
 ---
 

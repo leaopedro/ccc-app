@@ -15,6 +15,7 @@ import { adminGarageXpAdjustmentRoutes } from './garage-xp-adjustment.js';
 import { adminGeneralSettingsRoutes } from './general-settings.js';
 import { adminGroupRoutes } from './groups.js';
 import { adminMfaRoutes } from './mfa.js';
+import { adminBoxCatalogRoutes } from './box-catalog-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
 import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
@@ -69,6 +70,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminFeedModerationRoutes);
     await scope.register(adminGroupRoutes);
     await scope.register(adminPremiumCatalogRoutes);
+    await scope.register(adminBoxCatalogRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

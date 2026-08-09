@@ -103,6 +103,28 @@ Para cada box com cutoff vencido:
 - Item sem estoque no momento da reserva é derrubado da caixa (LIFO), com aviso.
 - `stockPerCycle` decrementa na reserva; libera no corte/cancelamento.
 
+## Integração com assinaturas (PR #5 feat/assinaturas-controle-admin)
+
+O fluxo de assinatura é o pré-requisito. Assinar é o passo inicial de quem hoje
+não paga nada. Os planos da assinatura SÃO os planos do box. Virou membro, todo
+mês tem acesso ao Box Builder.
+
+- Budget por tier vive em `PremiumPlan.monthlyBoxBudgetCents`. `PremiumPlan.tier`
+  é único (bronze/silver/gold), então cada plano tem seu budget.
+- Elegibilidade e ciclo vêm de `PremiumMembership` (não do snapshot
+  `Garage.premiumTier`). Só `active`/`trialing` montam box (R7). O ciclo é
+  `currentPeriodStart`/`currentPeriodEnd` da membership.
+- Abertura do MonthlyBox: hook em `applyMembershipEvent` nos casos
+  `subscription.activated` e `subscription.renewed` (branch forward-advance),
+  espelhando o padrão pós-commit do `PremiumTicketBackfillJob`. Um MonthlyBox por
+  membership por ciclo. Sem membership viva, sem box.
+- Invariante mantida: `PremiumMembership` só é escrita por webhook via
+  `applyMembershipEvent`. O box só lê o estado; não cria membership.
+- Extras do box são um `Order` one-time (kind `box`, Pix/cartão), separado da
+  fatura recorrente do Stripe. Não usa proration da assinatura.
+- Aberto: garagens com premium só por concessão manual (`Garage.premiumTier`,
+  sem `PremiumMembership`) têm box? MVP: não (box exige membership viva). Flag.
+
 ## Handoff de design
 
 Referência de UI em `docs/design/box-builder/` (15 telas mobile alta fidelidade,
@@ -112,8 +134,12 @@ Referência de UI em `docs/design/box-builder/` (15 telas mobile alta fidelidade
 
 Levantadas pelo agente de design. Algumas afetam schema (bloqueiam Fase 1).
 
-- Q1 Frete (schema): R6 recomendou incluso mas não confirmado. Tela 05 mostra
-  "Frete: Grátis". Se cobrado, entra no `chargeCents` e precisa de campo.
+- Q1 Frete (RESOLVIDO): grátis só para Curitiba e região. Fora da região, o
+  frete é somado ao `chargeCents`. Precisa de: config em `BoxSettings`
+  (`freeShippingRegion` por CEP/cidade + `shippingFeeCents` padrão), cálculo do
+  frete a partir da `ShippingAddress` no server, e linha de frete condicional na
+  tela 05. Aberto menor: fora da região, cobra frete ou bloqueia envio? Default:
+  cobra.
 - Q2 Aviso do corte: push/e-mail no momento do corte e aviso preventivo 24h
   antes com extras não pagos. Não definido. Afeta Fase 5.
 - Q3 Cancelar Pix pendente: cancelar volta o box pra `open` (libera reserva,

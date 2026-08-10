@@ -196,4 +196,109 @@ describe('runBoxCutoffTick', () => {
     expect(freshOrder.status).toBe('paid');
     expect(fresh.status).toBe('awaiting_payment');
   });
+
+  it('awaiting_payment cutoff does not double-reserve cycle stock', async () => {
+    const { user } = await createUser({
+      verified: true,
+      email: `u${Math.random().toString(36).slice(2, 7)}@jdm.test`,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_1',
+        providerSubRef: `sub_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'F',
+        line1: 'R',
+        number: '1',
+        district: 'C',
+        city: 'Curitiba',
+        stateCode: 'PR',
+        postalCode: '81000-000',
+      },
+    });
+    const cycleKey = '2026-08-01';
+    const box = await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey,
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: pastCutoff,
+        budgetCentsSnapshot: 10000,
+        status: 'awaiting_payment' as never,
+        autoSendOptIn: true,
+        shippingAddressId: address.id,
+      },
+    });
+    // Stock-limited catalog item: 2 units already reserved at confirm time.
+    const item = await prisma.boxCatalogItem.create({
+      data: {
+        slug: `it${Math.random().toString(36).slice(2, 7)}`,
+        title: 'Adesivo',
+        description: 'x',
+        priceCents: 3000,
+        category: 'sticker',
+        stockPerCycle: 5,
+      },
+    });
+    await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: item.id,
+        quantity: 2,
+        unitPriceCents: 3000,
+        subtotalCents: 6000,
+        titleSnapshot: 'Adesivo',
+      },
+    });
+    await prisma.boxCatalogItemCycleStock.create({
+      data: { catalogItemId: item.id, cycleKey, total: 5, reserved: 2 },
+    });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'box',
+        amountCents: 6000,
+        baseAmountCents: 6000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        shippingAddressId: address.id,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+
+    await runBoxCutoffTick({});
+
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    const ledger = await prisma.boxCatalogItemCycleStock.findUniqueOrThrow({
+      where: { catalogItemId_cycleKey: { catalogItemId: item.id, cycleKey } },
+    });
+    expect(fresh.status).toBe('ready');
+    expect(freshOrder.status).toBe('cancelled');
+    // Released the confirm-time 2 units, re-reserved the 2 survivors: net 2, not 4.
+    expect(ledger.reserved).toBe(2);
+  });
 });

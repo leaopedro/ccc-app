@@ -4,7 +4,7 @@ import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
 import { recalcBoxTotals } from '../services/box/recalc.js';
-import { reserveCycleStock } from '../services/box/stock.js';
+import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
 
 type Deps = { log?: FastifyBaseLogger };
 
@@ -121,10 +121,22 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             data: { status: 'cancelled', fulfillmentStatus: 'cancelled' },
           });
           if (cancelled.count === 0) {
-            // Pix already settled: leave for the paid path.
+            // Pix already settled: leave for the paid path. Its reservation must
+            // stand — do NOT release here.
             return;
           }
           await tx.monthlyBox.update({ where: { id }, data: { orderId: null } });
+          // Release the confirm-time reservations for this box's included lines.
+          // confirm.ts reserved stock when the box entered awaiting_payment;
+          // resolveBudgetOnly re-reserves the survivors below, so releasing first
+          // returns the ledger to baseline and avoids a permanent double-reserve.
+          for (const line of box.items.filter((i) => i.included)) {
+            await releaseCycleStock(tx, {
+              catalogItemId: line.catalogItemId,
+              cycleKey: box.cycleKey,
+              quantity: line.quantity,
+            });
+          }
         }
         await resolveBudgetOnly(tx, id);
       });

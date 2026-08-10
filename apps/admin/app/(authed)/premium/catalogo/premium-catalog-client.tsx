@@ -5,9 +5,10 @@ import type {
   AdminPremiumCatalogResponse,
   AdminPremiumPlan,
 } from '@ccc/shared/admin';
-import { useActionState, useState } from 'react';
+import { useActionState, useState, type ReactNode } from 'react';
 import { useFormStatus } from 'react-dom';
 
+import { fmtBRL } from '~/lib/format';
 import {
   createModuleAction,
   createPlanAction,
@@ -25,6 +26,10 @@ const initial: PremiumFormState = { error: null };
 const inputCls =
   'rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm';
 const labelCls = 'flex flex-col gap-1 text-xs text-[color:var(--color-muted)]';
+const legendCls = 'text-xs font-semibold uppercase tracking-wide text-[color:var(--color-muted)]';
+const checkboxLabelCls = 'flex items-center gap-2 pb-1 text-xs text-[color:var(--color-muted)]';
+const dangerBtnCls =
+  'rounded border border-red-500/40 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-40 disabled:hover:bg-transparent';
 
 const Submit = ({ label }: { label: string }) => {
   const { pending } = useFormStatus();
@@ -32,7 +37,7 @@ const Submit = ({ label }: { label: string }) => {
     <button
       type="submit"
       disabled={pending}
-      className="rounded bg-[color:var(--color-accent)] px-3 py-1 text-sm font-semibold disabled:opacity-50"
+      className="rounded bg-[color:var(--color-accent)] px-3 py-1 text-sm font-semibold text-black disabled:opacity-50"
     >
       {pending ? '…' : label}
     </button>
@@ -41,6 +46,61 @@ const Submit = ({ label }: { label: string }) => {
 
 const Err = ({ state }: { state: PremiumFormState }) =>
   state.error ? <span className="text-xs text-red-400">{state.error}</span> : null;
+
+// A labelled group of fields inside a form: a small caps legend above a
+// flex-wrapped row. Purely a spacing/grouping helper, no form semantics.
+const FieldGroup = ({ legend, children }: { legend: string; children: ReactNode }) => (
+  <div className="flex flex-col gap-2">
+    <span className={legendCls}>{legend}</span>
+    <div className="flex flex-wrap items-end gap-3">{children}</div>
+  </div>
+);
+
+const StatusPill = ({ active }: { active: boolean }) => (
+  <span
+    className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+      active
+        ? 'border-green-400/30 bg-green-400/10 text-green-400'
+        : 'border-[color:var(--color-border)] text-[color:var(--color-muted)]'
+    }`}
+  >
+    {active ? 'Ativo' : 'Inativo'}
+  </span>
+);
+
+// A centavos input paired with a live R$ preview so operators can see what
+// they're typing without changing the submitted unit (still raw centavos).
+const MoneyCentsField = ({
+  label,
+  name,
+  cents,
+  onChangeCents,
+  min,
+  widthCls = 'w-32',
+}: {
+  label: string;
+  name: string;
+  cents: number;
+  onChangeCents: (cents: number) => void;
+  min?: number;
+  widthCls?: string;
+}) => (
+  <label className={labelCls}>
+    {label}
+    <input
+      name={name}
+      type="number"
+      defaultValue={cents}
+      min={min}
+      placeholder="Em centavos"
+      onChange={(e) => onChangeCents(Number(e.target.value) || 0)}
+      className={`${inputCls} ${widthCls} tabular-nums`}
+    />
+    <span className="text-xs tabular-nums text-[color:var(--color-foreground)]">
+      {fmtBRL(cents)}
+    </span>
+  </label>
+);
 
 // ── Benefits editor ────────────────────────────────────────────────
 
@@ -59,7 +119,7 @@ const BenefitsEditor = ({ plan }: { plan: AdminPremiumPlan }) => {
 
   return (
     <form action={action} className="flex flex-col gap-2">
-      <span className="text-xs font-semibold text-[color:var(--color-muted)]">Benefícios</span>
+      <span className={legendCls}>Benefícios</span>
       <input type="hidden" name="benefits" value={JSON.stringify(rows)} />
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
@@ -105,128 +165,131 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
   const [priceState, priceAction] = useActionState(upsertPriceAction.bind(null, plan.id), initial);
   const [deleteState, deleteAction] = useActionState(deletePlanAction.bind(null, plan.id), initial);
   const monthly = plan.prices.find((p) => p.cadence === 'monthly');
+  const [valorCents, setValorCents] = useState(monthly?.baseAmountCents ?? 0);
 
   return (
-    <article className="flex flex-col gap-4 rounded border border-[color:var(--color-border)] p-4">
-      <div className="flex items-center justify-between">
+    <article
+      className={`flex flex-col gap-5 rounded-lg border border-[color:var(--color-border)] p-4 ${
+        plan.active ? '' : 'opacity-60'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">
           {plan.name}{' '}
-          <span className="text-xs text-[color:var(--color-muted)]">
+          <span className="text-xs font-normal text-[color:var(--color-muted)]">
             ({plan.tier} · {plan.slug})
           </span>
         </h3>
-        <span
-          className={`text-xs ${plan.active ? 'text-green-400' : 'text-[color:var(--color-muted)]'}`}
-        >
-          {plan.active ? 'Ativo' : 'Inativo'}
-        </span>
+        <StatusPill active={plan.active} />
       </div>
 
-      <form action={detailAction} className="flex flex-wrap items-end gap-3">
-        <label className={labelCls}>
-          Nome
-          <input
-            name="name"
-            defaultValue={plan.name}
-            required
-            maxLength={80}
-            className={inputCls}
-          />
-        </label>
-        <label className={`${labelCls} flex-1`}>
-          Descrição
-          <input
-            name="description"
-            defaultValue={plan.description ?? ''}
-            maxLength={500}
-            className={inputCls}
-          />
-        </label>
-        <label className={labelCls}>
-          Ordem
-          <input
-            name="sortOrder"
-            type="number"
-            defaultValue={plan.sortOrder}
-            className={`${inputCls} w-20`}
-          />
-        </label>
-        <label className={labelCls}>
-          Budget do box (centavos)
-          <input
-            name="monthlyBoxBudgetCents"
-            type="number"
-            min={0}
-            defaultValue={plan.monthlyBoxBudgetCents}
-            className={`${inputCls} w-32`}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]">
-          <input name="active" type="checkbox" defaultChecked={plan.active} />
-          Ativo
-        </label>
-        <Submit label="Salvar" />
-        <Err state={detailState} />
+      <form action={detailAction} className="flex flex-col gap-2">
+        <FieldGroup legend="Detalhes">
+          <label className={labelCls}>
+            Nome
+            <input
+              name="name"
+              defaultValue={plan.name}
+              required
+              maxLength={80}
+              className={inputCls}
+            />
+          </label>
+          <label className={`${labelCls} flex-1 basis-48`}>
+            Descrição
+            <input
+              name="description"
+              defaultValue={plan.description ?? ''}
+              maxLength={500}
+              className={inputCls}
+            />
+          </label>
+          <label className={labelCls}>
+            Ordem
+            <input
+              name="sortOrder"
+              type="number"
+              defaultValue={plan.sortOrder}
+              className={`${inputCls} w-20`}
+            />
+          </label>
+          <label className={labelCls}>
+            Budget do box (centavos)
+            <input
+              name="monthlyBoxBudgetCents"
+              type="number"
+              min={0}
+              defaultValue={plan.monthlyBoxBudgetCents}
+              className={`${inputCls} w-32`}
+            />
+          </label>
+          <label className={checkboxLabelCls}>
+            <input name="active" type="checkbox" defaultChecked={plan.active} />
+            Ativo
+          </label>
+          <Submit label="Salvar" />
+          <Err state={detailState} />
+        </FieldGroup>
       </form>
 
-      <form action={priceAction} className="flex flex-wrap items-end gap-3">
+      <form
+        action={priceAction}
+        className="flex flex-col gap-2 border-t border-[color:var(--color-border)] pt-4"
+      >
         <input type="hidden" name="cadence" value="monthly" />
-        <label className={labelCls}>
-          Preço mensal (centavos)
-          <input
+        <FieldGroup legend="Preço mensal">
+          <MoneyCentsField
+            label="Valor"
             name="baseAmountCents"
-            type="number"
-            defaultValue={monthly?.baseAmountCents ?? 0}
+            cents={valorCents}
+            onChangeCents={setValorCents}
             min={0}
-            className={`${inputCls} w-32`}
           />
-        </label>
-        <label className={labelCls}>
-          Moeda
-          <input
-            name="currency"
-            defaultValue={monthly?.currency ?? 'BRL'}
-            maxLength={3}
-            className={`${inputCls} w-16`}
-          />
-        </label>
-        <label className={labelCls}>
-          stripePriceId
-          <input
-            name="stripePriceId"
-            defaultValue={monthly?.stripePriceId ?? ''}
-            maxLength={120}
-            className={inputCls}
-          />
-        </label>
-        <label className={labelCls}>
-          rcProductId
-          <input
-            name="rcProductId"
-            defaultValue={monthly?.rcProductId ?? ''}
-            maxLength={120}
-            className={inputCls}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]">
-          <input name="active" type="checkbox" defaultChecked={monthly?.active ?? true} />
-          Preço ativo
-        </label>
-        <Submit label="Salvar preço" />
-        <Err state={priceState} />
+          <label className={labelCls}>
+            Moeda
+            <input
+              name="currency"
+              defaultValue={monthly?.currency ?? 'BRL'}
+              maxLength={3}
+              className={`${inputCls} w-16`}
+            />
+          </label>
+          <label className={labelCls}>
+            ID do preço (Stripe)
+            <input
+              name="stripePriceId"
+              defaultValue={monthly?.stripePriceId ?? ''}
+              maxLength={120}
+              className={inputCls}
+            />
+          </label>
+          <label className={labelCls}>
+            ID do produto (RevenueCat)
+            <input
+              name="rcProductId"
+              defaultValue={monthly?.rcProductId ?? ''}
+              maxLength={120}
+              className={inputCls}
+            />
+          </label>
+          <label className={checkboxLabelCls}>
+            <input name="active" type="checkbox" defaultChecked={monthly?.active ?? true} />
+            Preço ativo
+          </label>
+          <Submit label="Salvar preço" />
+          <Err state={priceState} />
+        </FieldGroup>
       </form>
 
-      <BenefitsEditor plan={plan} />
+      <div className="border-t border-[color:var(--color-border)] pt-4">
+        <BenefitsEditor plan={plan} />
+      </div>
 
       <form
         action={deleteAction}
-        className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3"
+        className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-4"
       >
-        <button
-          type="submit"
-          disabled={!plan.active}
-          className="text-sm text-red-400 hover:underline disabled:opacity-50"
-        >
+        <button type="submit" disabled={!plan.active} className={dangerBtnCls}>
           Desativar plano
         </button>
         <Err state={deleteState} />
@@ -242,131 +305,175 @@ const NewPlanForm = () => {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-3 rounded border border-dashed border-[color:var(--color-border)] p-4"
+      className="flex flex-col gap-2 rounded-lg border border-dashed border-[color:var(--color-border)] p-4"
     >
-      <label className={labelCls}>
-        Tier
-        <select name="tier" className={inputCls} defaultValue="bronze">
-          <option value="bronze">bronze</option>
-          <option value="silver">silver</option>
-          <option value="gold">gold</option>
-        </select>
-      </label>
-      <label className={labelCls}>
-        Slug
-        <input name="slug" required className={inputCls} placeholder="ex.: gold" />
-      </label>
-      <label className={labelCls}>
-        Nome
-        <input name="name" required maxLength={80} className={inputCls} />
-      </label>
-      <label className={labelCls}>
-        Ordem
-        <input name="sortOrder" type="number" defaultValue={0} className={`${inputCls} w-20`} />
-      </label>
-      <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]">
-        <input name="active" type="checkbox" defaultChecked />
-        Ativo
-      </label>
-      <Submit label="Adicionar plano" />
-      <Err state={state} />
+      <FieldGroup legend="Novo plano">
+        <label className={labelCls}>
+          Tier
+          <select name="tier" className={inputCls} defaultValue="bronze">
+            <option value="bronze">bronze</option>
+            <option value="silver">silver</option>
+            <option value="gold">gold</option>
+          </select>
+        </label>
+        <label className={labelCls}>
+          Slug
+          <input name="slug" required className={inputCls} placeholder="ex.: gold" />
+        </label>
+        <label className={labelCls}>
+          Nome
+          <input name="name" required maxLength={80} className={inputCls} />
+        </label>
+        <label className={labelCls}>
+          Ordem
+          <input name="sortOrder" type="number" defaultValue={0} className={`${inputCls} w-20`} />
+        </label>
+        <label className={checkboxLabelCls}>
+          <input name="active" type="checkbox" defaultChecked />
+          Ativo
+        </label>
+        <Submit label="Adicionar plano" />
+        <Err state={state} />
+      </FieldGroup>
     </form>
   );
 };
 
 // ── Module card ────────────────────────────────────────────────────
 
-const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => (
-  <>
-    <label className={labelCls}>
-      Nome
-      <input
-        name="name"
-        defaultValue={mod?.name ?? ''}
-        required
-        maxLength={80}
-        className={inputCls}
-      />
-    </label>
-    <label className={`${labelCls} flex-1`}>
-      Descrição
-      <input
-        name="description"
-        defaultValue={mod?.description ?? ''}
-        required
-        maxLength={240}
-        className={inputCls}
-      />
-    </label>
-    <label className={labelCls}>
-      Preço mensal (centavos)
-      <input
-        name="monthlyDeltaCents"
-        type="number"
-        defaultValue={mod?.monthlyDeltaCents ?? 0}
-        min={0}
-        className={`${inputCls} w-32`}
-      />
-    </label>
-    <label className={labelCls}>
-      Cota por ciclo
-      <input
-        name="quotaPerCycle"
-        type="number"
-        defaultValue={mod?.quotaPerCycle ?? 0}
-        min={0}
-        className={`${inputCls} w-24`}
-      />
-    </label>
-    <label className={labelCls}>
-      Unidade
-      <select name="quotaUnit" defaultValue={mod?.quotaUnit ?? 'access'} className={inputCls}>
-        <option value="access">access</option>
-        <option value="hours">hours</option>
-      </select>
-    </label>
-    <label className={labelCls}>
-      Moeda
-      <input
-        name="currency"
-        defaultValue={mod?.currency ?? 'BRL'}
-        maxLength={3}
-        className={`${inputCls} w-16`}
-      />
-    </label>
-    <label className={labelCls}>
-      Ordem
-      <input
-        name="sortOrder"
-        type="number"
-        defaultValue={mod?.sortOrder ?? 0}
-        className={`${inputCls} w-20`}
-      />
-    </label>
-    <label className={labelCls}>
-      stripePriceId
-      <input
-        name="stripePriceId"
-        defaultValue={mod?.stripePriceId ?? ''}
-        maxLength={120}
-        className={inputCls}
-      />
-    </label>
-    <label className={labelCls}>
-      rcProductId
-      <input
-        name="rcProductId"
-        defaultValue={mod?.rcProductId ?? ''}
-        maxLength={120}
-        className={inputCls}
-      />
-    </label>
-    <label className="flex items-center gap-2 text-xs text-[color:var(--color-muted)]">
-      <input name="active" type="checkbox" defaultChecked={mod?.active ?? true} />
-      Ativo
-    </label>
-  </>
-);
+const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => {
+  const [monthlyDeltaCents, setMonthlyDeltaCents] = useState(mod?.monthlyDeltaCents ?? 0);
+  const [payoutAmountCents, setPayoutAmountCents] = useState(mod?.payoutAmountCents ?? 0);
+  const marginCents = monthlyDeltaCents - payoutAmountCents;
+  const marginColor =
+    marginCents > 0
+      ? 'text-green-400'
+      : marginCents < 0
+        ? 'text-red-400'
+        : 'text-[color:var(--color-muted)]';
+
+  return (
+    <>
+      <FieldGroup legend="Detalhes">
+        <label className={labelCls}>
+          Nome
+          <input
+            name="name"
+            defaultValue={mod?.name ?? ''}
+            required
+            maxLength={80}
+            className={inputCls}
+          />
+        </label>
+        <label className={`${labelCls} flex-1 basis-48`}>
+          Descrição
+          <input
+            name="description"
+            defaultValue={mod?.description ?? ''}
+            required
+            maxLength={240}
+            className={inputCls}
+          />
+        </label>
+      </FieldGroup>
+
+      <FieldGroup legend="Precificação e repasse">
+        <MoneyCentsField
+          label="Preço mensal"
+          name="monthlyDeltaCents"
+          cents={monthlyDeltaCents}
+          onChangeCents={setMonthlyDeltaCents}
+          min={0}
+        />
+        <MoneyCentsField
+          label="Repasse ao fornecedor"
+          name="payoutAmountCents"
+          cents={payoutAmountCents}
+          onChangeCents={setPayoutAmountCents}
+          min={0}
+        />
+        <label className={labelCls}>
+          Fornecedor
+          <input
+            name="vendorName"
+            defaultValue={mod?.vendorName ?? ''}
+            maxLength={120}
+            className={inputCls}
+          />
+        </label>
+        <span className={labelCls}>
+          Margem
+          <span className={`py-1 text-sm font-semibold tabular-nums ${marginColor}`}>
+            {fmtBRL(marginCents)}
+          </span>
+        </span>
+      </FieldGroup>
+
+      <FieldGroup legend="Cota e ordenação">
+        <label className={labelCls}>
+          Cota por ciclo
+          <input
+            name="quotaPerCycle"
+            type="number"
+            defaultValue={mod?.quotaPerCycle ?? 0}
+            min={0}
+            className={`${inputCls} w-24`}
+          />
+        </label>
+        <label className={labelCls}>
+          Unidade da cota
+          <select name="quotaUnit" defaultValue={mod?.quotaUnit ?? 'access'} className={inputCls}>
+            <option value="access">Acesso</option>
+            <option value="hours">Horas</option>
+          </select>
+        </label>
+        <label className={labelCls}>
+          Moeda
+          <input
+            name="currency"
+            defaultValue={mod?.currency ?? 'BRL'}
+            maxLength={3}
+            className={`${inputCls} w-16`}
+          />
+        </label>
+        <label className={labelCls}>
+          Ordem
+          <input
+            name="sortOrder"
+            type="number"
+            defaultValue={mod?.sortOrder ?? 0}
+            className={`${inputCls} w-20`}
+          />
+        </label>
+      </FieldGroup>
+
+      <FieldGroup legend="Integração">
+        <label className={labelCls}>
+          ID do preço (Stripe)
+          <input
+            name="stripePriceId"
+            defaultValue={mod?.stripePriceId ?? ''}
+            maxLength={120}
+            className={inputCls}
+          />
+        </label>
+        <label className={labelCls}>
+          ID do produto (RevenueCat)
+          <input
+            name="rcProductId"
+            defaultValue={mod?.rcProductId ?? ''}
+            maxLength={120}
+            className={inputCls}
+          />
+        </label>
+        <label className={checkboxLabelCls}>
+          <input name="active" type="checkbox" defaultChecked={mod?.active ?? true} />
+          Ativo
+        </label>
+      </FieldGroup>
+    </>
+  );
+};
 
 const ModuleCard = ({ mod }: { mod: AdminPremiumAddonModule }) => {
   const [state, action] = useActionState(updateModuleAction.bind(null, mod.id), initial);
@@ -375,24 +482,29 @@ const ModuleCard = ({ mod }: { mod: AdminPremiumAddonModule }) => {
     initial,
   );
   return (
-    <article className="flex flex-col gap-3 rounded border border-[color:var(--color-border)] p-4">
-      <h3 className="text-base font-semibold">
-        {mod.name} <span className="text-xs text-[color:var(--color-muted)]">({mod.key})</span>
-      </h3>
-      <form action={action} className="flex flex-wrap items-end gap-3">
+    <article
+      className={`flex flex-col gap-4 rounded-lg border border-[color:var(--color-border)] p-4 ${
+        mod.active ? '' : 'opacity-60'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-base font-semibold">
+          {mod.name} <span className="text-xs text-[color:var(--color-muted)]">({mod.key})</span>
+        </h3>
+        <StatusPill active={mod.active} />
+      </div>
+      <form action={action} className="flex flex-col gap-3">
         <ModuleFields mod={mod} />
-        <Submit label="Salvar" />
-        <Err state={state} />
+        <div className="flex items-center gap-3">
+          <Submit label="Salvar" />
+          <Err state={state} />
+        </div>
       </form>
       <form
         action={deleteAction}
         className="flex items-center gap-2 border-t border-[color:var(--color-border)] pt-3"
       >
-        <button
-          type="submit"
-          disabled={!mod.active}
-          className="text-sm text-red-400 hover:underline disabled:opacity-50"
-        >
+        <button type="submit" disabled={!mod.active} className={dangerBtnCls}>
           Desativar módulo
         </button>
         <Err state={deleteState} />
@@ -406,15 +518,19 @@ const NewModuleForm = () => {
   return (
     <form
       action={action}
-      className="flex flex-wrap items-end gap-3 rounded border border-dashed border-[color:var(--color-border)] p-4"
+      className="flex flex-col gap-3 rounded-lg border border-dashed border-[color:var(--color-border)] p-4"
     >
-      <label className={labelCls}>
-        Chave
-        <input name="key" required maxLength={40} className={inputCls} placeholder="ex.: wash" />
-      </label>
+      <FieldGroup legend="Novo módulo">
+        <label className={labelCls}>
+          Chave
+          <input name="key" required maxLength={40} className={inputCls} placeholder="ex.: wash" />
+        </label>
+      </FieldGroup>
       <ModuleFields />
-      <Submit label="Adicionar módulo" />
-      <Err state={state} />
+      <div className="flex items-center gap-3">
+        <Submit label="Adicionar módulo" />
+        <Err state={state} />
+      </div>
     </form>
   );
 };
@@ -422,12 +538,14 @@ const NewModuleForm = () => {
 // ── Root ───────────────────────────────────────────────────────────
 
 export const PremiumCatalogClient = ({ catalog }: { catalog: AdminPremiumCatalogResponse }) => (
-  <div className="flex flex-col gap-8">
+  <div className="flex flex-col gap-10">
     <section className="flex flex-col gap-4">
       <h2 className="text-xl font-bold">Planos</h2>
-      {catalog.plans.map((plan) => (
-        <PlanCard key={plan.id} plan={plan} />
-      ))}
+      <div className="flex flex-col gap-4">
+        {catalog.plans.map((plan) => (
+          <PlanCard key={plan.id} plan={plan} />
+        ))}
+      </div>
       {catalog.plans.length === 0 ? (
         <p className="text-sm text-[color:var(--color-muted)]">Nenhum plano cadastrado.</p>
       ) : null}
@@ -436,9 +554,11 @@ export const PremiumCatalogClient = ({ catalog }: { catalog: AdminPremiumCatalog
 
     <section className="flex flex-col gap-4">
       <h2 className="text-xl font-bold">Módulos</h2>
-      {catalog.modules.map((mod) => (
-        <ModuleCard key={mod.id} mod={mod} />
-      ))}
+      <div className="flex flex-col gap-4">
+        {catalog.modules.map((mod) => (
+          <ModuleCard key={mod.id} mod={mod} />
+        ))}
+      </div>
       {catalog.modules.length === 0 ? (
         <p className="text-sm text-[color:var(--color-muted)]">Nenhum módulo cadastrado.</p>
       ) : null}

@@ -120,7 +120,7 @@ export async function GarageMembershipHistory({ garageId }: Props) {
                 ) : null}
               </div>
               <Link
-                href={`/financeiro/membros?search=${encodeURIComponent(m.userName)}`}
+                href={`/assinaturas?search=${encodeURIComponent(m.userName)}`}
                 className="mt-1 text-xs text-[color:var(--color-accent)] hover:underline"
                 data-testid={`membership-finance-link-${m.membershipId}`}
               >

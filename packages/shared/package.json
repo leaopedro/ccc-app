@@ -14,6 +14,10 @@
       "types": "./src/admin.ts",
       "default": "./dist/admin.js"
     },
+    "./admin-subscription": {
+      "types": "./src/admin-subscription.ts",
+      "default": "./dist/admin-subscription.js"
+    },
     "./admin-garage": {
       "types": "./src/admin-garage.ts",
       "default": "./dist/admin-garage.js"

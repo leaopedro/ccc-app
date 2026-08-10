@@ -92,6 +92,13 @@ import {
   type AdminPartnerUpdate,
 } from '@ccc/shared/admin-box';
 import {
+  adminSubscriptionActionResponseSchema,
+  adminSubscriptionAddonMutationResponseSchema,
+  adminSubscriptionDetailSchema,
+  type AdminSubscriptionAddonAttach,
+  type AdminSubscriptionChangePlan,
+} from '@ccc/shared/admin-subscription';
+import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
   extraClaimResponseSchema,
@@ -522,6 +529,8 @@ export const getFinanceMemberships = (
   if (q?.to) params.set('to', q.to);
   if (q?.search) params.set('search', q.search);
   if (q?.garageId) params.set('garageId', q.garageId);
+  if (q?.addonKey) params.set('addonKey', q.addonKey);
+  if (q?.vendorName) params.set('vendorName', q.vendorName);
   if (q?.page) params.set('page', String(q.page));
   if (q?.pageSize) params.set('pageSize', String(q.pageSize));
   const qs = params.toString();
@@ -529,6 +538,52 @@ export const getFinanceMemberships = (
     schema: adminFinanceMembershipsResponseSchema,
   });
 };
+
+// ── Admin assinaturas ─────────────────────────────────────────────────
+
+export const getAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}`, { schema: adminSubscriptionDetailSchema });
+
+export const changeAdminSubscriptionPlan = (id: string, input: AdminSubscriptionChangePlan) =>
+  apiFetch(`/admin/subscriptions/${id}/plan`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const attachAdminSubscriptionAddon = (id: string, input: AdminSubscriptionAddonAttach) =>
+  apiFetch(`/admin/subscriptions/${id}/addons`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminSubscriptionAddonMutationResponseSchema,
+  });
+
+export const detachAdminSubscriptionAddon = (id: string, addonKey: string) =>
+  apiFetch(`/admin/subscriptions/${id}/addons/${encodeURIComponent(addonKey)}`, {
+    method: 'DELETE',
+    schema: adminSubscriptionAddonMutationResponseSchema,
+  });
+
+export const cancelAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const resumeAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/resume`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const pauseAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/pause`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
 
 // ── Admin store collections ───────────────────────────────────────────
 

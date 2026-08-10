@@ -14,10 +14,15 @@ import type {
   FindOrCreateCustomerInput,
   FindOrCreateCustomerResult,
   OpenSubscriptionCheckoutSession,
+  PauseSubscriptionCollectionInput,
   PaymentIntentResult,
+  PaymentMethodCard,
   RemoveSubscriptionItemInput,
+  ResumeSubscriptionCancellationInput,
+  ResumeSubscriptionCollectionInput,
   StripeClient,
   SubscriptionCheckoutSessionResult,
+  UpdateSubscriptionItemPriceInput,
   WebhookEvent,
 } from './index.js';
 
@@ -38,7 +43,12 @@ type FakeCall = {
     | 'retrievePrice'
     | 'addSubscriptionItem'
     | 'removeSubscriptionItem'
-    | 'cancelSubscriptionAtPeriodEnd';
+    | 'cancelSubscriptionAtPeriodEnd'
+    | 'updateSubscriptionItemPrice'
+    | 'resumeSubscriptionCancellation'
+    | 'pauseSubscriptionCollection'
+    | 'resumeSubscriptionCollection'
+    | 'retrievePaymentMethodCard';
   payload: unknown;
 };
 
@@ -81,6 +91,18 @@ export type FakeStripe = StripeClient & {
   nextRemoveSubscriptionItemError: Error | null;
   /** Next payload returned by cancelSubscriptionAtPeriodEnd. */
   nextCancelledSubscription: CancelSubscriptionAtPeriodEndResult;
+  /** When set, updateSubscriptionItemPrice throws this error. */
+  nextUpdateSubscriptionItemPriceError: Error | null;
+  /** When set, resumeSubscriptionCancellation throws this error. */
+  nextResumeSubscriptionCancellationError: Error | null;
+  /** When set, pauseSubscriptionCollection throws this error. */
+  nextPauseSubscriptionCollectionError: Error | null;
+  /** When set, resumeSubscriptionCollection throws this error. */
+  nextResumeSubscriptionCollectionError: Error | null;
+  /** Next card returned by retrievePaymentMethodCard. Defaults to null. */
+  nextPaymentMethodCard: PaymentMethodCard | null;
+  /** When set, retrievePaymentMethodCard throws this error. */
+  nextRetrievePaymentMethodCardError: Error | null;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
@@ -119,6 +141,12 @@ export const buildFakeStripe = (): FakeStripe => {
     nextCancelledSubscription: {
       cancelAtPeriodEnd: true,
     },
+    nextUpdateSubscriptionItemPriceError: null,
+    nextResumeSubscriptionCancellationError: null,
+    nextPauseSubscriptionCollectionError: null,
+    nextResumeSubscriptionCollectionError: null,
+    nextPaymentMethodCard: null,
+    nextRetrievePaymentMethodCardError: null,
 
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -258,6 +286,46 @@ export const buildFakeStripe = (): FakeStripe => {
     ): Promise<CancelSubscriptionAtPeriodEndResult> => {
       fake.calls.push({ kind: 'cancelSubscriptionAtPeriodEnd', payload: input });
       return fake.nextCancelledSubscription;
+    },
+
+    updateSubscriptionItemPrice: async (input: UpdateSubscriptionItemPriceInput): Promise<void> => {
+      fake.calls.push({ kind: 'updateSubscriptionItemPrice', payload: input });
+      if (fake.nextUpdateSubscriptionItemPriceError) {
+        throw fake.nextUpdateSubscriptionItemPriceError;
+      }
+    },
+
+    resumeSubscriptionCancellation: async (
+      input: ResumeSubscriptionCancellationInput,
+    ): Promise<void> => {
+      fake.calls.push({ kind: 'resumeSubscriptionCancellation', payload: input });
+      if (fake.nextResumeSubscriptionCancellationError) {
+        throw fake.nextResumeSubscriptionCancellationError;
+      }
+    },
+
+    pauseSubscriptionCollection: async (input: PauseSubscriptionCollectionInput): Promise<void> => {
+      fake.calls.push({ kind: 'pauseSubscriptionCollection', payload: input });
+      if (fake.nextPauseSubscriptionCollectionError) {
+        throw fake.nextPauseSubscriptionCollectionError;
+      }
+    },
+
+    resumeSubscriptionCollection: async (
+      input: ResumeSubscriptionCollectionInput,
+    ): Promise<void> => {
+      fake.calls.push({ kind: 'resumeSubscriptionCollection', payload: input });
+      if (fake.nextResumeSubscriptionCollectionError) {
+        throw fake.nextResumeSubscriptionCollectionError;
+      }
+    },
+
+    retrievePaymentMethodCard: async (paymentIntentId: string) => {
+      fake.calls.push({ kind: 'retrievePaymentMethodCard', payload: { paymentIntentId } });
+      if (fake.nextRetrievePaymentMethodCardError) {
+        throw fake.nextRetrievePaymentMethodCardError;
+      }
+      return fake.nextPaymentMethodCard;
     },
   };
   return fake;

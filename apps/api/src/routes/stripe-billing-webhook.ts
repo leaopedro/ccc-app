@@ -107,6 +107,8 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
         key: true,
         stripePriceId: true,
         monthlyDeltaCents: true,
+        payoutAmountCents: true,
+        vendorName: true,
         quotaPerCycle: true,
         quotaUnit: true,
         currency: true,
@@ -138,6 +140,8 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
       addonKey: mod.key,
       providerItemRef: line.subscriptionItemRef,
       monthlyDeltaCents: mod.monthlyDeltaCents,
+      payoutAmountCents: mod.payoutAmountCents,
+      vendorName: mod.vendorName,
       quotaPerCycle: mod.quotaPerCycle,
       quotaUnit: mod.quotaUnit,
       currency: mod.currency,
@@ -529,6 +533,38 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-subscription' });
       }
       garageId = existing.garageId;
+    }
+
+    // -----------------------------------------------------------------------
+    // Metodo de pagamento (conveniencia para o admin, nao dado de cobranca)
+    //
+    // O payload de invoice.paid traz `payment_intent` como id, nao expandido,
+    // entao a bandeira e o final do cartao NAO estao no evento. O normalizador e
+    // puro e nao pode buscar: a resolucao fica aqui.
+    //
+    // Falha desta chamada nao derruba o webhook. Perder um dado de exibicao nao
+    // pode impedir o processamento de uma cobranca.
+    // -----------------------------------------------------------------------
+    if (
+      (billingEvt.kind === 'subscription.activated' ||
+        billingEvt.kind === 'subscription.renewed') &&
+      !billingEvt.pricing.paymentBrand
+    ) {
+      const paymentIntentId = (event.data.object as { payment_intent?: unknown }).payment_intent;
+      if (typeof paymentIntentId === 'string' && paymentIntentId.length > 0) {
+        try {
+          const card = await app.stripe.retrievePaymentMethodCard(paymentIntentId);
+          if (card) {
+            billingEvt.pricing.paymentBrand = card.brand;
+            billingEvt.pricing.paymentLast4 = card.last4;
+          }
+        } catch (err) {
+          request.log.warn(
+            { eventId: event.id, paymentIntentId, err },
+            'stripe-billing webhook: falha ao resolver metodo de pagamento, seguindo sem ele',
+          );
+        }
+      }
     }
 
     // -----------------------------------------------------------------------

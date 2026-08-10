@@ -32,6 +32,10 @@ function extractKind(event: BillingEvent): BillingEventKind {
       return event.kind;
     case 'subscription.tier_changed':
       return event.kind;
+    case 'subscription.paused':
+      return event.kind;
+    case 'subscription.resumed':
+      return event.kind;
     default: {
       // TypeScript narrows `event` to `never` here if all arms are covered.
       const _exhaustive: never = event;
@@ -181,7 +185,7 @@ describe('BillingEvent type narrowing', () => {
     }
   });
 
-  it('BillingEvent union covers exactly 7 kinds', () => {
+  it('BillingEvent union covers exactly 9 kinds', () => {
     // Enumerate all valid kinds. If a kind is added to the spec later, this
     // list must be updated here — the exhaustive switch above provides the
     // compile-time safety net.
@@ -193,8 +197,10 @@ describe('BillingEvent type narrowing', () => {
       'subscription.expired',
       'subscription.past_due',
       'subscription.tier_changed',
+      'subscription.paused',
+      'subscription.resumed',
     ];
-    expect(allKinds).toHaveLength(7);
+    expect(allKinds).toHaveLength(9);
   });
 });
 

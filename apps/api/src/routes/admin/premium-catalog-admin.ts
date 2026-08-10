@@ -90,6 +90,8 @@ const serializeModule = (m: DbPremiumAddonModule) => ({
   name: m.name,
   description: m.description,
   monthlyDeltaCents: m.monthlyDeltaCents,
+  payoutAmountCents: m.payoutAmountCents,
+  vendorName: m.vendorName,
   currency: m.currency,
   quotaPerCycle: m.quotaPerCycle,
   quotaUnit: m.quotaUnit,
@@ -274,6 +276,8 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
           name: input.name,
           description: input.description,
           monthlyDeltaCents: input.monthlyDeltaCents,
+          payoutAmountCents: input.payoutAmountCents,
+          vendorName: input.vendorName ?? null,
           quotaPerCycle: input.quotaPerCycle,
           quotaUnit: input.quotaUnit,
           currency: input.currency,
@@ -307,6 +311,8 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (input.name !== undefined) data.name = input.name;
     if (input.description !== undefined) data.description = input.description;
     if (input.monthlyDeltaCents !== undefined) data.monthlyDeltaCents = input.monthlyDeltaCents;
+    if (input.payoutAmountCents !== undefined) data.payoutAmountCents = input.payoutAmountCents;
+    if (input.vendorName !== undefined) data.vendorName = input.vendorName;
     if (input.quotaPerCycle !== undefined) data.quotaPerCycle = input.quotaPerCycle;
     if (input.quotaUnit !== undefined) data.quotaUnit = input.quotaUnit;
     if (input.currency !== undefined) data.currency = input.currency;

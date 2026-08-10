@@ -121,6 +121,49 @@ export type CancelSubscriptionAtPeriodEndResult = {
   cancelAtPeriodEnd: boolean;
 };
 
+/**
+ * Troca o Price de um SubscriptionItem existente. Usado pela troca de plano
+ * iniciada pelo admin. proration_behavior fica em 'create_prorations': a
+ * diferenca proporcional entra como credito ou debito na fatura seguinte, e nao
+ * como cobranca imediata fora do ciclo. Mesma politica do vinculo de add-on.
+ *
+ * O DB nao e escrito aqui. O customer.subscription.updated resultante e que
+ * dispara subscription.tier_changed e grava o snapshot novo.
+ */
+export type UpdateSubscriptionItemPriceInput = {
+  subscriptionItemId: string;
+  priceId: string;
+  idempotencyKey: string;
+};
+
+/** Desfaz um cancelamento agendado: cancel_at_period_end volta para false. */
+export type ResumeSubscriptionCancellationInput = {
+  subscriptionId: string;
+  idempotencyKey: string;
+};
+
+/**
+ * Suspende a cobranca sem cancelar a assinatura. behavior 'void' descarta as
+ * faturas do periodo pausado em vez de acumular divida para o membro.
+ */
+export type PauseSubscriptionCollectionInput = {
+  subscriptionId: string;
+  idempotencyKey: string;
+};
+
+/** Retoma a cobranca de uma assinatura pausada, limpando pause_collection. */
+export type ResumeSubscriptionCollectionInput = {
+  subscriptionId: string;
+  idempotencyKey: string;
+};
+
+/**
+ * Bandeira e final do cartao de um PaymentIntent, ou null quando o pagamento nao
+ * foi por cartao ou o dado nao esta disponivel. Usado apenas para exibicao no
+ * admin — nunca para decisao de cobranca.
+ */
+export type PaymentMethodCard = { brand: string; last4: string };
+
 export type StripeClient = {
   createPaymentIntent: (input: CreatePaymentIntentInput) => Promise<PaymentIntentResult>;
   createCheckoutSession: (input: CreateCheckoutSessionInput) => Promise<CheckoutSessionResult>;
@@ -195,6 +238,11 @@ export type StripeClient = {
   cancelSubscriptionAtPeriodEnd: (
     input: CancelSubscriptionAtPeriodEndInput,
   ) => Promise<CancelSubscriptionAtPeriodEndResult>;
+  updateSubscriptionItemPrice: (input: UpdateSubscriptionItemPriceInput) => Promise<void>;
+  resumeSubscriptionCancellation: (input: ResumeSubscriptionCancellationInput) => Promise<void>;
+  pauseSubscriptionCollection: (input: PauseSubscriptionCollectionInput) => Promise<void>;
+  resumeSubscriptionCollection: (input: ResumeSubscriptionCollectionInput) => Promise<void>;
+  retrievePaymentMethodCard: (paymentIntentId: string) => Promise<PaymentMethodCard | null>;
 };
 
 export type OpenSubscriptionCheckoutSession = {
@@ -490,6 +538,42 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       return {
         cancelAtPeriodEnd: sub.cancel_at_period_end,
       };
+    },
+    updateSubscriptionItemPrice: async ({ subscriptionItemId, priceId, idempotencyKey }) => {
+      await stripe.subscriptionItems.update(
+        subscriptionItemId,
+        { price: priceId, proration_behavior: 'create_prorations' },
+        { idempotencyKey },
+      );
+    },
+    resumeSubscriptionCancellation: async ({ subscriptionId, idempotencyKey }) => {
+      await stripe.subscriptions.update(
+        subscriptionId,
+        { cancel_at_period_end: false },
+        { idempotencyKey },
+      );
+    },
+    pauseSubscriptionCollection: async ({ subscriptionId, idempotencyKey }) => {
+      await stripe.subscriptions.update(
+        subscriptionId,
+        { pause_collection: { behavior: 'void' } },
+        { idempotencyKey },
+      );
+    },
+    resumeSubscriptionCollection: async ({ subscriptionId, idempotencyKey }) => {
+      await stripe.subscriptions.update(
+        subscriptionId,
+        { pause_collection: null },
+        { idempotencyKey },
+      );
+    },
+    retrievePaymentMethodCard: async (paymentIntentId) => {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+        expand: ['payment_method'],
+      });
+      const pm = pi.payment_method;
+      if (!pm || typeof pm === 'string' || pm.type !== 'card' || !pm.card) return null;
+      return { brand: pm.card.brand, last4: pm.card.last4 };
     },
   };
 };

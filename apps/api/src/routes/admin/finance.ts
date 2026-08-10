@@ -352,6 +352,13 @@ type RawMembershipRow = {
   provider: PremiumProvider;
   garageSlug: string;
   userName: string;
+  userId: string;
+  userEmail: string;
+  baseAmountCents: number;
+  addonsAmountCents: number;
+  paymentBrand: string | null;
+  paymentLast4: string | null;
+  addonKeys: string[];
   invoices: Array<{
     id: string;
     status: string;
@@ -373,6 +380,13 @@ type MembershipListItem = {
   invoiceCount: number;
   provider: PremiumProvider;
   providerSubRef: string;
+  userId: string;
+  userEmail: string;
+  baseAmountCents: number;
+  addonsAmountCents: number;
+  paymentBrand: string | null;
+  paymentLast4: string | null;
+  addonKeys: string[];
 };
 
 async function findMembershipRows(
@@ -385,6 +399,19 @@ async function findMembershipRows(
   if (query.tier) where.tier = query.tier;
   if (query.provider) where.provider = query.provider;
   if (query.garageId) where.garageId = query.garageId;
+
+  // Filtros de modulo. Ambos casam contra vinculos que ainda contam como ativos:
+  // `cancelled` fica de fora porque o membro ja nao tem o modulo.
+  if (query.addonKey || query.vendorName) {
+    const addonFilter: Prisma.PremiumMembershipAddonWhereInput = {
+      status: { in: ['active', 'cancel_scheduled'] },
+    };
+    // Casamento exato em vendorName, nao contains: a origem dos valores e o
+    // proprio catalogo, nao texto livre digitado pelo admin.
+    if (query.addonKey) addonFilter.addonKey = query.addonKey;
+    if (query.vendorName) addonFilter.vendorName = query.vendorName;
+    where.addons = { some: addonFilter };
+  }
 
   if (query.from || query.to) {
     const periodFilter: Prisma.DateTimeFilter<'PremiumMembership'> = {};
@@ -421,10 +448,18 @@ async function findMembershipRows(
         cancelAtPeriodEnd: true,
         providerSubRef: true,
         provider: true,
+        baseAmountCents: true,
+        addonsAmountCents: true,
+        paymentBrand: true,
+        paymentLast4: true,
+        addons: {
+          where: { status: { in: ['active', 'cancel_scheduled'] } },
+          select: { addonKey: true },
+        },
         garage: {
           select: {
             slug: true,
-            user: { select: { name: true, email: true } },
+            user: { select: { id: true, name: true, email: true } },
           },
         },
         invoices: {
@@ -451,6 +486,13 @@ async function findMembershipRows(
     provider: m.provider,
     garageSlug: m.garage.slug ?? '',
     userName: m.garage.user.name ?? '',
+    userId: m.garage.user.id,
+    userEmail: m.garage.user.email,
+    baseAmountCents: m.baseAmountCents,
+    addonsAmountCents: m.addonsAmountCents,
+    paymentBrand: m.paymentBrand,
+    paymentLast4: m.paymentLast4,
+    addonKeys: m.addons.map((a) => a.addonKey),
     invoices: m.invoices,
   }));
 
@@ -474,6 +516,13 @@ function rowToListItem(row: RawMembershipRow): MembershipListItem {
     invoiceCount: row.invoices.length,
     provider: row.provider,
     providerSubRef: row.providerSubRef,
+    userId: row.userId,
+    userEmail: row.userEmail,
+    baseAmountCents: row.baseAmountCents,
+    addonsAmountCents: row.addonsAmountCents,
+    paymentBrand: row.paymentBrand,
+    paymentLast4: row.paymentLast4,
+    addonKeys: row.addonKeys,
   };
 }
 

@@ -53,6 +53,17 @@ describe('AuthedNav — organizer role', () => {
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
     expect(html.indexOf('href="/events"')).toBeGreaterThan(-1);
   });
+
+  it('mostra o link de Assinaturas para organizer', () => {
+    const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
+    expect(html).toContain('href="/assinaturas"');
+    expect(html).toContain('Assinaturas');
+  });
+
+  it('nao mostra o link de Assinaturas para staff', () => {
+    const html = renderToStaticMarkup(<AuthedNav isStaff={true} />);
+    expect(html).not.toContain('href="/assinaturas"');
+  });
 });
 
 describe('AuthedNav — staff role', () => {

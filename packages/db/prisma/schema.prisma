@@ -346,6 +346,11 @@ model PremiumMembership {
   // Recurring add-on modules total (billing concern for a later phase).
   addonsAmountCents Int @default(0)
 
+  /// Snapshot do metodo de pagamento, preenchido pelo webhook de billing quando
+  /// disponivel. Ausencia nunca e erro: a UI cai para rotulo derivado do provider.
+  paymentBrand String? @db.VarChar(20)
+  paymentLast4 String? @db.VarChar(4)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -483,6 +488,10 @@ model PremiumAddonModule {
   name              String           @db.VarChar(80)
   description       String           @db.VarChar(240)
   monthlyDeltaCents Int
+  /// Valor mensal repassado ao fornecedor terceiro. Margem = monthlyDeltaCents - payoutAmountCents.
+  payoutAmountCents Int              @default(0)
+  /// Fornecedor que presta o serviço deste módulo. Null = ainda não cadastrado.
+  vendorName        String?          @db.VarChar(120)
   currency          String           @default("BRL") @db.VarChar(3)
   quotaPerCycle     Int
   quotaUnit         PremiumAddonUnit
@@ -507,6 +516,11 @@ model PremiumMembershipAddon {
   status            PremiumAddonStatus @default(active)
   providerItemRef   String?            @db.VarChar(200)
   monthlyDeltaCents Int
+  /// Snapshot do repasse no momento do vinculo. Editar o catalogo NAO altera
+  /// retroativamente um modulo ja vinculado, igual ao que ja vale para preco e cota.
+  payoutAmountCents Int                @default(0)
+  /// Snapshot do fornecedor no momento do vinculo.
+  vendorName        String?            @db.VarChar(120)
   quotaPerCycle     Int
   quotaUnit         PremiumAddonUnit
   currency          String             @db.VarChar(3)

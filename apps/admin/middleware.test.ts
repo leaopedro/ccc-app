@@ -51,4 +51,28 @@ describe('admin auth middleware', () => {
     const res = middleware(req);
     expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/login');
   });
+
+  it('redirects staff away from /assinaturas', () => {
+    const res = middleware(
+      makeRequest('/assinaturas', 'session_role=staff; session_refresh=valid_refresh_token'),
+    );
+    expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/check-in');
+  });
+
+  it('allows admin on /assinaturas', () => {
+    const res = middleware(
+      makeRequest('/assinaturas', 'session_role=admin; session_refresh=valid_refresh_token'),
+    );
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('allows organizer on a subscription detail page', () => {
+    const res = middleware(
+      makeRequest(
+        '/assinaturas/mem-1',
+        'session_role=organizer; session_refresh=valid_refresh_token',
+      ),
+    );
+    expect(res.headers.get('location')).toBeNull();
+  });
 });

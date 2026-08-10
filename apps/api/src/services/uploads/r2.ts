@@ -26,6 +26,9 @@ export class R2Uploads implements Uploads {
         accessKeyId: opts.accessKeyId,
         secretAccessKey: opts.secretAccessKey,
       },
+      // R2 rejects the SDK's default CRC32 request checksum on presigned PUTs
+      // (403 Forbidden). Only add checksum headers when explicitly required.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
     });
   }
 

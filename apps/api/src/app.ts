@@ -12,6 +12,7 @@ import { requestIdPlugin } from './plugins/request-id.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { sentryPlugin } from './plugins/sentry.js';
 import { abacatepayWebhookRoutes } from './routes/abacatepay-webhook.js';
+import { boxRoutes } from './routes/box.js';
 import { adminRoutes } from './routes/admin/index.js';
 import { fridgeUnlockRoutes } from './routes/fridge-unlock.js';
 import { fridgeWsRoutes } from './routes/fridge-ws.js';
@@ -137,6 +138,7 @@ export const buildApp = async (
   await app.register(meSupportRoutes);
   await app.register(mePremiumRoutes);
   await app.register(mePremiumAddonRoutes);
+  await app.register(boxRoutes);
   await app.register(premiumPricingRoutes);
   await app.register(premiumCatalogRoutes);
   await app.register(uploadRoutes);

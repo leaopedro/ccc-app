@@ -267,7 +267,14 @@ describe('admin document review', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('never leaks the cpf through the admin user detail route', async () => {
+  // This asserted `not.toContain(CPF)` for an `admin` actor, which 7e5c0fb
+  // deliberately changed: `admin` viewers now get the decrypted digits, gated
+  // by role and written to the audit log. That contract is owned by
+  // test/admin/users/detail.test.ts ('cpf/phone exposure (admin-only,
+  // audited)'), which covers both the admin and the organizer-gets-null side.
+  // What is still this file's business is the document: reviewing an identity
+  // document must never put the ciphertext or the R2 object key on the wire.
+  it('never leaks the cpf ciphertext or the document object key through the admin user detail route', async () => {
     const { headers } = await asAdmin();
     const { user } = await createUser({ verified: true, email: 'member@ccc.test' });
     await prisma.user.update({
@@ -281,12 +288,18 @@ describe('admin document review', () => {
 
     const res = await app.inject({ method: 'GET', url: `/admin/users/${user.id}`, headers });
     expect(res.statusCode).toBe(200);
-    // Presence flags only. Neither the plaintext, nor the ciphertext, nor a
-    // file url may appear anywhere in the payload.
-    expect(res.body).not.toContain('52998224725');
+    // Never the stored ciphertext, never the object key of the document file.
     expect(res.body).not.toContain('enc_v1:');
     expect(res.body).not.toContain('.jpg');
-    const body = res.json() as { hasCpf: boolean; hasPhone: boolean; documents: unknown[] };
+    const body = res.json() as {
+      hasCpf: boolean;
+      hasPhone: boolean;
+      cpf: string | null;
+      documents: unknown[];
+    };
+    // Guard the guard: if the route stopped returning the plaintext to an
+    // admin, the two assertions above would pass vacuously.
+    expect(body.cpf).toBe('52998224725');
     expect(body.hasCpf).toBe(true);
     expect(body.hasPhone).toBe(true);
     expect(body.documents).toHaveLength(1);

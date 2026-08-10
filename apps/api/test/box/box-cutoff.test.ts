@@ -126,4 +126,74 @@ describe('runBoxCutoffTick', () => {
     expect(fresh.status).toBe('ready');
     expect(fresh.chargeCents).toBe(0);
   });
+
+  it('awaiting_payment with a pending box Order -> cancels order and goes ready budget-only', async () => {
+    const box = await makeBox({
+      status: 'awaiting_payment',
+      withItem: true,
+      autoSendOptIn: true,
+      withAddress: true,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { id: box.garageId } });
+    const order = await prisma.order.create({
+      data: {
+        userId: garage.userId,
+        kind: 'box',
+        amountCents: 3000,
+        baseAmountCents: 3000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        shippingAddressId: box.shippingAddressId,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+
+    await runBoxCutoffTick({});
+
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshOrder.status).toBe('cancelled');
+    expect(fresh.orderId).toBeNull();
+    expect(fresh.status).toBe('ready');
+    expect(fresh.chargeCents).toBe(0);
+  });
+
+  it('awaiting_payment whose Order already settled is left for the paid path', async () => {
+    const box = await makeBox({
+      status: 'awaiting_payment',
+      withItem: true,
+      autoSendOptIn: true,
+      withAddress: true,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { id: box.garageId } });
+    const order = await prisma.order.create({
+      data: {
+        userId: garage.userId,
+        kind: 'box',
+        amountCents: 3000,
+        baseAmountCents: 3000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        shippingAddressId: box.shippingAddressId,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+    // Simulate the Pix settling first: mark the Order paid directly in the DB.
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
+
+    await runBoxCutoffTick({});
+
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshOrder.status).toBe('paid');
+    expect(fresh.status).toBe('awaiting_payment');
+  });
 });

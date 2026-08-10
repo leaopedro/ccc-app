@@ -112,6 +112,9 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         }
 
         // awaiting_payment: cancel the pending Order unless it already settled.
+        // An awaiting_payment box always has an orderId in practice (confirm sets
+        // it); a null orderId simply falls through to resolveBudgetOnly with no
+        // order to cancel.
         if (box.orderId) {
           const cancelled = await tx.order.updateMany({
             where: { id: box.orderId, status: 'pending' },

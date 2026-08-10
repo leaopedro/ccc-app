@@ -38,6 +38,10 @@
       "types": "./src/badges-copy.ts",
       "default": "./dist/badges-copy.js"
     },
+    "./box": {
+      "types": "./src/box.ts",
+      "default": "./dist/box.js"
+    },
     "./cars": {
       "types": "./src/cars.ts",
       "default": "./dist/cars.js"

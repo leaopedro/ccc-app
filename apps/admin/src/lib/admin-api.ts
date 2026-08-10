@@ -114,6 +114,7 @@ import {
   type TicketCheckInRequest,
   type TicketCheckInResponse,
 } from '@ccc/shared/check-in';
+import { USER_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import {
   createFeedBanInputSchema,
   feedBanResponseSchema,
@@ -128,7 +129,6 @@ import {
   type GeneralSettings,
   type GeneralSettingsUpdate,
 } from '@ccc/shared/general-settings';
-import { USER_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import { publicProfileSchema } from '@ccc/shared/profile';
 import {
   storeSettingsSchema,

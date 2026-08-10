@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import type * as AdminApi from '~/lib/admin-api';
+import type * as AdminGarageApi from '~/lib/admin-garage-api';
 import { ApiError } from '~/lib/api';
+import type * as PublicGarage from '~/lib/public-garage';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -57,10 +60,13 @@ vi.mock('~/components/user-status-chip', () => ({
   UserStatusChip: () => null,
 }));
 
-const getAdminUser = vi.fn();
-const getMe = vi.fn();
-const listAdminEvents = vi.fn();
-const listAdminGroups = vi.fn();
+// Tipar os mocks com a assinatura real evita que os wrappers do factory
+// devolvam `any` (regra no-unsafe-return do eslint type-checked que o CI roda
+// na raiz) e prende os mockRejectedValueOnce ao contrato do modulo.
+const getAdminUser = vi.fn<typeof AdminApi.getAdminUser>();
+const getMe = vi.fn<typeof AdminApi.getMe>();
+const listAdminEvents = vi.fn<typeof AdminApi.listAdminEvents>();
+const listAdminGroups = vi.fn<typeof AdminApi.listAdminGroups>();
 vi.mock('~/lib/admin-api', () => ({
   getAdminUser: (id: string) => getAdminUser(id),
   getMe: () => getMe(),
@@ -68,13 +74,13 @@ vi.mock('~/lib/admin-api', () => ({
   listAdminGroups: () => listAdminGroups(),
 }));
 
-const getAdminUserGarage = vi.fn();
+const getAdminUserGarage = vi.fn<typeof AdminGarageApi.getAdminUserGarage>();
 vi.mock('~/lib/admin-garage-api', () => ({
   getAdminUserGarage: (id: string) => getAdminUserGarage(id),
 }));
 
-const fetchBadgeCatalog = vi.fn();
-const fetchPublicGarage = vi.fn();
+const fetchBadgeCatalog = vi.fn<typeof PublicGarage.fetchBadgeCatalog>();
+const fetchPublicGarage = vi.fn<typeof PublicGarage.fetchPublicGarage>();
 vi.mock('~/lib/public-garage', () => ({
   fetchBadgeCatalog: () => fetchBadgeCatalog(),
   fetchPublicGarage: (slug: string) => fetchPublicGarage(slug),
@@ -84,9 +90,7 @@ const Page = (await import('../page')).default;
 
 describe('tela de detalhe do usuario, degradacao do rate limit', () => {
   it('mostra aviso de limite de leitura em vez de propagar o 429', async () => {
-    getAdminUser.mockRejectedValueOnce(
-      new ApiError(429, 'rate_limited', 'Too many requests'),
-    );
+    getAdminUser.mockRejectedValueOnce(new ApiError(429, 'rate_limited', 'Too many requests'));
 
     const el = await Page({ params: Promise.resolve({ id: 'usr-1' }) });
     const html = renderToStaticMarkup(el);

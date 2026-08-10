@@ -16,6 +16,7 @@ describe('runRetentionTick', () => {
     buildPublicUrl: vi.fn(() => 'https://example.test/object'),
     buildSignedGetUrl: vi.fn(() => Promise.resolve('https://example.test/object?signed=1')),
     isOwnedKey: vi.fn(() => true),
+    isKindKey: vi.fn(() => true),
   };
 
   beforeEach(async () => {

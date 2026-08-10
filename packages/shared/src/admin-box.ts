@@ -22,6 +22,7 @@ export const adminBoxCatalogItemSchema = z.object({
   currency: z.string(),
   category: z.string(),
   imageObjectKey: z.string().nullable(),
+  imageUrl: z.string().nullable(),
   stockPerCycle: z.number().int().nullable(),
   maxPerCycle: z.number().int().nullable(),
   active: z.boolean(),
@@ -71,6 +72,7 @@ export const adminPartnerModuleSchema = z.object({
   priceCents: z.number().int(),
   currency: z.string(),
   imageObjectKey: z.string().nullable(),
+  imageUrl: z.string().nullable(),
   active: z.boolean(),
   sortOrder: z.number().int(),
 });
@@ -104,6 +106,7 @@ export const adminPartnerSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   logoObjectKey: z.string().nullable(),
+  logoUrl: z.string().nullable(),
   active: z.boolean(),
   sortOrder: z.number().int(),
   modules: z.array(adminPartnerModuleSchema),
@@ -140,6 +143,8 @@ export const adminPartnerListSchema = z.object({
 export type AdminPartnerList = z.infer<typeof adminPartnerListSchema>;
 
 // ----- Box settings -----
+
+export const BOX_SETTINGS_SINGLETON_ID = 'box_default';
 
 const cep = z
   .string()

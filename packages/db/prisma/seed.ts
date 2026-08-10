@@ -632,11 +632,15 @@ const seedPremiumCatalog = async (): Promise<void> => {
   );
 };
 
+// Keep in sync with BOX_SETTINGS_SINGLETON_ID in @ccc/shared/admin-box.
+const BOX_SETTINGS_SINGLETON_ID = 'box_default';
+
 const seedBoxSettings = async (): Promise<void> => {
-  const existing = await prisma.boxSettings.findFirst();
-  if (existing) return;
-  await prisma.boxSettings.create({
-    data: {
+  await prisma.boxSettings.upsert({
+    where: { id: BOX_SETTINGS_SINGLETON_ID },
+    update: {},
+    create: {
+      id: BOX_SETTINGS_SINGLETON_ID,
       boxEnabled: false,
       cutoffDaysBeforeRenewal: 5,
       headerTitle: 'Sua caixa do mes',

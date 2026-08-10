@@ -144,7 +144,7 @@ const ItemRow = ({ item }: { item: AdminBoxCatalogList['items'][number] }) => {
           kind="box_item"
           name="imageObjectKey"
           initialKey={item.imageObjectKey}
-          initialUrl={null}
+          initialUrl={item.imageUrl}
         />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" name="active" defaultChecked={item.active} /> Ativo

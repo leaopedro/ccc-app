@@ -49,6 +49,7 @@ export interface Uploads {
   buildPublicUrl(objectKey: string): string;
   buildSignedGetUrl(objectKey: string, ttlSeconds?: number): Promise<string>;
   isOwnedKey(objectKey: string, userId: string, kind: UploadKind): boolean;
+  isKindKey(objectKey: string, kind: UploadKind): boolean;
   deleteObject(objectKey: string): Promise<void>;
 }
 

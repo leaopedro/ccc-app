@@ -8,12 +8,14 @@ import {
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { Uploads } from '../../services/uploads/types.js';
+
 const isUniqueViolation = (err: unknown): boolean =>
   typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
 
 type Row = Prisma.BoxCatalogItemGetPayload<Record<string, never>>;
 
-const serialize = (row: Row) => ({
+const serialize = (row: Row, uploads: Uploads) => ({
   id: row.id,
   slug: row.slug,
   title: row.title,
@@ -22,6 +24,7 @@ const serialize = (row: Row) => ({
   currency: row.currency,
   category: row.category,
   imageObjectKey: row.imageObjectKey,
+  imageUrl: row.imageObjectKey ? uploads.buildPublicUrl(row.imageObjectKey) : null,
   stockPerCycle: row.stockPerCycle,
   maxPerCycle: row.maxPerCycle,
   active: row.active,
@@ -33,7 +36,9 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
     const rows = await prisma.boxCatalogItem.findMany({
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
-    return reply.send(adminBoxCatalogListSchema.parse({ items: rows.map(serialize) }));
+    return reply.send(
+      adminBoxCatalogListSchema.parse({ items: rows.map((r) => serialize(r, app.uploads)) }),
+    );
   });
 
   app.post('/box/catalog-items', async (request, reply) => {
@@ -42,6 +47,9 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(422).send({ error: 'UnprocessableEntity', issues: parsed.error.issues });
     }
     const input = parsed.data;
+    if (input.imageObjectKey && !app.uploads.isKindKey(input.imageObjectKey, 'box_item')) {
+      return reply.status(400).send({ error: 'BadRequest', message: 'invalid image object key' });
+    }
     try {
       const created = await prisma.boxCatalogItem.create({
         data: {
@@ -57,7 +65,9 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
           sortOrder: input.sortOrder ?? 0,
         },
       });
-      return reply.status(201).send(adminBoxCatalogItemSchema.parse(serialize(created)));
+      return reply
+        .status(201)
+        .send(adminBoxCatalogItemSchema.parse(serialize(created, app.uploads)));
     } catch (err) {
       if (isUniqueViolation(err)) {
         return reply.status(409).send({ error: 'AlreadyExists', message: 'slug already exists' });
@@ -76,6 +86,9 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (!existing) return reply.status(404).send({ error: 'NotFound' });
 
     const input = parsed.data;
+    if (input.imageObjectKey && !app.uploads.isKindKey(input.imageObjectKey, 'box_item')) {
+      return reply.status(400).send({ error: 'BadRequest', message: 'invalid image object key' });
+    }
     const data: Prisma.BoxCatalogItemUpdateInput = {};
     if (input.title !== undefined) data.title = input.title;
     if (input.description !== undefined) data.description = input.description;
@@ -88,7 +101,7 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
 
     const updated = await prisma.boxCatalogItem.update({ where: { id }, data });
-    return reply.send(adminBoxCatalogItemSchema.parse(serialize(updated)));
+    return reply.send(adminBoxCatalogItemSchema.parse(serialize(updated, app.uploads)));
   });
 
   app.delete('/box/catalog-items/:id', async (request, reply) => {
@@ -99,6 +112,6 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
       where: { id },
       data: { active: false },
     });
-    return reply.send(adminBoxCatalogItemSchema.parse(serialize(updated)));
+    return reply.send(adminBoxCatalogItemSchema.parse(serialize(updated, app.uploads)));
   });
 };

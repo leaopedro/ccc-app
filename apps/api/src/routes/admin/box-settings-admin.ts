@@ -1,5 +1,9 @@
 import { prisma } from '@ccc/db';
-import { adminBoxSettingsSchema, adminBoxSettingsUpdateSchema } from '@ccc/shared/admin-box';
+import {
+  adminBoxSettingsSchema,
+  adminBoxSettingsUpdateSchema,
+  BOX_SETTINGS_SINGLETON_ID,
+} from '@ccc/shared/admin-box';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -16,12 +20,14 @@ const serialize = (row: Row) => ({
   shippingFeeCents: row.shippingFeeCents,
 });
 
-// Singleton row, mirrors StoreSettings/GeneralSettings usage.
-const getOrCreate = async (): Promise<Row> => {
-  const existing = await prisma.boxSettings.findFirst();
-  if (existing) return existing;
-  return prisma.boxSettings.create({ data: {} });
-};
+// Singleton row keyed by a fixed id, mirrors StoreSettings/GeneralSettings.
+// Upsert makes concurrent first requests race-safe (no duplicate rows).
+const getOrCreate = async (): Promise<Row> =>
+  prisma.boxSettings.upsert({
+    where: { id: BOX_SETTINGS_SINGLETON_ID },
+    update: {},
+    create: { id: BOX_SETTINGS_SINGLETON_ID },
+  });
 
 export const adminBoxSettingsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/box/settings', async (_request, reply) => {
@@ -35,7 +41,7 @@ export const adminBoxSettingsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(422).send({ error: 'UnprocessableEntity', issues: parsed.error.issues });
     }
     const input = parsed.data;
-    const current = await getOrCreate();
+    await getOrCreate();
     const data: Prisma.BoxSettingsUpdateInput = {};
     if (input.boxEnabled !== undefined) data.boxEnabled = input.boxEnabled;
     if (input.cutoffDaysBeforeRenewal !== undefined)
@@ -45,7 +51,10 @@ export const adminBoxSettingsRoutes: FastifyPluginAsync = async (app) => {
     if (input.freeShippingCepRanges !== undefined)
       data.freeShippingCepRanges = input.freeShippingCepRanges as Prisma.InputJsonValue;
     if (input.shippingFeeCents !== undefined) data.shippingFeeCents = input.shippingFeeCents;
-    const updated = await prisma.boxSettings.update({ where: { id: current.id }, data });
+    const updated = await prisma.boxSettings.update({
+      where: { id: BOX_SETTINGS_SINGLETON_ID },
+      data,
+    });
     return reply.send(adminBoxSettingsSchema.parse(serialize(updated)));
   });
 };

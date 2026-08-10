@@ -27,6 +27,12 @@ const USERS_SUB_LINKS = [
   { href: '/groups', label: 'Grupos' },
 ] as const;
 
+const BOX_SUB_LINKS = [
+  { href: '/box/catalogo', label: 'Catálogo' },
+  { href: '/box/parceiros', label: 'Parceiros' },
+  { href: '/box/config', label: 'Configuração' },
+] as const;
+
 export const AuthedNav = ({ isStaff }: { isStaff: boolean }) => {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -34,6 +40,9 @@ export const AuthedNav = ({ isStaff }: { isStaff: boolean }) => {
   const homeHref = isStaff ? '/check-in' : '/events';
   const inUsersSection =
     !isStaff && (pathname.startsWith('/users') || pathname.startsWith('/groups'));
+  const inBoxSection = !isStaff && pathname.startsWith('/box');
+  const subLinks = inUsersSection ? USERS_SUB_LINKS : inBoxSection ? BOX_SUB_LINKS : [];
+  const inSubSection = subLinks.length > 0;
 
   return (
     <nav className="border-b border-[color:var(--color-border)]">
@@ -77,25 +86,24 @@ export const AuthedNav = ({ isStaff }: { isStaff: boolean }) => {
               {l.label}
             </Link>
           ))}
-          {inUsersSection &&
-            USERS_SUB_LINKS.map((l) => (
-              <Link
-                key={`sub-${l.href}`}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className={`py-2 pl-4 text-sm ${pathname.startsWith(l.href) ? 'font-semibold' : 'opacity-70 hover:opacity-100'}`}
-              >
-                {l.label}
-              </Link>
-            ))}
+          {subLinks.map((l) => (
+            <Link
+              key={`sub-${l.href}`}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className={`py-2 pl-4 text-sm ${pathname.startsWith(l.href) ? 'font-semibold' : 'opacity-70 hover:opacity-100'}`}
+            >
+              {l.label}
+            </Link>
+          ))}
         </div>
       ) : null}
-      {inUsersSection && (
+      {inSubSection && (
         <div
           className="flex gap-1 border-t border-[color:var(--color-border)] px-6"
-          data-testid="users-subnav"
+          data-testid="section-subnav"
         >
-          {USERS_SUB_LINKS.map((l) => (
+          {subLinks.map((l) => (
             <Link
               key={l.href}
               href={l.href}

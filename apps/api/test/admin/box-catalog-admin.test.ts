@@ -108,4 +108,43 @@ describe('admin box catalog', () => {
     });
     expect(res.statusCode).toBe(422);
   });
+
+  it('builds imageUrl from a valid box_item key', async () => {
+    const header = await auth('organizer');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/box/catalog-items',
+      headers: { authorization: header },
+      payload: {
+        slug: 'com-imagem',
+        title: 'Com imagem',
+        description: 'x',
+        priceCents: 1000,
+        category: 'c',
+        imageObjectKey: 'box_item/some-user/abc.jpg',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const created = adminBoxCatalogItemSchema.parse(res.json());
+    expect(created.imageObjectKey).toBe('box_item/some-user/abc.jpg');
+    expect(created.imageUrl).toContain('box_item/some-user/abc.jpg');
+  });
+
+  it('rejects a wrong-kind image key with 400', async () => {
+    const header = await auth('organizer');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/box/catalog-items',
+      headers: { authorization: header },
+      payload: {
+        slug: 'chave-errada',
+        title: 'x',
+        description: 'x',
+        priceCents: 1000,
+        category: 'c',
+        imageObjectKey: 'product_photo/some-user/abc.jpg',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

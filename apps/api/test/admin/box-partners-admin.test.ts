@@ -63,4 +63,58 @@ describe('admin box partners', () => {
     });
     expect(delMod.statusCode).toBe(200);
   });
+
+  it('builds logoUrl from a valid partner_logo key', async () => {
+    const header = await org();
+    const p = await app.inject({
+      method: 'POST',
+      url: '/admin/box/partners',
+      headers: { authorization: header },
+      payload: {
+        slug: 'com-logo',
+        name: 'Com logo',
+        logoObjectKey: 'partner_logo/some-user/abc.png',
+      },
+    });
+    expect(p.statusCode).toBe(201);
+    const partner = adminPartnerSchema.parse(p.json());
+    expect(partner.logoUrl).toContain('partner_logo/some-user/abc.png');
+  });
+
+  it('rejects a wrong-kind logo key with 400', async () => {
+    const header = await org();
+    const p = await app.inject({
+      method: 'POST',
+      url: '/admin/box/partners',
+      headers: { authorization: header },
+      payload: {
+        slug: 'logo-errado',
+        name: 'x',
+        logoObjectKey: 'box_item/some-user/abc.png',
+      },
+    });
+    expect(p.statusCode).toBe(400);
+  });
+
+  it('rejects a wrong-kind module image key with 400', async () => {
+    const header = await org();
+    const p = await app.inject({
+      method: 'POST',
+      url: '/admin/box/partners',
+      headers: { authorization: header },
+      payload: { slug: 'oficina-y', name: 'Oficina Y' },
+    });
+    const partner = adminPartnerSchema.parse(p.json());
+    const m = await app.inject({
+      method: 'POST',
+      url: `/admin/box/partners/${partner.id}/modules`,
+      headers: { authorization: header },
+      payload: {
+        name: 'Kit',
+        priceCents: 1000,
+        imageObjectKey: 'partner_logo/some-user/abc.png',
+      },
+    });
+    expect(m.statusCode).toBe(400);
+  });
 });

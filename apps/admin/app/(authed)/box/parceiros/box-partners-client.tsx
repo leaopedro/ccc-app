@@ -72,7 +72,7 @@ const ModuleRow = ({ mod }: { mod: AdminPartnerList['partners'][number]['modules
           kind="partner_module"
           name="imageObjectKey"
           initialKey={mod.imageObjectKey}
-          initialUrl={null}
+          initialUrl={mod.imageUrl}
         />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" name="active" defaultChecked={mod.active} /> Ativo
@@ -168,7 +168,7 @@ const PartnerCard = ({ partner }: { partner: AdminPartnerList['partners'][number
           kind="partner_logo"
           name="logoObjectKey"
           initialKey={partner.logoObjectKey}
-          initialUrl={null}
+          initialUrl={partner.logoUrl}
         />
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" name="active" defaultChecked={partner.active} /> Ativo

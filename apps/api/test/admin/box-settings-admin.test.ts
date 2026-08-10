@@ -1,4 +1,5 @@
-import { adminBoxSettingsSchema } from '@ccc/shared/admin-box';
+import { prisma } from '@ccc/db';
+import { adminBoxSettingsSchema, BOX_SETTINGS_SINGLETON_ID } from '@ccc/shared/admin-box';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -54,5 +55,22 @@ describe('admin box settings', () => {
     expect(saved.boxEnabled).toBe(true);
     expect(saved.cutoffDaysBeforeRenewal).toBe(7);
     expect(saved.freeShippingCepRanges).toHaveLength(1);
+  });
+
+  it('keeps a single settings row under the fixed id', async () => {
+    const header = await org();
+    await app.inject({
+      method: 'GET',
+      url: '/admin/box/settings',
+      headers: { authorization: header },
+    });
+    await app.inject({
+      method: 'GET',
+      url: '/admin/box/settings',
+      headers: { authorization: header },
+    });
+    const rows = await prisma.boxSettings.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(BOX_SETTINGS_SINGLETON_ID);
   });
 });

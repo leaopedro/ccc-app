@@ -42,6 +42,7 @@ describe('admin-box catalog + partner schemas', () => {
       currency: 'BRL',
       category: 'bebidas',
       imageObjectKey: null,
+      imageUrl: null,
       stockPerCycle: null,
       maxPerCycle: 3,
       active: true,

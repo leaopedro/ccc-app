@@ -1,8 +1,9 @@
 import { prisma } from '@ccc/db';
-import { boxSelectionUpdateSchema } from '@ccc/shared/box';
+import { boxConfirmSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
+import { confirmBox } from '../services/box/confirm.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
 
@@ -129,6 +130,32 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: box.id },
+      include: { items: true, partnerItems: true },
+    });
+    return reply.send(serializeBox(fresh));
+  });
+
+  app.post('/me/box/confirm', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const parsed = boxConfirmSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'UnprocessableEntity', issues: parsed.error.issues });
+    }
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+
+    const result = await confirmBox({
+      userId: sub,
+      membershipId: membership.id,
+      shippingAddressId: parsed.data.shippingAddressId,
+      autoSendOptIn: parsed.data.autoSendOptIn ?? false,
+    });
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'not_open') return reply.status(409).send({ error: 'box_locked' });
+    if (result.kind === 'bad_address') return reply.status(400).send({ error: 'bad_address' });
+
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({
+      where: { id: result.boxId },
       include: { items: true, partnerItems: true },
     });
     return reply.send(serializeBox(fresh));

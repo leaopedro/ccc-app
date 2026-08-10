@@ -12,6 +12,9 @@ export const UPLOAD_KINDS = [
   'feed_photo',
   'product_photo',
   'support_attachment',
+  'box_item',
+  'partner_logo',
+  'partner_module',
 ] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
 

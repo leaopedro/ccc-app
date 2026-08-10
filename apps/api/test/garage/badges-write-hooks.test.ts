@@ -161,6 +161,7 @@ describe('write-path hooks — badges land atomically', () => {
         email: 'fundador-free@jdm.test',
         password: 'correct-horse-battery-staple',
         name: 'Fundador',
+        ageAttestation: true,
       },
     });
     expect(res.statusCode).toBe(201);

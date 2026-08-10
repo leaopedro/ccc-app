@@ -36,6 +36,7 @@ type FakeCall = {
     | 'retrieveSubscription'
     | 'createSubscriptionCheckoutSession'
     | 'findOrCreateCustomer'
+    | 'deleteCustomersByEmail'
     | 'createBillingPortalSession'
     | 'listOpenSubscriptionCheckoutSessions'
     | 'expireCheckoutSession'
@@ -69,6 +70,8 @@ export type FakeStripe = StripeClient & {
   nextSubscriptionCheckoutSession: SubscriptionCheckoutSessionResult;
   /** Next customer payload returned by findOrCreateCustomer. */
   nextFoundOrCreatedCustomer: FindOrCreateCustomerResult;
+  /** Count returned by deleteCustomersByEmail. Defaults to 0. */
+  nextDeletedCustomerCount: number;
   /** Next billing portal payload returned by createBillingPortalSession. */
   nextBillingPortalSession: BillingPortalSessionResult;
   /** Next list returned by listOpenSubscriptionCheckoutSessions. Defaults to []. */
@@ -126,6 +129,7 @@ export const buildFakeStripe = (): FakeStripe => {
       url: 'https://checkout.stripe.com/pay/cs_test_sub_1',
     },
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
+    nextDeletedCustomerCount: 0,
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
     nextOpenSubscriptionCheckoutSessions: [],
     nextCreateSubscriptionCheckoutSessionError: null,
@@ -143,23 +147,23 @@ export const buildFakeStripe = (): FakeStripe => {
     nextResumeSubscriptionCollectionError: null,
     nextPaymentMethodCard: null,
     nextRetrievePaymentMethodCardError: null,
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
       return fake.nextPaymentIntent;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     createCheckoutSession: async (
       input: CreateCheckoutSessionInput,
     ): Promise<CheckoutSessionResult> => {
       fake.calls.push({ kind: 'createCheckoutSession', payload: input });
       return fake.nextCheckoutSession;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     getCheckoutSessionPaymentIntentId: async (_sessionId) => {
       return fake.nextCheckoutSessionPaymentIntentId;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     constructWebhookEvent: async (_payload, _signature, _webhookSecret) => {
       if (!fake.nextSignatureValid) {
         const err = new Error('signature verification failed');
@@ -169,7 +173,7 @@ export const buildFakeStripe = (): FakeStripe => {
       if (!fake.nextEvent) throw new Error('FakeStripe.nextEvent not set');
       return fake.nextEvent;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     retrieveCustomer: async (customerId) => {
       const metadata = fake.customers.get(customerId);
       if (!metadata) {
@@ -177,18 +181,18 @@ export const buildFakeStripe = (): FakeStripe => {
       }
       return { id: customerId, metadata };
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     refund: async (paymentIntentId, reason, amountCents) => {
       fake.calls.push({ kind: 'refund', payload: { paymentIntentId, reason, amountCents } });
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     cancelPaymentIntent: async (paymentIntentId) => {
       fake.calls.push({ kind: 'cancelPaymentIntent', payload: { paymentIntentId } });
       if (fake.nextCancelPaymentIntentError) {
         throw fake.nextCancelPaymentIntentError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     retrievePaymentIntent: async (paymentIntentId: string): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'retrievePaymentIntent', payload: { paymentIntentId } });
       return (
@@ -198,7 +202,7 @@ export const buildFakeStripe = (): FakeStripe => {
         }
       );
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     retrieveSubscription: async (subId: string): Promise<Stripe.Subscription> => {
       fake.calls.push({ kind: 'retrieveSubscription', payload: { subId } });
       if (!fake.nextRetrievedSubscription) {
@@ -207,7 +211,7 @@ export const buildFakeStripe = (): FakeStripe => {
       return fake.nextRetrievedSubscription;
     },
     publishableKey: () => 'pk_test_fake',
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     createSubscriptionCheckoutSession: async (
       input: CreateSubscriptionCheckoutSessionInput,
     ): Promise<SubscriptionCheckoutSessionResult> => {
@@ -217,35 +221,40 @@ export const buildFakeStripe = (): FakeStripe => {
       }
       return fake.nextSubscriptionCheckoutSession;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     findOrCreateCustomer: async (
       input: FindOrCreateCustomerInput,
     ): Promise<FindOrCreateCustomerResult> => {
       fake.calls.push({ kind: 'findOrCreateCustomer', payload: input });
       return fake.nextFoundOrCreatedCustomer;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
+    deleteCustomersByEmail: async (email: string): Promise<number> => {
+      fake.calls.push({ kind: 'deleteCustomersByEmail', payload: { email } });
+      return fake.nextDeletedCustomerCount;
+    },
+
     createBillingPortalSession: async (
       input: CreateBillingPortalSessionInput,
     ): Promise<BillingPortalSessionResult> => {
       fake.calls.push({ kind: 'createBillingPortalSession', payload: input });
       return fake.nextBillingPortalSession;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     listOpenSubscriptionCheckoutSessions: async (
       customerId: string,
     ): Promise<OpenSubscriptionCheckoutSession[]> => {
       fake.calls.push({ kind: 'listOpenSubscriptionCheckoutSessions', payload: { customerId } });
       return fake.nextOpenSubscriptionCheckoutSessions;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     expireCheckoutSession: async (sessionId: string): Promise<void> => {
       fake.calls.push({ kind: 'expireCheckoutSession', payload: { sessionId } });
       if (fake.nextExpireCheckoutSessionError) {
         throw fake.nextExpireCheckoutSessionError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     retrievePrice: async (priceId: string): Promise<Stripe.Price> => {
       fake.calls.push({ kind: 'retrievePrice', payload: { priceId } });
       if (!fake.nextRetrievedPrice) {
@@ -253,7 +262,7 @@ export const buildFakeStripe = (): FakeStripe => {
       }
       return fake.nextRetrievedPrice;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     addSubscriptionItem: async (
       input: AddSubscriptionItemInput,
     ): Promise<AddSubscriptionItemResult> => {
@@ -264,28 +273,28 @@ export const buildFakeStripe = (): FakeStripe => {
       const subscriptionItemId = fake.nextSubscriptionItemId ?? `si_fake_${++subItemCounter}`;
       return { subscriptionItemId };
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     removeSubscriptionItem: async (input: RemoveSubscriptionItemInput): Promise<void> => {
       fake.calls.push({ kind: 'removeSubscriptionItem', payload: input });
       if (fake.nextRemoveSubscriptionItemError) {
         throw fake.nextRemoveSubscriptionItemError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     cancelSubscriptionAtPeriodEnd: async (
       input: CancelSubscriptionAtPeriodEndInput,
     ): Promise<CancelSubscriptionAtPeriodEndResult> => {
       fake.calls.push({ kind: 'cancelSubscriptionAtPeriodEnd', payload: input });
       return fake.nextCancelledSubscription;
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     updateSubscriptionItemPrice: async (input: UpdateSubscriptionItemPriceInput): Promise<void> => {
       fake.calls.push({ kind: 'updateSubscriptionItemPrice', payload: input });
       if (fake.nextUpdateSubscriptionItemPriceError) {
         throw fake.nextUpdateSubscriptionItemPriceError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     resumeSubscriptionCancellation: async (
       input: ResumeSubscriptionCancellationInput,
     ): Promise<void> => {
@@ -294,14 +303,14 @@ export const buildFakeStripe = (): FakeStripe => {
         throw fake.nextResumeSubscriptionCancellationError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     pauseSubscriptionCollection: async (input: PauseSubscriptionCollectionInput): Promise<void> => {
       fake.calls.push({ kind: 'pauseSubscriptionCollection', payload: input });
       if (fake.nextPauseSubscriptionCollectionError) {
         throw fake.nextPauseSubscriptionCollectionError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     resumeSubscriptionCollection: async (
       input: ResumeSubscriptionCollectionInput,
     ): Promise<void> => {
@@ -310,7 +319,7 @@ export const buildFakeStripe = (): FakeStripe => {
         throw fake.nextResumeSubscriptionCollectionError;
       }
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     retrievePaymentMethodCard: async (paymentIntentId: string) => {
       fake.calls.push({ kind: 'retrievePaymentMethodCard', payload: { paymentIntentId } });
       if (fake.nextRetrievePaymentMethodCardError) {

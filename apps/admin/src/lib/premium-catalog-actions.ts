@@ -80,6 +80,7 @@ export const updatePlanAction = async (
     description: str(fd, 'description'),
     active: bool(fd, 'active'),
     sortOrder: num(fd, 'sortOrder'),
+    monthlyBoxBudgetCents: num(fd, 'monthlyBoxBudgetCents'),
   });
   if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
   try {

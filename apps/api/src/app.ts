@@ -13,6 +13,8 @@ import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { sentryPlugin } from './plugins/sentry.js';
 import { abacatepayWebhookRoutes } from './routes/abacatepay-webhook.js';
 import { adminRoutes } from './routes/admin/index.js';
+import { fridgeUnlockRoutes } from './routes/fridge-unlock.js';
+import { fridgeWsRoutes } from './routes/fridge-ws.js';
 import { authRoutes } from './routes/auth/index.js';
 import { badgesCatalogRoute } from './routes/badges-catalog.js';
 import { carRoutes } from './routes/cars.js';
@@ -44,6 +46,7 @@ import { stripeBillingWebhookRoutes } from './routes/stripe-billing-webhook.js';
 import { stripeWebhookRoutes } from './routes/stripe-webhook.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { buildAbacatePay, type AbacatePayClient } from './services/abacatepay/index.js';
+import { createFridgeRegistry, type FridgeRegistry } from './services/fridge/registry.js';
 import { buildMailer, type Mailer } from './services/mailer/index.js';
 import { buildPushSender, type PushSender } from './services/push/index.js';
 import { buildRevenueCatClient } from './services/revenuecat/client.js';
@@ -67,6 +70,7 @@ declare module 'fastify' {
     stripe: StripeClient;
     abacatepay: AbacatePayClient | null;
     push: PushSender;
+    fridge: FridgeRegistry;
   }
 }
 
@@ -103,6 +107,10 @@ export const buildApp = async (
         : null;
   app.decorate('abacatepay', abacatepay);
   app.decorate('push', overrides.push ?? buildPushSender(env));
+  app.decorate('fridge', createFridgeRegistry({ heartbeatMs: 30_000, log: app.log }));
+  app.addHook('onClose', () => {
+    app.fridge.stopHeartbeat();
+  });
   process.stdout.write('[app] services ready, registering plugins\n');
 
   await app.register(requestIdPlugin);
@@ -146,6 +154,19 @@ export const buildApp = async (
   await app.register(abacatepayWebhookRoutes);
   await app.register(adminRoutes, { prefix: '/admin' });
   await app.register(authRoutes, { prefix: '/auth' });
+
+  if (env.FRIDGE_DEVICE_SECRET && env.FRIDGE_UNLOCK_API_KEY) {
+    await app.register(fridgeWsRoutes);
+    await app.register(fridgeUnlockRoutes);
+  } else {
+    app.log.warn(
+      {
+        FRIDGE_DEVICE_SECRET: Boolean(env.FRIDGE_DEVICE_SECRET),
+        FRIDGE_UNLOCK_API_KEY: Boolean(env.FRIDGE_UNLOCK_API_KEY),
+      },
+      '[fridge] disabled — set FRIDGE_DEVICE_SECRET and FRIDGE_UNLOCK_API_KEY to enable',
+    );
+  }
   process.stdout.write('[app] routes registered\n');
 
   if (env.WORKER_ENABLED && env.NODE_ENV === 'production') {

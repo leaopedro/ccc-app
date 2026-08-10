@@ -9,7 +9,6 @@ export class DevUploads implements Uploads {
     private readonly ttlSeconds = 300,
   ) {}
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async presignPut(input: PresignInput): Promise<PresignResult> {
     const ext = EXT_FOR_MIME[input.contentType] ?? 'bin';
     const prefix = UPLOAD_KIND_PATH_PREFIX[input.kind];
@@ -29,7 +28,6 @@ export class DevUploads implements Uploads {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async presignGet(objectKey: string): Promise<string> {
     return this.buildPublicUrl(objectKey);
   }
@@ -38,7 +36,6 @@ export class DevUploads implements Uploads {
     return `${this.publicBase}/${objectKey}`;
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async buildSignedGetUrl(objectKey: string, ttlSeconds = this.ttlSeconds): Promise<string> {
     return `${this.publicBase}/${objectKey}?signed=dev&exp=${Date.now() + ttlSeconds * 1000}`;
   }
@@ -46,6 +43,11 @@ export class DevUploads implements Uploads {
   isOwnedKey(objectKey: string, userId: string, kind: UploadKind): boolean {
     const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
     return objectKey.startsWith(`${prefix}/${userId}/`);
+  }
+
+  isKindKey(objectKey: string, kind: UploadKind): boolean {
+    const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
+    return objectKey.startsWith(`${prefix}/`);
   }
 
   async deleteObject(_objectKey: string): Promise<void> {

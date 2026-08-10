@@ -213,6 +213,16 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
               className={`${inputCls} w-20`}
             />
           </label>
+          <label className={labelCls}>
+            Budget do box (centavos)
+            <input
+              name="monthlyBoxBudgetCents"
+              type="number"
+              min={0}
+              defaultValue={plan.monthlyBoxBudgetCents}
+              className={`${inputCls} w-32`}
+            />
+          </label>
           <label className={checkboxLabelCls}>
             <input name="active" type="checkbox" defaultChecked={plan.active} />
             Ativo

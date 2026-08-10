@@ -12,7 +12,11 @@ concurrency:
 jobs:
   lint-typecheck-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # A suite da API roda serial (vitest singleFork: um Postgres compartilhado
+    # com resetDatabase no beforeEach) e sozinha ja passa de 15min, o que com
+    # lint + typecheck + build estourava o teto anterior de 20 e cancelava o
+    # job no meio do `pnpm test`, sem nunca chegar no `pnpm build`.
+    timeout-minutes: 40
 
     services:
       postgres:

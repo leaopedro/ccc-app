@@ -76,9 +76,9 @@ describe('subscription profile gate', () => {
     expect(incompleteProfileErrorSchema.parse(res.json()).missing).toEqual(['document']);
     // FakeStripe records every call in `calls` with a `kind` discriminator
     // (apps/api/src/services/stripe/fake.ts). No session may have been minted.
-    expect(
-      stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession'),
-    ).toHaveLength(0);
+    expect(stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession')).toHaveLength(
+      0,
+    );
   });
 
   it('lets a pending document through — optimistic auto-approval', async () => {

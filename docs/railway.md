@@ -60,12 +60,12 @@ runs `prisma migrate deploy`, then `startCommand` boots
 
 ## Variáveis do gate de perfil
 
-| Variável | Default | Descrição |
-| --- | --- | --- |
-| `PROFILE_GATE_ENABLED` | `false` | Liga os gates de perfil no checkout e na assinatura. |
-| `PROFILE_GATE_ROLLOUT_PERCENT` | `0` | Percentual de usuários sob o gate. Bucket determinístico por `userId`. |
-| `R2_DOCUMENTS_BUCKET` | Sem default | Bucket R2 privado de documentos de identidade. Obrigatório sempre que o R2 está configurado. A API não sobe sem essa variável. |
-| `DOCUMENT_URL_TTL_SECONDS` | `60` | TTL do signed GET de documento. |
+| Variável                       | Default     | Descrição                                                                                                                      |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `PROFILE_GATE_ENABLED`         | `false`     | Liga os gates de perfil no checkout e na assinatura.                                                                           |
+| `PROFILE_GATE_ROLLOUT_PERCENT` | `0`         | Percentual de usuários sob o gate. Bucket determinístico por `userId`.                                                         |
+| `R2_DOCUMENTS_BUCKET`          | Sem default | Bucket R2 privado de documentos de identidade. Obrigatório sempre que o R2 está configurado. A API não sobe sem essa variável. |
+| `DOCUMENT_URL_TTL_SECONDS`     | `60`        | TTL do signed GET de documento.                                                                                                |
 
 ## Deploy
 
@@ -172,12 +172,12 @@ API não sobe.
 
 Métricas a acompanhar em cada passo:
 
-| Métrica | Limiar de alerta |
-| --- | --- |
-| `403 INCOMPLETE_PROFILE` sobre tentativas de checkout | acima de 40% no bucket ativo |
-| Conversão de assinatura vs. semana anterior | queda acima de 20% |
-| `5xx` nas rotas de checkout e premium | qualquer aumento sobre a linha de base |
-| `count(UserDocument where status='pending')` | acima de 200 |
+| Métrica                                               | Limiar de alerta                       |
+| ----------------------------------------------------- | -------------------------------------- |
+| `403 INCOMPLETE_PROFILE` sobre tentativas de checkout | acima de 40% no bucket ativo           |
+| Conversão de assinatura vs. semana anterior           | queda acima de 20%                     |
+| `5xx` nas rotas de checkout e premium                 | qualquer aumento sobre a linha de base |
+| `count(UserDocument where status='pending')`          | acima de 200                           |
 
 Rollback: `PROFILE_GATE_ROLLOUT_PERCENT=0`, ou `PROFILE_GATE_ENABLED=false`.
 Efeito imediato, sem deploy. Não reverter a migração por problema de funil:

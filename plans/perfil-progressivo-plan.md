@@ -12,12 +12,12 @@
 
 Verificado no repo antes de escrever este plano:
 
-| Premissa do pedido | Realidade | Consequência |
-| --- | --- | --- |
-| `cpf`, `telefone`, `documento_id` existem e precisam aceitar `NULL` | Nenhum dos três existe. `User` tem só `bio`, `city`, `stateCode`, `avatarObjectKey` como perfil ([schema.prisma:47-51](../packages/db/prisma/schema.prisma:47)) | Migração **cria** colunas nullable. Não há `ALTER COLUMN DROP NOT NULL`. Zero risco de backfill. |
-| Tabela `documents` | Não existe. Precedente de anexo privado é `SupportTicket.attachmentObjectKey` ([me-support.ts:24](../apps/api/src/routes/me-support.ts:24)) | Nova tabela `UserDocument`, nome em PascalCase para casar com as outras 90 tabelas do schema. |
-| `phone` | Existe em `ShippingAddress.phone` e `SupportTicket.phone`, ambos `VarChar(20)`, ambos em claro | `User.phone` segue o mesmo tipo e não é cifrado. |
-| CPF em claro | `sentry-breadcrumb-filter.ts` e `sentry-scrubber.ts` já removem padrão de CPF de telemetria | CPF é cifrado em repouso com `encryptField` ([field-encryption.ts:34](../apps/api/src/services/crypto/field-encryption.ts:34)), chave `FIELD_ENCRYPTION_KEY` já em env. |
+| Premissa do pedido                                                  | Realidade                                                                                                                                                       | Consequência                                                                                                                                                            |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cpf`, `telefone`, `documento_id` existem e precisam aceitar `NULL` | Nenhum dos três existe. `User` tem só `bio`, `city`, `stateCode`, `avatarObjectKey` como perfil ([schema.prisma:47-51](../packages/db/prisma/schema.prisma:47)) | Migração **cria** colunas nullable. Não há `ALTER COLUMN DROP NOT NULL`. Zero risco de backfill.                                                                        |
+| Tabela `documents`                                                  | Não existe. Precedente de anexo privado é `SupportTicket.attachmentObjectKey` ([me-support.ts:24](../apps/api/src/routes/me-support.ts:24))                     | Nova tabela `UserDocument`, nome em PascalCase para casar com as outras 90 tabelas do schema.                                                                           |
+| `phone`                                                             | Existe em `ShippingAddress.phone` e `SupportTicket.phone`, ambos `VarChar(20)`, ambos em claro                                                                  | `User.phone` segue o mesmo tipo e não é cifrado.                                                                                                                        |
+| CPF em claro                                                        | `sentry-breadcrumb-filter.ts` e `sentry-scrubber.ts` já removem padrão de CPF de telemetria                                                                     | CPF é cifrado em repouso com `encryptField` ([field-encryption.ts:34](../apps/api/src/services/crypto/field-encryption.ts:34)), chave `FIELD_ENCRYPTION_KEY` já em env. |
 
 **Decisão travada:** auto-aprovação otimista. Enviar documento libera a assinatura na hora com `status = pending`. Revisão posterior no admin pode rejeitar.
 
@@ -128,13 +128,13 @@ Envelope de erro segue `error-handler.ts`: `{ error, message }` para 4xx, `{ err
 
 Corpo (`signupSchema`):
 
-| Campo | Tipo | Obrigatório |
-| --- | --- | --- |
-| `name` | string 1..100 | sim |
-| `email` | e-mail, lowercase | sim |
-| `password` | string >= 10 | sim |
-| `cpf` | string, 11 dígitos válidos | não |
-| `phone` | string, 10 ou 11 dígitos | não |
+| Campo      | Tipo                       | Obrigatório |
+| ---------- | -------------------------- | ----------- |
+| `name`     | string 1..100              | sim         |
+| `email`    | e-mail, lowercase          | sim         |
+| `password` | string >= 10               | sim         |
+| `cpf`      | string, 11 dígitos válidos | não         |
+| `phone`    | string, 10 ou 11 dígitos   | não         |
 
 - `201` — `authResponseSchema` inalterado.
 - `400` — `ValidationError` com `issues`. CPF com dígito verificador inválido cai aqui.
@@ -200,20 +200,20 @@ Devolvido por todos os gates. `403`:
 
 ### 2.5 Endpoints com gate `checkout` (`cpf` + `phone`)
 
-| Endpoint | Arquivo |
-| --- | --- |
-| `POST /cart/checkout` | [cart.ts:467](../apps/api/src/routes/cart.ts:467) |
-| `POST /orders` | [orders.ts:378](../apps/api/src/routes/orders.ts:378) |
+| Endpoint                | Arquivo                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `POST /cart/checkout`   | [cart.ts:467](../apps/api/src/routes/cart.ts:467)     |
+| `POST /orders`          | [orders.ts:378](../apps/api/src/routes/orders.ts:378) |
 | `POST /orders/checkout` | [orders.ts:509](../apps/api/src/routes/orders.ts:509) |
 
 Respostas existentes preservadas. O `403` da seção 2.4 é acrescentado e avaliado **antes** de qualquer reserva de estoque, criação de `Order` ou chamada a provedor.
 
 ### 2.6 Endpoints com gate `subscription` (`cpf` + `phone` + `document`)
 
-| Endpoint | Arquivo |
-| --- | --- |
-| `GET /api/me/premium/checkout-precheck` | [me-premium.ts:56](../apps/api/src/routes/me-premium.ts:56) |
-| `POST /api/me/premium/checkout` | [me-premium.ts:126](../apps/api/src/routes/me-premium.ts:126) |
+| Endpoint                                | Arquivo                                                       |
+| --------------------------------------- | ------------------------------------------------------------- |
+| `GET /api/me/premium/checkout-precheck` | [me-premium.ts:56](../apps/api/src/routes/me-premium.ts:56)   |
+| `POST /api/me/premium/checkout`         | [me-premium.ts:126](../apps/api/src/routes/me-premium.ts:126) |
 
 Ordem de precedência no precheck e no checkout: `503` (flag de billing off) → `403` (perfil incompleto) → `409` (`AlreadySubscribed`) → fluxo normal.
 
@@ -267,12 +267,12 @@ Corpo:
 
 ### 2.10 Admin
 
-| Método | URI | Sucesso | Erros |
-| --- | --- | --- | --- |
-| `GET` | `/admin/documents?status=&cursor=&limit=` | `200 { items, nextCursor }` | `401`, `403` |
-| `GET` | `/admin/documents/:id/file` | `302` para signed GET, TTL 60s | `401`, `403`, `404`, `410` (arquivo purgado) |
-| `POST` | `/admin/documents/:id/approve` | `200 { id, status: 'approved', reviewedAt }` | `401`, `403`, `404`, `409` (já revisado) |
-| `POST` | `/admin/documents/:id/reject` | `200 { id, status: 'rejected', reviewedAt, rejectionReason }` | `400` (sem `reason`), `401`, `403`, `404`, `409` |
+| Método | URI                                       | Sucesso                                                       | Erros                                            |
+| ------ | ----------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| `GET`  | `/admin/documents?status=&cursor=&limit=` | `200 { items, nextCursor }`                                   | `401`, `403`                                     |
+| `GET`  | `/admin/documents/:id/file`               | `302` para signed GET, TTL 60s                                | `401`, `403`, `404`, `410` (arquivo purgado)     |
+| `POST` | `/admin/documents/:id/approve`            | `200 { id, status: 'approved', reviewedAt }`                  | `401`, `403`, `404`, `409` (já revisado)         |
+| `POST` | `/admin/documents/:id/reject`             | `200 { id, status: 'rejected', reviewedAt, rejectionReason }` | `400` (sem `reason`), `401`, `403`, `404`, `409` |
 
 Toda mutação grava `recordAudit` com `entityType: 'user_document'`. O `GET /file` também.
 
@@ -438,17 +438,17 @@ Fluxo: seleção de tipo (CNH ou RG) → captura → preview → envio → estad
 
 Estados e transições:
 
-| Estado | Origem | Saída |
-| --- | --- | --- |
-| `selecting_type` | entrada | `capturing` |
-| `capturing` | tipo escolhido | `preview` ou `selecting_type` (cancelou) |
-| `preview` | arquivo escolhido | `uploading` ou `capturing` (trocar) |
-| `uploading` | toque em enviar | `sent` ou `error` |
-| `error` | falha de presign, PUT ou confirmação | `preview` (tentar de novo) |
-| `sent` | `201` do `POST /me/documents` | navega para `next`, ou para `pending` |
-| `pending` | `GET /me/documents` retorna `pending` | `approved` ou `rejected` na próxima leitura |
-| `approved` | revisão do admin | terminal |
-| `rejected` | revisão do admin | mostra `rejectionReason` e volta para `selecting_type` |
+| Estado           | Origem                                | Saída                                                  |
+| ---------------- | ------------------------------------- | ------------------------------------------------------ |
+| `selecting_type` | entrada                               | `capturing`                                            |
+| `capturing`      | tipo escolhido                        | `preview` ou `selecting_type` (cancelou)               |
+| `preview`        | arquivo escolhido                     | `uploading` ou `capturing` (trocar)                    |
+| `uploading`      | toque em enviar                       | `sent` ou `error`                                      |
+| `error`          | falha de presign, PUT ou confirmação  | `preview` (tentar de novo)                             |
+| `sent`           | `201` do `POST /me/documents`         | navega para `next`, ou para `pending`                  |
+| `pending`        | `GET /me/documents` retorna `pending` | `approved` ou `rejected` na próxima leitura            |
+| `approved`       | revisão do admin                      | terminal                                               |
+| `rejected`       | revisão do admin                      | mostra `rejectionReason` e volta para `selecting_type` |
 
 Em `pending` o texto deixa claro que a assinatura já está liberada e a análise segue em paralelo. É o que a auto-aprovação otimista promete.
 
@@ -472,26 +472,26 @@ Execução com `superpowers:subagent-driven-development`. Modelos: orquestrador 
 
 ### 5.1 Responsabilidades
 
-| Papel | Modelo | Responsabilidade |
-| --- | --- | --- |
-| Orquestrador | Opus 5 | Sequencia os lotes, monta o contexto de cada subagente, decide o que roda em paralelo, aplica os gates, integra os diffs. Não escreve código de produto. |
-| Reviewer | Opus 5 | Revisa o diff de cada lote antes do merge. Verifica contratos da seção 2, invariantes de webhook e pagamento, cobertura da seção 6, e ausência de PII em log, serializer ou telemetria. Aponta pendências, não corrige. |
-| Implementador | Sonnet 5 | Executa uma tarefa de lote, escreve teste e código, roda lint/typecheck/test do escopo dele. |
+| Papel         | Modelo   | Responsabilidade                                                                                                                                                                                                        |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Orquestrador  | Opus 5   | Sequencia os lotes, monta o contexto de cada subagente, decide o que roda em paralelo, aplica os gates, integra os diffs. Não escreve código de produto.                                                                |
+| Reviewer      | Opus 5   | Revisa o diff de cada lote antes do merge. Verifica contratos da seção 2, invariantes de webhook e pagamento, cobertura da seção 6, e ausência de PII em log, serializer ou telemetria. Aponta pendências, não corrige. |
+| Implementador | Sonnet 5 | Executa uma tarefa de lote, escreve teste e código, roda lint/typecheck/test do escopo dele.                                                                                                                            |
 
 ### 5.2 Lotes e paralelismo
 
-| Lote | Conteúdo | Paralelizável |
-| --- | --- | --- |
-| B1 | Shared: schemas de CPF, telefone, profile-status, documents, exports do `package.json` | não, é base dos demais |
-| B2 | Banco: schema Prisma + migração | sim, com B1 |
-| B3 | API: `services/profile/completeness.ts` + `gate.ts` + `GET /me/profile-status` + `PATCH /me` + signup | depende de B1, B2 |
-| B4 | API: gates nas 5 rotas de checkout e assinatura | depende de B3 |
-| B5 | API: uploads privados + `routes/me-documents.ts` | depende de B1, B2. Paralelo com B4 |
-| B6 | API: admin (fila, aprovar, rejeitar, audit) | depende de B5 |
-| B7 | API: LGPD (data-export, anonymize, retention, legal) | depende de B2, B5. Paralelo com B6 |
-| B8 | Mobile: cliente de API, copy, `ProfileCompletionSheet` | depende de B1 |
-| B9 | Mobile: signup, edit, telas de documento | depende de B8, B5 |
-| B10 | Mobile: ganchos de checkout e assinatura | depende de B8, B4 |
+| Lote | Conteúdo                                                                                              | Paralelizável                      |
+| ---- | ----------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| B1   | Shared: schemas de CPF, telefone, profile-status, documents, exports do `package.json`                | não, é base dos demais             |
+| B2   | Banco: schema Prisma + migração                                                                       | sim, com B1                        |
+| B3   | API: `services/profile/completeness.ts` + `gate.ts` + `GET /me/profile-status` + `PATCH /me` + signup | depende de B1, B2                  |
+| B4   | API: gates nas 5 rotas de checkout e assinatura                                                       | depende de B3                      |
+| B5   | API: uploads privados + `routes/me-documents.ts`                                                      | depende de B1, B2. Paralelo com B4 |
+| B6   | API: admin (fila, aprovar, rejeitar, audit)                                                           | depende de B5                      |
+| B7   | API: LGPD (data-export, anonymize, retention, legal)                                                  | depende de B2, B5. Paralelo com B6 |
+| B8   | Mobile: cliente de API, copy, `ProfileCompletionSheet`                                                | depende de B1                      |
+| B9   | Mobile: signup, edit, telas de documento                                                              | depende de B8, B5                  |
+| B10  | Mobile: ganchos de checkout e assinatura                                                              | depende de B8, B4                  |
 
 ### 5.3 Gates
 
@@ -511,27 +511,27 @@ Execução com `superpowers:subagent-driven-development`. Modelos: orquestrador 
 
 Testes de API contra Postgres real, conforme o CLAUDE.md. Reaproveitar `apps/api/test/helpers.ts` e estender `resetDatabase` com `userDocument`.
 
-| # | Cenário | Critério de aceite técnico |
-| --- | --- | --- |
-| T1 | Cadastro mínimo | `POST /auth/signup` com nome, e-mail, senha → `201`. `User.cpf` e `User.phone` são `NULL`. `Garage` criada na mesma tx. |
-| T2 | Cadastro com opcionais | `POST /auth/signup` com `cpf` e `phone` → `201`. `User.cpf` no banco casa `isEncrypted()`. `GET /me` devolve os 11 dígitos em claro. |
-| T3 | CPF inválido no cadastro | dígito verificador errado → `400 ValidationError`. Nenhum `User` criado. |
-| T4 | Checkout de carrinho sem CPF nem telefone | `POST /cart/checkout` → `403`, `status: 'incomplete_profile'`, `missing: ['cpf','phone']`. `Cart.status` permanece `open`. `TicketTier.quantitySold` inalterado. Nenhum `Order` criado. |
-| T5 | Checkout com CPF e sem telefone | `403` com `missing: ['phone']` apenas. |
-| T6 | Complementação libera checkout | `PATCH /me` com `phone` → `200`. Repetir `POST /cart/checkout` → `201`. `Order.status = 'pending'`. |
-| T7 | Gate nos dois endpoints legados | `POST /orders` e `POST /orders/checkout` sem CPF → `403` com o mesmo payload. Sem reserva de estoque. |
-| T8 | Assinatura sem documento, com CPF e telefone | `GET /checkout-precheck` → `403` com `missing: ['document']`. `POST /checkout` → `403` idem. Nenhuma sessão Stripe criada. |
-| T9 | Upload e liberação da assinatura | `POST /me/documents/upload` → `201` com `uploadUrl`. `POST /me/documents` → `201` com `status: 'pending'`. `GET /me/profile-status` → `subscription.complete: true`. `POST /checkout` → `201` com `url`. |
-| T10 | Documento de outro usuário | `POST /me/documents` com `objectKey` de outro `userId` → `400`. Nenhuma row criada. |
-| T11 | Segundo documento com um pendente | `POST /me/documents` → `409 DOCUMENT_ALREADY_PENDING`. |
-| T12 | MIME e tamanho | `POST /me/documents/upload` com `application/pdf` → `400`. Com `size` acima de 10 MB → `400`. |
-| T13 | Rejeição não altera assinatura | `POST /admin/documents/:id/reject` → `200`, `status: 'rejected'`. `PremiumMembership.status` inalterado. `AdminAudit` com `entityType: 'user_document'`. `GET /me/profile-status` volta a `subscription.complete: false`. |
-| T14 | Flag desligada | `PROFILE_GATE_ENABLED=false` → `POST /cart/checkout` sem CPF retorna `201`. |
-| T15 | Rollout percentual | `PROFILE_GATE_ROLLOUT_PERCENT=0` → nenhum usuário bloqueado. `=100` → todos. Bucketing estável para o mesmo `userId` entre chamadas. |
-| T16 | Anonimização | após `anonymizeUser`, `User.cpf` e `User.phone` são `NULL`, `UserDocument` do usuário sumiu, `objectKey` está em `UploadDeletionQueue`. |
-| T17 | Export de dados | `data-export` inclui `cpf` em claro, `phone` e metadados de `UserDocument`, sem bytes de arquivo. |
-| T18 | Serializer admin não vaza | `GET /admin/users/:id` não contém CPF nem URL de documento em nenhum campo da resposta. |
-| T19 | Contrato de privacidade do feed | `feed-privacy-contract.test.ts` continua verde com as colunas novas em `User`. |
+| #   | Cenário                                      | Critério de aceite técnico                                                                                                                                                                                                |
+| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1  | Cadastro mínimo                              | `POST /auth/signup` com nome, e-mail, senha → `201`. `User.cpf` e `User.phone` são `NULL`. `Garage` criada na mesma tx.                                                                                                   |
+| T2  | Cadastro com opcionais                       | `POST /auth/signup` com `cpf` e `phone` → `201`. `User.cpf` no banco casa `isEncrypted()`. `GET /me` devolve os 11 dígitos em claro.                                                                                      |
+| T3  | CPF inválido no cadastro                     | dígito verificador errado → `400 ValidationError`. Nenhum `User` criado.                                                                                                                                                  |
+| T4  | Checkout de carrinho sem CPF nem telefone    | `POST /cart/checkout` → `403`, `status: 'incomplete_profile'`, `missing: ['cpf','phone']`. `Cart.status` permanece `open`. `TicketTier.quantitySold` inalterado. Nenhum `Order` criado.                                   |
+| T5  | Checkout com CPF e sem telefone              | `403` com `missing: ['phone']` apenas.                                                                                                                                                                                    |
+| T6  | Complementação libera checkout               | `PATCH /me` com `phone` → `200`. Repetir `POST /cart/checkout` → `201`. `Order.status = 'pending'`.                                                                                                                       |
+| T7  | Gate nos dois endpoints legados              | `POST /orders` e `POST /orders/checkout` sem CPF → `403` com o mesmo payload. Sem reserva de estoque.                                                                                                                     |
+| T8  | Assinatura sem documento, com CPF e telefone | `GET /checkout-precheck` → `403` com `missing: ['document']`. `POST /checkout` → `403` idem. Nenhuma sessão Stripe criada.                                                                                                |
+| T9  | Upload e liberação da assinatura             | `POST /me/documents/upload` → `201` com `uploadUrl`. `POST /me/documents` → `201` com `status: 'pending'`. `GET /me/profile-status` → `subscription.complete: true`. `POST /checkout` → `201` com `url`.                  |
+| T10 | Documento de outro usuário                   | `POST /me/documents` com `objectKey` de outro `userId` → `400`. Nenhuma row criada.                                                                                                                                       |
+| T11 | Segundo documento com um pendente            | `POST /me/documents` → `409 DOCUMENT_ALREADY_PENDING`.                                                                                                                                                                    |
+| T12 | MIME e tamanho                               | `POST /me/documents/upload` com `application/pdf` → `400`. Com `size` acima de 10 MB → `400`.                                                                                                                             |
+| T13 | Rejeição não altera assinatura               | `POST /admin/documents/:id/reject` → `200`, `status: 'rejected'`. `PremiumMembership.status` inalterado. `AdminAudit` com `entityType: 'user_document'`. `GET /me/profile-status` volta a `subscription.complete: false`. |
+| T14 | Flag desligada                               | `PROFILE_GATE_ENABLED=false` → `POST /cart/checkout` sem CPF retorna `201`.                                                                                                                                               |
+| T15 | Rollout percentual                           | `PROFILE_GATE_ROLLOUT_PERCENT=0` → nenhum usuário bloqueado. `=100` → todos. Bucketing estável para o mesmo `userId` entre chamadas.                                                                                      |
+| T16 | Anonimização                                 | após `anonymizeUser`, `User.cpf` e `User.phone` são `NULL`, `UserDocument` do usuário sumiu, `objectKey` está em `UploadDeletionQueue`.                                                                                   |
+| T17 | Export de dados                              | `data-export` inclui `cpf` em claro, `phone` e metadados de `UserDocument`, sem bytes de arquivo.                                                                                                                         |
+| T18 | Serializer admin não vaza                    | `GET /admin/users/:id` não contém CPF nem URL de documento em nenhum campo da resposta.                                                                                                                                   |
+| T19 | Contrato de privacidade do feed              | `feed-privacy-contract.test.ts` continua verde com as colunas novas em `User`.                                                                                                                                            |
 
 Mobile: testes de unidade para o parser de `missing` em `src/api/errors.ts`, para a máquina de estados da tela de documento e para a seleção de campos do `ProfileCompletionSheet`.
 
@@ -549,14 +549,14 @@ Mobile: testes de unidade para o parser de `missing` em `src/api/errors.ts`, par
 
 ### 7.2 Métricas
 
-| Métrica | Fonte | Limiar de alerta |
-| --- | --- | --- |
-| Taxa de `403 INCOMPLETE_PROFILE` sobre total de tentativas de checkout | log estruturado da API por rota | acima de 40% no bucket ativo |
-| Abandono no sheet de complementação | eventos mobile: `sheet_opened` sem `sheet_completed` em 10 min | acima de 50% |
-| Conversão de assinatura | `PremiumMembership` criadas por dia, comparado à semana anterior | queda acima de 20% |
-| `5xx` nas rotas tocadas | Sentry, tag de rota | qualquer aumento sobre a linha de base |
-| Falha de upload de documento | razão `presign_failed`, `put_failed`, `confirm_failed` | acima de 10% dos envios |
-| Fila de documentos pendentes | `count(UserDocument where status = 'pending')` | acima de 200 |
+| Métrica                                                                | Fonte                                                            | Limiar de alerta                       |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| Taxa de `403 INCOMPLETE_PROFILE` sobre total de tentativas de checkout | log estruturado da API por rota                                  | acima de 40% no bucket ativo           |
+| Abandono no sheet de complementação                                    | eventos mobile: `sheet_opened` sem `sheet_completed` em 10 min   | acima de 50%                           |
+| Conversão de assinatura                                                | `PremiumMembership` criadas por dia, comparado à semana anterior | queda acima de 20%                     |
+| `5xx` nas rotas tocadas                                                | Sentry, tag de rota                                              | qualquer aumento sobre a linha de base |
+| Falha de upload de documento                                           | razão `presign_failed`, `put_failed`, `confirm_failed`           | acima de 10% dos envios                |
+| Fila de documentos pendentes                                           | `count(UserDocument where status = 'pending')`                   | acima de 200                           |
 
 ### 7.3 Rollback
 
@@ -591,20 +591,20 @@ Mobile: testes de unidade para o parser de `missing` em `src/api/errors.ts`, par
 
 ### 9.1 Dependências internas a reaproveitar
 
-| Necessidade | Módulo existente |
-| --- | --- |
-| Autenticação | `app.authenticate` + `requireUser` ([plugins/auth.ts](../apps/api/src/plugins/auth.ts)) |
-| Cifra de campo | `encryptField` / `decryptField` ([services/crypto/field-encryption.ts](../apps/api/src/services/crypto/field-encryption.ts)) |
-| Presign e signed GET | `app.uploads` ([services/uploads/](../apps/api/src/services/uploads/)) |
-| Anexo privado, precedente completo | [routes/me-support.ts](../apps/api/src/routes/me-support.ts) |
-| Endpoint de upload com kind injetado | `POST /me/garage/cover/upload` ([api/uploads.ts:32](../apps/mobile/src/api/uploads.ts:32)) |
-| Purga de objeto | `queueObjectDeletion` ([services/uploads/deletion-queue.ts](../apps/api/src/services/uploads/deletion-queue.ts)) + `workers/retention.ts` |
-| Audit de admin | `recordAudit` ([services/admin-audit.ts](../apps/api/src/services/admin-audit.ts)) |
-| Paginação por cursor no admin | [routes/admin/users.ts:20-29](../apps/api/src/routes/admin/users.ts:20) |
-| Rate limit por usuário | [routes/me-support.ts:46-53](../apps/api/src/routes/me-support.ts:46) |
-| Flag de env booleana | padrão `GROWTH_PREMIUM_BILLING_ENABLED` ([env.ts:72](../apps/api/src/env.ts:72)) |
-| Erro tipado no mobile | `ApiError` + `getApiErrorCode` ([api/errors.ts](../apps/mobile/src/api/errors.ts)) |
-| Captura de imagem | `expo-image-picker`, já usado em avatar e foto de carro |
+| Necessidade                          | Módulo existente                                                                                                                          |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Autenticação                         | `app.authenticate` + `requireUser` ([plugins/auth.ts](../apps/api/src/plugins/auth.ts))                                                   |
+| Cifra de campo                       | `encryptField` / `decryptField` ([services/crypto/field-encryption.ts](../apps/api/src/services/crypto/field-encryption.ts))              |
+| Presign e signed GET                 | `app.uploads` ([services/uploads/](../apps/api/src/services/uploads/))                                                                    |
+| Anexo privado, precedente completo   | [routes/me-support.ts](../apps/api/src/routes/me-support.ts)                                                                              |
+| Endpoint de upload com kind injetado | `POST /me/garage/cover/upload` ([api/uploads.ts:32](../apps/mobile/src/api/uploads.ts:32))                                                |
+| Purga de objeto                      | `queueObjectDeletion` ([services/uploads/deletion-queue.ts](../apps/api/src/services/uploads/deletion-queue.ts)) + `workers/retention.ts` |
+| Audit de admin                       | `recordAudit` ([services/admin-audit.ts](../apps/api/src/services/admin-audit.ts))                                                        |
+| Paginação por cursor no admin        | [routes/admin/users.ts:20-29](../apps/api/src/routes/admin/users.ts:20)                                                                   |
+| Rate limit por usuário               | [routes/me-support.ts:46-53](../apps/api/src/routes/me-support.ts:46)                                                                     |
+| Flag de env booleana                 | padrão `GROWTH_PREMIUM_BILLING_ENABLED` ([env.ts:72](../apps/api/src/env.ts:72))                                                          |
+| Erro tipado no mobile                | `ApiError` + `getApiErrorCode` ([api/errors.ts](../apps/mobile/src/api/errors.ts))                                                        |
+| Captura de imagem                    | `expo-image-picker`, já usado em avatar e foto de carro                                                                                   |
 
 Nada de fila nova, worker novo ou dependência externa nova.
 
@@ -619,13 +619,13 @@ Nada de fila nova, worker novo ou dependência externa nova.
 
 ### 9.3 Riscos e mitigantes
 
-| Risco | Mitigante |
-| --- | --- |
-| Queda de conversão no checkout ao ligar o gate | Rollout percentual com bucketing estável, métrica de bloqueio com limiar, reversão por variável de ambiente sem deploy. |
-| Base legada inteira bloqueada de uma vez | Deploy inerte primeiro, coleta no cadastro antes de ligar o gate, escalada de 5% em diante. |
-| Documento em bucket público | Bucket dedicado privado é item bloqueante do checklist da seção 8. Sem ele, o lote B5 não passa no review. |
-| Atrito extra na assinatura afugentar contratação | Auto-aprovação otimista: o `pending` já libera. A tela deixa isso explícito. |
-| CPF vazando em log ou telemetria | Scrubbers de Sentry já cobrem o padrão. Reviewer checa serializer por serializer. Teste T18 fixa o contrato do admin. |
-| Fila de documentos crescer sem revisão | Métrica de pendentes com limiar de 200. Revisão é assíncrona por desenho, não bloqueia receita. |
+| Risco                                                | Mitigante                                                                                                                  |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Queda de conversão no checkout ao ligar o gate       | Rollout percentual com bucketing estável, métrica de bloqueio com limiar, reversão por variável de ambiente sem deploy.    |
+| Base legada inteira bloqueada de uma vez             | Deploy inerte primeiro, coleta no cadastro antes de ligar o gate, escalada de 5% em diante.                                |
+| Documento em bucket público                          | Bucket dedicado privado é item bloqueante do checklist da seção 8. Sem ele, o lote B5 não passa no review.                 |
+| Atrito extra na assinatura afugentar contratação     | Auto-aprovação otimista: o `pending` já libera. A tela deixa isso explícito.                                               |
+| CPF vazando em log ou telemetria                     | Scrubbers de Sentry já cobrem o padrão. Reviewer checa serializer por serializer. Teste T18 fixa o contrato do admin.      |
+| Fila de documentos crescer sem revisão               | Métrica de pendentes com limiar de 200. Revisão é assíncrona por desenho, não bloqueia receita.                            |
 | `Cart` travado em `checking_out` por bloqueio tardio | Gate roda antes de `loadCartForCheckout`, antes de qualquer transição de status ou reserva de estoque. Teste T4 fixa isso. |
-| Corrida entre precheck e POST de assinatura | Gate repetido no POST, mesmo padrão que o código já usa para `AlreadySubscribed`. |
+| Corrida entre precheck e POST de assinatura          | Gate repetido no POST, mesmo padrão que o código já usa para `AlreadySubscribed`.                                          |

@@ -33,7 +33,7 @@
 pnpm --filter @ccc/api exec vitest run test/<caminho>
 ```
 
-  A suíte **completa** também precisa de `exec`, pelo mesmo motivo mais um:
+A suíte **completa** também precisa de `exec`, pelo mesmo motivo mais um:
 
 ```bash
 pnpm --filter @ccc/api exec vitest run
@@ -49,62 +49,64 @@ pnpm --filter @ccc/api exec vitest run
 
 **Criar:**
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `packages/shared/src/profile-status.ts` | Escopos, chaves de `missing`, schema de status de perfil, construtor do erro 403. |
-| `packages/shared/src/documents.ts` | Tipos e status de documento, allowlist de MIME, schemas de upload e de listagem. |
-| `packages/shared/src/__tests__/profile-cpf-phone.test.ts` | Unidade de `cpfSchema` e `phoneSchema`. |
-| `apps/api/src/services/profile/completeness.ts` | Leitura da completude. Uma query. Sem HTTP. |
-| `apps/api/src/services/profile/gate.ts` | Flag, rollout, e a reply 403. Única coisa que rotas chamam. |
-| `apps/api/src/routes/me-documents.ts` | `POST /me/documents/upload`, `POST /me/documents`, `GET /me/documents`. |
-| `apps/api/src/routes/admin/documents.ts` | Fila de revisão, visualização auditada, aprovar, rejeitar. |
-| `apps/api/test/profile/completeness.test.ts` | Unidade do serviço de completude e do bucketing. |
-| `apps/api/test/profile/profile-status.route.test.ts` | `GET /me/profile-status`. |
-| `apps/api/test/profile/gate-checkout.test.ts` | Gate nas três rotas de compra avulsa. |
-| `apps/api/test/profile/gate-subscription.test.ts` | Gate nas duas rotas de assinatura. |
-| `apps/api/test/documents/me-documents.test.ts` | Upload, confirmação, listagem, posse, duplicidade. |
-| `apps/api/test/documents/admin-documents.test.ts` | Fila, papéis, aprovar, rejeitar, audit. |
-| `packages/db/prisma/migrations/<ts>_user_profile_cpf_phone_documents/migration.sql` | DDL. |
+| Arquivo                                                                             | Responsabilidade                                                                  |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `packages/shared/src/profile-status.ts`                                             | Escopos, chaves de `missing`, schema de status de perfil, construtor do erro 403. |
+| `packages/shared/src/documents.ts`                                                  | Tipos e status de documento, allowlist de MIME, schemas de upload e de listagem.  |
+| `packages/shared/src/__tests__/profile-cpf-phone.test.ts`                           | Unidade de `cpfSchema` e `phoneSchema`.                                           |
+| `apps/api/src/services/profile/completeness.ts`                                     | Leitura da completude. Uma query. Sem HTTP.                                       |
+| `apps/api/src/services/profile/gate.ts`                                             | Flag, rollout, e a reply 403. Única coisa que rotas chamam.                       |
+| `apps/api/src/routes/me-documents.ts`                                               | `POST /me/documents/upload`, `POST /me/documents`, `GET /me/documents`.           |
+| `apps/api/src/routes/admin/documents.ts`                                            | Fila de revisão, visualização auditada, aprovar, rejeitar.                        |
+| `apps/api/test/profile/completeness.test.ts`                                        | Unidade do serviço de completude e do bucketing.                                  |
+| `apps/api/test/profile/profile-status.route.test.ts`                                | `GET /me/profile-status`.                                                         |
+| `apps/api/test/profile/gate-checkout.test.ts`                                       | Gate nas três rotas de compra avulsa.                                             |
+| `apps/api/test/profile/gate-subscription.test.ts`                                   | Gate nas duas rotas de assinatura.                                                |
+| `apps/api/test/documents/me-documents.test.ts`                                      | Upload, confirmação, listagem, posse, duplicidade.                                |
+| `apps/api/test/documents/admin-documents.test.ts`                                   | Fila, papéis, aprovar, rejeitar, audit.                                           |
+| `packages/db/prisma/migrations/<ts>_user_profile_cpf_phone_documents/migration.sql` | DDL.                                                                              |
 
 **Modificar:**
 
-| Arquivo | Mudança |
-| --- | --- |
-| `packages/shared/src/profile.ts` | `cpfSchema`, `phoneSchema`, campos em `updateProfileSchema` e `publicProfileSchema`. |
-| `packages/shared/src/auth.ts` | `signupSchema` ganha `cpf` e `phone` opcionais. |
-| `packages/shared/src/admin.ts` | Ações de audit e schema de documento no detalhe de usuário. |
-| `packages/shared/src/legal.ts` | Bases legais e retenção das duas finalidades novas. |
-| `packages/shared/package.json` | Exports `./profile-status` e `./documents`. |
-| `packages/db/prisma/schema.prisma` | `User.cpf`, `User.phone`, `User.documents`, enums e modelo `UserDocument`. |
-| `apps/api/src/env.ts` | 4 variáveis novas. |
-| `apps/api/src/services/uploads/types.ts` | Kind `identity_document`, prefixo, constantes de documento. |
-| `apps/api/src/services/uploads/r2.ts` | Bucket alvo por prefixo, headers privados. |
-| `apps/api/src/services/uploads/dev.ts` | Espelhar headers privados. |
-| `apps/api/src/services/uploads/index.ts` | Passar `R2_DOCUMENTS_BUCKET` ao construtor. |
-| `apps/api/src/routes/me.ts` | `cpf`/`phone` no serializer e no PATCH; `GET /me/profile-status`. |
-| `apps/api/src/routes/auth/signup.ts` | Gravar `cpf`/`phone` na tx existente. |
-| `apps/api/src/routes/cart.ts` | Gate `checkout`. |
-| `apps/api/src/routes/orders.ts` | Gate `checkout` em duas rotas. |
-| `apps/api/src/routes/me-premium.ts` | Gate `subscription` em duas rotas. |
-| `apps/api/src/routes/admin/users.ts` | `hasCpf`, `hasPhone`, lista de documentos. |
-| `apps/api/src/routes/admin/index.ts` | Registrar `adminDocumentRoutes`. |
-| `apps/api/src/services/admin-audit.ts` | `entityType: 'user_document'`. |
-| `apps/api/src/services/data-export.ts` | CPF, telefone e metadados de documento. |
-| `apps/api/src/services/account-deletion/anonymize.ts` | Zerar CPF/telefone, enfileirar arquivos. |
-| `apps/api/src/workers/retention.ts` | Purga de arquivo de documento por idade. |
-| `apps/api/src/app.ts` | Registrar `meDocumentRoutes`. |
-| `apps/api/test/helpers.ts` | `resetDatabase` limpa `userDocument`. |
-| `apps/api/test/setup.ts` | Limpar as flags novas em `beforeEach`. |
+| Arquivo                                               | Mudança                                                                              |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `packages/shared/src/profile.ts`                      | `cpfSchema`, `phoneSchema`, campos em `updateProfileSchema` e `publicProfileSchema`. |
+| `packages/shared/src/auth.ts`                         | `signupSchema` ganha `cpf` e `phone` opcionais.                                      |
+| `packages/shared/src/admin.ts`                        | Ações de audit e schema de documento no detalhe de usuário.                          |
+| `packages/shared/src/legal.ts`                        | Bases legais e retenção das duas finalidades novas.                                  |
+| `packages/shared/package.json`                        | Exports `./profile-status` e `./documents`.                                          |
+| `packages/db/prisma/schema.prisma`                    | `User.cpf`, `User.phone`, `User.documents`, enums e modelo `UserDocument`.           |
+| `apps/api/src/env.ts`                                 | 4 variáveis novas.                                                                   |
+| `apps/api/src/services/uploads/types.ts`              | Kind `identity_document`, prefixo, constantes de documento.                          |
+| `apps/api/src/services/uploads/r2.ts`                 | Bucket alvo por prefixo, headers privados.                                           |
+| `apps/api/src/services/uploads/dev.ts`                | Espelhar headers privados.                                                           |
+| `apps/api/src/services/uploads/index.ts`              | Passar `R2_DOCUMENTS_BUCKET` ao construtor.                                          |
+| `apps/api/src/routes/me.ts`                           | `cpf`/`phone` no serializer e no PATCH; `GET /me/profile-status`.                    |
+| `apps/api/src/routes/auth/signup.ts`                  | Gravar `cpf`/`phone` na tx existente.                                                |
+| `apps/api/src/routes/cart.ts`                         | Gate `checkout`.                                                                     |
+| `apps/api/src/routes/orders.ts`                       | Gate `checkout` em duas rotas.                                                       |
+| `apps/api/src/routes/me-premium.ts`                   | Gate `subscription` em duas rotas.                                                   |
+| `apps/api/src/routes/admin/users.ts`                  | `hasCpf`, `hasPhone`, lista de documentos.                                           |
+| `apps/api/src/routes/admin/index.ts`                  | Registrar `adminDocumentRoutes`.                                                     |
+| `apps/api/src/services/admin-audit.ts`                | `entityType: 'user_document'`.                                                       |
+| `apps/api/src/services/data-export.ts`                | CPF, telefone e metadados de documento.                                              |
+| `apps/api/src/services/account-deletion/anonymize.ts` | Zerar CPF/telefone, enfileirar arquivos.                                             |
+| `apps/api/src/workers/retention.ts`                   | Purga de arquivo de documento por idade.                                             |
+| `apps/api/src/app.ts`                                 | Registrar `meDocumentRoutes`.                                                        |
+| `apps/api/test/helpers.ts`                            | `resetDatabase` limpa `userDocument`.                                                |
+| `apps/api/test/setup.ts`                              | Limpar as flags novas em `beforeEach`.                                               |
 
 ---
 
 ## Task 1: Shared — validação de CPF e telefone
 
 **Files:**
+
 - Modify: `packages/shared/src/profile.ts`
 - Test: `packages/shared/src/__tests__/profile-cpf-phone.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `cpfSchema: ZodType<string>` e `phoneSchema: ZodType<string>`, ambos aceitando entrada mascarada e devolvendo só dígitos. `updateProfileSchema` com `cpf?: string` e `phone?: string`. `publicProfileSchema` com `cpf: string | null` e `phone: string | null`.
 
@@ -299,6 +301,7 @@ git commit -m "feat(shared): schemas de CPF e telefone no perfil"
 ## Task 2: Shared — contratos de status de perfil e de documento
 
 **Files:**
+
 - Create: `packages/shared/src/profile-status.ts`
 - Create: `packages/shared/src/documents.ts`
 - Modify: `packages/shared/src/auth.ts`
@@ -306,6 +309,7 @@ git commit -m "feat(shared): schemas de CPF e telefone no perfil"
 - Test: `packages/shared/src/__tests__/profile-status.test.ts`
 
 **Interfaces:**
+
 - Consumes: `cpfSchema`, `phoneSchema` da Task 1.
 - Produces:
   - `PROFILE_SCOPES = ['checkout', 'subscription']`, type `ProfileScope`.
@@ -389,9 +393,10 @@ describe('profile-status contracts', () => {
 
 describe('document contracts', () => {
   it('accepts an allowed image type within the size cap', () => {
-    expect(
-      documentUploadRequestSchema.parse({ contentType: 'image/jpeg', size: 1024 }),
-    ).toEqual({ contentType: 'image/jpeg', size: 1024 });
+    expect(documentUploadRequestSchema.parse({ contentType: 'image/jpeg', size: 1024 })).toEqual({
+      contentType: 'image/jpeg',
+      size: 1024,
+    });
   });
 
   it('rejects pdf', () => {
@@ -418,9 +423,9 @@ describe('document contracts', () => {
   });
 
   it('rejects an unknown document type', () => {
-    expect(
-      createDocumentBodySchema.safeParse({ type: 'passport', objectKey: 'x' }).success,
-    ).toBe(false);
+    expect(createDocumentBodySchema.safeParse({ type: 'passport', objectKey: 'x' }).success).toBe(
+      false,
+    );
   });
 
   it('allows a null fileUrl for a purged document', () => {
@@ -665,11 +670,13 @@ git commit -m "feat(shared): contratos de status de perfil e documento de identi
 ## Task 3: Banco — colunas de perfil e tabela de documentos
 
 **Files:**
+
 - Modify: `packages/db/prisma/schema.prisma`
 - Create: `packages/db/prisma/migrations/<ts>_user_profile_cpf_phone_documents/migration.sql`
 - Modify: `apps/api/test/helpers.ts:98-109`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `prisma.user.cpf: string | null`, `prisma.user.phone: string | null`, `prisma.userDocument` com campos `id`, `userId`, `type`, `objectKey`, `status`, `rejectionReason`, `reviewedByAdminId`, `reviewedAt`, `fileDeletedAt`, `sentAt`, `createdAt`, `updatedAt`.
 
@@ -849,7 +856,7 @@ ALTER TABLE "UserDocument" ADD CONSTRAINT "UserDocument_userId_fkey" FOREIGN KEY
 Em `apps/api/test/helpers.ts`, antes da linha `await prisma.supportTicket.deleteMany();`:
 
 ```ts
-  await prisma.userDocument.deleteMany();
+await prisma.userDocument.deleteMany();
 ```
 
 - [ ] **Step 6: Run test to verify it passes**
@@ -863,11 +870,11 @@ Run: `pnpm --filter @ccc/api test`
 
 Expected: 2035 passando, e **9 falhas em 3 arquivos**, todas com uma única causa raiz:
 
-| Arquivo | Asserts |
-| --- | --- |
-| `apps/api/test/me/patch.test.ts` | 6 |
-| `apps/api/test/me/get.test.ts` | 2 |
-| `apps/api/test/me/email-change.test.ts` | 1 |
+| Arquivo                                 | Asserts |
+| --------------------------------------- | ------- |
+| `apps/api/test/me/patch.test.ts`        | 6       |
+| `apps/api/test/me/get.test.ts`          | 2       |
+| `apps/api/test/me/email-change.test.ts` | 1       |
 
 Causa raiz: `serializeUser` em [me.ts:31](../../../apps/api/src/routes/me.ts:31) chama `publicProfileSchema.parse`, e a Task 1 tornou `cpf` e `phone` obrigatórios no schema enquanto a resposta de `/me` só ganha os campos na Task 5. O parse lança antes de devolver 200, e o `errorHandler` mapeia `ZodError` para **400** ([error-handler.ts](../../../apps/api/src/plugins/error-handler.ts)), então `GET /me` ([me.ts:53](../../../apps/api/src/routes/me.ts:53)) e `PATCH /me` ([me.ts:92](../../../apps/api/src/routes/me.ts:92)) devolvem 400 nesta branch até a Task 5. Os testes falham no `expect(res.statusCode).toBe(200)`, não no `parse` deles. Qualquer teste que leia `/me` cai junto.
 
@@ -887,6 +894,7 @@ git commit -m "feat(db): colunas cpf e phone no usuario e tabela UserDocument"
 ## Task 4: API — serviço de completude e bucketing de rollout
 
 **Files:**
+
 - Create: `apps/api/src/services/profile/completeness.ts`
 - Create: `apps/api/src/services/profile/gate.ts`
 - Modify: `apps/api/src/env.ts`
@@ -894,6 +902,7 @@ git commit -m "feat(db): colunas cpf e phone no usuario e tabela UserDocument"
 - Test: `apps/api/test/profile/completeness.test.ts`
 
 **Interfaces:**
+
 - Consumes: `MissingFieldKey`, `ProfileScope`, `buildIncompleteProfileError` da Task 2. `prisma.userDocument` da Task 3.
 - Produces:
   - `REQUIRED_BY_SCOPE: Record<ProfileScope, readonly MissingFieldKey[]>`
@@ -1222,10 +1231,12 @@ git commit -m "feat(api): servico de completude de perfil e gate com rollout per
 ## Task 5: API — `GET /me`, `PATCH /me` e `GET /me/profile-status`
 
 **Files:**
+
 - Modify: `apps/api/src/routes/me.ts:18-93`
 - Test: `apps/api/test/profile/profile-status.route.test.ts`
 
 **Interfaces:**
+
 - Consumes: `loadProfileCompleteness`, `missingFor` da Task 4. `cpfSchema`/`phoneSchema` e `profileStatusSchema` das Tasks 1 e 2. `encryptField`/`decryptField` de `services/crypto/field-encryption.js`.
 - Produces: `GET /me` e `PATCH /me` devolvendo `cpf` e `phone` em claro. `GET /me/profile-status` devolvendo `profileStatusSchema`.
 
@@ -1431,8 +1442,8 @@ import { loadProfileCompleteness, missingFor } from '../services/profile/complet
 Estender o type `DbUser` com os dois campos:
 
 ```ts
-  cpf: string | null;
-  phone: string | null;
+cpf: string | null;
+phone: string | null;
 ```
 
 Trocar a assinatura de `serializeUser` para receber a chave e devolver os campos novos:
@@ -1462,54 +1473,54 @@ Atualizar as duas chamadas de `serializeUser` em `GET /me` e `PATCH /me` para pa
 No handler de `PATCH /me`, depois do `Object.fromEntries` e antes do guard de avatar:
 
 ```ts
-    // CPF is encrypted at rest. Do this after Zod has normalized it to digits
-    // so the ciphertext always wraps the same canonical form.
-    if (typeof data.cpf === 'string') {
-      data.cpf = encryptField(data.cpf, app.env.FIELD_ENCRYPTION_KEY);
-    }
+// CPF is encrypted at rest. Do this after Zod has normalized it to digits
+// so the ciphertext always wraps the same canonical form.
+if (typeof data.cpf === 'string') {
+  data.cpf = encryptField(data.cpf, app.env.FIELD_ENCRYPTION_KEY);
+}
 ```
 
 Acrescentar a rota nova, depois de `PATCH /me`:
 
 ```ts
-  app.get('/me/profile-status', { preHandler: [app.authenticate] }, async (request, reply) => {
-    const { sub } = requireUser(request);
+app.get('/me/profile-status', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { sub } = requireUser(request);
 
-    const completeness = await loadProfileCompleteness(sub);
-    if (!completeness) return reply.status(401).send({ error: 'Unauthorized' });
+  const completeness = await loadProfileCompleteness(sub);
+  if (!completeness) return reply.status(401).send({ error: 'Unauthorized' });
 
-    const latest = await prisma.userDocument.findFirst({
-      where: { userId: sub },
-      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
-      select: {
-        id: true,
-        type: true,
-        status: true,
-        sentAt: true,
-        reviewedAt: true,
-        rejectionReason: true,
-      },
-    });
-
-    const checkoutMissing = missingFor(completeness, 'checkout');
-    const subscriptionMissing = missingFor(completeness, 'subscription');
-
-    return profileStatusSchema.parse({
-      fields: completeness,
-      checkout: { complete: checkoutMissing.length === 0, missing: checkoutMissing },
-      subscription: { complete: subscriptionMissing.length === 0, missing: subscriptionMissing },
-      latestDocument: latest
-        ? {
-            id: latest.id,
-            type: latest.type,
-            status: latest.status,
-            sentAt: latest.sentAt.toISOString(),
-            reviewedAt: latest.reviewedAt ? latest.reviewedAt.toISOString() : null,
-            rejectionReason: latest.rejectionReason,
-          }
-        : null,
-    });
+  const latest = await prisma.userDocument.findFirst({
+    where: { userId: sub },
+    orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      sentAt: true,
+      reviewedAt: true,
+      rejectionReason: true,
+    },
   });
+
+  const checkoutMissing = missingFor(completeness, 'checkout');
+  const subscriptionMissing = missingFor(completeness, 'subscription');
+
+  return profileStatusSchema.parse({
+    fields: completeness,
+    checkout: { complete: checkoutMissing.length === 0, missing: checkoutMissing },
+    subscription: { complete: subscriptionMissing.length === 0, missing: subscriptionMissing },
+    latestDocument: latest
+      ? {
+          id: latest.id,
+          type: latest.type,
+          status: latest.status,
+          sentAt: latest.sentAt.toISOString(),
+          reviewedAt: latest.reviewedAt ? latest.reviewedAt.toISOString() : null,
+          rejectionReason: latest.rejectionReason,
+        }
+      : null,
+  });
+});
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1542,10 +1553,12 @@ git commit -m "feat(api): cpf e telefone no perfil e endpoint de status de compl
 ## Task 6: API — signup grava CPF e telefone opcionais
 
 **Files:**
+
 - Modify: `apps/api/src/routes/auth/signup.ts:24-41`
 - Test: `apps/api/test/auth/signup-profile.test.ts`
 
 **Interfaces:**
+
 - Consumes: `signupSchema` estendido da Task 2. `encryptField`.
 - Produces: nada novo. `authResponseSchema` não muda.
 
@@ -1652,17 +1665,17 @@ import { encryptField } from '../../services/crypto/field-encryption.js';
 No `tx.user.create`, dentro da `$transaction` que já existe (linha 35), estender `data`:
 
 ```ts
-      const created = await tx.user.create({
-        data: {
-          email: input.email,
-          name: input.name,
-          passwordHash,
-          // Permissive signup: both optional. Written in the same tx as the
-          // User + Garage create so a half-filled profile never lands.
-          ...(input.cpf ? { cpf: encryptField(input.cpf, app.env.FIELD_ENCRYPTION_KEY) } : {}),
-          ...(input.phone ? { phone: input.phone } : {}),
-        },
-      });
+const created = await tx.user.create({
+  data: {
+    email: input.email,
+    name: input.name,
+    passwordHash,
+    // Permissive signup: both optional. Written in the same tx as the
+    // User + Garage create so a half-filled profile never lands.
+    ...(input.cpf ? { cpf: encryptField(input.cpf, app.env.FIELD_ENCRYPTION_KEY) } : {}),
+    ...(input.phone ? { phone: input.phone } : {}),
+  },
+});
 ```
 
 Nada mais no handler muda. `authResponseSchema` continua sem os campos, por desenho: o cliente lê perfil por `GET /me`.
@@ -1689,12 +1702,14 @@ git commit -m "feat(api): signup aceita cpf e telefone opcionais"
 ## Task 7: API — gate de checkout nas três rotas de compra avulsa
 
 **Files:**
+
 - Modify: `apps/api/src/routes/cart.ts:467-476`
 - Modify: `apps/api/src/routes/orders.ts:378-380`
 - Modify: `apps/api/src/routes/orders.ts:509-512`
 - Test: `apps/api/test/profile/gate-checkout.test.ts`
 
 **Interfaces:**
+
 - Consumes: `enforceProfileGate` da Task 4.
 - Produces: `403` com `incompleteProfileErrorSchema` nas três rotas.
 
@@ -1962,24 +1977,24 @@ import { enforceProfileGate } from '../services/profile/gate.js';
 No handler de `POST /cart/checkout`, logo depois do `requireUser` (linha 468) e **antes** do `beginCheckoutRequestSchema.safeParse`:
 
 ```ts
-    // Gate before anything mutates: below this line the cart flips to
-    // `checking_out` and tiers get reserved.
-    const gated = await enforceProfileGate(app, sub, reply, 'checkout');
-    if (gated) return gated;
+// Gate before anything mutates: below this line the cart flips to
+// `checking_out` and tiers get reserved.
+const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+if (gated) return gated;
 ```
 
 Em `apps/api/src/routes/orders.ts`, importar o mesmo helper. No handler de `POST /orders` (linha 379), depois do `requireUser` e antes do `createOrderRequestSchema.parse`:
 
 ```ts
-      const gated = await enforceProfileGate(app, sub, reply, 'checkout');
-      if (gated) return gated;
+const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+if (gated) return gated;
 ```
 
 No handler de `POST /orders/checkout` (linha 510), depois do `requireUser` e antes do `createWebCheckoutRequestSchema.safeParse`:
 
 ```ts
-      const gated = await enforceProfileGate(app, sub, reply, 'checkout');
-      if (gated) return gated;
+const gated = await enforceProfileGate(app, sub, reply, 'checkout');
+if (gated) return gated;
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -2004,11 +2019,13 @@ git commit -m "feat(api): exige cpf e telefone nas tres rotas de compra avulsa"
 ## Task 8: API — gate de assinatura no precheck e no checkout premium
 
 **Files:**
+
 - Modify: `apps/api/src/routes/me-premium.ts:56-68`
 - Modify: `apps/api/src/routes/me-premium.ts:126-135`
 - Test: `apps/api/test/profile/gate-subscription.test.ts`
 
 **Interfaces:**
+
 - Consumes: `enforceProfileGate` da Task 4.
 - Produces: `403` com `incompleteProfileErrorSchema` nas duas rotas premium.
 
@@ -2095,9 +2112,9 @@ describe('subscription profile gate', () => {
     expect(incompleteProfileErrorSchema.parse(res.json()).missing).toEqual(['document']);
     // FakeStripe records every call in `calls` with a `kind` discriminator
     // (apps/api/src/services/stripe/fake.ts). No session may have been minted.
-    expect(
-      stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession'),
-    ).toHaveLength(0);
+    expect(stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession')).toHaveLength(
+      0,
+    );
   });
 
   it('lets a pending document through — optimistic auto-approval', async () => {
@@ -2198,19 +2215,19 @@ import { enforceProfileGate } from '../services/profile/gate.js';
 No handler de `GET /api/me/premium/checkout-precheck`, depois do `requireUser` (linha 66) e antes do `prisma.garage.findUnique`:
 
 ```ts
-      // Precedence: 503 (feature off) → 403 (incomplete profile) → 409
-      // (already subscribed). An unavailable feature is not a profile problem.
-      const gated = await enforceProfileGate(app, sub, reply, 'subscription');
-      if (gated) return gated;
+// Precedence: 503 (feature off) → 403 (incomplete profile) → 409
+// (already subscribed). An unavailable feature is not a profile problem.
+const gated = await enforceProfileGate(app, sub, reply, 'subscription');
+if (gated) return gated;
 ```
 
 No `checkoutHandler`, depois do `requireUser` (linha 133) e antes do `premiumCheckoutRequestSchema.safeParse`:
 
 ```ts
-    // Repeated here on purpose. The precheck is advisory; the window between
-    // GET and POST is the same one the AlreadySubscribed check below closes.
-    const gated = await enforceProfileGate(app, sub, reply, 'subscription');
-    if (gated) return gated;
+// Repeated here on purpose. The precheck is advisory; the window between
+// GET and POST is the same one the AlreadySubscribed check below closes.
+const gated = await enforceProfileGate(app, sub, reply, 'subscription');
+if (gated) return gated;
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -2235,6 +2252,7 @@ git commit -m "feat(api): exige cpf, telefone e documento para contratar assinat
 ## Task 9: API — upload privado de documento de identidade
 
 **Files:**
+
 - Modify: `apps/api/src/services/uploads/types.ts`
 - Modify: `apps/api/src/services/uploads/r2.ts`
 - Modify: `apps/api/src/services/uploads/dev.ts`
@@ -2242,6 +2260,7 @@ git commit -m "feat(api): exige cpf, telefone e documento para contratar assinat
 - Test: `apps/api/test/uploads/identity-document.test.ts`
 
 **Interfaces:**
+
 - Consumes: env `R2_DOCUMENTS_BUCKET` e `DOCUMENT_URL_TTL_SECONDS` da Task 4.
 - Produces:
   - `UploadKind` inclui `'identity_document'`.
@@ -2475,27 +2494,27 @@ Ajustar os imports de `dev.ts` para incluir `DOCUMENT_CACHE_CONTROL`, `DOCUMENT_
 Em `apps/api/src/services/uploads/index.ts`, passar o bucket novo:
 
 ```ts
-    return new R2Uploads(
-      {
-        accountId: env.R2_ACCOUNT_ID,
-        accessKeyId: env.R2_ACCESS_KEY_ID,
-        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-      },
-      env.R2_BUCKET,
-      env.R2_PUBLIC_BASE_URL,
-      env.UPLOAD_URL_TTL_SECONDS,
-      env.R2_DOCUMENTS_BUCKET,
-    );
+return new R2Uploads(
+  {
+    accountId: env.R2_ACCOUNT_ID,
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  },
+  env.R2_BUCKET,
+  env.R2_PUBLIC_BASE_URL,
+  env.UPLOAD_URL_TTL_SECONDS,
+  env.R2_DOCUMENTS_BUCKET,
+);
 ```
 
 Logo antes desse `return`, **falhar alto** quando o R2 está configurado e o bucket privado não está. Decisão do usuário, tomada durante a execução: recusar subir é coerente com o `throw` de "provide all or none" que já existe onze linhas acima na mesma função. Se há bucket R2 real, tem que haver bucket de documentos real. O fallback `documentsBucket ?? this.bucket` passa a valer só para `DevUploads`, que é exatamente o que o comentário do construtor afirma.
 
 ```ts
-  if (r2Ready && !env.R2_DOCUMENTS_BUCKET) {
-    throw new Error(
-      'R2_DOCUMENTS_BUCKET is required when R2 is configured — identity documents must never land in the public bucket',
-    );
-  }
+if (r2Ready && !env.R2_DOCUMENTS_BUCKET) {
+  throw new Error(
+    'R2_DOCUMENTS_BUCKET is required when R2 is configured — identity documents must never land in the public bucket',
+  );
+}
 ```
 
 Consequência operacional aceita: sem a variável no Railway, a API não sobe, em vez de degradar em silêncio. Isso precisa constar no runbook, e a variável deixa de ser opcional na prática em qualquer ambiente com R2.
@@ -2524,11 +2543,13 @@ git commit -m "feat(api): kind de upload privado para documento de identidade"
 ## Task 10: API — rotas de documento do usuário
 
 **Files:**
+
 - Create: `apps/api/src/routes/me-documents.ts`
 - Modify: `apps/api/src/app.ts:134`
 - Test: `apps/api/test/documents/me-documents.test.ts`
 
 **Interfaces:**
+
 - Consumes: schemas de `@ccc/shared/documents` da Task 2. `app.uploads` com o kind da Task 9. `prisma.userDocument` da Task 3.
 - Produces: `POST /me/documents/upload`, `POST /me/documents`, `GET /me/documents`.
 
@@ -2798,9 +2819,7 @@ const serializeDocument = async (
     rejectionReason: doc.rejectionReason,
     // Signed GET only, short TTL. buildPublicUrl would hand out a URL in the
     // public bucket's namespace, which is exactly what this feature avoids.
-    fileUrl: doc.fileDeletedAt
-      ? null
-      : await uploads.buildSignedGetUrl(doc.objectKey, ttlSeconds),
+    fileUrl: doc.fileDeletedAt ? null : await uploads.buildSignedGetUrl(doc.objectKey, ttlSeconds),
   });
 
 export const meDocumentRoutes: FastifyPluginAsync = async (app) => {
@@ -2891,7 +2910,7 @@ export const meDocumentRoutes: FastifyPluginAsync = async (app) => {
 Em `apps/api/src/app.ts`, importar e registrar depois de `uploadRoutes` (linha 134):
 
 ```ts
-  await app.register(meDocumentRoutes);
+await app.register(meDocumentRoutes);
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -2916,6 +2935,7 @@ git commit -m "feat(api): rotas de envio e listagem de documento de identidade"
 ## Task 11: API — revisão de documento no admin
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin/documents.ts`
 - Modify: `apps/api/src/routes/admin/index.ts:56-74`
 - Modify: `apps/api/src/services/admin-audit.ts:6-34`
@@ -2924,6 +2944,7 @@ git commit -m "feat(api): rotas de envio e listagem de documento de identidade"
 - Test: `apps/api/test/documents/admin-documents.test.ts`
 
 **Interfaces:**
+
 - Consumes: `recordAudit`, `app.requireRole`, `app.uploads`, `prisma.userDocument`.
 - Produces: `GET /admin/documents`, `GET /admin/documents/:id/file`, `POST /admin/documents/:id/approve`, `POST /admin/documents/:id/reject`. `entityType: 'user_document'` em `RecordAuditInput`. Ações de audit `document_viewed`, `document_approved`, `document_rejected`.
 
@@ -3002,7 +3023,11 @@ describe('admin document review', () => {
       reviewedAt: new Date(),
     });
 
-    const res = await app.inject({ method: 'GET', url: '/admin/documents?status=pending', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/documents?status=pending',
+      headers,
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { items: Array<{ status: string; userId: string }> };
     expect(body.items).toHaveLength(1);
@@ -3391,7 +3416,8 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.params.id },
       select: { id: true },
     });
-    if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
+    if (!exists)
+      return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
     const count = await review(request.params.id, sub, 'approved', null);
     if (count === 0) {
@@ -3427,7 +3453,8 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
       where: { id: request.params.id },
       select: { id: true },
     });
-    if (!exists) return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
+    if (!exists)
+      return reply.status(404).send({ error: 'NotFound', message: 'document not found' });
 
     const count = await review(request.params.id, sub, 'rejected', reason);
     if (count === 0) {
@@ -3458,7 +3485,7 @@ export const adminDocumentRoutes: FastifyPluginAsync = async (app) => {
 Em `apps/api/src/routes/admin/index.ts`, importar e registrar no escopo `requireRole('organizer', 'admin')`, junto de `adminSupportRoutes`:
 
 ```ts
-    await scope.register(adminDocumentRoutes);
+await scope.register(adminDocumentRoutes);
 ```
 
 Em `apps/api/src/routes/admin/users.ts`, no serializer de detalhe, acrescentar os três campos derivados. Nunca o CPF, nunca a URL:
@@ -3500,6 +3527,7 @@ git commit -m "feat(api): fila de revisao de documento no admin com audit"
 ## Task 12: API — LGPD: export, anonimização e retenção
 
 **Files:**
+
 - Modify: `apps/api/src/services/data-export.ts`
 - Modify: `apps/api/src/services/account-deletion/anonymize.ts:27-130`
 - Modify: `apps/api/src/workers/retention.ts`
@@ -3507,6 +3535,7 @@ git commit -m "feat(api): fila de revisao de documento no admin com audit"
 - Test: `apps/api/test/documents/lgpd-documents.test.ts`
 
 **Interfaces:**
+
 - Consumes: `prisma.userDocument`, `queueObjectDeletion`, `decryptField`.
 - Produces: `DOCUMENT_APPROVED_RETENTION_DAYS = 90`, `DOCUMENT_REJECTED_RETENTION_DAYS = 30`, `purgeExpiredDocumentFiles(now: Date): Promise<number>` exportado de `workers/retention.ts`.
 
@@ -3702,7 +3731,7 @@ O CPF vai em claro no export — é o titular exercendo o direito de acesso. `en
 Em `apps/api/src/services/account-deletion/anonymize.ts`, estender o `select` inicial (linha 27) com `documents: { select: { objectKey: true } }`, e acrescentar as chaves em `objectKeys` junto do avatar (linha 39):
 
 ```ts
-  for (const doc of user.documents) objectKeys.push(doc.objectKey);
+for (const doc of user.documents) objectKeys.push(doc.objectKey);
 ```
 
 No `update` do usuário (linha 124), acrescentar:
@@ -3715,7 +3744,7 @@ No `update` do usuário (linha 124), acrescentar:
 As rows de `UserDocument` caem por `onDelete: Cascade` quando o usuário é apagado; no caminho de anonimização, que preserva a row do usuário, apagar explicitamente dentro da mesma tx:
 
 ```ts
-      await tx.userDocument.deleteMany({ where: { userId } });
+await tx.userDocument.deleteMany({ where: { userId } });
 ```
 
 Em `apps/api/src/workers/retention.ts`, acrescentar as constantes e a função:
@@ -3747,8 +3776,14 @@ export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
     where: {
       fileDeletedAt: null,
       OR: [
-        { status: 'approved', reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) } },
-        { status: 'rejected', reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) } },
+        {
+          status: 'approved',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) },
+        },
+        {
+          status: 'rejected',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) },
+        },
       ],
     },
     select: { id: true, objectKey: true },
@@ -3816,11 +3851,13 @@ git commit -m "feat(api): export, anonimizacao e retencao de cpf, telefone e doc
 ## Task 13: Infra e documentação de operação
 
 **Files:**
+
 - Modify: `docs/r2.md`
 - Modify: `docs/secrets.md`
 - Modify: `docs/railway.md` (o runbook canônico. `RAILWAY.md` na raiz é só um ponteiro de 36 linhas e deve continuar assim)
 
 **Interfaces:**
+
 - Consumes: as quatro variáveis da Task 4.
 - Produces: documentação. Nenhum código.
 
@@ -3882,12 +3919,12 @@ Em `docs/railway.md`, seção nova:
 
 Métricas a acompanhar em cada passo:
 
-| Métrica | Limiar de alerta |
-| --- | --- |
-| `403 INCOMPLETE_PROFILE` sobre tentativas de checkout | acima de 40% no bucket ativo |
-| Conversão de assinatura vs. semana anterior | queda acima de 20% |
-| `5xx` nas rotas de checkout e premium | qualquer aumento sobre a linha de base |
-| `count(UserDocument where status='pending')` | acima de 200 |
+| Métrica                                               | Limiar de alerta                       |
+| ----------------------------------------------------- | -------------------------------------- |
+| `403 INCOMPLETE_PROFILE` sobre tentativas de checkout | acima de 40% no bucket ativo           |
+| Conversão de assinatura vs. semana anterior           | queda acima de 20%                     |
+| `5xx` nas rotas de checkout e premium                 | qualquer aumento sobre a linha de base |
+| `count(UserDocument where status='pending')`          | acima de 200                           |
 
 Rollback: `PROFILE_GATE_ROLLOUT_PERCENT=0`, ou `PROFILE_GATE_ENABLED=false`.
 Efeito imediato, sem deploy. Não reverter a migração por problema de funil:

@@ -91,7 +91,11 @@ describe('admin document review', () => {
       reviewedAt: new Date(),
     });
 
-    const res = await app.inject({ method: 'GET', url: '/admin/documents?status=pending', headers });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/documents?status=pending',
+      headers,
+    });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { items: Array<{ status: string; userId: string }> };
     expect(body.items).toHaveLength(1);

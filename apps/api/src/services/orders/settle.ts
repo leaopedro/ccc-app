@@ -14,7 +14,7 @@ import { fulfillGarageSpotsForOrder } from './garage-fulfillment.js';
 type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 
 export type SettledOrderResult =
-  | { kind: 'ticket' | 'extras_only' | 'box'; issued: IssueResult }
+  | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] };
 
 export const settlePaidOrder = async (
@@ -71,6 +71,12 @@ export const settlePaidOrder = async (
 
     await assignEventPickupTicket(orderId, env);
     return { kind: order.kind };
+  }
+
+  // Fase 2: box orders stay pending and are never settled here. Fase 4 adds
+  // box settlement. Guard so a box order never falls through to ticket issuance.
+  if (order.kind === 'box') {
+    throw new Error('box orders are not settled in this phase');
   }
 
   const issued = await issueTicketForPaidOrder(orderId, providerRef, env, intentMetadata);

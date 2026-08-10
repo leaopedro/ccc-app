@@ -94,39 +94,62 @@ describe('AuthedNav — users sub-nav', () => {
   it('renders sub-nav when on /users path', () => {
     vi.mocked(usePathname).mockReturnValue('/users');
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
-    expect(html).toContain('data-testid="users-subnav"');
+    expect(html).toContain('data-testid="section-subnav"');
     expect(html).toContain('href="/groups"');
   });
 
   it('renders sub-nav when on /users/:id path', () => {
     vi.mocked(usePathname).mockReturnValue('/users/abc123');
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
-    expect(html).toContain('data-testid="users-subnav"');
+    expect(html).toContain('data-testid="section-subnav"');
     expect(html).toContain('href="/groups"');
   });
 
   it('renders sub-nav when on /groups path', () => {
     vi.mocked(usePathname).mockReturnValue('/groups');
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
-    expect(html).toContain('data-testid="users-subnav"');
+    expect(html).toContain('data-testid="section-subnav"');
     expect(html).toContain('href="/users"');
   });
 
   it('renders sub-nav when on /groups/:id path', () => {
     vi.mocked(usePathname).mockReturnValue('/groups/abc123');
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
-    expect(html).toContain('data-testid="users-subnav"');
+    expect(html).toContain('data-testid="section-subnav"');
   });
 
   it('does not render sub-nav when on /events path', () => {
     vi.mocked(usePathname).mockReturnValue('/events');
     const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
-    expect(html).not.toContain('data-testid="users-subnav"');
+    expect(html).not.toContain('data-testid="section-subnav"');
   });
 
   it('does not render sub-nav for staff even on /users path', () => {
     vi.mocked(usePathname).mockReturnValue('/users');
     const html = renderToStaticMarkup(<AuthedNav isStaff={true} />);
-    expect(html).not.toContain('data-testid="users-subnav"');
+    expect(html).not.toContain('data-testid="section-subnav"');
+  });
+});
+
+describe('AuthedNav — box sub-nav', () => {
+  it('exposes catalogo, parceiros and config when on a /box path', () => {
+    vi.mocked(usePathname).mockReturnValue('/box/catalogo');
+    const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
+    expect(html).toContain('data-testid="section-subnav"');
+    expect(html).toContain('href="/box/catalogo"');
+    expect(html).toContain('href="/box/parceiros"');
+    expect(html).toContain('href="/box/config"');
+  });
+
+  it('keeps box sub-nav on a nested /box/config path', () => {
+    vi.mocked(usePathname).mockReturnValue('/box/config');
+    const html = renderToStaticMarkup(<AuthedNav isStaff={false} />);
+    expect(html).toContain('href="/box/parceiros"');
+  });
+
+  it('does not render box sub-nav for staff', () => {
+    vi.mocked(usePathname).mockReturnValue('/box/catalogo');
+    const html = renderToStaticMarkup(<AuthedNav isStaff={true} />);
+    expect(html).not.toContain('data-testid="section-subnav"');
   });
 });

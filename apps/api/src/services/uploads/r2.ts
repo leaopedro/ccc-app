@@ -80,6 +80,11 @@ export class R2Uploads implements Uploads {
     return objectKey.startsWith(`${prefix}/${userId}/`);
   }
 
+  isKindKey(objectKey: string, kind: UploadKind): boolean {
+    const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
+    return objectKey.startsWith(`${prefix}/`);
+  }
+
   async deleteObject(objectKey: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }));
   }

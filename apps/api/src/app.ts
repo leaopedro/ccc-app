@@ -60,6 +60,7 @@ import { startReconcileWorker } from './workers/billing-reconcile.js';
 import { startBroadcastWorker } from './workers/broadcasts.js';
 import { startDataExportWorker } from './workers/data-export.js';
 import { startEventRemindersWorker } from './workers/event-reminders.js';
+import { startBoxCutoffWorker } from './workers/box-cutoff.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
 import { startRetentionWorker } from './workers/retention.js';
 
@@ -219,6 +220,11 @@ export const buildApp = async (
       const backfillWorker = startPremiumTicketBackfillWorker({ env, log: app.log });
       app.addHook('onClose', () => {
         backfillWorker.stop();
+      });
+
+      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log });
+      app.addHook('onClose', () => {
+        boxCutoffWorker.stop();
       });
     }
   }

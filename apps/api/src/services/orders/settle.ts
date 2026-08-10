@@ -14,7 +14,7 @@ import { fulfillGarageSpotsForOrder } from './garage-fulfillment.js';
 type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 
 export type SettledOrderResult =
-  | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
+  | { kind: 'ticket' | 'extras_only' | 'box'; issued: IssueResult }
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] };
 
 export const settlePaidOrder = async (

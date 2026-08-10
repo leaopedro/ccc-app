@@ -40,13 +40,26 @@ Correcoes pos-review (mesmo PR):
 - Validacao de chave por prefixo de kind (`isKindKey`) nas rotas de box.
 - Nav expoe Catalogo, Parceiros e Configuracao.
 
-### Fase 2 — Runtime de ciclo (PENDENTE)
+### Fase 2 — Runtime de ciclo (CONCLUIDA)
 
-API do atendente + logica de ciclo/cutoff/worker. Aqui entram os modelos de
-runtime adiados: `MonthlyBox*`, estoque por ciclo, `OrderKind.box`.
+API do atendente + logica de ciclo/cutoff/worker. Entregue em
+`feat/box-builder-fase-2`.
 
-Ponto de atencao herdado: quando o runtime chegar, revisar concorrencia real
-de `BoxSettings` (hoje resolvido por id fixo + upsert, suficiente para admin).
+Escopo entregue:
+
+- Schema Prisma de runtime: `MonthlyBox`, `MonthlyBoxItem`,
+  `MonthlyBoxPartnerItem`, `BoxCatalogItemCycleStock`. `OrderKind.box` adicionado.
+- Hook de abertura: `MonthlyBox` aberto automaticamente no forward-advance da
+  assinatura Premium (swallows P2002; um box por ciclo por assinatura).
+- API do atendente: `GET /me/box`, `PUT /me/box/selection`, `POST /me/box/confirm`.
+- Ledger de estoque por ciclo: reserva atomica em `BoxCatalogItemCycleStock`
+  com decremento transacional.
+- Worker de cutoff (`runBoxCutoffTick`): skip/ready, trim LIFO de excesso,
+  cancela Order pendente sem sobrepor pagamento liquidado.
+
+Nota: Fase 4 ainda e dona de: checkout do provider + flip do webhook para pago
+
+- fulfillment e refund no admin.
 
 ### Fase 3 — UI mobile (PENDENTE)
 

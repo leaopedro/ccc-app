@@ -643,6 +643,25 @@ const seedPremiumCatalog = async (): Promise<void> => {
   );
 };
 
+// Keep in sync with BOX_SETTINGS_SINGLETON_ID in @ccc/shared/admin-box.
+const BOX_SETTINGS_SINGLETON_ID = 'box_default';
+
+const seedBoxSettings = async (): Promise<void> => {
+  await prisma.boxSettings.upsert({
+    where: { id: BOX_SETTINGS_SINGLETON_ID },
+    update: {},
+    create: {
+      id: BOX_SETTINGS_SINGLETON_ID,
+      boxEnabled: false,
+      cutoffDaysBeforeRenewal: 5,
+      headerTitle: 'Sua caixa do mes',
+      shippingFeeCents: 0,
+      freeShippingCepRanges: [{ from: '80000-000', to: '83800-999' }],
+    },
+  });
+  console.log('Seeded box settings.');
+};
+
 const main = async (): Promise<void> => {
   for (const e of events) {
     const { tiers, ...rest } = e;
@@ -675,6 +694,8 @@ const main = async (): Promise<void> => {
   await seedBadgeCatalog();
 
   await seedPremiumCatalog();
+
+  await seedBoxSettings();
 };
 
 main()

@@ -58,6 +58,7 @@ describe('AddonsPanel — botao de remover modulo', () => {
           moduleOptions={[]}
         />,
       );
+      await Promise.resolve();
     });
 
     expect(
@@ -79,6 +80,7 @@ describe('AddonsPanel — botao de remover modulo', () => {
           moduleOptions={[]}
         />,
       );
+      await Promise.resolve();
     });
 
     expect(
@@ -102,6 +104,7 @@ describe('AddonsPanel — botao de remover modulo', () => {
           ]}
         />,
       );
+      await Promise.resolve();
     });
 
     const select = container.querySelector<HTMLSelectElement>(

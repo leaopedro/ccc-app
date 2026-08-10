@@ -73,6 +73,21 @@ async function purgeOldPaymentWebhookEvents(now: Date): Promise<PurgeResult> {
   };
 }
 
+async function scrubOldConsentIpMetadata(now: Date): Promise<PurgeResult> {
+  // The consent record itself is retained as proof, but the IP/user-agent
+  // captured with it are access-log metadata. The privacy policy states access
+  // logs (IP, user-agent) are kept 90 days, so null them out past that window.
+  const cutoff = new Date(now.getTime() - 90 * MS_PER_DAY);
+  const { count } = await prisma.consent.updateMany({
+    where: {
+      givenAt: { lt: cutoff },
+      OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }],
+    },
+    data: { ipAddress: null, userAgent: null },
+  });
+  return { table: 'Consent', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
 async function purgeOldNotifications(now: Date): Promise<PurgeResult> {
   const cutoff = new Date(now.getTime() - 90 * MS_PER_DAY);
   const { count } = await prisma.notification.deleteMany({
@@ -87,6 +102,59 @@ async function purgeOldBroadcastDeliveries(now: Date): Promise<PurgeResult> {
     where: { createdAt: { lt: cutoff } },
   });
   return { table: 'BroadcastDelivery', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
+async function purgeOldSupportTickets(now: Date): Promise<PurgeResult> {
+  // Retain support tickets (phone, message, attachment) for 2 years after
+  // closure, then delete. Attachments in R2 are queued for deletion first so
+  // the same tick's UploadDeletionQueue pass removes the object.
+  const cutoff = new Date(now.getTime() - 730 * MS_PER_DAY);
+  const due = await prisma.supportTicket.findMany({
+    where: { closedAt: { not: null, lt: cutoff } },
+    select: { id: true, attachmentObjectKey: true },
+    take: 500,
+  });
+  if (due.length === 0) {
+    return { table: 'SupportTicket', deletedCount: 0, skippedHolds: 0, failedCount: 0 };
+  }
+
+  const attachments = due.map((t) => t.attachmentObjectKey).filter((k): k is string => k !== null);
+  if (attachments.length > 0) {
+    await prisma.uploadDeletionQueue.createMany({
+      data: attachments.map((objectKey) => ({
+        objectKey,
+        deleteAfter: now,
+        reason: 'support_ticket_retention',
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  const { count } = await prisma.supportTicket.deleteMany({
+    where: { id: { in: due.map((t) => t.id) } },
+  });
+  return { table: 'SupportTicket', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
+async function purgeOldAdminAudits(now: Date): Promise<PurgeResult> {
+  const cutoff = new Date(now.getTime() - 730 * MS_PER_DAY);
+  const { count } = await prisma.adminAudit.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+  return { table: 'AdminAudit', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
+async function purgeOldSubscriptionWebhookEvents(now: Date): Promise<PurgeResult> {
+  const cutoff = new Date(now.getTime() - 90 * MS_PER_DAY);
+  const { count } = await prisma.subscriptionWebhookEvent.deleteMany({
+    where: { receivedAt: { lt: cutoff } },
+  });
+  return {
+    table: 'SubscriptionWebhookEvent',
+    deletedCount: count,
+    skippedHolds: 0,
+    failedCount: 0,
+  };
 }
 
 async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise<PurgeResult> {
@@ -199,8 +267,12 @@ const PURGE_JOBS = [
   purgeConsumedVerificationTokens,
   purgeConsumedPasswordResetTokens,
   purgeOldPaymentWebhookEvents,
+  scrubOldConsentIpMetadata,
   purgeOldNotifications,
   purgeOldBroadcastDeliveries,
+  purgeOldSupportTickets,
+  purgeOldAdminAudits,
+  purgeOldSubscriptionWebhookEvents,
 ] as const;
 
 export const runRetentionTick = async (deps: RetentionWorkerDeps): Promise<PurgeResult[]> => {

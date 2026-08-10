@@ -2,7 +2,7 @@
 // component so the highest-risk behaviors (digits-not-mask, which field a
 // 400 lands on, the document upload never blocking the account) are
 // testable without mounting the screen.
-import type { PublicUser, SignupInput } from '@ccc/shared/auth';
+import type { PublicUser, SignupInput, SignupRequestInput } from '@ccc/shared/auth';
 import type { UserDocumentType } from '@ccc/shared/documents';
 
 import { ApiError } from '~/api/client';
@@ -21,11 +21,15 @@ type SignupFieldErrorField = 'email' | 'password' | 'cpf' | 'phone';
 // for `undefined` — an empty string is still run through the checksum check
 // and fails it, which would turn an abandoned optional field into a blocked
 // signup.
-export const buildSignupPayload = (values: SignupInput): SignupInput => {
+// `ageAttestation` is hardcoded true because the screen already gated on the
+// 18+ checkbox before calling submitSignup — signupRequestSchema types it as
+// z.literal(true), so there is no false to forward.
+export const buildSignupPayload = (values: SignupInput): SignupRequestInput => {
   const cpfDigits = unmaskCpf(values.cpf ?? '');
   const phoneDigits = unmaskPhone(values.phone ?? '');
   return {
     ...values,
+    ageAttestation: true,
     cpf: cpfDigits.length > 0 ? cpfDigits : undefined,
     phone: phoneDigits.length > 0 ? phoneDigits : undefined,
   };
@@ -70,7 +74,7 @@ const mapSignupError = (err: unknown): SignupOutcome => {
 };
 
 export type SubmitSignupDeps = {
-  signup: (input: SignupInput) => Promise<PublicUser>;
+  signup: (input: SignupRequestInput) => Promise<PublicUser>;
   uploadDocument: (type: UserDocumentType, picked: PickedImage) => Promise<unknown>;
 };
 

@@ -18,10 +18,14 @@ describe('POST /auth/signup with optional profile fields', () => {
     await resetDatabase();
   });
 
+  // ageAttestation is required by signupRequestSchema: without it every
+  // payload below would 400 on the schema, and the two tests that assert 400
+  // would pass for the wrong reason.
   const base = {
     name: 'Ana Souza',
     email: 'ana@ccc.test',
     password: 'correct-horse-battery-staple',
+    ageAttestation: true as const,
   };
 
   it('creates the account with only name, email and password', async () => {

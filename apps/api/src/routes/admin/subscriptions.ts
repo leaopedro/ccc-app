@@ -17,6 +17,8 @@
 
 import { prisma } from '@ccc/db';
 import {
+  ADMIN_SUBSCRIPTION_ALLOWED_STATUS,
+  type AdminSubscriptionAction,
   adminSubscriptionActionResponseSchema,
   adminSubscriptionAddonAttachSchema,
   adminSubscriptionAddonMutationResponseSchema,
@@ -145,17 +147,15 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
   >['status'];
 
   /**
-   * Status aceitos POR ACAO. Nao existe um conceito unico de "assinatura viva"
-   * que sirva para todas: resume precisa aceitar `paused`, que nao esta na lista
-   * LIVE_STATUSES usada pela superficie do membro.
+   * As listas vivem em @ccc/shared para o admin desabilitar o controle com o
+   * mesmo criterio que a API usa para recusar. Esta atribuicao e a guarda de
+   * drift: se o enum do Prisma e o do shared divergirem, quebra a compilacao
+   * aqui em vez de virar 409 no clique.
    */
-  const ALLOWED_STATUS: Record<string, ReadonlyArray<MembershipStatus>> = {
-    plan: ['active', 'past_due', 'cancel_scheduled'],
-    addon: ['active', 'past_due', 'cancel_scheduled'],
-    cancel: ['active', 'past_due', 'trialing'],
-    resume: ['cancel_scheduled', 'paused'],
-    pause: ['active', 'past_due', 'trialing'],
-  };
+  const ALLOWED_STATUS: Record<
+    AdminSubscriptionAction,
+    ReadonlyArray<MembershipStatus>
+  > = ADMIN_SUBSCRIPTION_ALLOWED_STATUS;
 
   /**
    * Ordem de avaliacao: existencia, flag, status, provider.
@@ -179,7 +179,7 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
       return null;
     }
-    if (!ALLOWED_STATUS[action]!.includes(membership.status)) {
+    if (!ALLOWED_STATUS[action].includes(membership.status)) {
       void reply.status(409).send({
         error: 'InvalidStatus',
         message: `action not allowed while subscription is ${membership.status}`,

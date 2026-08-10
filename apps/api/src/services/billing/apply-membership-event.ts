@@ -226,12 +226,17 @@ async function handleActivated(
         where: {
           membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
         },
+        // payoutAmountCents/vendorName so no create. Sao snapshot do momento do
+        // vinculo, igual a preco e cota: um replay de activation nao pode
+        // reescrever o que attachAddon ja gravou com o catalogo da epoca.
         create: {
           membershipId: membership.id,
           addonKey: addon.addonKey,
           status: 'active',
           providerItemRef: addon.providerItemRef,
           monthlyDeltaCents: addon.monthlyDeltaCents,
+          payoutAmountCents: addon.payoutAmountCents,
+          vendorName: addon.vendorName,
           quotaPerCycle: addon.quotaPerCycle,
           quotaUnit: addon.quotaUnit,
           currency: addon.currency,

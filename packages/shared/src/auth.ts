@@ -47,6 +47,15 @@ export const signupSchema = z.object({
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
+// The signup request additionally carries the 18+ self-attestation. We record
+// only the fact of acceptance (a timestamp), never a date of birth — the
+// privacy policy states we do not collect DOB. The gate is enforced client-side
+// (checkbox) and echoed here so the server can persist the attestation.
+export const signupRequestSchema = signupSchema.extend({
+  ageAttestation: z.literal(true),
+});
+export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
+
 export const loginSchema = z.object({
   email: emailInputSchema,
   password: passwordSchema,

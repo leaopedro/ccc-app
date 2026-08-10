@@ -5,33 +5,56 @@ import type { StripeClient } from '../stripe/index.js';
 
 import type { StepEntry } from './anonymize.js';
 
+// Runs before anonymizeUser (see workers/account-deletion.ts), so the user row
+// still carries the real email here — needed to locate the Stripe customer.
 export const runVendorFanout = async (
   userId: string,
-  _stripe: StripeClient,
+  stripe: StripeClient,
   _env: Env,
 ): Promise<StepEntry[]> => {
   const steps: StepEntry[] = [];
   const now = () => new Date().toISOString();
 
-  // Stripe: no direct customer delete in MVP — orders reference providerRef, not customerId
-  // Log as skipped; a future migration can map customerId and call stripe.customers.del()
-  const hasStripeOrders = await prisma.order.findFirst({
-    where: { userId, provider: 'stripe', providerRef: { not: null } },
-    select: { id: true },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, status: true },
   });
-  steps.push({
-    step: 'stripe_customer_detach',
-    status: hasStripeOrders ? 'skipped' : 'skipped',
-    at: now(),
-  });
+
+  // Stripe: "forget" the customer(s) tied to this email. Customers are deduped
+  // by email (findOrCreateCustomer), and no customerId is stored locally, so we
+  // look them up by email while it is still present. Guarded so a Stripe error
+  // never blocks local anonymization.
+  try {
+    const alreadyAnonymized =
+      !user || user.status === 'anonymized' || user.email.endsWith('@removed.local');
+    if (alreadyAnonymized) {
+      steps.push({ step: 'stripe_customer_delete', status: 'skipped', at: now() });
+    } else {
+      const deleted = await stripe.deleteCustomersByEmail(user.email);
+      steps.push({
+        step: 'stripe_customer_delete',
+        status: deleted > 0 ? 'ok' : 'skipped',
+        at: now(),
+      });
+    }
+  } catch (err) {
+    steps.push({
+      step: 'stripe_customer_delete',
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+      at: now(),
+    });
+  }
 
   // Expo push tokens: deleted by anonymize step (deviceToken.deleteMany)
   steps.push({ step: 'expo_token_cleanup', status: 'ok', at: now() });
 
-  // Sentry: no self-serve user-deletion API; log for manual review
+  // Sentry: no user-identifying data is stored server-side (email is hashed at
+  // ingest and Sentry.setUser is never called), and Sentry exposes no per-user
+  // deletion API. Nothing to purge.
   steps.push({ step: 'sentry_user_delete', status: 'skipped', at: now() });
 
-  // Resend: no stored contact list in MVP
+  // Resend: transactional-only, no stored audience/contact list. Nothing to purge.
   steps.push({ step: 'resend_contact_remove', status: 'skipped', at: now() });
 
   return steps;

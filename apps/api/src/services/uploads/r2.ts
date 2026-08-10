@@ -42,6 +42,9 @@ export class R2Uploads implements Uploads {
         accessKeyId: opts.accessKeyId,
         secretAccessKey: opts.secretAccessKey,
       },
+      // R2 rejects the SDK's default CRC32 request checksum on presigned PUTs
+      // (403 Forbidden). Only add checksum headers when explicitly required.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
     });
   }
 
@@ -100,6 +103,11 @@ export class R2Uploads implements Uploads {
   isOwnedKey(objectKey: string, userId: string, kind: UploadKind): boolean {
     const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
     return objectKey.startsWith(`${prefix}/${userId}/`);
+  }
+
+  isKindKey(objectKey: string, kind: UploadKind): boolean {
+    const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
+    return objectKey.startsWith(`${prefix}/`);
   }
 
   async objectExists(objectKey: string): Promise<boolean> {

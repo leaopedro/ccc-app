@@ -37,6 +37,8 @@ const envSchema = z.object({
   STRIPE_PRICE_PREMIUM_GOLD_ANNUAL: z.string().optional(),
   ABACATEPAY_API_KEY: z.string().min(1).optional(),
   ABACATEPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
+  FRIDGE_DEVICE_SECRET: z.string().min(32).optional(),
+  FRIDGE_UNLOCK_API_KEY: z.string().min(32).optional(),
   ABACATEPAY_DEV_WEBHOOK_ENABLED: z
     .enum(['true', 'false'])
     .default('false')

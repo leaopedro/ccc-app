@@ -1,14 +1,18 @@
 'use client';
 
+import {
+  ADMIN_SUBSCRIPTION_ALLOWED_STATUS,
+  type AdminSubscriptionStatus,
+} from '@ccc/shared/admin-subscription';
 import { useState } from 'react';
-
-import { changePlanAction } from '~/lib/assinaturas-actions';
 
 import { ActionToast, useActionToast } from './use-action-toast';
 
+import { changePlanAction } from '~/lib/assinaturas-actions';
+
 type Tier = 'bronze' | 'silver' | 'gold';
 type Cadence = 'monthly' | 'annual';
-type Status = 'trialing' | 'active' | 'past_due' | 'cancel_scheduled' | 'expired' | 'paused';
+type Status = AdminSubscriptionStatus;
 
 type Props = {
   membershipId: string;
@@ -21,13 +25,6 @@ type Props = {
 const tierLabel: Record<Tier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
 const cadenceLabel: Record<Cadence, string> = { monthly: 'Mensal', annual: 'Anual' };
 
-/**
- * Espelha ALLOWED_STATUS.plan em apps/api/src/routes/admin/subscriptions.ts.
- * As duas listas precisam mudar juntas: divergir aqui deixa o botão
- * habilitado numa ação que a API vai recusar com 409.
- */
-const ALLOWED_STATUS: Status[] = ['active', 'past_due', 'cancel_scheduled'];
-
 const field =
   'rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--color-fg)]';
 
@@ -36,7 +33,7 @@ export function PlanActions({ membershipId, mutable, status, currentTier, curren
   const [tier, setTier] = useState<Tier>(currentTier);
   const [cadence, setCadence] = useState<Cadence>(currentCadence);
 
-  const statusAllowed = ALLOWED_STATUS.includes(status);
+  const statusAllowed = ADMIN_SUBSCRIPTION_ALLOWED_STATUS.plan.includes(status);
   const unchanged = tier === currentTier && cadence === currentCadence;
   const fieldDisabled = !mutable || !statusAllowed || pending;
   const disabled = fieldDisabled || unchanged;

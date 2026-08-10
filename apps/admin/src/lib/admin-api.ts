@@ -78,6 +78,21 @@ import {
   type AdminPremiumPriceUpsert,
 } from '@ccc/shared/admin';
 import {
+  adminBoxCatalogItemSchema,
+  adminBoxCatalogListSchema,
+  adminBoxSettingsSchema,
+  adminPartnerListSchema,
+  adminPartnerModuleSchema,
+  adminPartnerSchema,
+  type AdminBoxCatalogItemCreate,
+  type AdminBoxCatalogItemUpdate,
+  type AdminBoxSettingsUpdate,
+  type AdminPartnerCreate,
+  type AdminPartnerModuleCreate,
+  type AdminPartnerModuleUpdate,
+  type AdminPartnerUpdate,
+} from '@ccc/shared/admin-box';
+import {
   adminSubscriptionActionResponseSchema,
   adminSubscriptionAddonMutationResponseSchema,
   adminSubscriptionDetailSchema,
@@ -930,3 +945,78 @@ export const listAdminAuditLogs = (opts?: {
     schema: adminAuditListResponseSchema,
   });
 };
+
+// ── Admin box catalog ─────────────────────────────────────────────
+
+export const getBoxCatalog = () =>
+  apiFetch('/admin/box/catalog-items', { schema: adminBoxCatalogListSchema });
+
+export const createBoxCatalogItem = (input: AdminBoxCatalogItemCreate) =>
+  apiFetch('/admin/box/catalog-items', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminBoxCatalogItemSchema,
+  });
+
+export const updateBoxCatalogItem = (id: string, input: AdminBoxCatalogItemUpdate) =>
+  apiFetch(`/admin/box/catalog-items/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminBoxCatalogItemSchema,
+  });
+
+export const deleteBoxCatalogItem = (id: string) =>
+  apiFetch(`/admin/box/catalog-items/${id}`, {
+    method: 'DELETE',
+    schema: adminBoxCatalogItemSchema,
+  });
+
+export const getBoxPartners = () =>
+  apiFetch('/admin/box/partners', { schema: adminPartnerListSchema });
+
+export const createBoxPartner = (input: AdminPartnerCreate) =>
+  apiFetch('/admin/box/partners', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminPartnerSchema,
+  });
+
+export const updateBoxPartner = (id: string, input: AdminPartnerUpdate) =>
+  apiFetch(`/admin/box/partners/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminPartnerSchema,
+  });
+
+export const deleteBoxPartner = (id: string) =>
+  apiFetch(`/admin/box/partners/${id}`, { method: 'DELETE', schema: adminPartnerSchema });
+
+export const createBoxPartnerModule = (id: string, input: AdminPartnerModuleCreate) =>
+  apiFetch(`/admin/box/partners/${id}/modules`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminPartnerModuleSchema,
+  });
+
+export const updateBoxPartnerModule = (moduleId: string, input: AdminPartnerModuleUpdate) =>
+  apiFetch(`/admin/box/partner-modules/${moduleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminPartnerModuleSchema,
+  });
+
+export const deleteBoxPartnerModule = (moduleId: string) =>
+  apiFetch(`/admin/box/partner-modules/${moduleId}`, {
+    method: 'DELETE',
+    schema: adminPartnerModuleSchema,
+  });
+
+export const getBoxSettings = () =>
+  apiFetch('/admin/box/settings', { schema: adminBoxSettingsSchema });
+
+export const updateBoxSettings = (input: AdminBoxSettingsUpdate) =>
+  apiFetch('/admin/box/settings', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    schema: adminBoxSettingsSchema,
+  });

@@ -1380,6 +1380,7 @@ export const adminPremiumPlanSchema = z.object({
   description: z.string().nullable(),
   active: z.boolean(),
   sortOrder: z.number().int(),
+  monthlyBoxBudgetCents: z.number().int(),
   prices: z.array(adminPremiumPlanPriceSchema),
   benefits: z.array(adminPremiumPlanBenefitSchema),
   createdAt: z.string().datetime(),
@@ -1430,6 +1431,7 @@ export const adminPremiumPlanCreateSchema = z.object({
   description: optionalText(500).optional(),
   active: z.boolean().default(true),
   sortOrder: z.number().int().nonnegative().optional(),
+  monthlyBoxBudgetCents: z.number().int().nonnegative().optional(),
 });
 export type AdminPremiumPlanCreate = z.infer<typeof adminPremiumPlanCreateSchema>;
 
@@ -1439,6 +1441,7 @@ export const adminPremiumPlanUpdateSchema = z
     description: optionalText(500),
     active: z.boolean(),
     sortOrder: z.number().int().nonnegative(),
+    monthlyBoxBudgetCents: z.number().int().nonnegative(),
   })
   .partial()
   .strict()

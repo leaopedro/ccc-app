@@ -8,6 +8,7 @@ export const config = {
     '/check-in/:path*',
     '/financeiro/:path*',
     '/assinaturas/:path*',
+    '/box/:path*',
     '/login',
   ],
 };
@@ -50,12 +51,13 @@ export const middleware = (req: NextRequest) => {
     return NextResponse.redirect(new URL(homeFor(authedRole), req.url));
   }
 
-  // Staff cannot touch /events/*, /financeiro/* or /assinaturas/*.
+  // Staff cannot touch /events/*, /financeiro/*, /assinaturas/* or /box/*.
   if (
     authedRole === 'staff' &&
     (path.startsWith('/events') ||
       path.startsWith('/financeiro') ||
-      path.startsWith('/assinaturas'))
+      path.startsWith('/assinaturas') ||
+      path.startsWith('/box'))
   ) {
     return NextResponse.redirect(new URL('/check-in', req.url));
   }

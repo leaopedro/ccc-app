@@ -1,4 +1,4 @@
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-05-14' as const;
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
 
 export type PolicySection = {
   id: string;
@@ -10,14 +10,14 @@ export const privacyPolicySections: PolicySection[] = [
   {
     id: 'quem-somos',
     title: '1. Quem somos — dados do controlador',
-    body: `A **Casa Car Club** é uma empresa brasileira que organiza eventos um clubhouse automotivo privado em Curitiba. Somos o controlador dos seus dados pessoais nos termos da Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
+    body: `A **Casa Car Club** é uma empresa brasileira que organiza eventos e um clubhouse automotivo privado em Curitiba. Somos o controlador dos seus dados pessoais nos termos da Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
 
 Nossos dados de contato:
 
 - **Razão social:** Casa Car Club
 - **CNPJ:** a ser publicado antes do lançamento em produção
 - **Endereço:** a ser publicado antes do lançamento em produção
-- **E-mail comercial:** contato@casacarclub.com.br`,
+- **E-mail comercial:** contato@casacar.club`,
   },
   {
     id: 'encarregado',
@@ -26,7 +26,7 @@ Nossos dados de contato:
 
 - **Nome:** Pedro Leão
 - **Cargo:** CEO e fundador
-- **E-mail:** privacidade@casacarclub.com.br
+- **E-mail:** privacidade@casacar.club
 - **Prazo de resposta:** acuse de recebimento em até 2 dias úteis; resposta substantiva em até 15 dias (LGPD Art. 19 § 1º)
 
 Você pode enviar dúvidas, solicitações de direitos, reclamações e comunicações sobre proteção de dados diretamente para o e-mail acima.`,
@@ -38,7 +38,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Conta e identidade**
 - Nome completo, e-mail, senha (armazenada como hash irreversível)
-- Data de nascimento (para verificação de idade — Art. 14 LGPD)
+- Confirmação de que você tem 18 anos ou mais (registramos apenas o aceite e a data do aceite; **não** coletamos sua data de nascimento)
 - Foto de perfil (opcional)
 
 **Veículos e garagem**
@@ -46,20 +46,27 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Ingressos e pedidos**
 - Histórico de compras de ingressos e produtos da loja
-- Endereço de entrega (para pedidos com frete)
+- Endereço de entrega e telefone (para pedidos com frete)
 - Código de ingresso (QR) — assinado com HMAC; não armazena dados de localização
+
+**Suporte**
+- Telefone, mensagens e anexos que você enviar ao abrir um chamado de suporte
+
+**Imagens**
+- Foto de perfil, fotos de veículos e anexos de suporte, armazenados na Cloudflare R2
 
 **Pagamento**
 - Dados de cartão de crédito/débito: processados pela **Stripe** nos EUA — nunca armazenados por nós
-- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação e o CPF/CNPJ do pagador quando fornecido pelo gateway
+- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação. **Não** coletamos nem armazenamos CPF/CNPJ
+- Assinaturas premium: gerenciadas pela **RevenueCat**, que recebe apenas um identificador interno da sua conta
 
 **Notificações**
 - Token de dispositivo para notificações push (Expo Push / APNs / FCM)
 - Preferências de notificação (opt-in por categoria)
 
 **Dados técnicos**
-- Logs de acesso (IP, user-agent, timestamp) — retidos por 90 dias
-- Dados de erro e performance via **Sentry** (anonimizados: e-mail substituído por hash SHA-256; sem cookies de rastreamento)`,
+- Logs de acesso (IP, user-agent, timestamp) — retidos por 90 dias e depois eliminados
+- Dados de erro e performance via **Sentry** (e-mail substituído por hash SHA-256; sem cookies de rastreamento)`,
   },
   {
     id: 'finalidades-base-legal',
@@ -68,13 +75,13 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 |---|---|---|
 | Criar e manter sua conta | Nome, e-mail, senha | Art. 7, V — execução de contrato |
 | Emitir ingressos e QR codes | E-mail, dados do pedido | Art. 7, V — execução de contrato |
-| Processar pagamentos | Dados do pedido, CPF/CNPJ (Pix) | Art. 7, V — execução de contrato |
+| Processar pagamentos | Dados do pedido | Art. 7, V — execução de contrato |
 | Enviar e-mails transacionais | E-mail | Art. 7, V — execução de contrato |
 | Guardar registros fiscais | Dados do pedido, valor | Art. 7, II — obrigação legal |
-| Verificação de idade | Data de nascimento | Art. 14 LGPD — proteção de menores |
+| Restringir o acesso a maiores de 18 anos | Autodeclaração de maioridade | Art. 7, IX — interesse legítimo (proteção de menores) |
 | Notificações de eventos (push) | Token de dispositivo | Art. 7, I — consentimento (revogável) |
-| E-mails de marketing | E-mail | Art. 7, I — consentimento (revogável) |
-| Monitoramento de erros (Sentry) | Dados técnicos anonimizados | Art. 7, IX — interesse legítimo (segurança do sistema) |
+| E-mails e novidades de marketing | E-mail | Art. 7, I — consentimento (revogável) |
+| Monitoramento de erros (Sentry) | Dados técnicos | Art. 7, IX — interesse legítimo (segurança do sistema) |
 | Validar identidade para assinatura | CPF, telefone, documento de identidade | Art. 7, V — execução de contrato |
 
 **Sobre o interesse legítimo:** realizamos o balanço de interesses (teste LIA) antes de usar esta base. Você pode opor-se a tratamentos baseados em interesse legítimo enviando mensagem ao Encarregado.`,
@@ -88,13 +95,14 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 |---|---|---|---|
 | Stripe | Processamento de pagamentos com cartão | EUA | Operador |
 | AbacatePay | Processamento de Pix | Brasil | Operador |
+| RevenueCat | Gestão de assinaturas premium | EUA | Operador |
 | Expo / Apple / Google | Envio de notificações push | EUA | Operador |
-| Sentry | Monitoramento de erros (dados anonimizados) | EUA | Operador |
+| Sentry | Monitoramento de erros | EUA | Operador |
 | Cloudflare R2 | Armazenamento de fotos e mídia | EUA | Operador |
 | Resend | Envio de e-mails transacionais | EUA | Operador |
 | Railway | Infraestrutura de servidores | EUA | Operador |
 
-Todos os fornecedores estão sujeitos a cláusulas contratuais de proteção de dados (DPA). Poderemos compartilhar dados com autoridades públicas brasileiras quando exigido por lei.`,
+Todos os fornecedores estão sujeitos a cláusulas contratuais de proteção de dados (DPA). Poderemos compartilhar dados com autoridades públicas brasileiras quando exigido por lei. Não utilizamos SDKs de publicidade ou rastreamento de terceiros.`,
   },
   {
     id: 'transferencias-internacionais',
@@ -114,9 +122,9 @@ Os fornecedores que ainda não possuem SCC formalizados serão adequados antes d
 | Dados de conta (ativos) | Enquanto a conta estiver ativa | Execução de contrato |
 | Dados de conta (após exclusão) | 30 dias de carência, depois anonimização | Política interna + LGPD Art. 16 |
 | Histórico de pedidos e ingressos | 5 anos após a compra | Obrigação fiscal (Lei nº 9.613/1998) |
-| Dados de pagamento Pix (CPF) | 5 anos | Obrigação fiscal |
+| Chamados de suporte | 2 anos após o encerramento | Política interna |
 | Tokens de sessão | 30 dias (expiração automática) | Segurança |
-| Logs de acesso | 90 dias | Segurança / Marco Civil da Internet |
+| Logs de acesso (IP, user-agent) | 90 dias | Segurança / Marco Civil da Internet |
 | Tokens de push | Até revogação do consentimento | Consentimento |
 | Dados de erro (Sentry) | 90 dias na plataforma Sentry | Interesse legítimo |
 | Documento de identidade (aprovado) | 90 dias após a análise | Prevenção a fraude |
@@ -159,8 +167,8 @@ Você pode revogar ou alterar suas preferências de cookies a qualquer momento n
 
 **Como exercer seus direitos:**
 
-1. Pelo aplicativo: Perfil → Configurações → Privacidade
-2. Por e-mail: privacidade@casacarclub.com.br
+1. Pelo aplicativo: Perfil → Privacidade e dados (exportar seus dados ou excluir sua conta)
+2. Por e-mail: privacidade@casacar.club
 3. Respondemos em até 15 dias corridos (LGPD Art. 19 § 1º)
 
 Para solicitações de eliminação de dados, a conta será anonimizada após período de carência de 30 dias e os registros fiscais serão preservados pelo prazo legal.`,
@@ -168,11 +176,11 @@ Para solicitações de eliminação de dados, a conta será anonimizada após pe
   {
     id: 'criancas',
     title: '10. Crianças e adolescentes',
-    body: `Nossa plataforma é destinada a maiores de 18 anos. Solicitamos a data de nascimento no cadastro para verificação de idade.
+    body: `Nossa plataforma é destinada a maiores de 18 anos. No cadastro, exigimos que você declare ter 18 anos ou mais (autodeclaração). **Não** coletamos sua data de nascimento.
 
 Não coletamos intencionalmente dados de menores de 18 anos sem consentimento dos pais ou responsáveis legais. Se identificarmos que um menor cadastrou-se sem autorização adequada, a conta será suspensa e os dados eliminados.
 
-Se você é pai, mãe ou responsável e acredita que seu filho menor cadastrou-se em nossa plataforma sem autorização, entre em contato pelo e-mail: privacidade@casacarclub.com.br.`,
+Se você é pai, mãe ou responsável e acredita que seu filho menor cadastrou-se em nossa plataforma sem autorização, entre em contato pelo e-mail: privacidade@casacar.club.`,
   },
   {
     id: 'seguranca',
@@ -185,7 +193,7 @@ Se você é pai, mãe ou responsável e acredita que seu filho menor cadastrou-s
 - **Mídia:** fotos armazenadas com URLs pré-assinadas de curta duração (15 minutos)
 - **Pagamentos:** dados de cartão nunca passam pelos nossos servidores (Stripe)
 - **Autenticação:** MFA obrigatório para administradores e staff
-- **Logs:** dados sensíveis (senhas, tokens, e-mails) são removidos de todos os logs automaticamente
+- **Logs:** dados sensíveis (senhas, tokens, e-mails, IP) são removidos ou mascarados nos logs automaticamente
 
 Em caso de incidente de segurança com risco real aos titulares, notificaremos a ANPD e os afetados nos prazos previstos na Resolução CD/ANPD nº 15/2024.`,
   },
@@ -199,8 +207,8 @@ Em caso de incidente de segurança com risco real aos titulares, notificaremos a
 - Se as mudanças exigirem novo consentimento (base legal Art. 7, I), solicitaremos sua confirmação antes de continuar o tratamento
 
 **Versão atual:** ${PRIVACY_POLICY_VERSION}
-**Data de vigência:** 14 de maio de 2026
-**Versão anterior:** nenhuma (primeira publicação)`,
+**Data de vigência:** 6 de agosto de 2026
+**Versão anterior:** privacy-2026-05-14`,
   },
   {
     id: 'anpd',
@@ -211,6 +219,6 @@ Em caso de incidente de segurança com risco real aos titulares, notificaremos a
 - **E-mail:** comunicacao@anpd.gov.br
 - **Formulário de petição:** disponível no portal da ANPD
 
-Recomendamos que você entre em contato conosco primeiro (privacidade@casacarclub.com.br) para que possamos resolver sua questão diretamente.`,
+Recomendamos que você entre em contato conosco primeiro (privacidade@casacar.club) para que possamos resolver sua questão diretamente.`,
   },
 ];

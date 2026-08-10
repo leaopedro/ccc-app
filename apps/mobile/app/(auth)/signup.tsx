@@ -51,6 +51,8 @@ export default function SignupScreen() {
   const next = sanitizeNext(nextParam);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
+  const [ageAccepted, setAgeAccepted] = useState(false);
+  const [ageError, setAgeError] = useState<string | null>(null);
   const [pickedDocument, setPickedDocument] = useState<PickedSignupDocument | null>(null);
   const [documentPickError, setDocumentPickError] = useState<string | null>(null);
   const {
@@ -91,6 +93,11 @@ export default function SignupScreen() {
       return;
     }
     setTermsError(null);
+    if (!ageAccepted) {
+      setAgeError(authCopy.signup.ageRequired);
+      return;
+    }
+    setAgeError(null);
     const outcome = await submitSignup(values, pickedDocument, { signup, uploadDocument });
     if (outcome.kind === 'error') {
       setError(outcome.field, { message: outcome.message });
@@ -328,6 +335,37 @@ export default function SignupScreen() {
               </Text>
             ) : null}
 
+            <View className="flex-row items-start gap-3">
+              <Pressable
+                onPress={() => {
+                  setAgeAccepted((v) => !v);
+                  if (!ageAccepted) setAgeError(null);
+                }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ageAccepted }}
+                accessibilityLabel={authCopy.signup.ageAttest}
+                hitSlop={8}
+                className="active:opacity-70"
+              >
+                <View
+                  className={
+                    'h-6 w-6 rounded-md border items-center justify-center ' +
+                    (ageAccepted ? 'bg-brand border-brand' : 'border-border-strong')
+                  }
+                >
+                  {ageAccepted ? <Check color="#0A0A0A" size={16} strokeWidth={3} /> : null}
+                </View>
+              </Pressable>
+              <Text variant="bodySm" tone="secondary" className="flex-1">
+                {authCopy.signup.ageAttest}
+              </Text>
+            </View>
+            {ageError ? (
+              <Text variant="bodySm" tone="danger" className="-mt-1">
+                {ageError}
+              </Text>
+            ) : null}
+
             <View className="pt-4">
               <Button
                 label={authCopy.signup.submit}
@@ -335,7 +373,7 @@ export default function SignupScreen() {
                 size="lg"
                 fullWidth
                 loading={isSubmitting}
-                disabled={!termsAccepted}
+                disabled={!termsAccepted || !ageAccepted}
                 onPress={() => void onSubmit()}
               />
             </View>

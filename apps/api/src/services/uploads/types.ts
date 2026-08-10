@@ -6,6 +6,9 @@ export type UploadKind =
   | 'product_photo'
   | 'support_attachment'
   | 'garage_cover'
+  | 'box_item'
+  | 'partner_logo'
+  | 'partner_module'
   | 'identity_document';
 
 // Identity documents live behind their own prefix so bucket routing and
@@ -30,6 +33,9 @@ export const UPLOAD_KIND_PATH_PREFIX: Record<UploadKind, string> = {
   product_photo: 'product_photo',
   support_attachment: 'support_attachment',
   garage_cover: 'garage-cover',
+  box_item: 'box_item',
+  partner_logo: 'partner_logo',
+  partner_module: 'partner_module',
   identity_document: DOCUMENT_PATH_PREFIX,
 };
 
@@ -54,6 +60,7 @@ export interface Uploads {
   buildPublicUrl(objectKey: string): string;
   buildSignedGetUrl(objectKey: string, ttlSeconds?: number): Promise<string>;
   isOwnedKey(objectKey: string, userId: string, kind: UploadKind): boolean;
+  isKindKey(objectKey: string, kind: UploadKind): boolean;
   objectExists(objectKey: string): Promise<boolean>;
   deleteObject(objectKey: string): Promise<void>;
 }

@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
 import { recordAudit } from '../services/admin-audit.js';
+import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';
 import type { Uploads } from '../services/uploads/index.js';
 
 type PurgeResult = {
@@ -186,6 +187,81 @@ async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise
   return { table: 'UploadDeletionQueue', deletedCount, skippedHolds: 0, failedCount };
 }
 
+// Identity-document files are the most sensitive object this system stores.
+// The approval decision is what needs to survive, not the image: keep the row
+// for audit and purge the object. 90 days after approval leaves room for a
+// dispute; 30 after rejection is enough for a resend.
+export const DOCUMENT_APPROVED_RETENTION_DAYS = 90;
+export const DOCUMENT_REJECTED_RETENTION_DAYS = 30;
+// Under optimistic auto-approval, `pending` (reviewedAt: null) is the steady
+// state, not a transient one — most documents are never reviewed at all.
+// Keyed on `sentAt`, not `reviewedAt`, since a pending row has no review.
+// 180 days is deliberately double the approved window, to leave room for
+// review before the file disappears out from under a reviewer.
+export const DOCUMENT_PENDING_RETENTION_DAYS = 180;
+
+// Matches purgeQueuedUploadDeletions's take: 500 neighbour. Caps how many
+// rows one tick processes (two writes each); a large first-run backlog just
+// catches up over successive nightly ticks instead of blocking the tick.
+export const DOCUMENT_PURGE_BATCH = 500;
+
+const daysBefore = (now: Date, days: number): Date =>
+  new Date(now.getTime() - days * 24 * 3600 * 1000);
+
+/**
+ * Queues expired document objects for deletion and stamps `fileDeletedAt`.
+ * Idempotent: rows already stamped are skipped, so a re-run queues nothing.
+ * Returns how many rows were purged this pass.
+ */
+export const purgeExpiredDocumentFiles = async (now: Date): Promise<number> => {
+  const due = await prisma.userDocument.findMany({
+    where: {
+      fileDeletedAt: null,
+      OR: [
+        {
+          status: 'approved',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_APPROVED_RETENTION_DAYS) },
+        },
+        {
+          status: 'rejected',
+          reviewedAt: { lt: daysBefore(now, DOCUMENT_REJECTED_RETENTION_DAYS) },
+        },
+        { status: 'pending', sentAt: { lt: daysBefore(now, DOCUMENT_PENDING_RETENTION_DAYS) } },
+      ],
+    },
+    select: { id: true, objectKey: true },
+    take: DOCUMENT_PURGE_BATCH,
+  });
+
+  for (const doc of due) {
+    // retentionDays: 0 — the 90/30/180-day windows above ARE the grace period.
+    // queueObjectDeletion's own 30-day default exists for the avatar-replaced
+    // case, where the user might have made a mistake seconds ago; a document
+    // whose retention window already expired needs no second grace. Leaving
+    // the default would push the actual R2 deletion to
+    // reviewedAt + (90 or 30) + 30 days — 30 days past the window
+    // packages/shared/src/legal.ts publishes to data subjects — while
+    // fileDeletedAt is stamped immediately below, making GET /me/documents
+    // and the admin file endpoint report the file gone for that whole month
+    // even though it is still sitting in the bucket. `now` is passed through
+    // explicitly so deleteAfter lines up exactly with fileDeletedAt instead
+    // of drifting by the few ms between this call and queueObjectDeletion's
+    // own `new Date()` default.
+    await queueObjectDeletion({
+      objectKey: doc.objectKey,
+      reason: 'document_retention',
+      retentionDays: 0,
+      now,
+    });
+    await prisma.userDocument.update({
+      where: { id: doc.id },
+      data: { fileDeletedAt: now },
+    });
+  }
+
+  return due.length;
+};
+
 const PURGE_JOBS = [
   purgeExpiredRefreshTokens,
   purgeConsumedVerificationTokens,
@@ -234,6 +310,21 @@ export const runRetentionTick = async (deps: RetentionWorkerDeps): Promise<Purge
         skippedHolds: uploadResult.skippedHolds,
         failed: uploadResult.failedCount,
       },
+      '[retention] purged',
+    );
+  }
+
+  const documentPurgedCount = await purgeExpiredDocumentFiles(now);
+  const documentResult: PurgeResult = {
+    table: 'UserDocument',
+    deletedCount: documentPurgedCount,
+    skippedHolds: 0,
+    failedCount: 0,
+  };
+  results.push(documentResult);
+  if (documentPurgedCount > 0) {
+    deps.log?.info(
+      { table: documentResult.table, deleted: documentResult.deletedCount },
       '[retention] purged',
     );
   }

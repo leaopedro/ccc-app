@@ -124,6 +124,35 @@ describe('rate-limit gaps', () => {
     expect(res6.statusCode).toBe(429);
   });
 
+  it('returns 429 after 120 GET /admin/users/:id from the same admin', async () => {
+    const env = loadEnv();
+    const { user: admin } = await createUser({
+      email: 'admin-detail-rl@jdm.test',
+      role: 'admin',
+      verified: true,
+    });
+    const { user: target } = await createUser({ email: 'target-detail-rl@jdm.test' });
+    const token = bearer(env, admin.id, 'admin');
+
+    for (let i = 0; i < 120; i += 1) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: token },
+      });
+      // Isolated 120/min/actor bucket (apps/api/src/routes/admin/index.ts):
+      // not 429 yet.
+      expect(res.statusCode).toBe(200);
+    }
+
+    const res121 = await app.inject({
+      method: 'GET',
+      url: `/admin/users/${target.id}`,
+      headers: { authorization: token },
+    });
+    expect(res121.statusCode).toBe(429);
+  });
+
   it('two users on same IP do not share rate-limit quota', async () => {
     const env = loadEnv();
     const { user: userA } = await createUser({ verified: true, email: 'a@jdm.test' });

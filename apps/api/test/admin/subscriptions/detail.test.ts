@@ -166,6 +166,10 @@ describe('GET /admin/subscriptions/:id', () => {
 
     expect(res.statusCode).toBe(200);
     await flaggedApp.close();
-    process.env.GROWTH_PREMIUM_BILLING_ENABLED = previous;
+    if (previous === undefined) {
+      delete process.env.GROWTH_PREMIUM_BILLING_ENABLED;
+    } else {
+      process.env.GROWTH_PREMIUM_BILLING_ENABLED = previous;
+    }
   });
 });

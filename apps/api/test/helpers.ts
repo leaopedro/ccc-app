@@ -73,6 +73,22 @@ export const resetDatabase = async (): Promise<void> => {
   await prisma.premiumMembership.deleteMany();
   await prisma.premiumTicketBackfillJob.deleteMany();
   await prisma.subscriptionWebhookEvent.deleteMany();
+  // Segunda passada, mesmo idiom que orderItem/shippingAddress/product* ja usam
+  // acima. Order, OrderItem, Ticket e CartItem apontam para TicketTier com
+  // onDelete: Restrict, e sao limpos la em cima, ~20 statements antes daqui.
+  // Uma linha que nascesse nessa janela derrubava o delete abaixo com
+  // `Foreign key constraint violated on Order_tierId_fkey`, que foi como o CI
+  // quebrou duas vezes seguidas no afterEach de gate-checkout.test.ts (run
+  // 31438051862 e a re-execucao seguinte), sem nunca reproduzir local. Repetir
+  // os quatro colado no delete de TicketTier fecha a janela.
+  await prisma.cartItemExtra.deleteMany();
+  await prisma.cartItem.deleteMany();
+  await prisma.pickupVoucher.deleteMany();
+  await prisma.ticketExtraItem.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.orderItem.deleteMany();
+  await prisma.orderExtra.deleteMany();
+  await prisma.order.deleteMany();
   await prisma.ticketTier.deleteMany();
   await prisma.event.deleteMany();
   await prisma.carPhoto.deleteMany();
@@ -95,6 +111,7 @@ export const resetDatabase = async (): Promise<void> => {
   await prisma.productType.deleteMany();
   await prisma.storeSettings.deleteMany();
   await prisma.dataExportJob.deleteMany();
+  await prisma.userDocument.deleteMany();
   await prisma.supportTicket.deleteMany();
   await prisma.uploadDeletionQueue.deleteMany();
   await prisma.boxCatalogItem.deleteMany();

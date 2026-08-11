@@ -28,6 +28,7 @@ import {
   adminUserCreatedSchema,
   adminUserDetailSchema,
   adminUserSearchResponseSchema,
+  type AdminUserDetail,
   adminUserStatusUpdatedSchema,
   type AdminCreateUserBody,
   type AdminEventCreate,
@@ -113,6 +114,7 @@ import {
   type TicketCheckInRequest,
   type TicketCheckInResponse,
 } from '@ccc/shared/check-in';
+import { USER_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import {
   createFeedBanInputSchema,
   feedBanResponseSchema,
@@ -157,7 +159,7 @@ import {
   type UpdateBroadcastRequest,
 } from '../../../../packages/shared/src/broadcasts';
 
-import { apiFetch } from './api';
+import { apiFetch, apiFetchRedirectLocation } from './api';
 
 export const listAdminEvents = () =>
   apiFetch('/admin/events', { schema: adminEventListResponseSchema });
@@ -371,8 +373,19 @@ export const searchAdminUsers = (params?: { q?: string; cursor?: string; limit?:
   });
 };
 
+// Cast, not a plain return-type annotation: adminUserDetailSchema has
+// `.default()` fields (hasCpf, hasPhone, documents), which makes their INPUT
+// type optional even though the parsed OUTPUT (what schema.parse actually
+// returns at runtime) always has them present. apiFetch's `schema:
+// ZodType<T>` parameter defaults its contravariant Input type param to `=
+// T`, so inferring T from the schema argument leaks that input-side
+// optionality into T's shape — hasCpf/hasPhone/documents type as
+// possibly-undefined even though the schema guarantees them. A plain
+// `: Promise<AdminUserDetail>` annotation still fails structural
+// assignability for the same reason; the cast sidesteps the (spurious)
+// input-side check and asserts the schema's own documented Output type.
 export const getAdminUser = (id: string) =>
-  apiFetch(`/admin/users/${id}`, { schema: adminUserDetailSchema });
+  apiFetch(`/admin/users/${id}`, { schema: adminUserDetailSchema }) as Promise<AdminUserDetail>;
 
 export const createAdminUser = (input: AdminCreateUserBody) =>
   apiFetch('/admin/users', {
@@ -394,6 +407,38 @@ export const enableAdminUser = (id: string) =>
   });
 
 export const getMe = () => apiFetch('/me', { schema: publicProfileSchema });
+
+// ── Admin document review ──────────────────────────────────────────
+// See apps/api/src/routes/admin/documents.ts. Approve/reject responses have
+// no shared zod schema (admin-only surface), so they are defined inline
+// here, matching the file-wide convention for routes without one (e.g. the
+// feed moderation helpers above).
+
+const adminDocumentReviewResponseSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(USER_DOCUMENT_STATUSES),
+  reviewedAt: z.string().datetime(),
+  rejectionReason: z.string().nullable().optional(),
+});
+
+// GET /admin/documents/:id/file replies with a 302 redirect to a short-TTL
+// signed URL, not JSON — see apiFetchRedirectLocation for why apiFetch
+// cannot be reused here.
+export const getAdminDocumentFileUrl = (documentId: string): Promise<string> =>
+  apiFetchRedirectLocation(`/admin/documents/${documentId}/file`);
+
+export const approveAdminDocument = (documentId: string) =>
+  apiFetch(`/admin/documents/${documentId}/approve`, {
+    method: 'POST',
+    schema: adminDocumentReviewResponseSchema,
+  });
+
+export const rejectAdminDocument = (documentId: string, reason: string) =>
+  apiFetch(`/admin/documents/${documentId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+    schema: adminDocumentReviewResponseSchema,
+  });
 
 export const grantTicket = (input: AdminGrantTicket) =>
   apiFetch('/admin/tickets/grant', {

@@ -24,7 +24,11 @@ export const anonymizeUser = async (
   void uploads;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { status: true, avatarObjectKey: true },
+    select: {
+      status: true,
+      avatarObjectKey: true,
+      documents: { select: { objectKey: true } },
+    },
   });
 
   if (!user) return { ok: false, error: 'user_not_found' };
@@ -37,6 +41,7 @@ export const anonymizeUser = async (
   // Collect R2 keys to delete
   const objectKeys: string[] = [];
   if (user.avatarObjectKey) objectKeys.push(user.avatarObjectKey);
+  for (const doc of user.documents) objectKeys.push(doc.objectKey);
 
   const carPhotos = await prisma.carPhoto.findMany({
     where: { car: { userId } },
@@ -58,7 +63,19 @@ export const anonymizeUser = async (
     ...supportAttachments.map((s) => s.attachmentObjectKey).filter((k): k is string => k !== null),
   );
 
-  // Queue R2 objects for retention-window sweep (best-effort, log failures)
+  // Queue R2 objects for retention-window sweep (best-effort, log failures).
+  // No retentionDays here, so queueObjectDeletion's 30-day default applies —
+  // deliberately, and deliberately different from the retention purge worker
+  // (retention.ts), which passes retentionDays: 0. That is not an
+  // inconsistency to "fix": the retention purge's 90/30/180-day windows
+  // already ARE the grace period for a document nobody acted on, so a second
+  // 30-day grace there would push the real R2 deletion a month past the
+  // window packages/shared/src/legal.ts publishes to data subjects. Here, on
+  // the erasure path, there is no such published window to protect — this
+  // loop enqueues every object type on the account (avatar, car photos, feed
+  // photos, support attachments, documents) uniformly, and 30 days is simply
+  // the platform-wide convention for "user might have made a mistake
+  // seconds ago" on every one of them. Documents get no special case.
   for (const key of objectKeys) {
     try {
       await queueObjectDeletion({
@@ -125,11 +142,18 @@ export const anonymizeUser = async (
         city: null,
         stateCode: null,
         avatarObjectKey: null,
+        cpf: null,
+        phone: null,
         status: 'anonymized',
         anonymizedAt: now,
         pushPrefs: { transactional: false, marketing: false } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // UserDocument rows would cascade-delete with the User row, but
+    // anonymization keeps the User row alive (fiscal FK on orders), so we
+    // delete the documents explicitly here instead.
+    await tx.userDocument.deleteMany({ where: { userId } });
 
     const existingGarage = await tx.garage.findUnique({ where: { userId } });
     if (existingGarage) {
@@ -167,6 +191,7 @@ export const anonymizeUser = async (
     }
   });
   steps.push({ step: 'anonymize_user_row', status: 'ok', at: new Date().toISOString() });
+  steps.push({ step: 'delete_user_documents', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'anonymize_garage', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'delete_garage_badges', status: 'ok', at: new Date().toISOString() });
   steps.push({ step: 'delete_xp_events', status: 'ok', at: new Date().toISOString() });

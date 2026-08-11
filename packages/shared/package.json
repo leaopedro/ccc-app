@@ -46,6 +46,10 @@
       "types": "./src/cars.ts",
       "default": "./dist/cars.js"
     },
+    "./documents": {
+      "types": "./src/documents.ts",
+      "default": "./dist/documents.js"
+    },
     "./check-in": {
       "types": "./src/check-in.ts",
       "default": "./dist/check-in.js"
@@ -121,6 +125,10 @@
     "./profile": {
       "types": "./src/profile.ts",
       "default": "./dist/profile.js"
+    },
+    "./profile-status": {
+      "types": "./src/profile-status.ts",
+      "default": "./dist/profile-status.js"
     },
     "./push": {
       "types": "./src/push.ts",

@@ -30,6 +30,8 @@ describe('publicProfileSchema', () => {
       city: null,
       stateCode: null,
       avatarUrl: null,
+      cpf: null,
+      phone: null,
     });
     expect(ok.success).toBe(true);
   });

@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signupSchema } from '@ccc/shared/auth';
 import type { SignupInput } from '@ccc/shared/auth';
+import type { UserDocumentType } from '@ccc/shared/documents';
 import { Button, Text } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { ArrowLeft, Check, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -14,12 +15,34 @@ import {
   ScrollView,
   View,
 } from 'react-native';
+import { z } from 'zod';
 
-import { ApiError } from '~/api/client';
 import { useAuth } from '~/auth/context';
 import { buildLoginHref, sanitizeNext } from '~/auth/redirect-intent';
+import { type PickedSignupDocument, submitSignup } from '~/auth/signup-submit';
 import { TextField } from '~/components/TextField';
 import { authCopy } from '~/copy/auth';
+import { profileCopy } from '~/copy/profile';
+import { showMessage } from '~/lib/confirm';
+import { maskCpf, maskPhone } from '~/lib/masks';
+import { uploadDocument } from '~/lib/upload-document';
+import { ImagePickerPermissionDeniedError, pickImage } from '~/lib/upload-image';
+
+// Relaxes cpf/phone to plain optional strings for the client-side resolver.
+// The canonical cpfSchema/phoneSchema (via signupSchema) still run
+// server-side on every submit; duplicating their checksum/format validation
+// here would only block on an empty field ("" fails cpfSchema.optional(),
+// since optional only skips validation for `undefined`) and would still
+// need the server's 400 as the source of truth for the field-level error
+// copy. Blank stays untouched by the resolver; submitSignup converts "" to
+// `undefined` before calling signup().
+const signupFormSchema = signupSchema.extend({
+  cpf: z.string().optional(),
+  phone: z.string().optional(),
+});
+
+const documentTypeLabel = (type: UserDocumentType): string =>
+  type === 'cnh' ? profileCopy.documento.typeCnh : profileCopy.documento.typeRg;
 
 export default function SignupScreen() {
   const { signup } = useAuth();
@@ -30,15 +53,39 @@ export default function SignupScreen() {
   const [termsError, setTermsError] = useState<string | null>(null);
   const [ageAccepted, setAgeAccepted] = useState(false);
   const [ageError, setAgeError] = useState<string | null>(null);
+  const [pickedDocument, setPickedDocument] = useState<PickedSignupDocument | null>(null);
+  const [documentPickError, setDocumentPickError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<SignupInput>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { email: '', password: '', name: '' },
+    resolver: zodResolver(signupFormSchema),
+    defaultValues: { email: '', password: '', name: '', cpf: '', phone: '' },
   });
+
+  // Local only: no token exists before signup(), so the document cannot be
+  // presigned/uploaded yet. pickImage() is local and needs none, so this
+  // works here; the actual upload happens in submitSignup, after the
+  // account exists.
+  const handlePickDocument = async (type: UserDocumentType) => {
+    setDocumentPickError(null);
+    try {
+      const picked = await pickImage();
+      if (!picked) return; // genuine cancel: stay silent
+      setPickedDocument({ type, picked });
+    } catch (err) {
+      if (err instanceof ImagePickerPermissionDeniedError) {
+        setDocumentPickError(profileCopy.documento.pickFailed);
+      }
+    }
+  };
+
+  const handleRemoveDocument = () => {
+    setPickedDocument(null);
+    setDocumentPickError(null);
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     if (!termsAccepted) {
@@ -51,25 +98,21 @@ export default function SignupScreen() {
       return;
     }
     setAgeError(null);
-    try {
-      await signup({ ...values, ageAttestation: true });
-      router.replace({
-        pathname: '/verify-email-pending',
-        params: next ? { email: values.email, next } : { email: values.email },
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setError('email', { message: authCopy.errors.emailExists });
-      } else if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
-        setError('password', { message: authCopy.errors.weakPassword });
-      } else if (err instanceof ApiError && err.status === 429) {
-        setError('password', { message: authCopy.errors.rateLimited });
-      } else if (err instanceof ApiError) {
-        setError('password', { message: authCopy.errors.unknown });
-      } else {
-        setError('password', { message: authCopy.errors.network });
-      }
+    const outcome = await submitSignup(values, pickedDocument, { signup, uploadDocument });
+    if (outcome.kind === 'error') {
+      setError(outcome.field, { message: outcome.message });
+      return;
     }
+    if (outcome.documentUploadFailed) {
+      showMessage(authCopy.signup.documentUploadFailedNotice);
+    }
+    // Signup always ends at the verify screen: the email-verification gate
+    // in app/_layout.tsx owns every other post-signup route, so there is no
+    // branch here for a document intent to reroute through.
+    router.replace({
+      pathname: '/verify-email-pending',
+      params: next ? { email: values.email, next } : { email: values.email },
+    });
   });
 
   return (
@@ -156,6 +199,94 @@ export default function SignupScreen() {
               {!errors.password?.message ? (
                 <Text variant="caption" tone="muted" className="mt-2">
                   {authCopy.signup.passwordHint}
+                </Text>
+              ) : null}
+            </View>
+
+            <Controller
+              control={control}
+              name="cpf"
+              render={({ field: { onChange, value } }) => (
+                <TextField
+                  label={authCopy.signup.cpfLabel}
+                  placeholder={authCopy.signup.cpfPlaceholder}
+                  hint={authCopy.signup.cpfHint}
+                  keyboardType="number-pad"
+                  maxLength={14}
+                  value={value ?? ''}
+                  onChangeText={(text) => onChange(maskCpf(text))}
+                  error={errors.cpf?.message}
+                />
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="phone"
+              render={({ field: { onChange, value } }) => (
+                <TextField
+                  label={authCopy.signup.phoneLabel}
+                  placeholder={authCopy.signup.phonePlaceholder}
+                  hint={authCopy.signup.phoneHint}
+                  keyboardType="number-pad"
+                  maxLength={15}
+                  value={value ?? ''}
+                  onChangeText={(text) => onChange(maskPhone(text))}
+                  error={errors.phone?.message}
+                />
+              )}
+            />
+
+            <View className="gap-2">
+              <Text variant="bodySm" tone="secondary">
+                {authCopy.signup.documentTitle}
+              </Text>
+              {pickedDocument ? (
+                <View className="flex-row items-center justify-between rounded-lg border border-border px-4 py-3">
+                  <Text variant="bodySm" tone="secondary">
+                    {documentTypeLabel(pickedDocument.type)}
+                  </Text>
+                  <Pressable
+                    onPress={handleRemoveDocument}
+                    accessibilityRole="button"
+                    accessibilityLabel={authCopy.signup.documentRemove}
+                    hitSlop={8}
+                  >
+                    <X color="#8A8A93" size={18} strokeWidth={1.75} />
+                  </Pressable>
+                </View>
+              ) : (
+                <View className="flex-row gap-3">
+                  <Pressable
+                    onPress={() => void handlePickDocument('cnh')}
+                    accessibilityRole="button"
+                    accessibilityLabel={profileCopy.documento.typeCnh}
+                    className="flex-1 items-center rounded-lg border border-border-strong py-3 active:opacity-70"
+                  >
+                    <Text variant="bodySm" tone="secondary">
+                      {profileCopy.documento.typeCnh}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void handlePickDocument('rg')}
+                    accessibilityRole="button"
+                    accessibilityLabel={profileCopy.documento.typeRg}
+                    className="flex-1 items-center rounded-lg border border-border-strong py-3 active:opacity-70"
+                  >
+                    <Text variant="bodySm" tone="secondary">
+                      {profileCopy.documento.typeRg}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+              <Text variant="caption" tone="muted">
+                {pickedDocument
+                  ? authCopy.signup.documentSelectedHint
+                  : authCopy.signup.documentHint}
+              </Text>
+              {documentPickError ? (
+                <Text variant="bodySm" tone="danger">
+                  {documentPickError}
                 </Text>
               ) : null}
             </View>

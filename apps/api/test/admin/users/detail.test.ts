@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../../src/env.js';
+import { encryptField } from '../../../src/services/crypto/field-encryption.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../../helpers.js';
 
 const mkEvent = () =>
@@ -214,5 +215,180 @@ describe('GET /admin/users/:id', () => {
     expect(body.recentOrders.length).toBe(1);
     expect(body.recentOrders[0]!.amountCents).toBe(5000);
     expect(body.recentOrders[0]!.status).toBe('paid');
+  });
+
+  describe('cpf/phone exposure (admin-only, audited)', () => {
+    const CPF_DIGITS = '52998224725';
+    const PHONE_DIGITS = '11987654321';
+
+    it('admin actor gets the decrypted cpf digits and the phone digits', async () => {
+      const { user: admin } = await createUser({
+        email: 'admin@jdm.test',
+        verified: true,
+        role: 'admin',
+      });
+      const { user: target } = await createUser({
+        email: 'has-docs@jdm.test',
+        name: 'Has Docs',
+        verified: true,
+      });
+      await prisma.user.update({
+        where: { id: target.id },
+        data: {
+          cpf: encryptField(CPF_DIGITS, loadEnv().FIELD_ENCRYPTION_KEY),
+          phone: PHONE_DIGITS,
+        },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: bearer(loadEnv(), admin.id, 'admin') },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = adminUserDetailSchema.parse(res.json());
+      expect(body.cpf).toBe(CPF_DIGITS);
+      expect(body.phone).toBe(PHONE_DIGITS);
+      expect(body.hasCpf).toBe(true);
+      expect(body.hasPhone).toBe(true);
+    });
+
+    it('non-admin actor who can reach the route gets null for both, rest unchanged', async () => {
+      const { user: org } = await createUser({
+        email: 'org2@jdm.test',
+        verified: true,
+        role: 'organizer',
+      });
+      const { user: target } = await createUser({
+        email: 'has-docs2@jdm.test',
+        name: 'Has Docs Two',
+        verified: true,
+      });
+      await prisma.user.update({
+        where: { id: target.id },
+        data: {
+          cpf: encryptField(CPF_DIGITS, loadEnv().FIELD_ENCRYPTION_KEY),
+          phone: PHONE_DIGITS,
+        },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: bearer(loadEnv(), org.id, 'organizer') },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = adminUserDetailSchema.parse(res.json());
+      expect(body.cpf).toBeNull();
+      expect(body.phone).toBeNull();
+      // Presence flags and the rest of the payload are unaffected by the role gate.
+      expect(body.hasCpf).toBe(true);
+      expect(body.hasPhone).toBe(true);
+      expect(body.id).toBe(target.id);
+      expect(body.name).toBe('Has Docs Two');
+
+      const audits = await prisma.adminAudit.findMany({ where: { action: 'user.pii_viewed' } });
+      expect(audits).toHaveLength(0);
+    });
+
+    it('member with no cpf and no phone yields null for both and writes no audit row', async () => {
+      const { user: admin } = await createUser({
+        email: 'admin3@jdm.test',
+        verified: true,
+        role: 'admin',
+      });
+      const { user: target } = await createUser({
+        email: 'no-pii@jdm.test',
+        name: 'No Pii',
+        verified: true,
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: bearer(loadEnv(), admin.id, 'admin') },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = adminUserDetailSchema.parse(res.json());
+      expect(body.cpf).toBeNull();
+      expect(body.phone).toBeNull();
+
+      const audits = await prisma.adminAudit.findMany({ where: { action: 'user.pii_viewed' } });
+      expect(audits).toHaveLength(0);
+    });
+
+    it('admin read of a member with cpf writes exactly one audit row with no cpf digits in metadata', async () => {
+      const { user: admin } = await createUser({
+        email: 'admin4@jdm.test',
+        verified: true,
+        role: 'admin',
+      });
+      const { user: target } = await createUser({
+        email: 'has-cpf@jdm.test',
+        name: 'Has Cpf',
+        verified: true,
+      });
+      await prisma.user.update({
+        where: { id: target.id },
+        data: {
+          cpf: encryptField(CPF_DIGITS, loadEnv().FIELD_ENCRYPTION_KEY),
+          phone: PHONE_DIGITS,
+        },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: bearer(loadEnv(), admin.id, 'admin') },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const audits = await prisma.adminAudit.findMany({ where: { action: 'user.pii_viewed' } });
+      expect(audits).toHaveLength(1);
+      expect(audits[0]!.actorId).toBe(admin.id);
+      expect(audits[0]!.entityId).toBe(target.id);
+      const metadataJson = JSON.stringify(audits[0]!.metadata);
+      expect(metadataJson).not.toContain(CPF_DIGITS);
+      expect(metadataJson).not.toContain(PHONE_DIGITS);
+    });
+
+    it('undecryptable ciphertext yields null and not a 500', async () => {
+      const { user: admin } = await createUser({
+        email: 'admin5@jdm.test',
+        verified: true,
+        role: 'admin',
+      });
+      const { user: target } = await createUser({
+        email: 'bad-cipher@jdm.test',
+        name: 'Bad Cipher',
+        verified: true,
+      });
+      const validCiphertext = encryptField(CPF_DIGITS, loadEnv().FIELD_ENCRYPTION_KEY);
+      // Flip a hex character in the auth tag segment to break authentication
+      // while keeping the enc_v1:iv:data:tag shape intact (isEncrypted() must
+      // still recognize it so decryptField takes the decrypt-and-catch path).
+      const parts = validCiphertext.split(':');
+      const tag = parts[3]!;
+      const flippedChar = tag[0] === '0' ? '1' : '0';
+      parts[3] = flippedChar + tag.slice(1);
+      const corrupted = parts.join(':');
+
+      await prisma.user.update({
+        where: { id: target.id },
+        data: { cpf: corrupted },
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/admin/users/${target.id}`,
+        headers: { authorization: bearer(loadEnv(), admin.id, 'admin') },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = adminUserDetailSchema.parse(res.json());
+      expect(body.cpf).toBeNull();
+
+      // hasCpf still reflects that a (corrupted) ciphertext is on file.
+      expect(body.hasCpf).toBe(true);
+    });
   });
 });

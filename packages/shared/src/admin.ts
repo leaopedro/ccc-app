@@ -114,6 +114,10 @@ export const adminAuditActionSchema = z.enum([
   'premium.subscription.cancel_scheduled',
   'premium.subscription.resumed',
   'premium.subscription.paused',
+  'document_viewed',
+  'document_approved',
+  'document_rejected',
+  'user.pii_viewed',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 
@@ -476,6 +480,21 @@ export const adminUserGroupSchema = z.object({
 });
 export type AdminUserGroup = z.infer<typeof adminUserGroupSchema>;
 
+// Presence + review metadata only — never the file itself. The file is only
+// ever handed out through the separately audited GET
+// /admin/documents/:id/file. (CPF/phone are a different surface: see
+// hasCpf/cpf and hasPhone/phone below, which the product owner deliberately
+// chose to expose in full to the `admin` role, audited on every read.)
+export const adminUserDetailDocumentSchema = z.object({
+  id: z.string().min(1),
+  type: z.string(),
+  status: z.string(),
+  sentAt: z.string().datetime(),
+  reviewedAt: z.string().datetime().nullable(),
+  rejectionReason: z.string().nullable(),
+});
+export type AdminUserDetailDocument = z.infer<typeof adminUserDetailDocumentSchema>;
+
 export const adminUserDetailSchema = z.object({
   id: z.string().min(1),
   email: z.string().email(),
@@ -488,6 +507,21 @@ export const adminUserDetailSchema = z.object({
   city: z.string().nullable(),
   stateCode: z.string().nullable(),
   avatarUrl: z.string().nullable(),
+  // Defaulted rather than required: an older API build predating "perfil
+  // progressivo" would omit these fields entirely, and a hard-parsing caller
+  // (apps/admin/src/lib/admin-api.ts) must not throw on that response just
+  // because both apps auto-deploy from the same merge with no ordering
+  // guarantee between them.
+  hasCpf: z.boolean().default(false),
+  hasPhone: z.boolean().default(false),
+  // Full values, `admin` role only. The API returns null for both to any
+  // other role that can reach this route, exactly as if the member had not
+  // filled them — the caller cannot tell "not admin" apart from "not filled"
+  // from this payload alone. Defaulted to null for the same deploy-ordering
+  // reason as hasCpf/hasPhone above: an older API build predating this field
+  // must not make a hard-parsing caller throw.
+  cpf: z.string().nullable().default(null),
+  phone: z.string().nullable().default(null),
   stats: z.object({
     totalTickets: z.number().int().nonnegative(),
     totalOrders: z.number().int().nonnegative(),
@@ -495,6 +529,7 @@ export const adminUserDetailSchema = z.object({
   recentTickets: z.array(adminUserDetailTicketSchema),
   recentOrders: z.array(adminUserDetailOrderSchema),
   groups: z.array(adminUserGroupSchema),
+  documents: z.array(adminUserDetailDocumentSchema).default([]),
 });
 export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
 

@@ -78,16 +78,33 @@ Nota: Fase 4 ainda e dona de: checkout do provider + flip do webhook para pago
 - fulfillment e refund no admin. `settlePaidOrder` hoje lanca de proposito para
   `kind === 'box'`, como guarda ate a Fase 4 implementar a liquidacao.
 
-### Fase 3 — UI mobile (PENDENTE)
+### Fase 3 — UI mobile (DESIGN CONCLUIDO, IMPL PENDENTE)
 
-Tela do assinante montar a caixa dentro do budget.
+Tela do assinante montar a caixa dentro do budget + camada de leitura/skip/
+historico/preferencias que as telas exigem. Pagamento e fulfillment timeline
+ficam pra Fase 4.
 
-Dependencia do worker de cutoff (ja implementado, aguardando consumidor): a
-branch de auto-send do worker espera uma caixa `open` com `autoSendOptIn = true`
-e `shippingAddressId` setados enquanto a caixa segue aberta. Nenhum endpoint da
-Fase 2 seta esses campos com a caixa aberta por design. A Fase 3 mobile precisa
-persistir opt-in de auto-send + endereco na caixa aberta (novo campo no PUT ou
-endpoint dedicado) para tornar esse caminho alcancavel.
+Design: `docs/superpowers/specs/2026-08-11-box-builder-fase-3-design.md`
+(passou por review de tres agentes; resolucoes embutidas). Referencia de UI:
+`docs/design/box-builder/README.md`.
+
+Decisoes de escopo:
+
+- Builder ate confirmar. Telas de pagamento (06/07) e timeline de fulfillment
+  (09) sao Fase 4; `ready` ganha uma tela minimal de confirmacao agora.
+- Extras: "confirma e estaciona". Confirm com charge > 0 vai pra
+  `awaiting_payment` read-only; sem pagamento ate o cutoff, o worker corta pro
+  budget-only.
+- Nav: aba Ingressos vira item do Perfil; o slot vira premium-gated
+  (Caixa pra membro `active`, Assinatura pra free). Loja OFF cai pra 4 abas.
+- Auto-envio: novo `PUT /me/box/preferences` persiste `autoSendOptIn` +
+  endereco na caixa aberta (unico caminho de escrita do opt-in; removido do
+  confirm). Fecha a dependencia do worker de cutoff.
+- Offline: persist local minimo (AsyncStorage + reenvio ao reconectar).
+
+Novos endpoints do atendente: `GET /me/box/catalog`, `POST /me/box/skip` +
+`/unskip`, `GET /me/boxes`, `PUT /me/box/preferences`; box view enriquecida com
+`imageUrl` + linhas removidas (`included`/`dropReason`).
 
 ### Fase 4 — Checkout dos extras (PENDENTE)
 

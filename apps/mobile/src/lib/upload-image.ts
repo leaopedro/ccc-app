@@ -28,9 +28,19 @@ const inferMime = (asset: ImagePicker.ImagePickerAsset): PickedImage['mime'] | n
   return MIME_FROM_EXT[ext] ?? null;
 };
 
+// Thrown when the OS media-library permission was denied, distinct from a
+// genuine user cancel (which resolves to `null`). Callers that want to warn
+// on denial but stay silent on a plain cancel catch this specifically.
+export class ImagePickerPermissionDeniedError extends Error {
+  constructor() {
+    super('media library permission denied');
+    this.name = 'ImagePickerPermissionDeniedError';
+  }
+}
+
 export const pickImage = async (): Promise<PickedImage | null> => {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) throw new ImagePickerPermissionDeniedError();
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
     allowsEditing: true,
@@ -51,7 +61,12 @@ export const pickImage = async (): Promise<PickedImage | null> => {
   };
 };
 
-export const uploadBlobToR2 = async (blob: Blob, presign: PresignResponse): Promise<void> => {
+// Narrower than PresignResponse: only uploadUrl and headers are used for the
+// PUT itself, so this also accepts DocumentUploadResponse (no `publicUrl`,
+// by design, since an identity document has no public URL).
+type PutPresign = Pick<PresignResponse, 'uploadUrl' | 'headers'>;
+
+export const uploadBlobToR2 = async (blob: Blob, presign: PutPresign): Promise<void> => {
   const res = await fetch(presign.uploadUrl, {
     method: 'PUT',
     headers: presign.headers,

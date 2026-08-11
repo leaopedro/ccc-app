@@ -1,7 +1,14 @@
 import { createId } from '@paralleldrive/cuid2';
 
 import type { PresignInput, PresignResult, UploadKind, Uploads } from './types.js';
-import { EXT_FOR_MIME, UPLOAD_CACHE_CONTROL, UPLOAD_KIND_PATH_PREFIX } from './types.js';
+import {
+  DOCUMENT_CACHE_CONTROL,
+  DOCUMENT_CONTENT_DISPOSITION,
+  EXT_FOR_MIME,
+  isDocumentKey,
+  UPLOAD_CACHE_CONTROL,
+  UPLOAD_KIND_PATH_PREFIX,
+} from './types.js';
 
 export class DevUploads implements Uploads {
   constructor(
@@ -13,16 +20,21 @@ export class DevUploads implements Uploads {
     const ext = EXT_FOR_MIME[input.contentType] ?? 'bin';
     const prefix = UPLOAD_KIND_PATH_PREFIX[input.kind];
     const objectKey = `${prefix}/${input.userId}/${createId()}.${ext}`;
+    const isDocument = isDocumentKey(objectKey);
+    const disposition = isDocument ? DOCUMENT_CONTENT_DISPOSITION : 'inline';
+    const cacheControl = isDocument ? DOCUMENT_CACHE_CONTROL : UPLOAD_CACHE_CONTROL;
     return {
       uploadUrl: `${this.publicBase}/put/${objectKey}`,
       objectKey,
-      publicUrl: this.buildPublicUrl(objectKey),
+      // An identity document has no public URL by design: callers must
+      // request a short-lived signed URL via buildSignedGetUrl instead.
+      publicUrl: isDocument ? '' : this.buildPublicUrl(objectKey),
       expiresAt: new Date(Date.now() + this.ttlSeconds * 1000),
       headers: {
         'content-type': input.contentType,
         'content-length': String(input.size),
-        'content-disposition': 'inline',
-        'cache-control': UPLOAD_CACHE_CONTROL,
+        'content-disposition': disposition,
+        'cache-control': cacheControl,
         'x-amz-meta-kind': input.kind,
       },
     };
@@ -48,6 +60,14 @@ export class DevUploads implements Uploads {
   isKindKey(objectKey: string, kind: UploadKind): boolean {
     const prefix = UPLOAD_KIND_PATH_PREFIX[kind];
     return objectKey.startsWith(`${prefix}/`);
+  }
+
+  async objectExists(_objectKey: string): Promise<boolean> {
+    // DevUploads has no real storage backing it, so it cannot actually
+    // answer this question. Returning true keeps local development and the
+    // test suite working; tests that need to exercise the "not found" path
+    // stub this method (see me-documents.test.ts).
+    return true;
   }
 
   async deleteObject(_objectKey: string): Promise<void> {

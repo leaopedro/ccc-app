@@ -26,6 +26,7 @@ import {
 import rateLimit from '@fastify/rate-limit';
 import { reserveExtras, validateTickets } from '../services/orders/validate-tickets.js';
 import { applyDevFee } from '../services/pricing/dev-fee.js';
+import { enforceProfileGate } from '../services/profile/gate.js';
 
 type PreparedOrder = {
   sub: string;
@@ -377,6 +378,11 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
 
     scoped.post('/orders', {}, async (request, reply) => {
       const { sub } = requireUser(request);
+
+      // Gate before anything mutates: below this line stock gets reserved.
+      const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
+      if (gated) return gated;
+
       const input = createOrderRequestSchema.parse(request.body);
 
       const result = await prepareOrder(sub, input, app.env.DEV_FEE_PERCENT);
@@ -508,6 +514,11 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
 
     scoped.post('/orders/checkout', {}, async (request, reply) => {
       const { sub } = requireUser(request);
+
+      // Gate before anything mutates: below this line stock gets reserved.
+      const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
+      if (gated) return gated;
+
       const parsed = createWebCheckoutRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(422).send({

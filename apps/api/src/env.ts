@@ -79,6 +79,25 @@ const envSchema = z.object({
   REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().min(1).optional(),
   REVENUECAT_REST_API_KEY: z.string().min(1).optional(),
   RECONCILE_ALERT_DEPTH: z.coerce.number().int().positive().default(200),
+  // Progressive-profile gates. Default OFF: the feature deploys inert, and
+  // Railway variables drive the rollout. Percent is a deterministic bucket
+  // over userId, not a sampling rate.
+  PROFILE_GATE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  PROFILE_GATE_ROLLOUT_PERCENT: z.coerce.number().int().min(0).max(100).default(0),
+  // Private bucket for identity documents. Required in ANY environment where
+  // R2 is configured — buildUploads (services/uploads/index.ts) refuses to
+  // boot otherwise. The fallback to R2_BUCKET in R2Uploads.bucketFor() never
+  // actually applies there; it only applies to DevUploads, i.e. local dev
+  // and tests with no real R2 configured.
+  // .min(1) so an empty string is rejected rather than silently treated as
+  // "unset" here while bucketFor()'s `??` would treat it as "present".
+  R2_DOCUMENTS_BUCKET: z.string().min(1).optional(),
+  // Shorter than UPLOAD_URL_TTL_SECONDS on purpose: 300s is too long for a
+  // link to someone's ID.
+  DOCUMENT_URL_TTL_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 type RawEnv = z.infer<typeof envSchema>;

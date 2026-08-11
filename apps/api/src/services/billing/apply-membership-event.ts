@@ -37,6 +37,10 @@ export const applyMembershipEvent = async (
       return handlePastDue(tx, evt);
     case 'subscription.tier_changed':
       return handleTierChanged(tx, evt);
+    case 'subscription.paused':
+      return handlePaused(tx, evt);
+    case 'subscription.resumed':
+      return handleResumed(tx, evt);
     default: {
       // Exhaustive check — TypeScript will error if BillingEvent grows a new kind
       // without a corresponding case.
@@ -107,6 +111,8 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+        ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         addonsAmountCents,
       },
     });
@@ -126,6 +132,8 @@ async function handleActivated(
         devFeeAmountCents: pricing.devFeeAmountCents,
         grossAmountCents: pricing.grossAmountCents,
         currency: pricing.currency,
+        ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+        ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         addonsAmountCents,
       },
     });
@@ -218,12 +226,17 @@ async function handleActivated(
         where: {
           membershipId_addonKey: { membershipId: membership.id, addonKey: addon.addonKey },
         },
+        // payoutAmountCents/vendorName so no create. Sao snapshot do momento do
+        // vinculo, igual a preco e cota: um replay de activation nao pode
+        // reescrever o que attachAddon ja gravou com o catalogo da epoca.
         create: {
           membershipId: membership.id,
           addonKey: addon.addonKey,
           status: 'active',
           providerItemRef: addon.providerItemRef,
           monthlyDeltaCents: addon.monthlyDeltaCents,
+          payoutAmountCents: addon.payoutAmountCents,
+          vendorName: addon.vendorName,
           quotaPerCycle: addon.quotaPerCycle,
           quotaUnit: addon.quotaUnit,
           currency: addon.currency,
@@ -321,6 +334,10 @@ async function handleRenewed(
           devFeeAmountCents: pricing.devFeeAmountCents,
           grossAmountCents: pricing.grossAmountCents,
           currency: pricing.currency,
+          // Spread condicional, nao atribuicao direta: uma renovacao sem o dado
+          // nao pode apagar com null o snapshot bom gravado na ativacao.
+          ...(pricing.paymentBrand ? { paymentBrand: pricing.paymentBrand } : {}),
+          ...(pricing.paymentLast4 ? { paymentLast4: pricing.paymentLast4 } : {}),
         },
       })
     : existing;
@@ -511,6 +528,67 @@ async function handleTierChanged(
   await tx.garage.update({
     where: { id: membership.garageId },
     data: { premiumTier: tier, premiumUntil: newUntil },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.paused (Stripe pause_collection)
+// ---------------------------------------------------------------------------
+
+async function handlePaused(
+  tx: Prisma.TransactionClient,
+  evt: Extract<BillingEvent, { kind: 'subscription.paused' }>,
+): Promise<void> {
+  const { provider, providerSubRef } = evt;
+
+  // Status flip only. Snapshot da Garage fica intacto de proposito: o membro
+  // mantem entitlement ate premiumUntil, mesma escolha ja feita em handlePastDue.
+  // Pausa suspende cobranca, nao revoga o que ja foi pago.
+  await tx.premiumMembership.update({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    data: { status: 'paused' },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// subscription.resumed (pause_collection cleared)
+// ---------------------------------------------------------------------------
+
+async function handleResumed(
+  tx: Prisma.TransactionClient,
+  evt: Extract<BillingEvent, { kind: 'subscription.resumed' }>,
+): Promise<void> {
+  const { provider, providerSubRef } = evt;
+
+  // Fix round 2, finding 3: clearing cancelAtPeriodEnd/cancelledAt here is
+  // copied from handleUncancelled, mas retomar cobranca (pause_collection
+  // limpo) nao e a mesma intencao de reverter um cancelamento. Uma assinatura
+  // pausada E com cancel_at_period_end=true na Stripe, apos um resume,
+  // ficaria Ativo com "Cancelamento agendado: Nao" aqui, enquanto a Stripe
+  // ainda cancela no fim do periodo.
+  //
+  // A combinacao foi considerada de proposito e o clear continua deliberado:
+  // nao existe forma de o nosso admin produzir esse estado. Em
+  // routes/admin/subscriptions.ts, ALLOWED_STATUS.pause exclui
+  // cancel_scheduled e ALLOWED_STATUS.cancel exclui paused, entao
+  // pausar-e-cancelar a mesma assinatura so acontece com alguem agindo direto
+  // no dashboard da Stripe. Ficou registrado aqui em vez de mudar o
+  // comportamento.
+  const membership = await tx.premiumMembership.update({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    data: { status: 'active', cancelAtPeriodEnd: false, cancelledAt: null },
+  });
+
+  // Snapshot refresh com a regra de max() (canon §F8.3), igual a
+  // handleUncancelled: uma concessao manual mais distante nao pode ser encurtada.
+  const garage = await tx.garage.findUniqueOrThrow({ where: { id: membership.garageId } });
+  const existingUntil = garage.premiumUntil ?? new Date(0);
+  const newUntil =
+    membership.currentPeriodEnd > existingUntil ? membership.currentPeriodEnd : existingUntil;
+
+  await tx.garage.update({
+    where: { id: membership.garageId },
+    data: { premiumTier: membership.tier, premiumUntil: newUntil },
   });
 }
 

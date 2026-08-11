@@ -31,7 +31,9 @@ export type RecordAuditInput = {
     | 'dsr'
     | 'car'
     | 'garage_spot'
-    | 'garage';
+    | 'garage'
+    | 'premium_membership'
+    | 'user_document';
   entityId: string;
   metadata?: Record<string, unknown>;
 };

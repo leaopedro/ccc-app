@@ -25,6 +25,8 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
+import { attachAddon, detachAddon } from '../services/billing/addons.js';
+import { isBillingActionError } from '../services/billing/errors.js';
 
 /**
  * Live membership statuses — the same set me-premium.ts treats as "blocks a new
@@ -195,123 +197,31 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'NoActiveMembership', message: 'no live membership to attach to' });
     }
 
-    const module = await prisma.premiumAddonModule.findUnique({ where: { key: addonKey } });
-    if (!module || !module.active) {
-      return reply.status(404).send({ error: 'NotFound', message: 'add-on module not found' });
-    }
-
-    const existing = await prisma.premiumMembershipAddon.findUnique({
-      where: { membershipId_addonKey: { membershipId: membership.id, addonKey } },
-    });
-    if (existing && existing.status !== 'cancelled') {
-      return reply.status(409).send({ error: 'AlreadyExists', message: 'add-on already attached' });
-    }
-
-    const cycleStart = membership.currentPeriodStart ?? new Date();
-    const cycleEnd = membership.currentPeriodEnd;
-
-    // P5 provider seam — provider-first ordering:
-    // Create the Stripe subscription item BEFORE the DB transaction. A Stripe
-    // failure throws here and leaves local state untouched (no compensation
-    // needed). The rare orphan case (Stripe ok, DB tx fails afterwards) is
-    // reconciled by the addons webhook sync + the reconcile worker.
-    // Local-only fallback (no throw) when the membership has no Stripe
-    // subscription ref OR the module has no stripePriceId configured.
-    let providerItemRef: string | null = null;
-    const stripeBacked = membership.provider === 'stripe' && Boolean(membership.providerSubRef);
-    if (stripeBacked && module.stripePriceId) {
-      const item = await app.stripe.addSubscriptionItem({
-        subscriptionId: membership.providerSubRef,
-        priceId: module.stripePriceId,
-        idempotencyKey: `addon_attach_${membership.id}_${addonKey}`,
-      });
-      providerItemRef = item.subscriptionItemId;
-    } else {
-      request.log.info(
-        {
-          membershipId: membership.id,
-          addonKey,
-          provider: membership.provider,
-          hasStripePrice: Boolean(module.stripePriceId),
-        },
-        'me-premium-addons: attach local-only (no stripe sub ref or module stripePriceId)',
-      );
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      if (existing) {
-        // Re-attach a previously cancelled add-on: refresh the snapshot back to
-        // the current module terms and re-open a usage cycle for this period.
-        await tx.premiumMembershipAddon.update({
-          where: { id: existing.id },
-          data: {
-            status: 'active',
-            providerItemRef,
-            monthlyDeltaCents: module.monthlyDeltaCents,
-            quotaPerCycle: module.quotaPerCycle,
-            quotaUnit: module.quotaUnit,
-            currency: module.currency,
-          },
-        });
-        await tx.premiumAddonUsage.upsert({
-          where: {
-            membershipAddonId_cycleStart: { membershipAddonId: existing.id, cycleStart },
-          },
-          create: {
-            membershipAddonId: existing.id,
-            cycleStart,
-            cycleEnd,
-            quotaTotal: module.quotaPerCycle,
-            quotaUsed: 0,
-          },
-          update: {},
-        });
-      } else {
-        const created = await tx.premiumMembershipAddon.create({
-          data: {
-            membershipId: membership.id,
-            addonKey,
-            status: 'active',
-            providerItemRef,
-            monthlyDeltaCents: module.monthlyDeltaCents,
-            quotaPerCycle: module.quotaPerCycle,
-            quotaUnit: module.quotaUnit,
-            currency: module.currency,
-          },
-        });
-        await tx.premiumAddonUsage.create({
-          data: {
-            membershipAddonId: created.id,
-            cycleStart,
-            cycleEnd,
-            quotaTotal: module.quotaPerCycle,
-            quotaUsed: 0,
-          },
-        });
-      }
-
-      const agg = await tx.premiumMembershipAddon.aggregate({
-        where: { membershipId: membership.id, status: 'active' },
-        _sum: { monthlyDeltaCents: true },
-      });
-      const addonsAmountCents = agg._sum.monthlyDeltaCents ?? 0;
-
-      await tx.premiumMembership.update({
-        where: { id: membership.id },
-        data: { addonsAmountCents },
-      });
-
-      return { addonsAmountCents };
-    });
-
-    return reply.status(201).send(
-      addonMutationResponseSchema.parse({
+    try {
+      const result = await attachAddon({
+        membershipId: membership.id,
         addonKey,
-        status: 'active',
-        addonsAmountCents: result.addonsAmountCents,
-        totalAmountCents: membership.baseAmountCents + result.addonsAmountCents,
-      }),
-    );
+        stripe: app.stripe,
+        logger: request.log,
+      });
+      return reply.status(201).send(addonMutationResponseSchema.parse(result));
+    } catch (err) {
+      if (isBillingActionError(err)) {
+        // Explicit mapping to preserve EXACTLY the codes and messages this
+        // endpoint already returned before the service extraction. The
+        // pre-existing test suite for me-premium-addons is the proof of that
+        // and must not be edited.
+        if (err.code === 'ModuleNotFound') {
+          return reply.status(404).send({ error: 'NotFound', message: 'add-on module not found' });
+        }
+        if (err.code === 'AddonAlreadyAttached') {
+          return reply
+            .status(409)
+            .send({ error: 'AlreadyExists', message: 'add-on already attached' });
+        }
+      }
+      throw err;
+    }
   };
 
   /**
@@ -350,60 +260,20 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
       }
 
-      const addon = await prisma.premiumMembershipAddon.findUnique({
-        where: { membershipId_addonKey: { membershipId: membership.id, addonKey } },
-      });
-      if (!addon || !(ATTACHED_ADDON_STATUSES as readonly string[]).includes(addon.status)) {
-        return reply.status(404).send({ error: 'NotFound', message: 'add-on not attached' });
-      }
-
-      // P5 provider seam — provider-first ordering (mirrors attach):
-      // Remove the Stripe subscription item BEFORE the DB transaction. A Stripe
-      // failure throws here and leaves the add-on row untouched. The Stripe item
-      // is deleted immediately with proration (see removeSubscriptionItem); the
-      // local row is set to `cancel_scheduled` so the member keeps quota through
-      // period end while Stripe stops billing — a deliberate simplification.
-      // Local-only fallback (no throw) when there is no provider item to remove.
-      if (membership.provider === 'stripe' && addon.providerItemRef) {
-        await app.stripe.removeSubscriptionItem({
-          subscriptionItemId: addon.providerItemRef,
-          idempotencyKey: `addon_detach_${addon.id}`,
-        });
-      } else {
-        request.log.info(
-          { membershipId: membership.id, addonKey, provider: membership.provider },
-          'me-premium-addons: detach local-only (no provider item ref)',
-        );
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        await tx.premiumMembershipAddon.update({
-          where: { id: addon.id },
-          data: { status: 'cancel_scheduled' },
-        });
-
-        const agg = await tx.premiumMembershipAddon.aggregate({
-          where: { membershipId: membership.id, status: 'active' },
-          _sum: { monthlyDeltaCents: true },
-        });
-        const addonsAmountCents = agg._sum.monthlyDeltaCents ?? 0;
-
-        await tx.premiumMembership.update({
-          where: { id: membership.id },
-          data: { addonsAmountCents },
-        });
-
-        return { addonsAmountCents };
-      });
-
-      return reply.status(200).send(
-        addonMutationResponseSchema.parse({
+      try {
+        const result = await detachAddon({
+          membershipId: membership.id,
           addonKey,
-          status: 'cancel_scheduled',
-          addonsAmountCents: result.addonsAmountCents,
-          totalAmountCents: membership.baseAmountCents + result.addonsAmountCents,
-        }),
-      );
+          stripe: app.stripe,
+          logger: request.log,
+        });
+        return reply.status(200).send(addonMutationResponseSchema.parse(result));
+      } catch (err) {
+        if (isBillingActionError(err) && err.code === 'AddonNotAttached') {
+          return reply.status(404).send({ error: 'NotFound', message: 'add-on not attached' });
+        }
+        throw err;
+      }
     },
   );
 

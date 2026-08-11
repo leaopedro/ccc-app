@@ -14,6 +14,10 @@
       "types": "./src/admin.ts",
       "default": "./dist/admin.js"
     },
+    "./admin-subscription": {
+      "types": "./src/admin-subscription.ts",
+      "default": "./dist/admin-subscription.js"
+    },
     "./admin-garage": {
       "types": "./src/admin-garage.ts",
       "default": "./dist/admin-garage.js"
@@ -45,6 +49,10 @@
     "./cars": {
       "types": "./src/cars.ts",
       "default": "./dist/cars.js"
+    },
+    "./documents": {
+      "types": "./src/documents.ts",
+      "default": "./dist/documents.js"
     },
     "./check-in": {
       "types": "./src/check-in.ts",
@@ -121,6 +129,10 @@
     "./profile": {
       "types": "./src/profile.ts",
       "default": "./dist/profile.js"
+    },
+    "./profile-status": {
+      "types": "./src/profile-status.ts",
+      "default": "./dist/profile-status.js"
     },
     "./push": {
       "types": "./src/push.ts",

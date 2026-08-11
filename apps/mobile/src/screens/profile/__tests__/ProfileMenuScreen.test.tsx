@@ -161,6 +161,8 @@ const baseProfile: PublicProfile = {
   city: 'São Paulo',
   stateCode: 'SP',
   avatarUrl: null,
+  cpf: null,
+  phone: null,
 };
 
 const hookResult = (over: Partial<HookResult>): HookResult => ({

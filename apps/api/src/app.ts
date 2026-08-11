@@ -29,6 +29,7 @@ import { meAccountDeleteRoutes } from './routes/me-account-delete.js';
 import { meConsentRoutes } from './routes/me-consents.js';
 import { meDataExportRoutes } from './routes/me-data-export.js';
 import { meDeviceTokenRoutes } from './routes/me-device-tokens.js';
+import { meDocumentRoutes } from './routes/me-documents.js';
 import { meEmailChangeRoutes } from './routes/me-email-change.js';
 import { meNotificationsRoutes } from './routes/me-notifications.js';
 import { meOrdersRoutes } from './routes/me-orders.js';
@@ -143,6 +144,7 @@ export const buildApp = async (
   await app.register(premiumPricingRoutes);
   await app.register(premiumCatalogRoutes);
   await app.register(uploadRoutes);
+  await app.register(meDocumentRoutes);
   await app.register(carRoutes);
   await app.register(garageRoutes);
   await app.register(badgesCatalogRoute);

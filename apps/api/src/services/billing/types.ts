@@ -12,6 +12,19 @@ export type BillingPricing = {
   devFeeAmountCents: number;
   grossAmountCents: number;
   currency: string; // 'BRL' v1
+  /**
+   * Bandeira e final do cartao, quando o provider os fornece.
+   *
+   * Vivem em BillingPricing porque ele ja e o portador de snapshot dos tres
+   * eventos que reescrevem valores da assinatura (activated, renewed,
+   * tier_changed). Nenhuma variante nova de BillingEvent, nenhuma assinatura
+   * de funcao alterada.
+   *
+   * Opcionais de proposito. RevenueCat nunca preenche, e a Stripe so preenche
+   * quando a rota consegue resolver o PaymentIntent. Ausencia nunca e erro.
+   */
+  paymentBrand?: string;
+  paymentLast4?: string;
 };
 
 /** Invoice record carried on activated and renewed events. */
@@ -44,6 +57,10 @@ export type BillingAddonLine = {
   addonKey: string;
   providerItemRef: string | null;
   monthlyDeltaCents: number;
+  /** Snapshot do repasse ao fornecedor, igual ao que attachAddon grava. */
+  payoutAmountCents: number;
+  /** Snapshot do fornecedor. Null = catalogo ainda sem fornecedor cadastrado. */
+  vendorName: string | null;
   quotaPerCycle: number;
   quotaUnit: PremiumAddonUnit;
   currency: string;
@@ -117,6 +134,22 @@ export type BillingEvent =
       tier: GaragePremiumTier;
       cadence: PremiumCadence;
       pricing: BillingPricing;
+    }
+  | {
+      /**
+       * Cobranca suspensa sem cancelamento (Stripe pause_collection). Produz o
+       * status `paused`, que ja existia no enum do schema mas que nenhum evento
+       * gerava antes desta mudanca.
+       */
+      kind: 'subscription.paused';
+      provider: PremiumProvider;
+      providerSubRef: string;
+    }
+  | {
+      /** Cobranca retomada: pause_collection limpo. Volta para `active`. */
+      kind: 'subscription.resumed';
+      provider: PremiumProvider;
+      providerSubRef: string;
     };
 
 /** Convenience: all valid `kind` strings, for exhaustiveness checks in switch arms. */

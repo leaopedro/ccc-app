@@ -82,6 +82,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 | Notificações de eventos (push) | Token de dispositivo | Art. 7, I — consentimento (revogável) |
 | E-mails e novidades de marketing | E-mail | Art. 7, I — consentimento (revogável) |
 | Monitoramento de erros (Sentry) | Dados técnicos | Art. 7, IX — interesse legítimo (segurança do sistema) |
+| Validar identidade para assinatura | CPF, telefone, documento de identidade | Art. 7, V — execução de contrato |
 
 **Sobre o interesse legítimo:** realizamos o balanço de interesses (teste LIA) antes de usar esta base. Você pode opor-se a tratamentos baseados em interesse legítimo enviando mensagem ao Encarregado.`,
   },
@@ -126,6 +127,9 @@ Os fornecedores que ainda não possuem SCC formalizados serão adequados antes d
 | Logs de acesso (IP, user-agent) | 90 dias | Segurança / Marco Civil da Internet |
 | Tokens de push | Até revogação do consentimento | Consentimento |
 | Dados de erro (Sentry) | 90 dias na plataforma Sentry | Interesse legítimo |
+| Documento de identidade (aprovado) | 90 dias após a análise | Prevenção a fraude |
+| Documento de identidade (rejeitado) | 30 dias após a análise | Prevenção a fraude |
+| Documento de identidade (em análise) | 180 dias após o envio | Prevenção a fraude |
 
 Após os prazos acima, os dados são excluídos ou anonimizados de forma irreversível.`,
   },

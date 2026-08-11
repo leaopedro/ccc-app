@@ -28,6 +28,7 @@ import {
   adminUserCreatedSchema,
   adminUserDetailSchema,
   adminUserSearchResponseSchema,
+  type AdminUserDetail,
   adminUserStatusUpdatedSchema,
   type AdminCreateUserBody,
   type AdminEventCreate,
@@ -92,6 +93,13 @@ import {
   type AdminPartnerUpdate,
 } from '@ccc/shared/admin-box';
 import {
+  adminSubscriptionActionResponseSchema,
+  adminSubscriptionAddonMutationResponseSchema,
+  adminSubscriptionDetailSchema,
+  type AdminSubscriptionAddonAttach,
+  type AdminSubscriptionChangePlan,
+} from '@ccc/shared/admin-subscription';
+import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
   extraClaimResponseSchema,
@@ -106,6 +114,7 @@ import {
   type TicketCheckInRequest,
   type TicketCheckInResponse,
 } from '@ccc/shared/check-in';
+import { USER_DOCUMENT_STATUSES } from '@ccc/shared/documents';
 import {
   createFeedBanInputSchema,
   feedBanResponseSchema,
@@ -150,7 +159,7 @@ import {
   type UpdateBroadcastRequest,
 } from '../../../../packages/shared/src/broadcasts';
 
-import { apiFetch } from './api';
+import { apiFetch, apiFetchRedirectLocation } from './api';
 
 export const listAdminEvents = () =>
   apiFetch('/admin/events', { schema: adminEventListResponseSchema });
@@ -364,8 +373,19 @@ export const searchAdminUsers = (params?: { q?: string; cursor?: string; limit?:
   });
 };
 
+// Cast, not a plain return-type annotation: adminUserDetailSchema has
+// `.default()` fields (hasCpf, hasPhone, documents), which makes their INPUT
+// type optional even though the parsed OUTPUT (what schema.parse actually
+// returns at runtime) always has them present. apiFetch's `schema:
+// ZodType<T>` parameter defaults its contravariant Input type param to `=
+// T`, so inferring T from the schema argument leaks that input-side
+// optionality into T's shape — hasCpf/hasPhone/documents type as
+// possibly-undefined even though the schema guarantees them. A plain
+// `: Promise<AdminUserDetail>` annotation still fails structural
+// assignability for the same reason; the cast sidesteps the (spurious)
+// input-side check and asserts the schema's own documented Output type.
 export const getAdminUser = (id: string) =>
-  apiFetch(`/admin/users/${id}`, { schema: adminUserDetailSchema });
+  apiFetch(`/admin/users/${id}`, { schema: adminUserDetailSchema }) as Promise<AdminUserDetail>;
 
 export const createAdminUser = (input: AdminCreateUserBody) =>
   apiFetch('/admin/users', {
@@ -387,6 +407,38 @@ export const enableAdminUser = (id: string) =>
   });
 
 export const getMe = () => apiFetch('/me', { schema: publicProfileSchema });
+
+// ── Admin document review ──────────────────────────────────────────
+// See apps/api/src/routes/admin/documents.ts. Approve/reject responses have
+// no shared zod schema (admin-only surface), so they are defined inline
+// here, matching the file-wide convention for routes without one (e.g. the
+// feed moderation helpers above).
+
+const adminDocumentReviewResponseSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(USER_DOCUMENT_STATUSES),
+  reviewedAt: z.string().datetime(),
+  rejectionReason: z.string().nullable().optional(),
+});
+
+// GET /admin/documents/:id/file replies with a 302 redirect to a short-TTL
+// signed URL, not JSON — see apiFetchRedirectLocation for why apiFetch
+// cannot be reused here.
+export const getAdminDocumentFileUrl = (documentId: string): Promise<string> =>
+  apiFetchRedirectLocation(`/admin/documents/${documentId}/file`);
+
+export const approveAdminDocument = (documentId: string) =>
+  apiFetch(`/admin/documents/${documentId}/approve`, {
+    method: 'POST',
+    schema: adminDocumentReviewResponseSchema,
+  });
+
+export const rejectAdminDocument = (documentId: string, reason: string) =>
+  apiFetch(`/admin/documents/${documentId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+    schema: adminDocumentReviewResponseSchema,
+  });
 
 export const grantTicket = (input: AdminGrantTicket) =>
   apiFetch('/admin/tickets/grant', {
@@ -522,6 +574,8 @@ export const getFinanceMemberships = (
   if (q?.to) params.set('to', q.to);
   if (q?.search) params.set('search', q.search);
   if (q?.garageId) params.set('garageId', q.garageId);
+  if (q?.addonKey) params.set('addonKey', q.addonKey);
+  if (q?.vendorName) params.set('vendorName', q.vendorName);
   if (q?.page) params.set('page', String(q.page));
   if (q?.pageSize) params.set('pageSize', String(q.pageSize));
   const qs = params.toString();
@@ -529,6 +583,52 @@ export const getFinanceMemberships = (
     schema: adminFinanceMembershipsResponseSchema,
   });
 };
+
+// ── Admin assinaturas ─────────────────────────────────────────────────
+
+export const getAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}`, { schema: adminSubscriptionDetailSchema });
+
+export const changeAdminSubscriptionPlan = (id: string, input: AdminSubscriptionChangePlan) =>
+  apiFetch(`/admin/subscriptions/${id}/plan`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const attachAdminSubscriptionAddon = (id: string, input: AdminSubscriptionAddonAttach) =>
+  apiFetch(`/admin/subscriptions/${id}/addons`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminSubscriptionAddonMutationResponseSchema,
+  });
+
+export const detachAdminSubscriptionAddon = (id: string, addonKey: string) =>
+  apiFetch(`/admin/subscriptions/${id}/addons/${encodeURIComponent(addonKey)}`, {
+    method: 'DELETE',
+    schema: adminSubscriptionAddonMutationResponseSchema,
+  });
+
+export const cancelAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const resumeAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/resume`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
+
+export const pauseAdminSubscription = (id: string) =>
+  apiFetch(`/admin/subscriptions/${id}/pause`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+    schema: adminSubscriptionActionResponseSchema,
+  });
 
 // ── Admin store collections ───────────────────────────────────────────
 

@@ -2,7 +2,9 @@ import { PutObjectCommand, S3Client, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { prisma } from '@ccc/db';
 
+import { loadEnv } from '../env.js';
 import type { Env } from '../env.js';
+import { decryptField } from './crypto/field-encryption.js';
 
 const EXPORT_EXPIRY_DAYS = 7;
 const EXPORT_EXPIRY_MS = EXPORT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
@@ -57,6 +59,7 @@ const collectUserData = async (userId: string): Promise<ExportBundle> => {
     consents,
     notifications,
     xpEvents,
+    documents,
   ] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -69,6 +72,8 @@ const collectUserData = async (userId: string): Promise<ExportBundle> => {
         bio: true,
         city: true,
         stateCode: true,
+        cpf: true,
+        phone: true,
         pushPrefs: true,
         emailVerifiedAt: true,
         createdAt: true,
@@ -229,13 +234,36 @@ const collectUserData = async (userId: string): Promise<ExportBundle> => {
       select: { delta: true, reason: true, sourceRef: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // Progressive-profile identity documents. objectKey is included: it is
+    // metadata about the request, not the file itself, and the file has no
+    // public URL anyway (see uploads/dev.ts). No decryption needed here — the
+    // document row itself carries no encrypted fields.
+    prisma.userDocument.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        objectKey: true,
+        status: true,
+        rejectionReason: true,
+        sentAt: true,
+        reviewedAt: true,
+        fileDeletedAt: true,
+      },
+    }),
   ]);
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + EXPORT_EXPIRY_MS);
 
+  // This is the data subject exercising their right of access (LGPD Art. 18,
+  // I): the export MUST carry the CPF in plaintext, never the `enc_v1:`
+  // ciphertext stored at rest.
+  const encryptionKey = loadEnv().FIELD_ENCRYPTION_KEY;
+  const exportedUser = user ? { ...user, cpf: decryptField(user.cpf, encryptionKey) } : null;
+
   const data: Record<string, unknown[]> = {
-    user: user ? [user] : [],
+    user: exportedUser ? [exportedUser] : [],
     garage: garage ? [garage] : [],
     garageBadges,
     cars,
@@ -250,6 +278,7 @@ const collectUserData = async (userId: string): Promise<ExportBundle> => {
     consents,
     notifications,
     xpEvents,
+    documents,
   };
 
   const entities: ExportManifestEntity[] = Object.entries(data).map(([entity, rows]) => ({

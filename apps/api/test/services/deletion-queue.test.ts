@@ -15,6 +15,7 @@ const makeUploads = () => ({
   buildSignedGetUrl: vi.fn(() => Promise.resolve('https://example.test/object?signed=1')),
   isOwnedKey: vi.fn(() => true),
   isKindKey: vi.fn(() => true),
+  objectExists: vi.fn(() => Promise.resolve(true)),
 });
 
 describe('queueObjectDeletion', () => {

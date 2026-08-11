@@ -79,3 +79,44 @@ export const apiFetch = async <T>(
 
 export const fetchHealth = async (): Promise<HealthResponse> =>
   apiFetch('/health', { schema: healthResponseSchema, auth: false });
+
+// Some routes (e.g. GET /admin/documents/:id/file) reply with a 302 redirect
+// to a short-TTL signed URL instead of JSON. apiFetch cannot be reused here:
+// it always follows redirects and calls res.json(), which would try to parse
+// the redirected binary file response. This fetches with redirect: 'manual'
+// so the Location header is read directly, without the server ever
+// downloading the (potentially large, private) file body itself.
+export const apiFetchRedirectLocation = async (path: string): Promise<string> => {
+  const jar = await cookies();
+  const access = jar.get('session_access')?.value;
+  const h = new Headers();
+  if (access) h.set('authorization', `Bearer ${access}`);
+
+  const doFetch = () =>
+    fetch(`${base}${path}`, { headers: h, cache: 'no-store', redirect: 'manual' });
+
+  let res = await doFetch();
+  if (res.status === 401) {
+    const fresh = await refreshAccessToken();
+    if (fresh) {
+      h.set('authorization', `Bearer ${fresh}`);
+      res = await doFetch();
+    } else {
+      redirect('/login?reauth=1');
+    }
+  }
+
+  if (res.status >= 300 && res.status < 400) {
+    const location = res.headers.get('location');
+    if (location) return location;
+    throw new ApiError(res.status, 'Error', 'Redirect response had no Location header');
+  }
+
+  let body: { error?: string; message?: string } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    // ignore
+  }
+  throw new ApiError(res.status, body.error ?? 'Error', body.message ?? res.statusText);
+};

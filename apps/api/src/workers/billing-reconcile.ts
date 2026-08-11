@@ -5,6 +5,7 @@ import cron from 'node-cron';
 
 import type { Env } from '../env.js';
 import { applyMembershipEvent } from '../services/billing/apply-membership-event.js';
+import { openMonthlyBoxIfEligible } from '../services/box/open.js';
 import type { BillingEvent } from '../services/billing/types.js';
 import type { RevenueCatClient } from '../services/revenuecat/client.js';
 import type { StripeClient } from '../services/stripe/index.js';
@@ -287,6 +288,8 @@ export const runReconcileTick = async (deps: ReconcileTickDeps): Promise<void> =
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${row.garageId} FOR UPDATE`;
         await applyMembershipEvent(tx, synthesised);
       });
+      // Box Builder Fase 2: open the current-cycle box post-commit (best-effort).
+      await openMonthlyBoxIfEligible(prisma, synthesised);
 
       const logKind =
         evt.kind === 'subscription.expired' ? 'reconcile.expired' : 'reconcile.recovered';

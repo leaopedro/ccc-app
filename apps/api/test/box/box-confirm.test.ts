@@ -141,6 +141,66 @@ describe('POST /me/box/confirm', () => {
     expect(order.amountCents).toBe(2000);
   });
 
+  it('second confirm on an already-confirmed box returns 409 and does not create a second Order (Fix C)', async () => {
+    const { user, box, address } = await setup({
+      budgetCents: 4000,
+      shippingFeeCents: 0,
+      cep: '81000-000',
+    });
+    const payload = { shippingAddressId: address.id };
+    const auth = { authorization: bearer(env, user.id) };
+    // First confirm succeeds.
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/me/box/confirm',
+      headers: auth,
+      payload,
+    });
+    expect(res1.statusCode).toBe(200);
+    // Second confirm on an already-confirmed (awaiting_payment) box must be rejected.
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/me/box/confirm',
+      headers: auth,
+      payload,
+    });
+    expect(res2.statusCode).toBe(409);
+    // There must be exactly one Order for this box.
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(fresh.orderId).not.toBeNull();
+    const orderCount = await prisma.order.count({ where: { id: fresh.orderId! } });
+    expect(orderCount).toBe(1);
+  });
+
+  it('confirm after cutoffAt returns 409 even if status is still open (Fix D)', async () => {
+    const { user, address } = await setup({
+      budgetCents: 4000,
+      shippingFeeCents: 0,
+      cep: '81000-000',
+    });
+    // Manually set cutoffAt to a past date while status remains open.
+    const membership = await prisma.premiumMembership.findFirstOrThrow({
+      where: {
+        garageId: (await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } })).id,
+      },
+    });
+    const box = await prisma.monthlyBox.findFirstOrThrow({
+      where: { membershipId: membership.id },
+      orderBy: { cycleStart: 'desc' },
+    });
+    await prisma.monthlyBox.update({
+      where: { id: box.id },
+      data: { cutoffAt: new Date('2000-01-01T00:00:00.000Z') },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/me/box/confirm',
+      headers: { authorization: bearer(env, user.id) },
+      payload: { shippingAddressId: address.id },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
   it('shipping outside the free region is added to the charge', async () => {
     const { user, box, address } = await setup({
       budgetCents: 10000,

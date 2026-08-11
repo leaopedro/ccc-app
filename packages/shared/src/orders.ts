@@ -18,7 +18,7 @@ export const orderStatusSchema = z.enum([
 ]);
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 
-export const orderKindSchema = z.enum(['ticket', 'extras_only', 'product', 'mixed']);
+export const orderKindSchema = z.enum(['ticket', 'extras_only', 'product', 'mixed', 'box']);
 export type OrderKind = z.infer<typeof orderKindSchema>;
 
 export const fulfillmentMethodSchema = z.enum(['ship', 'pickup', 'virtual']);

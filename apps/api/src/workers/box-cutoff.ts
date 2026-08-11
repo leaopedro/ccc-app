@@ -15,6 +15,15 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
     include: { items: true, partnerItems: true },
   });
 
+  // Budget-only cannot cover shipping. An awaiting_payment box outside the
+  // free-shipping region (shippingCents > 0) is skipped, never shipped unpaid.
+  // open+autoSend boxes always have shippingCents 0 (never confirmed), so they
+  // are unaffected; only awaiting_payment boxes reach this gate.
+  if (box.shippingCents > 0) {
+    await tx.monthlyBox.update({ where: { id: boxId }, data: { status: 'skipped' } });
+    return;
+  }
+
   // Drop all partner modules (extras are never auto-sent).
   for (const p of box.partnerItems.filter((i) => i.included)) {
     await tx.monthlyBoxPartnerItem.update({
@@ -103,6 +112,10 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         const hasItems = box.items.some((i) => i.included);
 
         if (box.status === 'open') {
+          // The autoSendOptIn+shippingAddressId precondition is set by the Fase 3
+          // mobile builder (member toggles auto-send and picks an address while the
+          // box is still open). No Fase 2 endpoint sets these while open by design;
+          // this branch is intentionally ahead of its Fase 3 consumer.
           if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
             return;
@@ -121,9 +134,19 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             data: { status: 'cancelled', fulfillmentStatus: 'cancelled' },
           });
           if (cancelled.count === 0) {
-            // Pix already settled: leave for the paid path. Its reservation must
-            // stand — do NOT release here.
-            return;
+            // Order was not pending. Distinguish paid from other terminal states.
+            const ord = await tx.order.findUnique({
+              where: { id: box.orderId },
+              select: { status: true },
+            });
+            if (ord?.status === 'paid') {
+              // Pix already settled: leave for the paid path. Its reservation must
+              // stand — do NOT release here.
+              return;
+            }
+            // Order is cancelled/failed/expired/refunded via another path.
+            // Fall through: release reservations and resolve budget-only so the
+            // box is not permanently stuck in awaiting_payment.
           }
           await tx.monthlyBox.update({ where: { id }, data: { orderId: null } });
           // Release the confirm-time reservations for this box's included lines.

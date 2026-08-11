@@ -15,6 +15,7 @@ import {
   normalizeRevenueCatEvent,
   type RCNonBrSentinel,
 } from '../services/billing/normalize-revenuecat.js';
+import { openMonthlyBoxIfEligible } from '../services/box/open.js';
 
 // Constant-time string comparison — prevents timing-oracle auth bypass.
 // Mirrors abacatepay-webhook.ts::constantTimeEquals.
@@ -189,6 +190,8 @@ export const revenuecatWebhookRoutes: FastifyPluginAsync = async (app) => {
       // commits, RC retry would hit the dedup catch (processedAt non-null),
       // return 200, and the backfill would be permanently lost.
       await enqueuePremiumTicketBackfillIfActivated(prisma, normalized);
+      // Box Builder Fase 2: open the current-cycle box post-commit (best-effort).
+      await openMonthlyBoxIfEligible(prisma, normalized);
 
       await prisma.subscriptionWebhookEvent.update({
         where: { provider_providerEventId: { provider: 'apple_revenuecat', providerEventId } },

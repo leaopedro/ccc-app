@@ -197,6 +197,225 @@ describe('runBoxCutoffTick', () => {
     expect(fresh.status).toBe('awaiting_payment');
   });
 
+  it('awaiting_payment with shippingCents>0 is skipped and order cancelled (Fix B)', async () => {
+    const { user } = await createUser({
+      verified: true,
+      email: `u${Math.random().toString(36).slice(2, 7)}@jdm.test`,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_1',
+        providerSubRef: `sub_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'F',
+        line1: 'R',
+        number: '1',
+        district: 'C',
+        city: 'Curitiba',
+        stateCode: 'PR',
+        postalCode: '90000-000',
+      },
+    });
+    const cycleKey = '2026-08-01';
+    const item = await prisma.boxCatalogItem.create({
+      data: {
+        slug: `it${Math.random().toString(36).slice(2, 7)}`,
+        title: 'Adesivo',
+        description: 'x',
+        priceCents: 3000,
+        category: 'sticker',
+        stockPerCycle: 5,
+      },
+    });
+    const box = await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey,
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: pastCutoff,
+        budgetCentsSnapshot: 10000,
+        status: 'awaiting_payment' as never,
+        autoSendOptIn: true,
+        shippingAddressId: address.id,
+        // Simulates a box confirmed outside the free-shipping region.
+        shippingCents: 1990,
+      },
+    });
+    await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: item.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: 'Adesivo',
+        included: true,
+      },
+    });
+    // Confirm-time reservation (1 unit reserved).
+    await prisma.boxCatalogItemCycleStock.create({
+      data: { catalogItemId: item.id, cycleKey, total: 5, reserved: 1 },
+    });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'box',
+        amountCents: 4990,
+        baseAmountCents: 3000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        shippingAddressId: address.id,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+
+    await runBoxCutoffTick({});
+
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    const ledger = await prisma.boxCatalogItemCycleStock.findUniqueOrThrow({
+      where: { catalogItemId_cycleKey: { catalogItemId: item.id, cycleKey } },
+    });
+    // Box must be skipped, never shipped unpaid.
+    expect(fresh.status).toBe('skipped');
+    // Order that was pending must be cancelled.
+    expect(freshOrder.status).toBe('cancelled');
+    // The confirm-time reservation must have been released before skipping.
+    expect(ledger.reserved).toBe(0);
+    // Must not be ready.
+    expect(fresh.status).not.toBe('ready');
+  });
+
+  it('awaiting_payment with already-cancelled Order is resolved not stuck (Fix F)', async () => {
+    const { user } = await createUser({
+      verified: true,
+      email: `u${Math.random().toString(36).slice(2, 7)}@jdm.test`,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_1',
+        providerSubRef: `sub_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'F',
+        line1: 'R',
+        number: '1',
+        district: 'C',
+        city: 'Curitiba',
+        stateCode: 'PR',
+        postalCode: '81000-000',
+      },
+    });
+    const cycleKey = '2026-08-01';
+    const item = await prisma.boxCatalogItem.create({
+      data: {
+        slug: `it${Math.random().toString(36).slice(2, 7)}`,
+        title: 'Adesivo',
+        description: 'x',
+        priceCents: 3000,
+        category: 'sticker',
+        stockPerCycle: 5,
+      },
+    });
+    const box = await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey,
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: pastCutoff,
+        budgetCentsSnapshot: 10000,
+        status: 'awaiting_payment' as never,
+        autoSendOptIn: true,
+        shippingAddressId: address.id,
+      },
+    });
+    await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: item.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: 'Adesivo',
+        included: true,
+      },
+    });
+    // Confirm-time reservation (1 unit reserved).
+    await prisma.boxCatalogItemCycleStock.create({
+      data: { catalogItemId: item.id, cycleKey, total: 5, reserved: 1 },
+    });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'box',
+        amountCents: 3000,
+        baseAmountCents: 3000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'cancelled', // already cancelled via another path
+        shippingAddressId: address.id,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+
+    await runBoxCutoffTick({});
+
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    // Box must be resolved (ready or skipped), not stuck in awaiting_payment.
+    expect(fresh.status).not.toBe('awaiting_payment');
+    expect(['ready', 'skipped']).toContain(fresh.status);
+    // Reservation released: the budget covers the item so it re-reserves to 1.
+    const ledger = await prisma.boxCatalogItemCycleStock.findUniqueOrThrow({
+      where: { catalogItemId_cycleKey: { catalogItemId: item.id, cycleKey } },
+    });
+    // released 1, re-reserved 1 during budget-only resolve: net 1.
+    expect(ledger.reserved).toBe(1);
+  });
+
   it('awaiting_payment cutoff does not double-reserve cycle stock', async () => {
     const { user } = await createUser({
       verified: true,

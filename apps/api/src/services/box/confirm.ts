@@ -20,13 +20,27 @@ export const confirmBox = async (args: {
   autoSendOptIn: boolean;
 }): Promise<ConfirmResult> => {
   return prisma.$transaction(async (tx) => {
-    const box = await tx.monthlyBox.findFirst({
+    // Step 1: find the latest box id for this membership.
+    const boxRef = await tx.monthlyBox.findFirst({
       where: { membershipId: args.membershipId },
       orderBy: { cycleStart: 'desc' },
+      select: { id: true },
+    });
+    if (!boxRef) return { kind: 'not_found' };
+
+    // Step 2: lock the row so concurrent confirms cannot both proceed past this point.
+    await tx.$queryRaw`SELECT id FROM "MonthlyBox" WHERE id = ${boxRef.id} FOR UPDATE`;
+
+    // Step 3: re-read full box under the lock; re-check status.
+    const box = await tx.monthlyBox.findUnique({
+      where: { id: boxRef.id },
       include: { items: true },
     });
     if (!box) return { kind: 'not_found' };
     if (box.status !== 'open') return { kind: 'not_open' };
+
+    // Box locks at the cutoff instant even if the cron worker has not processed it yet.
+    if (box.cutoffAt <= new Date()) return { kind: 'not_open' };
 
     const address = await tx.shippingAddress.findUnique({ where: { id: args.shippingAddressId } });
     if (!address || address.userId !== args.userId) return { kind: 'bad_address' };

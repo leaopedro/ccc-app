@@ -1,5 +1,10 @@
 # Box Builder — Fase 2 (Runtime de Ciclo) Implementation Plan
 
+> **STATUS: CONCLUIDA.** Executada via subagent-driven-development e mergeada em
+> `main` no PR #11 (branch `feat/box-builder-fase-2`). As 10 tasks abaixo estao
+> entregues; os checkboxes ficam como registro historico. Follow-ups do review e
+> a dependencia da Fase 3 estao em `docs/superpowers/box-builder-roadmap.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give Premium members a per-cycle MonthlyBox they open, edit, and confirm; charge the extras via a pending Order; and auto-resolve at the cutoff via a scheduled worker.

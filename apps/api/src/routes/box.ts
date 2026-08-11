@@ -56,7 +56,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     const boxRef = await prisma.monthlyBox.findFirst({
       where: { membershipId: membership.id },
       orderBy: { cycleStart: 'desc' },
-      select: { id: true },
+      select: { id: true, garageId: true },
     });
     if (!boxRef) return reply.status(404).send({ error: 'box_not_open' });
 
@@ -81,8 +81,8 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       await prisma.$transaction(async (tx) => {
-        // Lock the box row first; then re-read status + cutoffAt under the lock.
-        await tx.$queryRaw`SELECT id FROM "MonthlyBox" WHERE id = ${boxRef.id} FOR UPDATE`;
+        // Lock the Garage row — same resource the cutoff worker locks — so all three paths serialize.
+        await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${boxRef.garageId} FOR UPDATE`;
         const locked = await tx.monthlyBox.findUnique({
           where: { id: boxRef.id },
           select: { status: true, cutoffAt: true },

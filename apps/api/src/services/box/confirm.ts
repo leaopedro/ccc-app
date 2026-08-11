@@ -24,12 +24,12 @@ export const confirmBox = async (args: {
     const boxRef = await tx.monthlyBox.findFirst({
       where: { membershipId: args.membershipId },
       orderBy: { cycleStart: 'desc' },
-      select: { id: true },
+      select: { id: true, garageId: true },
     });
     if (!boxRef) return { kind: 'not_found' };
 
-    // Step 2: lock the row so concurrent confirms cannot both proceed past this point.
-    await tx.$queryRaw`SELECT id FROM "MonthlyBox" WHERE id = ${boxRef.id} FOR UPDATE`;
+    // Step 2: lock the Garage row — same resource the cutoff worker locks — so all three paths serialize.
+    await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${boxRef.garageId} FOR UPDATE`;
 
     // Step 3: re-read full box under the lock; re-check status.
     const box = await tx.monthlyBox.findUnique({

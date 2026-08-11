@@ -405,9 +405,8 @@ describe('runBoxCutoffTick', () => {
     await runBoxCutoffTick({});
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
-    // Box must be resolved (ready or skipped), not stuck in awaiting_payment.
-    expect(fresh.status).not.toBe('awaiting_payment');
-    expect(['ready', 'skipped']).toContain(fresh.status);
+    // Box must resolve to ready: shippingCents is 0 and item is within budget.
+    expect(fresh.status).toBe('ready');
     // Reservation released: the budget covers the item so it re-reserves to 1.
     const ledger = await prisma.boxCatalogItemCycleStock.findUniqueOrThrow({
       where: { catalogItemId_cycleKey: { catalogItemId: item.id, cycleKey } },

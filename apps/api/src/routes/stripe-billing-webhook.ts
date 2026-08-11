@@ -10,6 +10,7 @@ import {
   enqueuePremiumTicketBackfillIfActivated,
   reconcileMembershipAddonsAmount,
 } from '../services/billing/apply-membership-event.js';
+import { openMonthlyBoxIfEligible } from '../services/box/open.js';
 import { normalizeStripeEvent } from '../services/billing/normalize-stripe.js';
 import type {
   NormalizeStripeResult,
@@ -169,7 +170,6 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
   };
 };
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
   // Raw body parser is shared with the existing stripe-webhook.ts route; Fastify
   // de-duplicates if both call addContentTypeParser for the same type. To stay
@@ -578,6 +578,8 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // Canon §F8.4 post-commit hook: enqueue ticket backfill on activation.
     // No-op for renewal/cancel/expiry/past_due/uncancel/tier_changed.
     await enqueuePremiumTicketBackfillIfActivated(prisma, billingEvt);
+    // Box Builder Fase 2: open the current-cycle box post-commit (best-effort).
+    await openMonthlyBoxIfEligible(prisma, billingEvt);
 
     await prisma.subscriptionWebhookEvent.update({
       where: { id: webhookEventId },

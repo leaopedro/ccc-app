@@ -73,6 +73,12 @@ export const settlePaidOrder = async (
     return { kind: order.kind };
   }
 
+  // Fase 2: box orders stay pending and are never settled here. Fase 4 adds
+  // box settlement. Guard so a box order never falls through to ticket issuance.
+  if (order.kind === 'box') {
+    throw new Error('box orders are not settled in this phase');
+  }
+
   const issued = await issueTicketForPaidOrder(orderId, providerRef, env, intentMetadata);
   return { kind: order.kind, issued };
 };

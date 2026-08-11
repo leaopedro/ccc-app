@@ -175,7 +175,7 @@ const constantTimeEquals = (a: string, b: string): boolean => {
   return timingSafeEqual(bufA, bufB);
 };
 
-const cartSettlementPriority = (kind: 'ticket' | 'extras_only' | 'product' | 'mixed') => {
+const cartSettlementPriority = (kind: 'ticket' | 'extras_only' | 'product' | 'mixed' | 'box') => {
   if (kind === 'ticket') return 0;
   if (kind === 'extras_only') return 1;
   return 2;

@@ -12,6 +12,7 @@ import { requestIdPlugin } from './plugins/request-id.js';
 import { securityHeadersPlugin } from './plugins/security-headers.js';
 import { sentryPlugin } from './plugins/sentry.js';
 import { abacatepayWebhookRoutes } from './routes/abacatepay-webhook.js';
+import { boxRoutes } from './routes/box.js';
 import { adminRoutes } from './routes/admin/index.js';
 import { fridgeUnlockRoutes } from './routes/fridge-unlock.js';
 import { fridgeWsRoutes } from './routes/fridge-ws.js';
@@ -60,6 +61,7 @@ import { startReconcileWorker } from './workers/billing-reconcile.js';
 import { startBroadcastWorker } from './workers/broadcasts.js';
 import { startDataExportWorker } from './workers/data-export.js';
 import { startEventRemindersWorker } from './workers/event-reminders.js';
+import { startBoxCutoffWorker } from './workers/box-cutoff.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
 import { startRetentionWorker } from './workers/retention.js';
 
@@ -138,6 +140,7 @@ export const buildApp = async (
   await app.register(meSupportRoutes);
   await app.register(mePremiumRoutes);
   await app.register(mePremiumAddonRoutes);
+  await app.register(boxRoutes);
   await app.register(premiumPricingRoutes);
   await app.register(premiumCatalogRoutes);
   await app.register(uploadRoutes);
@@ -219,6 +222,11 @@ export const buildApp = async (
       const backfillWorker = startPremiumTicketBackfillWorker({ env, log: app.log });
       app.addHook('onClose', () => {
         backfillWorker.stop();
+      });
+
+      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log });
+      app.addHook('onClose', () => {
+        boxCutoffWorker.stop();
       });
     }
   }

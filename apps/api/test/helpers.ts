@@ -70,6 +70,11 @@ export const resetDatabase = async (): Promise<void> => {
   // truncate explicitly so F8.03+ webhook idempotency tests start clean).
   // SubscriptionWebhookEvent has no FK; cleaned here for the same reason.
   await prisma.premiumMembershipInvoice.deleteMany();
+  // Box runtime (Fase 2): children before parents.
+  await prisma.monthlyBoxItem.deleteMany();
+  await prisma.monthlyBoxPartnerItem.deleteMany();
+  await prisma.boxCatalogItemCycleStock.deleteMany();
+  await prisma.monthlyBox.deleteMany();
   await prisma.premiumMembership.deleteMany();
   await prisma.premiumTicketBackfillJob.deleteMany();
   await prisma.subscriptionWebhookEvent.deleteMany();

@@ -93,13 +93,12 @@ const markRefundedAndReleaseReservation = async (orderId: string): Promise<void>
   });
 };
 
-const cartSettlementPriority = (kind: 'ticket' | 'extras_only' | 'product' | 'mixed') => {
+const cartSettlementPriority = (kind: 'ticket' | 'extras_only' | 'product' | 'mixed' | 'box') => {
   if (kind === 'ticket') return 0;
   if (kind === 'extras_only') return 1;
   return 2;
 };
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => {
     done(null, body);

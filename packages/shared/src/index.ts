@@ -27,4 +27,5 @@ export * from './garage-public.js';
 export * from './garage-covers.js';
 export * from './admin-garage.js';
 export * from './badges-copy.js';
+export * from './box.js';
 export * from './premium.js';

@@ -404,6 +404,7 @@ model PremiumMembership {
   garage   Garage                     @relation(fields: [garageId], references: [id], onDelete: Cascade)
   invoices PremiumMembershipInvoice[]
   addons   PremiumMembershipAddon[]
+  boxes    MonthlyBox[]
 
   @@unique([provider, providerSubRef])
   @@index([garageId, status])
@@ -616,6 +617,14 @@ model PremiumAddonRedemption {
 
 // Box Builder config models (Fase 1)
 
+enum MonthlyBoxStatus {
+  open
+  awaiting_payment
+  ready
+  skipped
+  cancelled
+}
+
 model BoxCatalogItem {
   id             String   @id @default(cuid())
   slug           String   @unique @db.VarChar(140)
@@ -631,6 +640,9 @@ model BoxCatalogItem {
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  boxItems   MonthlyBoxItem[]
+  cycleStock BoxCatalogItemCycleStock[]
 
   @@index([active, sortOrder])
   @@index([category, active])
@@ -665,7 +677,8 @@ model PartnerModule {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  partner   Partner                @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  boxItems  MonthlyBoxPartnerItem[]
 
   @@index([partnerId, active, sortOrder])
 }
@@ -680,6 +693,103 @@ model BoxSettings {
   shippingFeeCents        Int      @default(0)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+// Box Builder runtime models (Fase 2)
+
+model MonthlyBox {
+  id                  String           @id @default(cuid())
+  membershipId        String
+  garageId            String
+  cycleKey            String           @db.VarChar(10)
+  cycleStart          DateTime
+  cycleEnd            DateTime
+  cutoffAt            DateTime
+  status              MonthlyBoxStatus @default(open)
+  budgetCentsSnapshot Int
+  currency            String           @default("BRL") @db.VarChar(3)
+  itemsTotalCents     Int              @default(0)
+  partnersTotalCents  Int              @default(0)
+  overflowCents       Int              @default(0)
+  shippingCents       Int              @default(0)
+  chargeCents         Int              @default(0)
+  autoSendOptIn       Boolean          @default(false)
+  shippingAddressId   String?
+  orderId             String?           @unique
+  fulfillmentStatus   FulfillmentStatus @default(unfulfilled)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  membership      PremiumMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  shippingAddress ShippingAddress?  @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  order           Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  items           MonthlyBoxItem[]
+  partnerItems    MonthlyBoxPartnerItem[]
+
+  @@unique([membershipId, cycleKey])
+  @@index([status, cutoffAt])
+  @@index([cycleKey, fulfillmentStatus])
+  @@index([membershipId])
+}
+
+model MonthlyBoxItem {
+  id            String    @id @default(cuid())
+  boxId         String
+  catalogItemId String
+  quantity      Int
+  unitPriceCents Int
+  subtotalCents Int
+  titleSnapshot String    @db.VarChar(140)
+  currency      String    @default("BRL") @db.VarChar(3)
+  addedAt       DateTime  @default(now())
+  included      Boolean   @default(true)
+  droppedAt     DateTime?
+  dropReason    String?   @db.VarChar(40)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  box         MonthlyBox     @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  catalogItem BoxCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  @@unique([boxId, catalogItemId])
+  @@index([boxId, addedAt])
+}
+
+model MonthlyBoxPartnerItem {
+  id              String    @id @default(cuid())
+  boxId           String
+  partnerModuleId String
+  quantity        Int
+  unitPriceCents  Int
+  subtotalCents   Int
+  nameSnapshot    String    @db.VarChar(80)
+  currency        String    @default("BRL") @db.VarChar(3)
+  addedAt         DateTime  @default(now())
+  included        Boolean   @default(true)
+  droppedAt       DateTime?
+  dropReason      String?   @db.VarChar(40)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  box           MonthlyBox    @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  partnerModule PartnerModule @relation(fields: [partnerModuleId], references: [id], onDelete: Restrict)
+
+  @@unique([boxId, partnerModuleId])
+  @@index([boxId, addedAt])
+}
+
+model BoxCatalogItemCycleStock {
+  id            String   @id @default(cuid())
+  catalogItemId String
+  cycleKey      String   @db.VarChar(10)
+  total         Int
+  reserved      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  catalogItem BoxCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogItemId, cycleKey])
 }
 
 model Car {
@@ -893,6 +1003,7 @@ enum OrderKind {
   extras_only
   product
   mixed
+  box
 }
 
 enum OrderStatus {
@@ -1049,8 +1160,9 @@ model ShippingAddress {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders Order[]
+  boxes  MonthlyBox[]
 
   @@index([userId])
 }
@@ -1136,6 +1248,7 @@ model Order {
   orderExtras     OrderExtra[]
   items           OrderItem[]
   pickupVouchers  PickupVoucher[]
+  box             MonthlyBox?
 
   @@unique([provider, providerRef])
   @@index([userId, createdAt])

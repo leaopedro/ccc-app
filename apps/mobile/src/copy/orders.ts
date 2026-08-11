@@ -32,6 +32,7 @@ export const ordersCopy = {
     extras_only: 'Extras',
     product: 'Loja',
     mixed: 'Evento + loja',
+    box: 'Caixa',
   },
   summary: {
     orderId: 'Pedido',

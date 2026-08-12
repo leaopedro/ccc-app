@@ -62,7 +62,16 @@ export const caixaCopy = {
     autoSendHint: 'No corte, enviamos sua caixa dentro do budget sem você precisar confirmar.',
     address: 'Endereço de entrega',
     changeAddress: 'Trocar',
+    defaultAddressBadge: 'Padrão',
     save: 'Salvar',
+    saving: 'Salvando...',
+    saved: 'Preferências salvas.',
+    saveError: 'Não foi possível salvar. Tente de novo.',
+    addressInvalid: 'Endereço inválido. Escolha outro endereço.',
+    locked: {
+      title: 'Caixa travada',
+      body: 'As preferências só podem ser alteradas enquanto a caixa está em montagem.',
+    },
   },
   empty: {
     catalog: { title: 'Catálogo em curadoria', body: 'Novos itens aparecem aqui em breve.' },

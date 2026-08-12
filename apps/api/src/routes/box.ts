@@ -7,6 +7,7 @@ import { buildBoxCatalog } from '../services/box/catalog.js';
 import { confirmBox } from '../services/box/confirm.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
+import { skipBox, unskipBox } from '../services/box/skip.js';
 
 const BOX_INCLUDE = {
   items: { include: { catalogItem: true } },
@@ -196,6 +197,26 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
       include: BOX_INCLUDE,
     });
     return reply.send(serializeBox(fresh, app.uploads));
+  });
+
+  app.post('/me/box/skip', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const result = await skipBox(membership.id);
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'conflict') return reply.status(409).send({ error: 'box_locked' });
+    return reply.status(204).send();
+  });
+
+  app.post('/me/box/unskip', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const result = await unskipBox(membership.id);
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'conflict') return reply.status(409).send({ error: 'box_locked' });
+    return reply.status(204).send();
   });
 
   app.post('/me/box/confirm', { preHandler: [app.authenticate] }, async (request, reply) => {

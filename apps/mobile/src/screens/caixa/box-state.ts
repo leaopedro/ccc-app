@@ -1,5 +1,7 @@
 import type { BoxStatus, BoxView } from '@ccc/shared/box';
 
+import { caixaCopy } from '~/copy/caixa';
+
 export function homeVariant(
   status: BoxStatus,
 ): 'open' | 'skipped' | 'awaiting_payment' | 'ready' | 'post_cutoff' {
@@ -58,4 +60,10 @@ const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZon
 // the month never shifts under a local timezone offset.
 export function cycleMonthLabel(cycleKey: string): string {
   return monthFormatter.format(new Date(`${cycleKey}T00:00:00Z`));
+}
+
+// PT-BR label for a history entry's status — copy lives in caixaCopy so this
+// stays a pure lookup (used by the /caixa/historico list, screen 12).
+export function boxStatusLabel(status: BoxStatus): string {
+  return caixaCopy.history.status[status];
 }

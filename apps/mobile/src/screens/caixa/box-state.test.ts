@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { homeVariant, budgetMeter, hasDroppedLines, cycleMonthLabel, canUnskip } from './box-state';
+import {
+  homeVariant,
+  budgetMeter,
+  hasDroppedLines,
+  cycleMonthLabel,
+  canUnskip,
+  boxStatusLabel,
+} from './box-state';
 
 describe('homeVariant', () => {
   it('maps each status', () => {
@@ -81,5 +88,15 @@ describe('canUnskip', () => {
   it('is false when the cutoff has already passed', () => {
     const past = new Date(Date.now() - 60_000).toISOString();
     expect(canUnskip(past)).toBe(false);
+  });
+});
+
+describe('boxStatusLabel', () => {
+  it('maps each status to a PT-BR label', () => {
+    expect(boxStatusLabel('open')).toBe('Em montagem');
+    expect(boxStatusLabel('awaiting_payment')).toBe('Aguardando pagamento');
+    expect(boxStatusLabel('ready')).toBe('Confirmada');
+    expect(boxStatusLabel('skipped')).toBe('Pulada');
+    expect(boxStatusLabel('cancelled')).toBe('Cancelada');
   });
 });

@@ -44,7 +44,18 @@ export const caixaCopy = {
     confirm: 'Pular esse mês',
     cancel: 'Continuar montando',
   },
-  history: { title: 'Histórico de caixas', current: 'Ciclo atual' },
+  history: {
+    title: 'Histórico de caixas',
+    current: 'Ciclo atual',
+    status: {
+      open: 'Em montagem',
+      awaiting_payment: 'Aguardando pagamento',
+      ready: 'Confirmada',
+      skipped: 'Pulada',
+      cancelled: 'Cancelada',
+    },
+    empty: { title: 'Nenhuma caixa ainda', body: 'Seu histórico aparece aqui a cada ciclo.' },
+  },
   preferences: {
     title: 'Preferências',
     autoSend: 'Enviar automaticamente no corte',

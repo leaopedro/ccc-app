@@ -51,11 +51,25 @@ function AppTabs() {
   // in whichever position the store ternaries below would have shown
   // `tickets` previously. The other one is registered hidden below so deep
   // links still resolve.
+  const premiumTabListeners = {
+    tabPress: (e: { preventDefault: () => void }) => {
+      e.preventDefault();
+      router.replace((slot === 'caixa' ? '/caixa' : '/assinaturas') as never);
+    },
+  };
   const premiumTab =
     slot === 'caixa' ? (
-      <Tabs.Screen name="caixa" options={{ title: 'Caixa', tabBarIcon: CaixaIcon }} />
+      <Tabs.Screen
+        name="caixa"
+        options={{ title: 'Caixa', tabBarIcon: CaixaIcon }}
+        listeners={premiumTabListeners}
+      />
     ) : (
-      <Tabs.Screen name="assinaturas" options={{ title: 'Assinatura' }} />
+      <Tabs.Screen
+        name="assinaturas"
+        options={{ title: 'Assinatura' }}
+        listeners={premiumTabListeners}
+      />
     );
   const hiddenPremiumTab =
     slot === 'caixa' ? (

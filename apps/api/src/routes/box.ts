@@ -7,7 +7,10 @@ import { confirmBox } from '../services/box/confirm.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
 
-const BOX_INCLUDE = { items: true, partnerItems: true } as const;
+const BOX_INCLUDE = {
+  items: { include: { catalogItem: true } },
+  partnerItems: { include: { partnerModule: true } },
+} as const;
 const ELIGIBLE_STATUSES = ['active', 'trialing'] as const;
 
 /** user -> garage -> latest eligible membership. Null when none qualifies. */
@@ -40,7 +43,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     if (!box) {
       return reply.status(404).send({ error: 'box_not_open' });
     }
-    return reply.send(serializeBox(box));
+    return reply.send(serializeBox(box, app.uploads));
   });
 
   app.put('/me/box/selection', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -176,9 +179,9 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: boxRef.id },
-      include: { items: true, partnerItems: true },
+      include: BOX_INCLUDE,
     });
-    return reply.send(serializeBox(fresh));
+    return reply.send(serializeBox(fresh, app.uploads));
   });
 
   app.post('/me/box/confirm', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -202,8 +205,8 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: result.boxId },
-      include: { items: true, partnerItems: true },
+      include: BOX_INCLUDE,
     });
-    return reply.send(serializeBox(fresh));
+    return reply.send(serializeBox(fresh, app.uploads));
   });
 };

@@ -93,6 +93,44 @@ describe('PUT /me/box/preferences', () => {
     expect(fresh.shippingAddressId).toBe(address.id);
   });
 
+  it('non-free region address -> stores shippingCents so the cutoff worker skips unpaid freight', async () => {
+    const { user, box, address } = await setup();
+    // Fee configured, address CEP not in any free range.
+    await prisma.boxSettings.update({
+      where: { id: BOX_SETTINGS_SINGLETON_ID },
+      data: { shippingFeeCents: 1990, freeShippingCepRanges: [] },
+    });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/me/box/preferences',
+      headers: { authorization: bearer(env, user.id) },
+      payload: { autoSendOptIn: true, shippingAddressId: address.id },
+    });
+    expect(res.statusCode).toBe(204);
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(fresh.shippingCents).toBe(1990);
+  });
+
+  it('free region address -> shippingCents stays 0', async () => {
+    const { user, box, address } = await setup();
+    await prisma.boxSettings.update({
+      where: { id: BOX_SETTINGS_SINGLETON_ID },
+      data: {
+        shippingFeeCents: 1990,
+        freeShippingCepRanges: [{ from: '80000-000', to: '82000-000' }],
+      },
+    });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/me/box/preferences',
+      headers: { authorization: bearer(env, user.id) },
+      payload: { autoSendOptIn: true, shippingAddressId: address.id },
+    });
+    expect(res.statusCode).toBe(204);
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(fresh.shippingCents).toBe(0);
+  });
+
   it('address owned by another user -> 400 bad_address', async () => {
     const { user } = await setup();
     const { user: otherUser } = await createUser({

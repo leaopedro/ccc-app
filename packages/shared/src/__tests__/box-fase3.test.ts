@@ -51,7 +51,7 @@ describe('box fase 3 schemas', () => {
         },
       ],
     });
-    expect(parsed.items[0].soldOut).toBe(false);
+    expect(parsed.items[0]!.soldOut).toBe(false);
   });
 
   it('history is an array of cycle summaries', () => {
@@ -66,6 +66,6 @@ describe('box fase 3 schemas', () => {
         current: true,
       },
     ]);
-    expect(parsed[0].current).toBe(true);
+    expect(parsed[0]!.current).toBe(true);
   });
 });

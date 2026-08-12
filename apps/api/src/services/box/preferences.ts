@@ -1,4 +1,9 @@
+import { BOX_SETTINGS_SINGLETON_ID } from '@ccc/shared/admin-box';
 import { prisma } from '@ccc/db';
+
+import { isFreeShippingCep } from './charge.js';
+
+type CepRange = { from: string; to: string };
 
 export type PrefsResult =
   | { kind: 'ok' }
@@ -28,20 +33,29 @@ export const setBoxPreferences = async (args: {
     if (!box || box.status !== 'open' || box.cutoffAt <= new Date()) {
       return { kind: 'conflict' as const };
     }
+    const data: { autoSendOptIn: boolean; shippingAddressId?: string; shippingCents?: number } = {
+      autoSendOptIn: args.autoSendOptIn,
+    };
     if (args.shippingAddressId) {
       const address = await tx.shippingAddress.findUnique({
         where: { id: args.shippingAddressId },
-        select: { userId: true },
+        select: { userId: true, postalCode: true },
       });
       if (!address || address.userId !== args.userId) return { kind: 'bad_address' as const };
+      // Compute shipping the same way confirm does, so the cutoff worker skips an
+      // auto-send box outside the free-shipping region instead of shipping unpaid
+      // freight. Without this, shippingCents stays 0 and the worker treats a
+      // non-free address as free.
+      const settings = await tx.boxSettings.findUniqueOrThrow({
+        where: { id: BOX_SETTINGS_SINGLETON_ID },
+      });
+      const ranges = (settings.freeShippingCepRanges as CepRange[]) ?? [];
+      data.shippingAddressId = args.shippingAddressId;
+      data.shippingCents = isFreeShippingCep(address.postalCode, ranges)
+        ? 0
+        : settings.shippingFeeCents;
     }
-    await tx.monthlyBox.update({
-      where: { id: ref.id },
-      data: {
-        autoSendOptIn: args.autoSendOptIn,
-        ...(args.shippingAddressId ? { shippingAddressId: args.shippingAddressId } : {}),
-      },
-    });
+    await tx.monthlyBox.update({ where: { id: ref.id }, data });
     return { kind: 'ok' as const };
   });
 };

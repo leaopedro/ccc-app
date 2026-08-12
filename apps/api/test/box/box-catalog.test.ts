@@ -60,6 +60,25 @@ const setupCatalogFixtures = async () => {
     data: { catalogItemId: soldOutItem.id, cycleKey: CYCLE_KEY, total: 2, reserved: 2 },
   });
 
+  // Active item whose catalog capacity was raised to 10 AFTER the cycle opened,
+  // but whose ledger snapshot (total 1) is exhausted. soldOut must follow the
+  // ledger snapshot, not the current catalog stockPerCycle.
+  const snapshotItem = await prisma.boxCatalogItem.create({
+    data: {
+      slug: 'snapshot-item',
+      title: 'Snapshot Item',
+      description: 'Capacity raised after the cycle opened',
+      category: 'Acessorios',
+      priceCents: 2500,
+      active: true,
+      stockPerCycle: 10,
+      sortOrder: 4,
+    },
+  });
+  await prisma.boxCatalogItemCycleStock.create({
+    data: { catalogItemId: snapshotItem.id, cycleKey: CYCLE_KEY, total: 1, reserved: 1 },
+  });
+
   // Active item with no stock limit (soldOut false).
   const unlimitedItem = await prisma.boxCatalogItem.create({
     data: {
@@ -105,7 +124,7 @@ const setupCatalogFixtures = async () => {
     },
   });
 
-  return { user, soldOutItem, unlimitedItem, archivedItem, partner };
+  return { user, soldOutItem, snapshotItem, unlimitedItem, archivedItem, partner };
 };
 
 describe('GET /me/box/catalog', () => {
@@ -135,7 +154,7 @@ describe('GET /me/box/catalog', () => {
   });
 
   it('returns catalog with correct soldOut flags, excludes archived, includes partners', async () => {
-    const { user, soldOutItem, unlimitedItem, archivedItem, partner } =
+    const { user, soldOutItem, snapshotItem, unlimitedItem, archivedItem, partner } =
       await setupCatalogFixtures();
 
     const res = await app.inject({
@@ -152,6 +171,11 @@ describe('GET /me/box/catalog', () => {
     const soldOut = catalog.items.find((i) => i.id === soldOutItem.id);
     expect(soldOut).toBeDefined();
     expect(soldOut!.soldOut).toBe(true);
+
+    // Snapshot item: ledger total 1 exhausted, even though catalog capacity is now 10.
+    const snapshot = catalog.items.find((i) => i.id === snapshotItem.id);
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.soldOut).toBe(true);
 
     // Unlimited item.
     const unlimited = catalog.items.find((i) => i.id === unlimitedItem.id);

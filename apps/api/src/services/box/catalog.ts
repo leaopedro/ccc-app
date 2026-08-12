@@ -10,14 +10,20 @@ export const buildBoxCatalog = async (uploads: Uploads, cycleKey: string): Promi
     orderBy: { sortOrder: 'asc' },
   });
   const ledger = await prisma.boxCatalogItemCycleStock.findMany({ where: { cycleKey } });
-  const reservedById = new Map(ledger.map((l) => [l.catalogItemId, l.reserved]));
+  const ledgerById = new Map(ledger.map((l) => [l.catalogItemId, l]));
 
   const catalogItems = items.map((i) => {
-    const reserved = reservedById.get(i.id) ?? 0;
+    const row = ledgerById.get(i.id);
+    // The ledger row is the cycle's stock snapshot: its total is captured when
+    // the cycle first reserves stock and never follows later catalog edits. Use
+    // it when present; fall back to the current stockPerCycle for a cycle that
+    // has not reserved yet. null capacity means unlimited (never soldOut).
+    const total = row ? row.total : i.stockPerCycle;
+    const reserved = row ? row.reserved : 0;
     // soldOut only when a finite stock exists and nothing is left. Advisory:
     // the atomic reservation at confirm/cutoff is the real gate. Read is
     // intentionally outside any transaction.
-    const soldOut = i.stockPerCycle != null && i.stockPerCycle - reserved <= 0;
+    const soldOut = total != null && total - reserved <= 0;
     return {
       id: i.id,
       title: i.title,

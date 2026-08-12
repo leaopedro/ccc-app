@@ -1,9 +1,17 @@
 import { router, Tabs } from 'expo-router';
-import { CalendarDays, ShoppingBag, ShoppingCart, Ticket, UserRound } from 'lucide-react-native';
+import {
+  CalendarDays,
+  Package,
+  ShoppingBag,
+  ShoppingCart,
+  Ticket,
+  UserRound,
+} from 'lucide-react-native';
 import { Platform } from 'react-native';
 
 import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
+import { usePremiumSlot } from '~/hooks/usePremiumSlot';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
 import { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName } from '~/navigation/app-tabs';
 import { useStoreRuntime } from '~/store/runtime-context';
@@ -22,6 +30,9 @@ const CartIcon = ({ color }: { color: string }) => (
 const TicketsIcon = ({ color }: { color: string }) => (
   <Ticket color={color} size={22} strokeWidth={1.75} />
 );
+const CaixaIcon = ({ color }: { color: string }) => (
+  <Package color={color} size={22} strokeWidth={1.75} />
+);
 const ProfileIcon = ({ color }: { color: string }) => (
   <UserRound color={color} size={22} strokeWidth={1.75} />
 );
@@ -34,6 +45,24 @@ function AppTabs() {
   const { runtimeStoreEnabled } = useStoreRuntime();
   const primaryTabName = getPrimaryTabName(runtimeStoreEnabled);
   const showDedicatedTicketsTab = primaryTabName === 'store';
+  const { slot } = usePremiumSlot();
+
+  // The premium-gated slot: exactly one of caixa/assinaturas is visible here,
+  // in whichever position the store ternaries below would have shown
+  // `tickets` previously. The other one is registered hidden below so deep
+  // links still resolve.
+  const premiumTab =
+    slot === 'caixa' ? (
+      <Tabs.Screen name="caixa" options={{ title: 'Caixa', tabBarIcon: CaixaIcon }} />
+    ) : (
+      <Tabs.Screen name="assinaturas" options={{ title: 'Assinatura' }} />
+    );
+  const hiddenPremiumTab =
+    slot === 'caixa' ? (
+      <Tabs.Screen name="assinaturas" options={{ href: null, title: 'Assinatura' }} />
+    ) : (
+      <Tabs.Screen name="caixa" options={{ href: null, title: 'Caixa', tabBarIcon: CaixaIcon }} />
+    );
 
   return (
     <Tabs screenOptions={screenOptions}>
@@ -62,16 +91,7 @@ function AppTabs() {
           }}
         />
       ) : (
-        <Tabs.Screen
-          name="tickets"
-          options={{ title: 'Ingressos', tabBarIcon: TicketsIcon }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              router.replace('/tickets');
-            },
-          }}
-        />
+        premiumTab
       )}
       <Tabs.Screen
         name="cart"
@@ -88,21 +108,16 @@ function AppTabs() {
         }}
       />
       {showDedicatedTicketsTab ? (
-        <Tabs.Screen
-          name="tickets"
-          options={{ title: APP_TAB_SPECS[3].title, tabBarIcon: TicketsIcon }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              router.replace('/tickets');
-            },
-          }}
-        />
+        premiumTab
       ) : (
         <Tabs.Screen name="store" options={{ href: null, title: 'Loja', tabBarIcon: StoreIcon }} />
       )}
+      {hiddenPremiumTab}
+      <Tabs.Screen
+        name="tickets"
+        options={{ href: null, title: 'Ingressos', tabBarIcon: TicketsIcon }}
+      />
       <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[4].title }} />
-      <Tabs.Screen name="assinaturas" options={{ href: null, title: 'Assinatura' }} />
       <Tabs.Screen
         name="profile"
         options={{ title: APP_TAB_SPECS[5].title, tabBarIcon: ProfileIcon }}

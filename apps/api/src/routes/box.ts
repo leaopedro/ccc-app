@@ -5,6 +5,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireUser } from '../plugins/auth.js';
 import { buildBoxCatalog } from '../services/box/catalog.js';
 import { confirmBox } from '../services/box/confirm.js';
+import { listBoxHistory } from '../services/box/history.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
 import { skipBox, unskipBox } from '../services/box/skip.js';
@@ -31,6 +32,13 @@ export const loadEligibleMembership = async (userId: string): Promise<{ id: stri
 };
 
 export const boxRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/me/boxes', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const garage = await prisma.garage.findUnique({ where: { userId: sub }, select: { id: true } });
+    if (!garage) return reply.send([]);
+    return reply.send(await listBoxHistory(app.uploads, garage.id));
+  });
+
   app.get('/me/box/catalog', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { sub } = requireUser(request);
     const membership = await loadEligibleMembership(sub);

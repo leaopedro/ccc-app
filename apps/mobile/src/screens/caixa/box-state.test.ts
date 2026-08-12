@@ -4,6 +4,7 @@ import {
   budgetMeter,
   hasDroppedLines,
   cycleMonthLabel,
+  cycleMonthYearLabel,
   canUnskip,
   boxStatusLabel,
 } from './box-state';
@@ -76,6 +77,14 @@ describe('cycleMonthLabel', () => {
     expect(cycleMonthLabel('2026-08-01')).toBe('agosto');
     expect(cycleMonthLabel('2026-01-01')).toBe('janeiro');
     expect(cycleMonthLabel('2026-12-01')).toBe('dezembro');
+  });
+});
+
+describe('cycleMonthYearLabel', () => {
+  it('formats a cycleKey date as a pt-BR month + year label', () => {
+    expect(cycleMonthYearLabel('2026-08-01')).toBe('agosto de 2026');
+    expect(cycleMonthYearLabel('2025-08-01')).toBe('agosto de 2025');
+    expect(cycleMonthYearLabel('2026-01-01')).toBe('janeiro de 2026');
   });
 });
 

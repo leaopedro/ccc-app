@@ -55,11 +55,24 @@ export function canUnskip(cutoffAt: string): boolean {
 }
 
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
+const monthYearFormatter = new Intl.DateTimeFormat('pt-BR', {
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 
 // cycleKey is a date-only string like "2026-08-01". Parsed as UTC midnight so
 // the month never shifts under a local timezone offset.
 export function cycleMonthLabel(cycleKey: string): string {
   return monthFormatter.format(new Date(`${cycleKey}T00:00:00Z`));
+}
+
+// Same as cycleMonthLabel but includes the year, so history rows spanning
+// more than one year don't show ambiguous duplicate month labels (used by
+// /caixa/historico, screen 12 — the home screen only ever shows one cycle,
+// so it keeps the month-only label).
+export function cycleMonthYearLabel(cycleKey: string): string {
+  return monthYearFormatter.format(new Date(`${cycleKey}T00:00:00Z`));
 }
 
 // PT-BR label for a history entry's status — copy lives in caixaCopy so this

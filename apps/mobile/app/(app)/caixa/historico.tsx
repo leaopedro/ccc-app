@@ -14,7 +14,7 @@ import { FlatList, Image, Pressable, RefreshControl, StyleSheet, View } from 're
 
 import { caixaCopy } from '~/copy/caixa';
 import { useBoxHistory } from '~/hooks/useBoxHistory';
-import { boxStatusLabel, cycleMonthLabel } from '~/screens/caixa/box-state';
+import { boxStatusLabel, cycleMonthYearLabel } from '~/screens/caixa/box-state';
 import { EmptyState } from '~/screens/caixa/EmptyState';
 import { formatBRL } from '~/screens/caixa/format';
 import { theme } from '~/theme';
@@ -82,7 +82,7 @@ function HistoryCard({ entry }: { entry: BoxHistory[number] }) {
       <View style={styles.cardBody}>
         <View style={styles.cardTitleRow}>
           <Text style={styles.cardTitle} numberOfLines={1}>
-            {capitalize(cycleMonthLabel(entry.cycleKey))}
+            {capitalize(cycleMonthYearLabel(entry.cycleKey))}
           </Text>
           {entry.current ? (
             <View style={styles.currentBadge}>

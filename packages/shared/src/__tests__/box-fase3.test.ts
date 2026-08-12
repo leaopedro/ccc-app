@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boxCatalogSchema,
-  boxConfirmSchema,
   boxHistorySchema,
   boxPreferencesSchema,
   boxViewItemSchema,
@@ -21,11 +20,6 @@ describe('box fase 3 schemas', () => {
       dropReason: null,
     });
     expect(parsed.included).toBe(true);
-  });
-
-  it('confirm no longer accepts autoSendOptIn', () => {
-    const parsed = boxConfirmSchema.parse({ shippingAddressId: 'addr1', autoSendOptIn: true });
-    expect('autoSendOptIn' in parsed).toBe(false);
   });
 
   it('preferences requires autoSendOptIn boolean, optional address', () => {

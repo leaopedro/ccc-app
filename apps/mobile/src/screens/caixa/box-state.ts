@@ -45,3 +45,11 @@ export function hasDroppedLines(box: Pick<BoxView, 'items' | 'partnerItems'>): b
     box.partnerItems.some((partnerItem) => !partnerItem.included)
   );
 }
+
+const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
+
+// cycleKey is a date-only string like "2026-08-01". Parsed as UTC midnight so
+// the month never shifts under a local timezone offset.
+export function cycleMonthLabel(cycleKey: string): string {
+  return monthFormatter.format(new Date(`${cycleKey}T00:00:00Z`));
+}

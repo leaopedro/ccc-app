@@ -25,6 +25,11 @@ export const caixaCopy = {
   awaiting: {
     banner: 'Aguardando pagamento',
     note: 'Sem pagamento até o corte, enviamos só os itens do budget.',
+    comingSoon: 'Pagamento pelo app disponível em breve.',
+  },
+  notOpen: {
+    title: 'Sem caixa neste ciclo',
+    body: 'Volte quando o próximo ciclo abrir.',
   },
   ready: { banner: 'Caixa confirmada' },
   postCutoff: {

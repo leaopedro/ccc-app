@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeVariant, budgetMeter, hasDroppedLines } from './box-state';
+import { homeVariant, budgetMeter, hasDroppedLines, cycleMonthLabel } from './box-state';
 
 describe('homeVariant', () => {
   it('maps each status', () => {
@@ -61,5 +61,13 @@ describe('hasDroppedLines', () => {
         partnerItems: [{ included: true }],
       } as never),
     ).toBe(false);
+  });
+});
+
+describe('cycleMonthLabel', () => {
+  it('formats a cycleKey date as a pt-BR month name', () => {
+    expect(cycleMonthLabel('2026-08-01')).toBe('agosto');
+    expect(cycleMonthLabel('2026-01-01')).toBe('janeiro');
+    expect(cycleMonthLabel('2026-12-01')).toBe('dezembro');
   });
 });

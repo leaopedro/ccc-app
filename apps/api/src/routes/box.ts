@@ -3,6 +3,7 @@ import { boxConfirmSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
+import { buildBoxCatalog } from '../services/box/catalog.js';
 import { confirmBox } from '../services/box/confirm.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
@@ -29,6 +30,19 @@ export const loadEligibleMembership = async (userId: string): Promise<{ id: stri
 };
 
 export const boxRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/me/box/catalog', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const box = await prisma.monthlyBox.findFirst({
+      where: { membershipId: membership.id },
+      orderBy: { cycleStart: 'desc' },
+      select: { cycleKey: true },
+    });
+    if (!box) return reply.status(404).send({ error: 'box_not_open' });
+    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey));
+  });
+
   app.get('/me/box', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { sub } = requireUser(request);
     const membership = await loadEligibleMembership(sub);

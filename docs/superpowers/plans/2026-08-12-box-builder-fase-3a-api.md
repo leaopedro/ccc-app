@@ -134,7 +134,7 @@ Expected: FAIL (schemas/fields not defined).
 
 - [ ] **Step 3: Edit `packages/shared/src/box.ts`**
 
-Add the three fields to both view-item schemas and add the new schemas. Change `boxConfirmSchema`:
+Add the three fields to both view-item schemas, then append the new schemas below:
 
 ```ts
 export const boxViewItemSchema = z.object({

@@ -46,6 +46,12 @@ export function hasDroppedLines(box: Pick<BoxView, 'items' | 'partnerItems'>): b
   );
 }
 
+// A skipped box can only go back to "montando" while the cutoff hasn't
+// passed yet — after that the cycle is locked, so the skip stands.
+export function canUnskip(cutoffAt: string): boolean {
+  return new Date(cutoffAt).getTime() > Date.now();
+}
+
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
 
 // cycleKey is a date-only string like "2026-08-01". Parsed as UTC midnight so

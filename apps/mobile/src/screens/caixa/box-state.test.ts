@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeVariant, budgetMeter, hasDroppedLines, cycleMonthLabel } from './box-state';
+import { homeVariant, budgetMeter, hasDroppedLines, cycleMonthLabel, canUnskip } from './box-state';
 
 describe('homeVariant', () => {
   it('maps each status', () => {
@@ -69,5 +69,17 @@ describe('cycleMonthLabel', () => {
     expect(cycleMonthLabel('2026-08-01')).toBe('agosto');
     expect(cycleMonthLabel('2026-01-01')).toBe('janeiro');
     expect(cycleMonthLabel('2026-12-01')).toBe('dezembro');
+  });
+});
+
+describe('canUnskip', () => {
+  it('is true when the cutoff is still in the future', () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    expect(canUnskip(future)).toBe(true);
+  });
+
+  it('is false when the cutoff has already passed', () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    expect(canUnskip(past)).toBe(false);
   });
 });

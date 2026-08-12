@@ -16,12 +16,18 @@ import { unskipBox } from '~/api/box';
 import { caixaCopy } from '~/copy/caixa';
 import { useBox } from '~/hooks/useBox';
 import { BudgetMeter } from '~/screens/caixa/BudgetMeter';
-import { cycleMonthLabel, hasDroppedLines, homeVariant } from '~/screens/caixa/box-state';
+import {
+  canUnskip,
+  cycleMonthLabel,
+  hasDroppedLines,
+  homeVariant,
+} from '~/screens/caixa/box-state';
 import { CaixaSkeleton } from '~/screens/caixa/CaixaSkeleton';
 import { CutoffBanner } from '~/screens/caixa/CutoffBanner';
 import { EmptyState } from '~/screens/caixa/EmptyState';
 import { formatBRL } from '~/screens/caixa/format';
 import { OfflineBanner } from '~/screens/caixa/OfflineBanner';
+import { SkipSheet } from '~/screens/caixa/SkipSheet';
 import { theme } from '~/theme';
 
 // README design tokens not covered by ~/theme.
@@ -133,7 +139,7 @@ function LineRow({
 /* homeVariant bodies                                                   */
 /* ------------------------------------------------------------------ */
 
-function OpenBody({ box }: { box: BoxView }) {
+function OpenBody({ box, onSkip }: { box: BoxView; onSkip: () => void }) {
   const includedCents = Math.min(box.itemsTotalCents, box.budgetCents);
 
   return (
@@ -167,10 +173,7 @@ function OpenBody({ box }: { box: BoxView }) {
       </View>
       <Button label={caixaCopy.actions.edit} onPress={goToMontar} className="mt-2" />
       <Pressable
-        // The skip flow (bottom sheet + skipBox()) is Task 8 (SkipSheet).
-        // This link is a no-op placeholder so the layout matches the design
-        // handoff without building that sheet in this task.
-        onPress={() => {}}
+        onPress={onSkip}
         accessibilityRole="button"
         accessibilityLabel={caixaCopy.actions.skip}
         style={styles.skipLink}
@@ -192,8 +195,7 @@ function SkippedBody({
   onUnskip: () => void;
   unskipping: boolean;
 }) {
-  const cutoffInFuture = new Date(box.cutoffAt).getTime() > Date.now();
-  const disabled = !cutoffInFuture || unskipping;
+  const disabled = !canUnskip(box.cutoffAt) || unskipping;
 
   return (
     <View style={styles.centerBlock}>
@@ -389,9 +391,10 @@ function ReadyBody({ box }: { box: BoxView }) {
 export default function CaixaHome() {
   const { box, loading, error, notOpen, refresh } = useBox();
   const [unskipping, setUnskipping] = useState(false);
+  const [skipSheetVisible, setSkipSheetVisible] = useState(false);
 
   const onUnskip = async () => {
-    if (unskipping) return;
+    if (unskipping || !box || !canUnskip(box.cutoffAt)) return;
     setUnskipping(true);
     try {
       await unskipBox();
@@ -439,12 +442,15 @@ export default function CaixaHome() {
 
   const variant = homeVariant(box.status);
   const title = capitalize(cycleMonthLabel(box.cycleKey));
+  const monthLabel = cycleMonthLabel(box.cycleKey);
 
   return (
     <View style={styles.screen}>
       <Header title={title} />
       <ScrollView contentContainerStyle={styles.content}>
-        {variant === 'open' ? <OpenBody box={box} /> : null}
+        {variant === 'open' ? (
+          <OpenBody box={box} onSkip={() => setSkipSheetVisible(true)} />
+        ) : null}
         {variant === 'skipped' ? (
           <SkippedBody box={box} onUnskip={() => void onUnskip()} unskipping={unskipping} />
         ) : null}
@@ -457,6 +463,12 @@ export default function CaixaHome() {
           )
         ) : null}
       </ScrollView>
+      <SkipSheet
+        visible={skipSheetVisible}
+        month={monthLabel}
+        onClose={() => setSkipSheetVisible(false)}
+        onDone={() => void refresh()}
+      />
     </View>
   );
 }

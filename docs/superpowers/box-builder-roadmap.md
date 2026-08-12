@@ -78,15 +78,39 @@ Nota: Fase 4 ainda e dona de: checkout do provider + flip do webhook para pago
 - fulfillment e refund no admin. `settlePaidOrder` hoje lanca de proposito para
   `kind === 'box'`, como guarda ate a Fase 4 implementar a liquidacao.
 
-### Fase 3 — UI mobile (DESIGN CONCLUIDO, IMPL PENDENTE)
+### Fase 3 — UI mobile (DESIGN CONCLUIDO)
 
-Tela do assinante montar a caixa dentro do budget + camada de leitura/skip/
-historico/preferencias que as telas exigem. Pagamento e fulfillment timeline
-ficam pra Fase 4.
+Dividida em duas entregas: 3a (API do atendente) e 3b (UI mobile).
 
 Design: `docs/superpowers/specs/2026-08-11-box-builder-fase-3-design.md`
 (passou por review de tres agentes; resolucoes embutidas). Referencia de UI:
 `docs/design/box-builder/README.md`.
+
+#### Fase 3a — API do atendente (CONCLUIDA)
+
+Camada de leitura/skip/historico/preferencias que as telas exigem. Entregue em
+`feat/box-builder-fase-3a-api` (PR #14). Plano:
+`docs/superpowers/plans/2026-08-12-box-builder-fase-3a-api.md`. Executada via
+subagent-driven-development (6 tasks TDD, review por task + review de branch).
+
+Novos endpoints do atendente: `GET /me/box/catalog`, `POST /me/box/skip` +
+`/unskip`, `GET /me/boxes`, `PUT /me/box/preferences`; box view enriquecida com
+`imageUrl` + linhas removidas (`included`/`dropReason`). `autoSendOptIn` agora
+tem caminho de escrita unico (`PUT /me/box/preferences`; removido do confirm).
+
+Correcoes pos-review (PR #14):
+
+- `PUT /me/box/preferences` calcula `shippingCents` do endereco (igual confirm),
+  senao o cutoff enviava caixa auto-send de regiao nao-gratis sem cobrar frete.
+- `soldOut` do catalogo usa o `total` do ledger do ciclo quando existe, nao o
+  `stockPerCycle` atual, pra edicao de estoque nao virar disponibilidade num
+  ciclo ja aberto.
+- Fix de typecheck de CI no teste do shared (acesso indexado nao-nulo).
+
+#### Fase 3b — UI mobile (PENDENTE)
+
+Tela do assinante montar a caixa dentro do budget, sobre a API da 3a. Plano a
+escrever quando a 3a mergear no `main`.
 
 Decisoes de escopo:
 

@@ -79,8 +79,10 @@ auto-confirm do worker no cutoff.
 - Adiciona `imageUrl` em `boxViewItemSchema` e `boxViewPartnerItemSchema`.
   Fonte: join via `BOX_INCLUDE` pra `catalogItem`/`partnerModule` +
   helper r2 (a imagem nao e snapshotada nas tabelas de linha).
-- Adiciona `included` e `dropReason` (e `droppedAt`) nas linhas, pra tela 10
-  renderizar os itens removidos no fechamento com o motivo (R2b).
+- Adiciona `included` e `dropReason` nas linhas, pra tela 10 renderizar os itens
+  removidos no fechamento com o motivo (R2b). `droppedAt` fica de fora: a tela 10
+  mostra o motivo, nao o horario da remocao, entao o timestamp nao e exposto
+  nesta fase (YAGNI).
 - `chargeCents` da view enquanto `open` nao inclui frete (frete so e computado no
   confirm). O cliente nao mostra frete na tela de builder.
 

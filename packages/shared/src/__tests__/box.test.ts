@@ -39,11 +39,8 @@ describe('box shared schemas', () => {
     expect(() => boxSelectionUpdateSchema.parse(bad)).toThrow();
   });
 
-  it('accepts a confirm payload with opt-in and address', () => {
-    const parsed = boxConfirmSchema.parse({
-      shippingAddressId: 'addr_1',
-      autoSendOptIn: true,
-    });
-    expect(parsed.autoSendOptIn).toBe(true);
+  it('accepts a confirm payload with an address', () => {
+    const parsed = boxConfirmSchema.parse({ shippingAddressId: 'addr_1' });
+    expect(parsed.shippingAddressId).toBe('addr_1');
   });
 });

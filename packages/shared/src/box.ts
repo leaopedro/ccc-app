@@ -59,7 +59,6 @@ export type BoxSelectionUpdate = z.infer<typeof boxSelectionUpdateSchema>;
 
 export const boxConfirmSchema = z.object({
   shippingAddressId: z.string().min(1),
-  autoSendOptIn: z.boolean().optional(),
 });
 export type BoxConfirm = z.infer<typeof boxConfirmSchema>;
 

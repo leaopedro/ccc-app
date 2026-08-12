@@ -1,6 +1,6 @@
 export const formatBRL = (cents: number): string => {
   const value = (Math.round(cents) / 100).toFixed(2); // "1234.56"
-  const [intPart, dec] = value.split('.');
+  const [intPart = '', dec = ''] = value.split('.');
   const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `R$ ${withThousands},${dec}`;
 };

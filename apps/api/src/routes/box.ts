@@ -1,13 +1,20 @@
 import { prisma } from '@ccc/db';
-import { boxConfirmSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
+import { boxConfirmSchema, boxPreferencesSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
+import { buildBoxCatalog } from '../services/box/catalog.js';
 import { confirmBox } from '../services/box/confirm.js';
+import { listBoxHistory } from '../services/box/history.js';
+import { setBoxPreferences } from '../services/box/preferences.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
+import { skipBox, unskipBox } from '../services/box/skip.js';
 
-const BOX_INCLUDE = { items: true, partnerItems: true } as const;
+const BOX_INCLUDE = {
+  items: { include: { catalogItem: true } },
+  partnerItems: { include: { partnerModule: true } },
+} as const;
 const ELIGIBLE_STATUSES = ['active', 'trialing'] as const;
 
 /** user -> garage -> latest eligible membership. Null when none qualifies. */
@@ -26,6 +33,26 @@ export const loadEligibleMembership = async (userId: string): Promise<{ id: stri
 };
 
 export const boxRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/me/boxes', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const garage = await prisma.garage.findUnique({ where: { userId: sub }, select: { id: true } });
+    if (!garage) return reply.send([]);
+    return reply.send(await listBoxHistory(app.uploads, garage.id));
+  });
+
+  app.get('/me/box/catalog', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const box = await prisma.monthlyBox.findFirst({
+      where: { membershipId: membership.id },
+      orderBy: { cycleStart: 'desc' },
+      select: { cycleKey: true },
+    });
+    if (!box) return reply.status(404).send({ error: 'box_not_open' });
+    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey));
+  });
+
   app.get('/me/box', { preHandler: [app.authenticate] }, async (request, reply) => {
     const { sub } = requireUser(request);
     const membership = await loadEligibleMembership(sub);
@@ -40,7 +67,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     if (!box) {
       return reply.status(404).send({ error: 'box_not_open' });
     }
-    return reply.send(serializeBox(box));
+    return reply.send(serializeBox(box, app.uploads));
   });
 
   app.put('/me/box/selection', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -176,9 +203,51 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: boxRef.id },
-      include: { items: true, partnerItems: true },
+      include: BOX_INCLUDE,
     });
-    return reply.send(serializeBox(fresh));
+    return reply.send(serializeBox(fresh, app.uploads));
+  });
+
+  app.post('/me/box/skip', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const result = await skipBox(membership.id);
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'conflict') return reply.status(409).send({ error: 'box_locked' });
+    return reply.status(204).send();
+  });
+
+  app.post('/me/box/unskip', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const result = await unskipBox(membership.id);
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'conflict') return reply.status(409).send({ error: 'box_locked' });
+    return reply.status(204).send();
+  });
+
+  app.put('/me/box/preferences', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { sub } = requireUser(request);
+    const parsed = boxPreferencesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'UnprocessableEntity', issues: parsed.error.issues });
+    }
+    const membership = await loadEligibleMembership(sub);
+    if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+    const result = await setBoxPreferences({
+      userId: sub,
+      membershipId: membership.id,
+      autoSendOptIn: parsed.data.autoSendOptIn,
+      ...(parsed.data.shippingAddressId
+        ? { shippingAddressId: parsed.data.shippingAddressId }
+        : {}),
+    });
+    if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+    if (result.kind === 'bad_address') return reply.status(400).send({ error: 'bad_address' });
+    if (result.kind === 'conflict') return reply.status(409).send({ error: 'box_locked' });
+    return reply.status(204).send();
   });
 
   app.post('/me/box/confirm', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -194,7 +263,6 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
       userId: sub,
       membershipId: membership.id,
       shippingAddressId: parsed.data.shippingAddressId,
-      autoSendOptIn: parsed.data.autoSendOptIn ?? false,
     });
     if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
     if (result.kind === 'not_open') return reply.status(409).send({ error: 'box_locked' });
@@ -202,8 +270,8 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: result.boxId },
-      include: { items: true, partnerItems: true },
+      include: BOX_INCLUDE,
     });
-    return reply.send(serializeBox(fresh));
+    return reply.send(serializeBox(fresh, app.uploads));
   });
 };

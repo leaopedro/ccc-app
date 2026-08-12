@@ -47,7 +47,7 @@ Modified files:
 
 **Interfaces:**
 
-- Produces: enriched `boxViewItemSchema` (adds `imageUrl: string | null`, `included: boolean`, `dropReason: string | null`), enriched `boxViewPartnerItemSchema` (same three), `boxConfirmSchema` without `autoSendOptIn`, and new `boxCatalogSchema`, `boxHistorySchema`, `boxPreferencesSchema` with their inferred types `BoxCatalog`, `BoxHistory`, `BoxPreferences`.
+- Produces: enriched `boxViewItemSchema` (adds `imageUrl: string | null`, `included: boolean`, `dropReason: string | null`), enriched `boxViewPartnerItemSchema` (same three), and new `boxCatalogSchema`, `boxHistorySchema`, `boxPreferencesSchema` with their inferred types `BoxCatalog`, `BoxHistory`, `BoxPreferences`. `boxConfirmSchema` is NOT changed here — its `autoSendOptIn` removal moves to Task 6, atomic with the callers.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -58,7 +58,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boxCatalogSchema,
-  boxConfirmSchema,
   boxHistorySchema,
   boxPreferencesSchema,
   boxViewItemSchema,
@@ -77,11 +76,6 @@ describe('box fase 3 schemas', () => {
       dropReason: null,
     });
     expect(parsed.included).toBe(true);
-  });
-
-  it('confirm no longer accepts autoSendOptIn', () => {
-    const parsed = boxConfirmSchema.parse({ shippingAddressId: 'addr1', autoSendOptIn: true });
-    expect('autoSendOptIn' in parsed).toBe(false);
   });
 
   it('preferences requires autoSendOptIn boolean, optional address', () => {
@@ -140,7 +134,7 @@ Expected: FAIL (schemas/fields not defined).
 
 - [ ] **Step 3: Edit `packages/shared/src/box.ts`**
 
-Add the three fields to both view-item schemas and add the new schemas. Change `boxConfirmSchema`:
+Add the three fields to both view-item schemas, then append the new schemas below:
 
 ```ts
 export const boxViewItemSchema = z.object({
@@ -166,14 +160,7 @@ export const boxViewPartnerItemSchema = z.object({
 });
 ```
 
-Replace `boxConfirmSchema` (drop `autoSendOptIn`):
-
-```ts
-export const boxConfirmSchema = z.object({
-  shippingAddressId: z.string().min(1),
-});
-export type BoxConfirm = z.infer<typeof boxConfirmSchema>;
-```
+Do NOT touch `boxConfirmSchema` in this task. Dropping `autoSendOptIn` from it breaks its API callers (`box.ts` confirm route, `confirm.ts`) and the existing `box.test.ts` assertion, which are all updated atomically in Task 6. Leave `boxConfirmSchema` exactly as it is now (`{ shippingAddressId, autoSendOptIn: z.boolean().optional() }`).
 
 Append the new schemas:
 
@@ -865,9 +852,31 @@ export const setBoxPreferences = async (args: {
 };
 ```
 
-- [ ] **Step 4: Drop `autoSendOptIn` from `confirmBox`**
+- [ ] **Step 4: Remove `autoSendOptIn` from the confirm path end to end (atomic)**
 
-In `apps/api/src/services/box/confirm.ts`: remove `autoSendOptIn` from the args type, and remove it from the `tx.monthlyBox.update` data block that writes `shippingAddressId`/`shippingCents`. Leave everything else. `autoSendOptIn` is now owned solely by preferences and by the open-time default.
+This removal spans the shared schema, its rebuild, the confirm service, and the existing shared test. Do all of it in this step so no intermediate tree fails `tsc`.
+
+(a) `packages/shared/src/box.ts` — drop `autoSendOptIn` from `boxConfirmSchema`:
+
+```ts
+export const boxConfirmSchema = z.object({
+  shippingAddressId: z.string().min(1),
+});
+export type BoxConfirm = z.infer<typeof boxConfirmSchema>;
+```
+
+(b) `packages/shared/src/__tests__/box.test.ts` — the existing test `accepts a confirm payload with opt-in and address` asserts `expect(parsed.autoSendOptIn).toBe(true)`, which now strips to `undefined`. Replace that test body so it no longer references `autoSendOptIn`:
+
+```ts
+it('accepts a confirm payload with an address', () => {
+  const parsed = boxConfirmSchema.parse({ shippingAddressId: 'addr_1' });
+  expect(parsed.shippingAddressId).toBe('addr_1');
+});
+```
+
+(c) Rebuild shared so the API sees it: `pnpm -C packages/shared build`.
+
+(d) `apps/api/src/services/box/confirm.ts` — remove `autoSendOptIn` from the args type (line ~20) and from the `tx.monthlyBox.update` data block that writes `shippingAddressId`/`shippingCents` (line ~61). Leave everything else. `autoSendOptIn` is now owned solely by `PUT /me/box/preferences` and the open-time default.
 
 - [ ] **Step 5: Wire the route + fix the confirm call**
 

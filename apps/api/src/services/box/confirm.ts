@@ -17,7 +17,6 @@ export const confirmBox = async (args: {
   userId: string;
   membershipId: string;
   shippingAddressId: string;
-  autoSendOptIn: boolean;
 }): Promise<ConfirmResult> => {
   return prisma.$transaction(async (tx) => {
     // Step 1: find the latest box id for this membership.
@@ -58,7 +57,6 @@ export const confirmBox = async (args: {
       data: {
         shippingAddressId: address.id,
         shippingCents,
-        autoSendOptIn: args.autoSendOptIn,
       },
     });
 

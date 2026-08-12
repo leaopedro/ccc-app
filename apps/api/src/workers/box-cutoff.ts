@@ -15,10 +15,11 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
     include: { items: true, partnerItems: true },
   });
 
-  // Budget-only cannot cover shipping. An awaiting_payment box outside the
-  // free-shipping region (shippingCents > 0) is skipped, never shipped unpaid.
-  // open+autoSend boxes always have shippingCents 0 (never confirmed), so they
-  // are unaffected; only awaiting_payment boxes reach this gate.
+  // Budget-only cannot cover shipping. A box outside the free-shipping region
+  // (shippingCents > 0) is skipped, never shipped unpaid. This covers both
+  // awaiting_payment boxes and open+autoSend boxes: the preferences endpoint
+  // computes shippingCents when it stores the auto-send address, so a non-free
+  // region auto-send box arrives here with shippingCents > 0 and is skipped.
   if (box.shippingCents > 0) {
     await tx.monthlyBox.update({ where: { id: boxId }, data: { status: 'skipped' } });
     return;

@@ -24,6 +24,9 @@ describe('box shared schemas', () => {
           unitPriceCents: 2000,
           subtotalCents: 4000,
           titleSnapshot: 'Adesivo',
+          imageUrl: null,
+          included: true,
+          dropReason: null,
         },
       ],
       partnerItems: [],
@@ -36,11 +39,8 @@ describe('box shared schemas', () => {
     expect(() => boxSelectionUpdateSchema.parse(bad)).toThrow();
   });
 
-  it('accepts a confirm payload with opt-in and address', () => {
-    const parsed = boxConfirmSchema.parse({
-      shippingAddressId: 'addr_1',
-      autoSendOptIn: true,
-    });
-    expect(parsed.autoSendOptIn).toBe(true);
+  it('accepts a confirm payload with an address', () => {
+    const parsed = boxConfirmSchema.parse({ shippingAddressId: 'addr_1' });
+    expect(parsed.shippingAddressId).toBe('addr_1');
   });
 });

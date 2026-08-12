@@ -19,14 +19,6 @@ export const setBoxPreferences = async (args: {
   });
   if (!ref) return { kind: 'not_found' };
 
-  if (args.shippingAddressId) {
-    const address = await prisma.shippingAddress.findUnique({
-      where: { id: args.shippingAddressId },
-      select: { userId: true },
-    });
-    if (!address || address.userId !== args.userId) return { kind: 'bad_address' };
-  }
-
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${ref.garageId} FOR UPDATE`;
     const box = await tx.monthlyBox.findUnique({
@@ -35,6 +27,13 @@ export const setBoxPreferences = async (args: {
     });
     if (!box || box.status !== 'open' || box.cutoffAt <= new Date()) {
       return { kind: 'conflict' as const };
+    }
+    if (args.shippingAddressId) {
+      const address = await tx.shippingAddress.findUnique({
+        where: { id: args.shippingAddressId },
+        select: { userId: true },
+      });
+      if (!address || address.userId !== args.userId) return { kind: 'bad_address' as const };
     }
     await tx.monthlyBox.update({
       where: { id: ref.id },

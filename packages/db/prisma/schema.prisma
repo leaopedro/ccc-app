@@ -41,6 +41,12 @@ model User {
   // 18+ self-attestation captured at signup. We store only the fact/timestamp
   // of acceptance, never a date of birth (privacy policy: no DOB collected).
   ageAttestedAt      DateTime?
+  /// Which Terms of Use text this person accepted, and when. Storing the
+  /// VERSION (not just a boolean) is what makes the signup checkbox auditable:
+  /// without it we cannot say which wording someone agreed to, and the checkbox
+  /// is decorative. See packages/shared/src/terms.ts TERMS_VERSION.
+  termsVersion       String?    @db.VarChar(40)
+  termsAcceptedAt    DateTime?
   tokenInvalidatedAt DateTime?
   deletedAt          DateTime?
   anonymizedAt       DateTime?

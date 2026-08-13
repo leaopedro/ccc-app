@@ -154,6 +154,10 @@
       "types": "./src/support.ts",
       "default": "./dist/support.js"
     },
+    "./terms": {
+      "types": "./src/terms.ts",
+      "default": "./dist/terms.js"
+    },
     "./tickets": {
       "types": "./src/tickets.ts",
       "default": "./dist/tickets.js"

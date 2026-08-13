@@ -10,11 +10,11 @@ This document is the source of truth for `JDMA-116`.
 
 `apps/mobile/app.config.ts` already pins these variants:
 
-| Profile     | `APP_VARIANT` | iOS bundle id                   | Android package                 | Intended use                             |
-| ----------- | ------------- | ------------------------------- | ------------------------------- | ---------------------------------------- |
-| development | development   | `com.jdmexperience.app.dev`     | `com.jdmexperience.app.dev`     | First EAS dev-client / simulator proof   |
-| preview     | preview       | `com.jdmexperience.app.preview` | `com.jdmexperience.app.preview` | Internal device builds for smoke testing |
-| production  | production    | `com.jdmexperience.app`         | `com.jdmexperience.app`         | App Store / Play Store release           |
+| Profile     | `APP_VARIANT` | iOS bundle id                 | Android package               | Intended use                             |
+| ----------- | ------------- | ----------------------------- | ----------------------------- | ---------------------------------------- |
+| development | development   | `com.casacarclub.app.dev`     | `com.casacarclub.app.dev`     | First EAS dev-client / simulator proof   |
+| preview     | preview       | `com.casacarclub.app.preview` | `com.casacarclub.app.preview` | Internal device builds for smoke testing |
+| production  | production    | `com.casacarclub.app`         | `com.casacarclub.app`         | App Store / Play Store release           |
 
 `apps/mobile/eas.json` already pins:
 
@@ -54,28 +54,28 @@ Store locations:
 
 Do this once before the first iOS device build.
 
-### 1.0 Exact values for JDM Experience
+### 1.0 Exact values for Casa Car Club
 
 Use these values exactly.
 
 #### App IDs
 
-| Purpose            | Description field        | Bundle ID field                 | Type              |
-| ------------------ | ------------------------ | ------------------------------- | ----------------- |
-| Dev variant        | `JDM Experience Dev`     | `com.jdmexperience.app.dev`     | `Explicit App ID` |
-| Preview variant    | `JDM Experience Preview` | `com.jdmexperience.app.preview` | `Explicit App ID` |
-| Production variant | `JDM Experience`         | `com.jdmexperience.app`         | `Explicit App ID` |
+| Purpose            | Description field         | Bundle ID field               | Type              |
+| ------------------ | ------------------------- | ----------------------------- | ----------------- |
+| Dev variant        | `Casa Car Club (Dev)`     | `com.casacarclub.app.dev`     | `Explicit App ID` |
+| Preview variant    | `Casa Car Club (Preview)` | `com.casacarclub.app.preview` | `Explicit App ID` |
+| Production variant | `Casa Car Club`           | `com.casacarclub.app`         | `Explicit App ID` |
 
 #### Merchant ID
 
-| Field       | Value                            |
-| ----------- | -------------------------------- |
-| Description | `JDM Experience Apple Pay`       |
-| Identifier  | `merchant.com.jdmexperience.app` |
+| Field       | Value                          |
+| ----------- | ------------------------------ |
+| Description | `Casa Car Club Apple Pay`      |
+| Identifier  | `merchant.com.casacarclub.app` |
 
 This merchant identifier matches the checked-in mobile code:
 
-- `apps/mobile/app/_layout.tsx` uses `merchantIdentifier="merchant.com.jdmexperience.app"`.
+- `apps/mobile/app/_layout.tsx` uses `merchantIdentifier="merchant.com.casacarclub.app"`.
 
 #### App Store Connect record
 
@@ -84,13 +84,13 @@ Create this record now:
 | Field            | Value                                                                                      |
 | ---------------- | ------------------------------------------------------------------------------------------ |
 | Platforms        | `iOS`                                                                                      |
-| Name             | `JDM Experience`                                                                           |
+| Name             | `Casa Car Club`                                                                            |
 | Primary language | `Portuguese (Brazil)` if available; otherwise the closest Portuguese option shown by Apple |
-| Bundle ID        | `com.jdmexperience.app`                                                                    |
-| SKU              | `jdm-experience-ios-prod`                                                                  |
+| Bundle ID        | `com.casacarclub.app`                                                                      |
+| SKU              | `casa-car-club-ios-prod`                                                                   |
 | User Access      | `Full Access`                                                                              |
 
-Do not create the Store Connect record against `com.jdmexperience.app.preview`
+Do not create the Store Connect record against `com.casacarclub.app.preview`
 unless you explicitly want preview builds in TestFlight as a separate app record.
 
 ### 1.1 Confirm account access
@@ -104,15 +104,15 @@ unless you explicitly want preview builds in TestFlight as a separate app record
 
 Create these App IDs in Apple Developer:
 
-- `com.jdmexperience.app.dev`
-- `com.jdmexperience.app.preview`
-- `com.jdmexperience.app`
+- `com.casacarclub.app.dev`
+- `com.casacarclub.app.preview`
+- `com.casacarclub.app`
 
 Recommended display names:
 
-- `JDM Experience Dev`
-- `JDM Experience Preview`
-- `JDM Experience`
+- `Casa Car Club (Dev)`
+- `Casa Car Club (Preview)`
+- `Casa Car Club`
 
 Apple screen inputs for each App ID:
 
@@ -144,7 +144,7 @@ Why these two:
 
 - Push is already in the app via `expo-notifications`.
 - Apple Pay is already referenced by the Stripe payment sheet config and the
-  `merchant.com.jdmexperience.app` identifier.
+  `merchant.com.casacarclub.app` identifier.
 
 After you enable a capability, Apple notes that provisioning profiles using that
 App ID become invalid and need regeneration. That is fine here because EAS will
@@ -152,11 +152,17 @@ regenerate signing assets on the next interactive build.
 
 ### App Review note — iOS bundle must not reference Stripe
 
+> **A ser revertido.** A decisão de 2026-08-12, registrada em
+> `docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md`, é que o iOS passa a
+> cobrar via Stripe e Apple Pay. Esta seção descreve o estado atual do código, que
+> ainda tem o isolamento e a regra de lint, mas ela sai junto do Apple Pay. Não
+> tratar como invariante permanente.
+
 The iOS bundle MUST NOT reference Stripe checkout surfaces. This is required for
 App Store Review compliance: Apple rejects apps that imply an external payment
 method for digital goods (App Store Review Guideline 3.1.1).
 
-Enforcement: the `jdm-mobile/no-stripe-on-ios` ESLint rule (added in F8.18)
+Enforcement: the `ccc-mobile/no-stripe-on-ios` ESLint rule (added in F8.18)
 scans both `apps/mobile/src/**/*.{ts,tsx}` AND `apps/mobile/app/**/*.{ts,tsx}`
 at CI time and reports an error if any of the following tokens appear outside
 a `Platform.OS !== 'ios'` (or `=== 'android'`) guard:
@@ -188,7 +194,7 @@ purchase product before the iOS store release.
 Before submitting a TestFlight or App Store build:
 
 1. Run `pnpm --filter @ccc/mobile exec eslint src/ app/` and confirm 0
-   errors from the `jdm-mobile/no-stripe-on-ios` rule.
+   errors from the `ccc-mobile/no-stripe-on-ios` rule.
 2. Confirm `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` is `true` in the EAS build
    secret so the Premium screen is not hidden behind the maintenance banner.
 3. Confirm `EXPO_PUBLIC_RC_IOS_API_KEY` is set as an EAS secret for the
@@ -204,8 +210,8 @@ identifier before you finish enabling Apple Pay on the App IDs:
 1. `Certificates, Identifiers & Profiles` → `Identifiers` → `+`
 2. Choose `Merchant IDs`
 3. Fill:
-   - `Description` = `JDM Experience Apple Pay`
-   - `Identifier` = `merchant.com.jdmexperience.app`
+   - `Description` = `Casa Car Club Apple Pay`
+   - `Identifier` = `merchant.com.casacarclub.app`
 4. `Continue` → `Register`
 
 Then go back to each App ID:
@@ -213,7 +219,7 @@ Then go back to each App ID:
 1. Open the App ID
 2. Click `Edit`
 3. Enable `Apple Pay`
-4. Select `merchant.com.jdmexperience.app`
+4. Select `merchant.com.casacarclub.app`
 5. `Continue` → `Save`
 
 Note:
@@ -227,30 +233,30 @@ Before uploading a build to App Store Connect, Apple requires an app record.
 For Phase 0.9, create the production record now:
 
 - Platform: `iOS`
-- Name: `JDM Experience`
+- Name: `Casa Car Club`
 - Primary language: `Portuguese (Brazil)` or the closest PT option available
-- Bundle ID: `com.jdmexperience.app`
-- SKU: `jdm-experience-ios-prod`
+- Bundle ID: `com.casacarclub.app`
+- SKU: `casa-car-club-ios-prod`
 
 Apple screen inputs:
 
 1. App Store Connect → `Apps` → `+` → `New App`
 2. `Platforms` = `iOS`
-3. `Name` = `JDM Experience`
+3. `Name` = `Casa Car Club`
 4. `Primary Language` = `Portuguese (Brazil)` if Apple offers it
-5. `Bundle ID` = `com.jdmexperience.app`
-6. `SKU` = `jdm-experience-ios-prod`
+5. `Bundle ID` = `com.casacarclub.app`
+6. `SKU` = `casa-car-club-ios-prod`
 7. `User Access` = `Full Access`
 8. Click `Create`
 
 Optional now, useful later:
 
-- Create a second record for `com.jdmexperience.app.preview` only if you want to
+- Create a second record for `com.casacarclub.app.preview` only if you want to
   push preview builds through TestFlight instead of Expo internal distribution.
 
 Not required for Phase 0.9:
 
-- A Store Connect app record for `com.jdmexperience.app.dev`
+- A Store Connect app record for `com.casacarclub.app.dev`
 
 ### 1.4 Register test devices for preview installs
 
@@ -290,9 +296,9 @@ heartbeat so Android does not become the next blocker.
 
 Create the production Android app in Play Console:
 
-- App name: `JDM Experience`
+- App name: `Casa Car Club`
 - Default language: `Portuguese (Brazil)` if available
-- Package name: `com.jdmexperience.app`
+- Package name: `com.casacarclub.app`
 
 Why production only:
 
@@ -371,7 +377,7 @@ SENTRY_PROJECT_MOBILE=
 ```
 
 For `preview`, `eas.json` overrides `APP_VARIANT=preview` and points the app at
-`https://jdm-production.up.railway.app`.
+`https://api.casacar.club`.
 
 ## Step 4: First builds to run
 
@@ -389,7 +395,7 @@ pnpm --filter @ccc/mobile exec eas build --profile development --platform ios
 Expected outcome:
 
 - EAS build finishes successfully.
-- Artifact is a simulator build for `com.jdmexperience.app.dev`.
+- Artifact is a simulator build for `com.casacarclub.app.dev`.
 
 ### 4.2 First real iPhone build: preview
 
@@ -401,7 +407,7 @@ pnpm --filter @ccc/mobile exec eas build --profile preview --platform ios
 
 Expected outcome:
 
-- Internal-distribution IPA for `com.jdmexperience.app.preview`
+- Internal-distribution IPA for `com.casacarclub.app.preview`
 - Install URL or QR from Expo
 - Build points at Railway production API per `eas.json`
 
@@ -420,7 +426,7 @@ pnpm --filter @ccc/mobile exec eas build --profile preview --platform android
 
 Expected outcome:
 
-- Installable APK for `com.jdmexperience.app.preview`
+- Installable APK for `com.casacarclub.app.preview`
 - Direct download URL from Expo
 
 ### 4.4 Store-targeted builds later
@@ -472,5 +478,5 @@ Roadmap rule reminder:
 - iOS preview installs on one phone but not another:
   the second UDID was not in the provisioning profile used for that build.
 - App launches but API calls fail:
-  verify `https://jdm-production.up.railway.app/health` and confirm the preview
+  verify `https://api.casacar.club/health` and confirm the preview
   build used the checked-in `preview` profile.

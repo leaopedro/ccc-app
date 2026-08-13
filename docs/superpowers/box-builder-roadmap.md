@@ -114,7 +114,7 @@ interativo + offline).
 
 Camada de dados, navegacao premium-gated e todas as telas de leitura/estado da
 Caixa, atras do flag `EXPO_PUBLIC_CAIXA_ENABLED` (default OFF, merge dark).
-Entregue em `feat/box-builder-fase-3b-mobile`. Plano:
+Entregue em `feat/box-builder-fase-3b-mobile` (PR #15, mergeado em `main`). Plano:
 `docs/superpowers/plans/2026-08-12-box-builder-fase-3b-1-mobile-foundation.md`.
 Executada via subagent-driven-development (10 tasks TDD, review por task + review
 de branch; final READY TO MERGE, zero Critical/Important).

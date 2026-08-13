@@ -15,14 +15,23 @@
 - Nenhum pedido e nenhuma membership muda de estado por chamada do cliente. Só por webhook verificado.
 - Dedupe por id de evento do provedor, via constraint única no banco, nunca leitura seguida de escrita.
 - Testes de integração da API batem em Postgres real via Testcontainers, nunca mocks (CLAUDE.md).
-- Rodar testes por pacote: `pnpm --filter @ccc/api test`. O `eslint` na raiz estoura memória; lintar por pacote.
+- Rodar um arquivo: `cd apps/api && pnpm exec vitest run test/<caminho>`. **Não** usar `pnpm --filter @ccc/api test -- <arquivo>`: o `--` não filtra, roda a suíte inteira (2243 testes, cerca de 13 minutos) e mesmo assim mostra o resultado do arquivo no meio do ruído. Medido em 2026-08-13.
+- Docker precisa estar rodando. O `test/global-setup.ts` sobe Postgres via Testcontainers para **toda** a suíte, inclusive testes puros de unidade como os do normalizador. Sem daemon, nada roda: `Could not find a working container runtime strategy`.
+- `eslint` na raiz estoura memória; lintar por pacote com `cd apps/api && pnpm lint`. A base tem 72 warnings pré-existentes e 0 erros; o alvo é não aumentar nenhum dos dois.
 - Idioma do código e dos comentários novos: inglês, como o resto de `apps/api`.
 - Copy voltada ao usuário: PT-BR.
 - Branch a partir de `main` fresco. PR para `main`. Nunca commitar em `production`.
 
 ---
 
-## Task 1: Envelope do webhook carrega `previous_attributes`
+## Task 1: Envelope do webhook carrega `previous_attributes` — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `69b8a8f`. O plano pedia migrar fixtures um a um;
+> na prática bastou levantar o campo dentro do helper de evento de cada arquivo.
+> Adicionado além do plano: pin de regressão no próprio seam
+> (`test/billing/stripe-construct-webhook-event.test.ts`), verificado revertendo
+> `index.ts` e vendo o teste falhar. O seam não tinha cobertura nenhuma do caminho
+> de sucesso.
 
 Sem isto, todo `customer.subscription.updated` normaliza para `null` e cancelamento nunca chega ao banco.
 
@@ -40,7 +49,7 @@ Sem isto, todo `customer.subscription.updated` normaliza para `null` e cancelame
 - Consumes: nada de tarefas anteriores.
 - Produces: `WebhookEvent.data.previous_attributes?: Record<string, unknown>`, lido por todas as tarefas seguintes que tocam o normalizador.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Em `apps/api/test/billing/normalize-stripe.test.ts`, adicionar um helper que monta o envelope na forma REAL da Stripe e um teste de cancelamento usando ele. O helper `mkEvent` atual só aceita `object`; adicione um segundo:
 
@@ -89,12 +98,12 @@ it('normalizes cancel_at_period_end flip from envelope-level previous_attributes
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: FAIL. `result` é `null`, porque o normalizador lê `previous_attributes` de dentro de `data.object`.
 
-- [ ] **Step 3: Alargar o tipo `WebhookEvent`**
+- [x] **Step 3: Alargar o tipo `WebhookEvent`**
 
 Em `apps/api/src/services/stripe/index.ts`, substituir a declaração:
 
@@ -115,7 +124,7 @@ export type WebhookEvent = {
 };
 ```
 
-- [ ] **Step 4: Carregar o campo no seam**
+- [x] **Step 4: Carregar o campo no seam**
 
 Em `constructWebhookEvent` (mesmo arquivo, ~linha 325), trocar o objeto retornado:
 
@@ -135,7 +144,7 @@ return {
 };
 ```
 
-- [ ] **Step 5: Ler do lugar certo no normalizador**
+- [x] **Step 5: Ler do lugar certo no normalizador**
 
 Em `apps/api/src/services/billing/normalize-stripe.ts`, no bloco de `customer.subscription.updated`: remover `previous_attributes` do type cast do `sub` (linhas ~187-192) e trocar a linha 194 por:
 
@@ -147,21 +156,21 @@ const prev = (event.data.previous_attributes ?? {}) as {
 };
 ```
 
-- [ ] **Step 6: Rodar o teste novo**
+- [x] **Step 6: Rodar o teste novo**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: PASS no teste novo. Os testes antigos que aninham `previous_attributes` dentro de `object` agora FALHAM, e é isso que queremos: eles codificavam o defeito.
 
-- [ ] **Step 7: Corrigir os fixtures antigos**
+- [x] **Step 7: Corrigir os fixtures antigos**
 
 Nos quatro arquivos de teste listados em **Files**, todo lugar que monta `previous_attributes` dentro de `data.object` passa a usar `mkEventWithPrev` (ou equivalente local). Não apagar os casos, só mover o campo para o nível certo do envelope.
 
-- [ ] **Step 8: Suite completa de billing**
+- [x] **Step 8: Suite completa de billing**
 
-Run: `pnpm --filter @ccc/api test -- billing`
+Run: `cd apps/api && pnpm exec vitest run test/billing`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/api/src/services/stripe/index.ts apps/api/src/services/billing/normalize-stripe.ts apps/api/test/billing
@@ -235,7 +244,7 @@ Importar `UNRECOGNIZED_SHAPE` no topo do arquivo de teste.
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: FAIL. Hoje o primeiro caso devolve `null`, indistinguível do segundo.
 
 - [ ] **Step 3: Exportar a sentinela e detectar a forma nova**
@@ -281,7 +290,7 @@ Aplicar o mesmo padrão nos blocos `invoice.payment_failed` e `charge.refunded`.
 
 - [ ] **Step 4: Rodar os testes do normalizador**
 
-Run: `pnpm --filter @ccc/api test -- normalize-stripe.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Escrever o teste de rota**
@@ -326,7 +335,7 @@ it('returns 503 and leaves the event unprocessed when the payload shape is unrec
 
 - [ ] **Step 6: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/stripe-billing-webhook.test.ts`
 Expected: FAIL com 200, porque a rota trata `null` e `UNRECOGNIZED_SHAPE` do mesmo jeito.
 
 - [ ] **Step 7: Tratar a sentinela na rota**
@@ -355,7 +364,7 @@ Importar `UNRECOGNIZED_SHAPE` do normalizador.
 
 - [ ] **Step 8: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- billing`
+Run: `cd apps/api && pnpm exec vitest run test/billing`
 Expected: PASS.
 
 - [ ] **Step 9: Commit**
@@ -415,7 +424,7 @@ it('flips every cart order to refunded and revokes the ticket on charge.refunded
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- cart-refund.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/cart-refund.test.ts`
 Expected: FAIL. O pedido segue `paid` e o log traz `charge.refunded for unknown order`.
 
 - [ ] **Step 3: Gravar `providerRef` na liquidação do carrinho**
@@ -466,12 +475,12 @@ Daí para baixo, o código que hoje opera sobre `order` passa a iterar sobre `af
 
 - [ ] **Step 5: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- cart-refund.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/cart-refund.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Suite de cart e de webhook**
 
-Run: `pnpm --filter @ccc/api test -- cart stripe-webhook`
+Run: `cd apps/api && pnpm exec vitest run test/cart test/stripe-webhook-push.test.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -517,7 +526,7 @@ it('refunds and alerts when a cart is paid after its orders expired', async () =
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- cart-expired-payment.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/cart-expired-payment.test.ts`
 Expected: FAIL. Nenhum refund é chamado; a resposta é `ignored: true`.
 
 - [ ] **Step 3: Tratar o ramo sem pendente e sem pago**
@@ -549,7 +558,7 @@ if (dead.length > 0) {
 
 - [ ] **Step 4: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- cart-expired-payment.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/cart-expired-payment.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -593,7 +602,7 @@ it('revokes tickets and alerts on charge.dispute.created', async () => {
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- dispute.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/dispute.test.ts`
 Expected: FAIL. O evento cai no ramo genérico `{ ok: true, ignored: true }`.
 
 - [ ] **Step 3: Implementar o ramo**
@@ -656,7 +665,7 @@ importado em `stripe-webhook.ts:7`. Nenhum import novo é necessário.
 
 - [ ] **Step 4: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- dispute.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/dispute.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -704,7 +713,7 @@ it('persists the event and asks Stripe to retry when the billing flag is off', a
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- stripe-billing-webhook.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/stripe-billing-webhook.test.ts`
 Expected: FAIL com 200 e nenhuma linha no banco.
 
 - [ ] **Step 3: Mover o gate para depois do insert**
@@ -728,7 +737,7 @@ Atenção: a verificação de assinatura precisa continuar acontecendo antes dis
 
 - [ ] **Step 4: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- billing`
+Run: `cd apps/api && pnpm exec vitest run test/billing`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -778,7 +787,7 @@ Adicionar `nextPortalError` ao `fake.ts` seguindo o padrão dos demais campos `n
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- stale-refs.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/stale-refs.test.ts`
 Expected: FAIL com 500.
 
 - [ ] **Step 3: Envolver as três chamadas**
@@ -846,7 +855,7 @@ try {
 
 - [ ] **Step 4: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- stale-refs.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/stale-refs.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -897,7 +906,7 @@ Semear duas memberships: uma com `providerSubRef: 'sub_test_...'` e outra com `s
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- purge-test-mode.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/purge-test-mode.test.ts`
 Expected: FAIL, o módulo não existe.
 
 - [ ] **Step 3: Implementar**
@@ -972,7 +981,7 @@ entitlement de quem paga.
 
 - [ ] **Step 4: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- purge-test-mode.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/billing/purge-test-mode.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1019,7 +1028,7 @@ it('bumps cart.version on failure so the next checkout gets a fresh session', as
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
-Run: `pnpm --filter @ccc/api test -- cart-retry.test.ts`
+Run: `cd apps/api && pnpm exec vitest run test/cart/cart-retry.test.ts`
 Expected: FAIL, `version` não muda.
 
 - [ ] **Step 3: Incrementar a versão**
@@ -1081,7 +1090,7 @@ Conferir o nome do índice composto gerado pelo Prisma para
 
 - [ ] **Step 5: Rodar**
 
-Run: `pnpm --filter @ccc/api test -- cart billing`
+Run: `cd apps/api && pnpm exec vitest run test/cart test/billing`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**

@@ -95,9 +95,7 @@ export const caixaCopy = {
     extraTag: 'EXTRA',
     withinBudget: (n: number) => `${n} ${n === 1 ? 'item' : 'itens'} · dentro do budget`,
     noExtraCharge: 'Sem cobrança extra',
-    reviewCta: 'Revisar e confirmar',
     writeError: 'Não foi possível salvar. Tente de novo.',
-    soon: 'Em breve',
     continueCta: 'Continuar',
   },
   partners: {

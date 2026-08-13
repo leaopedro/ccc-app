@@ -706,6 +706,105 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(await prisma.ticket.count({ where: { userId: user.id } })).toBe(0);
   });
 
+  it('charge.dispute.created revokes the tickets of the disputed cart', async () => {
+    // Without this branch a disputed ticket order stays `paid` with a valid QR:
+    // the attendee walks in and keeps the money. Stripe disputes were entirely
+    // unhandled — `rg dispute src/routes/stripe-webhook.ts` returned nothing.
+    const { user } = await createUser({ verified: true });
+    const { cart } = await seedCartWithOrders(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_disputed',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_disputed', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    stripe.nextEvent = {
+      id: 'evt_dispute_created',
+      type: 'charge.dispute.created',
+      data: { object: { id: 'dp_1', payment_intent: 'pi_cart_disputed', amount: 10000 } },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const tickets = await prisma.ticket.findMany({ where: { userId: user.id } });
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every((t) => t.status === 'revoked')).toBe(true);
+  });
+
+  it('charge.dispute.created for an unknown PaymentIntent still acks', async () => {
+    stripe.nextEvent = {
+      id: 'evt_dispute_unknown',
+      type: 'charge.dispute.created',
+      data: { object: { id: 'dp_2', payment_intent: 'pi_never_seen', amount: 5000 } },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    // Ack so Stripe stops retrying; the Sentry alert is what reaches a human.
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('charge.dispute.closed acks without touching entitlement', async () => {
+    const { user } = await createUser({ verified: true });
+    const { cart } = await seedCartWithOrders(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_dispute_closed',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_dispute_closed', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    stripe.nextEvent = {
+      id: 'evt_dispute_closed',
+      type: 'charge.dispute.closed',
+      data: {
+        object: { id: 'dp_3', payment_intent: 'pi_cart_dispute_closed', status: 'won' },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Winning a dispute does not re-issue anything, and losing one does not
+    // revoke twice: closure is an operator decision, so state is untouched.
+    const orders = await prisma.order.findMany({ where: { cartId: cart.id } });
+    expect(orders.every((o) => o.status === 'paid')).toBe(true);
+  });
+
   it('payment_intent.succeeded settles product-only carts without issuing tickets', async () => {
     const { user } = await createUser({ verified: true });
     const { cart, orders } = await seedProductCartWithOrders(user.id);

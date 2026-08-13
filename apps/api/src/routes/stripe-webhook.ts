@@ -364,6 +364,66 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     const orderId = intent.metadata?.orderId;
     const cartId = intent.metadata?.cartId;
 
+    // Disputes and chargebacks. Before this, a disputed ticket order stayed
+    // `paid` with a valid QR: the attendee walks in and keeps the money. The
+    // dispute itself is an operator problem (evidence, deadlines), so the code
+    // does the one thing that must not wait — pull the entitlement — and alerts.
+    if (event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') {
+      const dispute = event.data.object as {
+        payment_intent?: string;
+        amount?: number;
+        status?: string;
+      };
+      const disputedPi = dispute.payment_intent;
+
+      const anchor = disputedPi
+        ? await prisma.order.findFirst({
+            where: { provider: 'stripe', providerRef: disputedPi },
+            select: { id: true, cartId: true },
+          })
+        : null;
+
+      Sentry.captureMessage(`stripe webhook: ${event.type}`, {
+        level: event.type === 'charge.dispute.created' ? 'error' : 'warning',
+        tags: {
+          kind:
+            event.type === 'charge.dispute.created'
+              ? 'stripe-dispute-opened'
+              : 'stripe-dispute-closed',
+          provider: 'stripe',
+        },
+        extra: {
+          paymentIntentId: disputedPi ?? null,
+          orderId: anchor?.id ?? null,
+          amount: dispute.amount ?? null,
+          status: dispute.status ?? null,
+        },
+      });
+
+      // Only `created` revokes. On `closed`, winning does not re-issue and
+      // losing does not revoke twice — the operator decides what follows.
+      if (event.type === 'charge.dispute.created' && anchor) {
+        const ids = anchor.cartId
+          ? (
+              await prisma.order.findMany({
+                where: { cartId: anchor.cartId },
+                select: { id: true },
+              })
+            ).map((o) => o.id)
+          : [anchor.id];
+        for (const id of ids) {
+          await revokeTicketsForRefundedOrder(id);
+        }
+      }
+
+      const firstTime = await markProcessed(event.id, event);
+      request.log.warn(
+        { eventType: event.type, paymentIntentId: disputedPi, orderId: anchor?.id, firstTime },
+        'stripe webhook: dispute event',
+      );
+      return reply.status(200).send({ ok: true, dispute: true, deduped: !firstTime });
+    }
+
     if (event.type === 'charge.refunded') {
       const charge = event.data.object as {
         payment_intent?: string;

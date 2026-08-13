@@ -74,8 +74,8 @@ vi.mock('@ccc/ui', async () => {
 // The global `lucide-react-native` alias (apps/mobile/vitest.config.ts) only
 // exports a fixed icon list that doesn't cover most of this screen's icons
 // (Bell, BellDot, CarFront, ChevronRight, Gem, LogOut, MapPinned, Package,
-// PencilLine, MessageCircle). A local vi.mock takes precedence over the
-// alias — list every icon the route imports.
+// PencilLine, MessageCircle, Ticket). A local vi.mock takes precedence over
+// the alias — list every icon the route imports.
 vi.mock('lucide-react-native', async () => {
   const ReactMod = await import('react');
   const icon = () => ReactMod.createElement('span');
@@ -91,6 +91,7 @@ vi.mock('lucide-react-native', async () => {
     Package: icon,
     PencilLine: icon,
     ShieldCheck: icon,
+    Ticket: icon,
   };
 });
 

@@ -13,6 +13,7 @@ import {
   Package,
   PencilLine,
   ShieldCheck,
+  Ticket,
 } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -226,6 +227,12 @@ export default function ProfileMenuScreen() {
           label={profileCopy.menu.shipping}
           hint={profileCopy.menu.shippingHint}
           onPress={() => router.push('/profile/shipping' as never)}
+        />
+        <MenuRow
+          icon={<Ticket color={theme.colors.fg} size={18} strokeWidth={1.75} />}
+          label={profileCopy.menu.tickets}
+          hint={profileCopy.menu.ticketsHint}
+          onPress={() => router.push('/tickets' as never)}
         />
         <MenuRow
           icon={<CarFront color={theme.colors.fg} size={18} strokeWidth={1.75} />}

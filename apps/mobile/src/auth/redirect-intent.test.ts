@@ -50,6 +50,7 @@ describe('sanitizeNext', () => {
     expect(sanitizeNext('/tickets')).toBe('/tickets');
     expect(sanitizeNext('/garage')).toBe('/garage');
     expect(sanitizeNext('/profile')).toBe('/profile');
+    expect(sanitizeNext('/caixa/preferencias')).toBe('/caixa/preferencias');
   });
 
   it('rejects open-redirect attempts', () => {

@@ -13,6 +13,7 @@ const NEXT_ALLOWED_PREFIXES = [
   '/tickets',
   '/garage',
   '/profile',
+  '/caixa',
 ];
 
 // Post-signin landing per the per-user pivot spec §6.2 + §8: the app

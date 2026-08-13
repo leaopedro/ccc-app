@@ -41,6 +41,8 @@ export const profileCopy = {
     shippingHint: 'Cadastre e edite seus endereços de entrega',
     garage: 'Garagem',
     garageHint: 'Veja e edite seus carros',
+    tickets: 'Ingressos',
+    ticketsHint: 'Seus ingressos de eventos',
     assinatura: 'Assinatura',
     assinaturaHint: 'Conheça os planos e torne-se membro',
     support: 'Suporte',

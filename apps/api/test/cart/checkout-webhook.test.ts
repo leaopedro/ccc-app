@@ -590,6 +590,89 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(tickets).toHaveLength(orders.length);
   });
 
+  it('payment_intent.succeeded stamps providerRef on the canonical cart order', async () => {
+    // charge.refunded resolves the order by providerRef. Cart orders never got
+    // one: cart.ts only writes it when the Checkout Session already has a
+    // payment_intent (it does not, at creation), and every settle/issue path
+    // skips it for cart orders. Without this stamp the refund below cannot find
+    // anything to refund.
+    const { user } = await createUser({ verified: true });
+    const { cart, orders } = await seedCartWithOrders(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_stamp',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_stamp', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    const stamped = await prisma.order.findMany({
+      where: { cartId: cart.id },
+      select: { id: true, providerRef: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(stamped.some((o) => o.providerRef === 'pi_cart_stamp')).toBe(true);
+    expect(orders).toHaveLength(2);
+  });
+
+  it('charge.refunded flips every cart order to refunded and revokes the tickets', async () => {
+    const { user } = await createUser({ verified: true });
+    const { cart, orders } = await seedCartWithOrders(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_refund',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_refund', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    const total = orders.reduce((sum, o) => sum + o.amountCents, 0);
+    stripe.nextEvent = {
+      id: 'evt_cart_charge_refunded',
+      type: 'charge.refunded',
+      data: {
+        object: { payment_intent: 'pi_cart_refund', amount: total, amount_refunded: total },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    // Assert the DB, not the Stripe dashboard: money out with a valid ticket is
+    // the whole failure mode here.
+    const refunded = await prisma.order.findMany({
+      where: { cartId: cart.id },
+      select: { status: true },
+    });
+    expect(refunded).toHaveLength(orders.length);
+    expect(refunded.every((o) => o.status === 'refunded')).toBe(true);
+
+    const tickets = await prisma.ticket.findMany({ where: { userId: user.id } });
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every((t) => t.status === 'revoked')).toBe(true);
+  });
+
   it('payment_intent.succeeded settles product-only carts without issuing tickets', async () => {
     const { user } = await createUser({ verified: true });
     const { cart, orders } = await seedProductCartWithOrders(user.id);

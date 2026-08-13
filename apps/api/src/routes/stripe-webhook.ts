@@ -129,6 +129,11 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(200).send({ ok: true, ignored: true });
     }
 
+    // Capture the canonical order BEFORE the settlement re-sort below: after it,
+    // orders[0] is whichever kind settles first, not the oldest row. The
+    // providerRef stamp further down must be deterministic across redeliveries.
+    const canonicalOrderId = orders[0]?.id;
+
     orders.sort((a, b) => cartSettlementPriority(a.kind) - cartSettlementPriority(b.kind));
 
     let issuedAnyTicket = false;
@@ -165,6 +170,31 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
           continue;
         }
         throw err;
+      }
+    }
+
+    // Stamp the PaymentIntent on the canonical (first) cart order. Cart orders
+    // are settled with `{ cartId }` and every settle/issue path deliberately
+    // skips providerRef for them, while cart.ts only writes it when the
+    // Checkout Session already carries a payment_intent — which it never does
+    // at creation, since a `payment` mode session starts with
+    // payment_intent: null. The result was that charge.refunded and
+    // charge.dispute.created, which both resolve by providerRef, could not find
+    // the order: money went out and the ticket stayed valid.
+    // Order has @@unique([provider, providerRef]), so exactly one row per
+    // PaymentIntent: skip when a sibling already holds this ref (redelivery, or
+    // a session-resolved cart whose canonical order was stamped by cart.ts).
+    // Writing it unconditionally raises P2002 and 500s the webhook.
+    if (canonicalOrderId) {
+      const alreadyStamped = await prisma.order.findFirst({
+        where: { provider: 'stripe', providerRef: piId },
+        select: { id: true },
+      });
+      if (!alreadyStamped) {
+        await prisma.order.updateMany({
+          where: { id: canonicalOrderId, providerRef: null },
+          data: { providerRef: piId },
+        });
       }
     }
 
@@ -323,7 +353,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
 
       const order = await prisma.order.findFirst({
         where: { provider: 'stripe', providerRef: piId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, cartId: true },
       });
 
       if (!order) {
@@ -333,6 +363,18 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         );
         return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-order' });
       }
+
+      // One PaymentIntent covers the whole cart, but only the canonical order
+      // carries providerRef. Refunding just that row would leave every sibling
+      // `paid` with a valid ticket after a full refund.
+      const affectedIds = order.cartId
+        ? (
+            await prisma.order.findMany({
+              where: { cartId: order.cartId },
+              select: { id: true },
+            })
+          ).map((o) => o.id)
+        : [order.id];
 
       // Stripe partial refunds need separate handling (line-item attribution,
       // refundedCents partial accounting). Out of scope for JDMA-312; flag and
@@ -352,14 +394,22 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       }
 
       await prisma.order.updateMany({
-        where: { id: order.id, status: 'paid' },
+        where: { id: { in: affectedIds }, status: 'paid' },
         data: { status: 'refunded' },
       });
-      await revokeTicketsForRefundedOrder(order.id);
+      for (const id of affectedIds) {
+        await revokeTicketsForRefundedOrder(id);
+      }
 
       const firstTime = await markProcessed(event.id, event);
       request.log.info(
-        { orderId: order.id, paymentIntentId: piId, firstTime },
+        {
+          orderId: order.id,
+          cartId: order.cartId,
+          affected: affectedIds.length,
+          paymentIntentId: piId,
+          firstTime,
+        },
         'stripe webhook: charge.refunded settled',
       );
       return reply.status(200).send({ ok: true, refunded: true, deduped: !firstTime });

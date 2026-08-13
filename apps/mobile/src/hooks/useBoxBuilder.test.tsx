@@ -67,7 +67,7 @@ describe('useBoxBuilder', () => {
     });
   });
 
-  it('flush sends immediately', async () => {
+  it('flush sends immediately and cancels the pending debounce timer', async () => {
     const root = createRoot(document.createElement('div'));
     await act(async () => {
       root.render(<Probe />);
@@ -79,6 +79,36 @@ describe('useBoxBuilder', () => {
       await api.flush();
     });
     expect(updateBoxSelection).toHaveBeenCalledTimes(1);
+    // The 600ms debounce scheduled by setItemQty must not fire a second PUT.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(updateBoxSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconciles totals from the server response after the PUT settles', async () => {
+    updateBoxSelection.mockResolvedValueOnce({
+      budgetCents: 20000,
+      itemsTotalCents: 0,
+      partnersTotalCents: 0,
+      overflowCents: 0,
+      items: [{ catalogItemId: 'a', quantity: 2, unitPriceCents: 5000 }],
+      partnerItems: [],
+    } as never);
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    await act(async () => {
+      api.setItemQty('a', 2);
+    });
+    await act(async () => {
+      await api.flush();
+    });
+    // Reconciled price index now prices item "a" at 5000 (from the server
+    // response) against a 20000 budget, not the original 10000/45000.
+    expect(api.totals.itemsTotalCents).toBe(10000);
+    expect(api.totals.overflowCents).toBe(0);
   });
 
   it('sets writeError when the PUT rejects', async () => {

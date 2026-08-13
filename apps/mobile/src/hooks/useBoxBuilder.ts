@@ -27,27 +27,39 @@ type UseBoxBuilder = {
 
 export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder {
   const seed = useMemo(() => seedSelection(box), [box]);
-  const prices = useMemo(() => buildPriceIndex(box, catalog), [box, catalog]);
 
   const [items, setItems] = useState<SelectionMap>(seed.items);
   const [partners, setPartners] = useState<SelectionMap>(seed.partners);
   const [writeError, setWriteError] = useState(false);
+  // Server is the source of truth for totals; reconciled from each PUT response.
+  const [serverBox, setServerBox] = useState<BoxView>(box);
+
+  const prices = useMemo(() => buildPriceIndex(serverBox, catalog), [serverBox, catalog]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest selection, read at flush time (avoids stale closures).
   const latest = useRef({ items, partners });
   latest.current = { items, partners };
+  // Guards against overlapping sends: only the most recent one may write state.
+  const reqSeq = useRef(0);
 
   const send = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
+    const seq = ++reqSeq.current;
     setWriteError(false);
     try {
-      await updateBoxSelection(toSelectionUpdate(latest.current.items, latest.current.partners));
+      const result = await updateBoxSelection(
+        toSelectionUpdate(latest.current.items, latest.current.partners),
+      );
+      if (seq === reqSeq.current) {
+        setWriteError(false);
+        setServerBox(result);
+      }
     } catch {
-      setWriteError(true);
+      if (seq === reqSeq.current) setWriteError(true);
     }
   }, []);
 
@@ -82,8 +94,8 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
   }, [send]);
 
   const totals = useMemo(
-    () => computeOptimisticTotals(items, partners, prices, box.budgetCents),
-    [items, partners, prices, box.budgetCents],
+    () => computeOptimisticTotals(items, partners, prices, serverBox.budgetCents),
+    [items, partners, prices, serverBox.budgetCents],
   );
 
   return {

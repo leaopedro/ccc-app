@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { updateBoxSelection } from '~/api/box';
 
+import { loadDraft, saveDraft } from '~/screens/caixa/builder-offline';
 import {
   buildPriceIndex,
   computeOptimisticTotals,
@@ -70,6 +71,12 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
           );
           setWriteError(false);
           setServerBox(result);
+          void saveDraft({
+            boxId: box.id,
+            items: latest.current.items,
+            partners: latest.current.partners,
+            dirty: false,
+          });
         } catch {
           setWriteError(true);
         }
@@ -77,7 +84,7 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
     } finally {
       inFlight.current = false;
     }
-  }, []);
+  }, [box.id]);
 
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -86,20 +93,37 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
     }, DEBOUNCE_MS);
   }, [send]);
 
+  // Persist the in-progress selection as dirty so a failed write / app kill
+  // can be resumed and resent on the next builder mount.
+  const persistDirty = useCallback(
+    (nextItems: SelectionMap, nextPartners: SelectionMap) => {
+      void saveDraft({ boxId: box.id, items: nextItems, partners: nextPartners, dirty: true });
+    },
+    [box.id],
+  );
+
   const setItemQty = useCallback(
     (id: string, qty: number) => {
-      setItems((prev) => ({ ...prev, [id]: Math.max(0, qty) }));
+      setItems((prev) => {
+        const next = { ...prev, [id]: Math.max(0, qty) };
+        persistDirty(next, latest.current.partners);
+        return next;
+      });
       schedule();
     },
-    [schedule],
+    [schedule, persistDirty],
   );
 
   const setPartnerQty = useCallback(
     (id: string, qty: number) => {
-      setPartners((prev) => ({ ...prev, [id]: Math.max(0, qty) }));
+      setPartners((prev) => {
+        const next = { ...prev, [id]: Math.max(0, qty) };
+        persistDirty(latest.current.items, next);
+        return next;
+      });
       schedule();
     },
-    [schedule],
+    [schedule, persistDirty],
   );
 
   // Flush on unmount — never cancel silently.
@@ -108,6 +132,23 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
       if (timer.current) void send();
     };
   }, [send]);
+
+  // On mount, if a dirty draft for THIS box survived (failed write / app
+  // kill), seed from it and resend. Runs once; the debounce/flush path owns
+  // the rest of the write serialization.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumed.current) return;
+    resumed.current = true;
+    void (async () => {
+      const draft = await loadDraft(box.id);
+      if (!draft || !draft.dirty) return;
+      setItems(draft.items);
+      setPartners(draft.partners);
+      latest.current = { items: draft.items, partners: draft.partners };
+      void send();
+    })();
+  }, [box.id, send]);
 
   const totals = useMemo(
     () => computeOptimisticTotals(items, partners, prices, serverBox.budgetCents),

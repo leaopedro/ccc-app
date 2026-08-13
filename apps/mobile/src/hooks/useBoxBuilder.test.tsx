@@ -6,9 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const updateBoxSelection = vi.fn();
 vi.mock('~/api/box', () => ({ updateBoxSelection: (p: unknown) => updateBoxSelection(p) }));
 
+const { loadDraft: loadDraftMock, saveDraft: saveDraftMock } = vi.hoisted(() => ({
+  loadDraft: vi.fn(),
+  saveDraft: vi.fn(),
+}));
+vi.mock('~/screens/caixa/builder-offline', () => ({
+  loadDraft: (id: string) => loadDraftMock(id),
+  saveDraft: (input: unknown) => saveDraftMock(input),
+  clearDraft: vi.fn(),
+}));
+
 import { useBoxBuilder } from './useBoxBuilder';
 
+const boxId = 'box-1';
 const box = {
+  id: boxId,
   budgetCents: 45000,
   itemsTotalCents: 0,
   partnersTotalCents: 0,
@@ -41,6 +53,8 @@ function Probe() {
 beforeEach(() => {
   vi.useFakeTimers();
   updateBoxSelection.mockReset().mockResolvedValue(box);
+  loadDraftMock.mockReset().mockResolvedValue(null);
+  saveDraftMock.mockReset();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -161,6 +175,30 @@ describe('useBoxBuilder', () => {
     });
     expect(updateBoxSelection).toHaveBeenCalledTimes(2);
     expect(updateBoxSelection).toHaveBeenLastCalledWith({
+      items: [{ catalogItemId: 'a', quantity: 3 }],
+      partnerItems: [],
+    });
+  });
+
+  it('resends a dirty draft on mount', async () => {
+    loadDraftMock.mockResolvedValueOnce({
+      version: 1,
+      boxId,
+      savedAt: 'x',
+      dirty: true,
+      items: { a: 3 },
+      partners: {},
+    });
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      // Flush the microtask chain in the resend effect (await loadDraft(...)
+      // then send()) — fake timers only govern setTimeout, not promises.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loadDraftMock).toHaveBeenCalledWith(boxId);
+    expect(updateBoxSelection).toHaveBeenCalledWith({
       items: [{ catalogItemId: 'a', quantity: 3 }],
       partnerItems: [],
     });

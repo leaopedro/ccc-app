@@ -2,8 +2,9 @@
 //
 // Read-only rendering of budgetMeter(box): the used amount, the budget total,
 // and a two-segment bar (gold = included in plan, green = overflow). No width
-// animation this phase — read-only screens must not look interactive; the
-// animated version belongs to the builder (Fase 3b-2).
+// animation by default — read-only screens must not look interactive. The
+// builder (Fase 3b-2) opts into the `animated` prop so the bar eases as the
+// selection changes.
 //
 // Typography note: the design handoff specifies Cormorant Garamond for the
 // large money value. That font is not bundled in the app (same call made in
@@ -13,7 +14,8 @@
 
 import { Text } from '@ccc/ui';
 import type { BoxView } from '@ccc/shared/box';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import { caixaCopy } from '~/copy/caixa';
 import { theme } from '~/theme';
@@ -24,15 +26,35 @@ import { formatBRL } from './format';
 const CARD_SURFACE = '#0F0E0B';
 const CARD_BORDER = 'rgba(212,175,55,0.14)';
 const TRACK_BG = 'rgba(242,232,216,0.1)';
+const BAR_ANIM_MS = 240;
 
 type BudgetMeterProps = {
   box: Pick<BoxView, 'itemsTotalCents' | 'budgetCents' | 'overflowCents'>;
   compact?: boolean;
+  animated?: boolean;
 };
 
-export function BudgetMeter({ box, compact = false }: BudgetMeterProps) {
+export function BudgetMeter({ box, compact = false, animated = false }: BudgetMeterProps) {
   const meter = budgetMeter(box);
   const hasOverflow = meter.overflowCents > 0;
+
+  // Segment widths are flex-based (not pixel widths), so they can't ride the
+  // native driver — useNativeDriver: false is required here.
+  const fill = useRef(new Animated.Value(meter.fillRatio)).current;
+  const over = useRef(new Animated.Value(meter.overflowRatio)).current;
+  useEffect(() => {
+    if (!animated) return;
+    Animated.timing(fill, {
+      toValue: meter.fillRatio,
+      duration: BAR_ANIM_MS,
+      useNativeDriver: false,
+    }).start();
+    Animated.timing(over, {
+      toValue: meter.overflowRatio,
+      duration: BAR_ANIM_MS,
+      useNativeDriver: false,
+    }).start();
+  }, [animated, meter.fillRatio, meter.overflowRatio, fill, over]);
 
   return (
     <View style={[styles.card, compact && styles.cardCompact]}>
@@ -46,12 +68,23 @@ export function BudgetMeter({ box, compact = false }: BudgetMeterProps) {
       </View>
 
       <View style={[styles.track, compact && styles.trackCompact]}>
-        <View style={[styles.fill, { flex: meter.fillRatio }]} />
-        {hasOverflow ? <View style={[styles.overflowFill, { flex: meter.overflowRatio }]} /> : null}
-        <View
-          style={{ flex: Math.max(0, 1 - meter.fillRatio - meter.overflowRatio) }}
-          accessible={false}
-        />
+        {animated ? (
+          <>
+            <Animated.View style={[styles.fill, { flex: fill }]} />
+            <Animated.View style={[styles.overflowFill, { flex: over }]} />
+          </>
+        ) : (
+          <>
+            <View style={[styles.fill, { flex: meter.fillRatio }]} />
+            {hasOverflow ? (
+              <View style={[styles.overflowFill, { flex: meter.overflowRatio }]} />
+            ) : null}
+            <View
+              style={{ flex: Math.max(0, 1 - meter.fillRatio - meter.overflowRatio) }}
+              accessible={false}
+            />
+          </>
+        )}
       </View>
 
       <View style={styles.captionsRow}>

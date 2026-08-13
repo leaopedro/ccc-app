@@ -48,6 +48,14 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * inside the same transaction. This route is the lock owner.
  */
 /**
+ * Redeliveries on the unprocessed-replay branch before the event is escalated
+ * to a fatal alert. Stripe retries an endpoint for roughly three days; five
+ * attempts is well inside that, so a human hears about it while the event can
+ * still be replayed.
+ */
+const POISON_PILL_THRESHOLD = 5;
+
+/**
  * Parses devFeePercent from the plan line's Stripe Price metadata (canon
  * §F8.1 — the one value still read from metadata, never the catalog).
  * Malformed input must never reach the Prisma Int write: by the time this
@@ -58,14 +66,6 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * finite value in [0, 100], fall back to 0, and alert so an operator can fix
  * the Stripe Price metadata.
  */
-/**
- * Redeliveries on the unprocessed-replay branch before the event is escalated
- * to a fatal alert. Stripe retries an endpoint for roughly three days; five
- * attempts is well inside that, so a human hears about it while the event can
- * still be replayed.
- */
-const POISON_PILL_THRESHOLD = 5;
-
 const parseDevFeePercent = (raw: string | undefined): number => {
   if (raw === undefined) return 0;
   const n = Number(raw);

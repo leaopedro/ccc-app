@@ -673,6 +673,41 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(tickets.every((t) => t.status === 'revoked')).toBe(true);
   });
 
+  it('backfills providerRef when a redelivery finds the cart already paid', async () => {
+    // Simulates a crash between settlement and the stamp: the orders are paid
+    // but no order carries the PaymentIntent. Every retry lands on the
+    // already-paid branch, so that branch has to repair it — otherwise refunds
+    // and disputes can never resolve the cart and a refunded ticket stays valid.
+    const { user } = await createUser({ verified: true });
+    const { cart } = await seedCartWithOrders(user.id);
+    await prisma.order.updateMany({
+      where: { cartId: cart.id },
+      data: { status: 'paid', providerRef: null },
+    });
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_backfill',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_backfill', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const stamped = await prisma.order.findMany({
+      where: { cartId: cart.id },
+      select: { providerRef: true },
+    });
+    expect(stamped.some((o) => o.providerRef === 'pi_cart_backfill')).toBe(true);
+  });
+
   it('refunds instead of ignoring when a cart is paid after its orders expired', async () => {
     // ORDER_EXPIRY_MS is 15 minutes but the Checkout Session lives 30+. Pay in
     // that gap, after the reservation sweep expired the orders, and the handler

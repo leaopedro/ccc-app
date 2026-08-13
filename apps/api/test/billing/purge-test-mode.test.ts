@@ -4,17 +4,26 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { purgeTestMode } from '../../src/scripts/purge-test-mode.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
+// The cutover instant. Rows created before it are test-mode by definition,
+// because production accepted no live payment before that point. See the long
+// comment in the script for why the ids themselves cannot be used: Stripe
+// test-mode ids for Customer, Subscription and PaymentIntent are shaped exactly
+// like live ones.
+const CUTOVER = new Date('2026-08-20T00:00:00Z');
+const BEFORE = new Date('2026-08-01T00:00:00Z');
+const AFTER = new Date('2026-08-25T00:00:00Z');
+
 const seedMembership = async (
   garageId: string,
-  refs: { customer: string; sub: string },
+  createdAt: Date,
   status: 'active' | 'past_due' | 'cancel_scheduled' | 'expired' = 'active',
 ) =>
   prisma.premiumMembership.create({
     data: {
       garageId,
       provider: 'stripe',
-      providerCustomerRef: refs.customer,
-      providerSubRef: refs.sub,
+      providerCustomerRef: 'cus_NffrFeUfNV2Hib',
+      providerSubRef: `sub_${Math.random().toString(36).slice(2, 12)}`,
       tier: 'gold',
       cadence: 'monthly',
       status,
@@ -26,6 +35,7 @@ const seedMembership = async (
       devFeeAmountCents: 299,
       grossAmountCents: 3289,
       currency: 'BRL',
+      createdAt,
     },
   });
 
@@ -44,11 +54,11 @@ describe('purgeTestMode', () => {
     await resetDatabase();
   });
 
-  it('expires test-mode memberships and clears the garage entitlement snapshot', async () => {
-    const { garageId } = await seedGarage('purge-test@jdm.test');
-    await seedMembership(garageId, { customer: 'cus_test_abc', sub: 'sub_test_abc' });
+  it('expires pre-cutover memberships and clears the garage entitlement snapshot', async () => {
+    const { garageId } = await seedGarage('purge-pre@jdm.test');
+    await seedMembership(garageId, BEFORE);
 
-    const result = await purgeTestMode(prisma);
+    const result = await purgeTestMode(prisma, { createdBefore: CUTOVER });
 
     expect(result.memberships).toBe(1);
     expect(result.garages).toBe(1);
@@ -62,57 +72,84 @@ describe('purgeTestMode', () => {
     expect(garage.premiumUntil).toBeNull();
   });
 
-  it('leaves live-mode rows untouched', async () => {
-    const { garageId } = await seedGarage('purge-live@jdm.test');
-    await seedMembership(garageId, { customer: 'cus_live_abc', sub: 'sub_live_abc' });
+  it('leaves post-cutover rows untouched', async () => {
+    const { garageId } = await seedGarage('purge-post@jdm.test');
+    await seedMembership(garageId, AFTER);
 
-    const result = await purgeTestMode(prisma);
+    const result = await purgeTestMode(prisma, { createdBefore: CUTOVER });
 
     expect(result.memberships).toBe(0);
-    expect(result.garages).toBe(0);
-
     const membership = await prisma.premiumMembership.findFirstOrThrow({ where: { garageId } });
     expect(membership.status).toBe('active');
     const garage = await prisma.garage.findUniqueOrThrow({ where: { id: garageId } });
     expect(garage.premiumTier).toBe('gold');
   });
 
-  it('catches a test-mode customer ref even when the subscription ref looks live', async () => {
-    const { garageId } = await seedGarage('purge-mixed@jdm.test');
-    await seedMembership(garageId, { customer: 'cus_test_mixed', sub: 'sub_live_mixed' });
-
-    const result = await purgeTestMode(prisma);
-
-    expect(result.memberships).toBe(1);
-  });
-
-  it('expires pending orders holding a test-mode payment ref', async () => {
-    const { userId } = await seedGarage('purge-order@jdm.test');
+  it('releases the stock a purged pending order was holding', async () => {
+    // Setting `expired` directly would leave quantitySold inflated forever: the
+    // regular expiry sweeps only look at `pending` rows, so nothing repairs it.
+    const { userId } = await seedGarage('purge-stock@jdm.test');
+    const event = await prisma.event.create({
+      data: {
+        slug: `purge-ev-${Math.random().toString(36).slice(2, 8)}`,
+        title: 'Evento purga',
+        description: 'desc',
+        startsAt: new Date('2026-09-01T18:00:00Z'),
+        endsAt: new Date('2026-09-01T22:00:00Z'),
+        type: 'meeting',
+        status: 'published',
+        capacity: 10,
+      },
+    });
+    const tier = await prisma.ticketTier.create({
+      data: {
+        eventId: event.id,
+        name: 'Geral',
+        priceCents: 5000,
+        quantityTotal: 10,
+        quantitySold: 3,
+      },
+    });
     const order = await prisma.order.create({
       data: {
         userId,
+        eventId: event.id,
+        tierId: tier.id,
+        kind: 'ticket',
         amountCents: 5000,
-        quantity: 1,
+        quantity: 2,
         method: 'card',
         provider: 'stripe',
-        providerRef: 'pi_test_pending',
         status: 'pending',
-        expiresAt: new Date(Date.now() + 15 * 60_000),
+        createdAt: BEFORE,
+        expiresAt: new Date('2026-08-01T00:15:00Z'),
+      },
+    });
+    await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        kind: 'ticket',
+        tierId: tier.id,
+        quantity: 2,
+        unitPriceCents: 5000,
+        subtotalCents: 10000,
       },
     });
 
-    const result = await purgeTestMode(prisma);
+    const result = await purgeTestMode(prisma, { createdBefore: CUTOVER });
 
     expect(result.orders).toBe(1);
-    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect(updated.status).toBe('expired');
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('expired');
+    const tierAfter = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
+    expect(tierAfter.quantitySold).toBe(1);
   });
 
   it('dry run reports counts and writes nothing', async () => {
     const { garageId } = await seedGarage('purge-dry@jdm.test');
-    await seedMembership(garageId, { customer: 'cus_test_dry', sub: 'sub_test_dry' });
+    await seedMembership(garageId, BEFORE);
 
-    const result = await purgeTestMode(prisma, { dryRun: true });
+    const result = await purgeTestMode(prisma, { createdBefore: CUTOVER, dryRun: true });
 
     expect(result.memberships).toBe(1);
 
@@ -124,10 +161,10 @@ describe('purgeTestMode', () => {
 
   it('skips memberships already expired so reruns are cheap and idempotent', async () => {
     const { garageId } = await seedGarage('purge-idem@jdm.test');
-    await seedMembership(garageId, { customer: 'cus_test_idem', sub: 'sub_test_idem' });
+    await seedMembership(garageId, BEFORE);
 
-    await purgeTestMode(prisma);
-    const second = await purgeTestMode(prisma);
+    await purgeTestMode(prisma, { createdBefore: CUTOVER });
+    const second = await purgeTestMode(prisma, { createdBefore: CUTOVER });
 
     expect(second.memberships).toBe(0);
   });

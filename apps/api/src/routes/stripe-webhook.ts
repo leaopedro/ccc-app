@@ -123,6 +123,36 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true },
       });
       if (alreadyPaid) {
+        // Backfill the stamp before short-circuiting. Settlement happens before
+        // the providerRef write further down, so a crash in between leaves the
+        // cart paid with no reference — and this branch is where every retry
+        // lands after that. Without the backfill, charge.refunded and
+        // charge.dispute.created can never resolve the cart, so a refunded or
+        // disputed ticket stays valid. Guarded on providerRef: null and on the
+        // ref not already being taken, since Order has @@unique([provider,
+        // providerRef]).
+        const alreadyStamped = await prisma.order.findFirst({
+          where: { provider: 'stripe', providerRef: piId },
+          select: { id: true },
+        });
+        if (!alreadyStamped) {
+          const canonical = await prisma.order.findFirst({
+            where: { cartId },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+          });
+          if (canonical) {
+            await prisma.order.updateMany({
+              where: { id: canonical.id, providerRef: null },
+              data: { providerRef: piId },
+            });
+            request.log.warn(
+              { cartId, piId, orderId: canonical.id },
+              'stripe webhook: backfilled providerRef on already-paid cart',
+            );
+          }
+        }
+
         await markProcessed(webhookEvent.id, webhookEvent);
         return reply.status(200).send({ ok: true, deduped: true });
       }

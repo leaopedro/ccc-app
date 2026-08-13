@@ -3,12 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { normalizeStripeEvent } from '../../src/services/billing/normalize-stripe.js';
 import type { WebhookEvent } from '../../src/services/stripe/index.js';
 
-const subUpdated = (object: Record<string, unknown>): WebhookEvent =>
-  ({
+// Cases below author `previous_attributes` alongside the subscription fields
+// for readability. Stripe delivers it as a SIBLING of data.object, so lift it
+// into the envelope here — otherwise these fixtures assert against a shape no
+// real delivery ever has.
+const subUpdated = (object: Record<string, unknown>): WebhookEvent => {
+  const { previous_attributes: prev, ...rest } = object;
+  return {
     id: 'evt_1',
     type: 'customer.subscription.updated',
-    data: { object },
-  }) as unknown as WebhookEvent;
+    data: {
+      object: rest,
+      ...(prev === undefined ? {} : { previous_attributes: prev as Record<string, unknown> }),
+    },
+  } as unknown as WebhookEvent;
+};
 
 const baseSub = {
   id: 'sub_1',

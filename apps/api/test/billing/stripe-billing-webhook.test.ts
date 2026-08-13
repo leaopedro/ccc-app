@@ -87,8 +87,11 @@ const subscriptionUpdatedEvent = (
         ],
       },
       ...subOverride,
-      previous_attributes: previousAttributes,
     },
+    // Sibling of object, matching a real Stripe envelope. Nesting it inside
+    // object made every discriminator in this suite pass against a shape the
+    // normalizer never sees in production.
+    previous_attributes: previousAttributes,
   },
 });
 
@@ -205,7 +208,12 @@ describe('POST /webhooks/stripe-billing', () => {
   // Test 1: Feature flag disabled
   // -------------------------------------------------------------------------
 
-  it('returns 200 and skips DB writes when GROWTH_PREMIUM_BILLING_ENABLED=false', async () => {
+  it('persists the event and asks Stripe to retry when GROWTH_PREMIUM_BILLING_ENABLED=false', async () => {
+    // Used to return 200 before persisting anything: Stripe marked the event
+    // delivered and there was no replay path. That made the subscription smoke
+    // impossible in the documented go-live order (smoke, THEN flip the flag),
+    // because with the flag off the checkout 503s and the webhook was discarded.
+    // 503 + a stored, unprocessed row means the window's events survive the flip.
     ({ app, stripe } = await buildBillingApp(false));
     stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_flag_disabled_1');
 
@@ -216,11 +224,184 @@ describe('POST /webhooks/stripe-billing', () => {
       payload: rawJson(stripe.nextEvent),
     });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true, skipped: true, reason: 'flag_disabled' });
+    expect(res.statusCode).toBe(503);
 
-    const count = await prisma.subscriptionWebhookEvent.count();
-    expect(count).toBe(0);
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: 'evt_flag_disabled_1' },
+    });
+    expect(row.processedAt).toBeNull();
+
+    // Still no side effects: nothing was applied, only recorded.
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
+  it('counts redeliveries of an unprocessed event so a stuck one can be escalated', async () => {
+    // A deterministically failing apply used to just 503 until Stripe gave up
+    // after ~3 days, losing the event with nothing louder than a warning.
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_attempts_1');
+
+    // Seed the row as unprocessed, which is the state a crashed prior attempt
+    // leaves behind.
+    await prisma.subscriptionWebhookEvent.create({
+      data: {
+        provider: 'stripe',
+        providerEventId: 'evt_attempts_1',
+        type: 'invoice.paid',
+        payload: {},
+      },
+    });
+
+    for (const expected of [1, 2]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/stripe-billing',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+        payload: rawJson(stripe.nextEvent),
+      });
+      expect(res.statusCode).toBe(503);
+
+      const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+        where: { providerEventId: 'evt_attempts_1' },
+      });
+      expect(row.attempts).toBe(expected);
+    }
+  });
+
+  it('processes a stored unprocessed event once the flag is on', async () => {
+    // The gap the review caught: storing the event while the flag was off did
+    // nothing, because every retry bounced off the duplicate-event branch with
+    // 503 before reaching the flag gate or the dispatch. Stripe keeps the same
+    // event id on redelivery, so the row was unreachable forever — a paid
+    // subscription that never becomes a membership.
+    const eventId = 'evt_stored_then_enabled';
+
+    ({ app, stripe } = await buildBillingApp(false));
+    const { garageId } = await seedGarageWithStripeCustomer(stripe, 'cus_test_001');
+    stripe.nextEvent = invoicePaidEvent('subscription_create', eventId);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(first.statusCode).toBe(503);
+    expect(await prisma.premiumMembership.count()).toBe(0);
+
+    // Age the row past STALE_UNPROCESSED_MS. A real redelivery arrives minutes
+    // later; the age check is what separates that from true concurrency.
+    await prisma.subscriptionWebhookEvent.updateMany({
+      where: { providerEventId: eventId },
+      data: { receivedAt: new Date(Date.now() - 5 * 60_000) },
+    });
+
+    await app.close();
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.customers.set('cus_test_001', { garageId });
+    stripe.nextEvent = invoicePaidEvent('subscription_create', eventId);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(second.statusCode).toBe(200);
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: eventId },
+    });
+    expect(row.processedAt).not.toBeNull();
+    expect(await prisma.premiumMembership.count()).toBe(1);
+  });
+
+  it('still answers 503 for a genuinely concurrent unprocessed delivery', async () => {
+    // Same shape, but the row is fresh, so this is another delivery in flight
+    // rather than an abandoned attempt. Must NOT double-apply.
+    const eventId = 'evt_concurrent_unprocessed';
+    ({ app, stripe } = await buildBillingApp(true));
+    await seedGarageWithStripeCustomer(stripe, 'cus_test_001');
+
+    await prisma.subscriptionWebhookEvent.create({
+      data: {
+        provider: 'stripe',
+        providerEventId: eventId,
+        type: 'invoice.paid',
+        payload: {},
+      },
+    });
+
+    stripe.nextEvent = invoicePaidEvent('subscription_create', eventId);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
+  it('rejects an unsigned payload before persisting, even with the flag off', async () => {
+    // The gate moved below the signature check, so unauthenticated garbage must
+    // not reach the audit table.
+    ({ app, stripe } = await buildBillingApp(false));
+    stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_flag_disabled_unsigned');
+    stripe.nextSignatureValid = false;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=bad' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(await prisma.subscriptionWebhookEvent.count()).toBe(0);
+  });
+
+  it('returns 503 and leaves the event unprocessed when the payload shape is unrecognized', async () => {
+    // A 2026+ shape invoice.paid. Answering 200 here would mark it processed and
+    // stop Stripe retrying: the card is charged and no membership exists. 503
+    // keeps it redeliverable once the endpoint is repinned to the API version
+    // this normalizer parses.
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.nextEvent = {
+      id: 'evt_unrecognized_shape_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_test_new_shape',
+          customer: 'cus_test_001',
+          billing_reason: 'subscription_create',
+          amount_paid: 4990,
+          currency: 'brl',
+          period_start: 1748300000,
+          period_end: 1750892000,
+          parent: { subscription_details: { subscription: 'sub_test_001' } },
+          lines: { data: [{ pricing: { price_details: { price: 'price_monthly_test' } } }] },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(503);
+
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: 'evt_unrecognized_shape_1' },
+    });
+    expect(row.processedAt).toBeNull();
+
+    // And nothing was provisioned off an invoice we could not read.
+    expect(await prisma.premiumMembership.count()).toBe(0);
   });
 
   // -------------------------------------------------------------------------
@@ -647,11 +828,18 @@ describe('POST /webhooks/stripe-billing', () => {
   // never apply.
   // -------------------------------------------------------------------------
 
-  it('replay of unprocessed event (stale crashed attempt) returns 503 to trigger Stripe retry', async () => {
+  it('replay of a FRESH unprocessed event returns 503 to trigger Stripe retry', async () => {
+    // Renamed 2026-08-13. This test creates the row with receivedAt = now, so it
+    // exercises the CONCURRENT case, not a stale one — the old name said
+    // "stale crashed attempt" and asserted 503, which encoded as intended
+    // behaviour the very bug review found: a genuinely abandoned row could never
+    // be processed, because every retry bounced here. A row older than
+    // STALE_UNPROCESSED_MS now resumes instead; see
+    // "processes a stored unprocessed event once the flag is on".
     ({ app, stripe } = await buildBillingApp(true));
     const evt = invoicePaidEvent('subscription_create', 'evt_stale_unprocessed_1');
 
-    // Simulate a prior attempt that inserted the row but never marked it processed.
+    // Simulate another delivery in flight: row inserted, not yet processed.
     await prisma.subscriptionWebhookEvent.create({
       data: {
         provider: 'stripe',
@@ -671,7 +859,7 @@ describe('POST /webhooks/stripe-billing', () => {
     });
 
     expect(res.statusCode).toBe(503);
-    expect(res.payload).toMatch(/concurrent or stale/i);
+    expect(res.payload).toMatch(/concurrent/i);
   });
 });
 

@@ -54,12 +54,52 @@ once that integration lands.
 
 ### 2. Webhook handler failure
 
-- **Condition:** `event.type:error` AND `transaction:POST /stripe/webhook`
-  in 5 min, threshold ≥ 1.
+- **Condition:** `event.type:error` AND transaction in
+  `POST /stripe/webhook`, `POST /webhooks/stripe-billing`, or
+  `POST /abacatepay/webhook`, in 5 min, threshold ≥ 1.
 - **Why:** Stripe retries failed webhooks for 3 days, but we want a
-  human looking inside the first hour.
+  human looking inside the first hour. The rule used to cover only the
+  one-off endpoint, leaving subscription billing and Pix with no alert
+  at all.
 - **Triage:** see
   [Webhook handler failure](#runbook-2--webhook-handler-failure).
+
+### 2b. Payload shape or stuck event (billing)
+
+- **Condition:** `tags[kind]:billing-webhook-unrecognized-shape` OR
+  `tags[kind]:billing-webhook-poison-pill`, threshold ≥ 1, notify
+  immediately.
+- **Why:** both mean a paid invoice is sitting unapplied. The first says
+  the endpoint renders a Stripe API version the normalizer cannot parse;
+  the second says an event has been retried past the escalation
+  threshold and Stripe will eventually give up. Neither self-heals.
+- **Triage:** see
+  [Money in, nothing out](#runbook-5--money-in-nothing-out).
+
+### 2c. Dispute opened
+
+- **Condition:** `tags[kind]:stripe-dispute-opened`, threshold ≥ 1,
+  notify immediately.
+- **Why:** the code revokes the ticket automatically, but the evidence
+  deadline is a human task with a hard clock.
+- **Triage:** open the dispute in the Stripe dashboard, gather the
+  check-in record and the order, respond before the due date.
+
+### 2d. Cart paid after expiry
+
+- **Condition:** `tags[kind]:cart-paid-after-expiry`, threshold ≥ 1.
+- **Why:** the customer paid inside a still-valid Checkout Session after
+  the reservation had already been released. The API refunds
+  automatically; the alert exists so someone can talk to the customer
+  and check whether the expiry window needs widening.
+
+### 2e. Stale cross-mode Stripe reference
+
+- **Condition:** `tags[kind]:stripe-stale-ref`, threshold ≥ 1.
+- **Why:** a row is pointing at an object from the other Stripe mode
+  (test id under a live key). Permanent until purged: retrying never
+  fixes it. A burst right after the live cutover means the purge script
+  missed rows — see `apps/api/src/scripts/purge-test-mode.ts`.
 
 ### 3. Webhook signature mismatch
 
@@ -218,6 +258,64 @@ Treat alerts here as a smoke signal for a deeper integration
 problem, not a customer-impact incident.
 
 ---
+
+## Runbook 5 — Money in, nothing out
+
+The worst class of failure: the card was charged and the member has
+nothing. Never resolve this by asking the customer to pay again.
+
+**Confirm what happened.**
+
+1. Find the charge in the Stripe dashboard. Note the PaymentIntent or
+   invoice id.
+2. For a subscription: query `SubscriptionWebhookEvent` by
+   `providerEventId`. `processedAt` null means the event was received and
+   never applied. For a one-off: query `Order` by `providerRef`.
+
+**If the alert was `billing-webhook-unrecognized-shape`.** The endpoint
+is rendering a newer Stripe API version than the normalizer parses. Fix
+the endpoint's API version in the Stripe dashboard so it matches the
+version the other endpoints use, then redeliver the event from the
+dashboard. The route deliberately answered 503 and left the row
+unprocessed precisely so this redelivery works.
+
+**If the alert was `unknown-plan-price`.** The invoice carried a Stripe
+Price that is not registered in `PremiumPlanPrice`. Register it in the
+admin at `/premium/catalogo`, verify with `GET /api/plans`, then note
+that the event is already marked processed and will NOT re-run. The
+membership has to be created by hand.
+
+**Creating a membership by hand.** There is no admin endpoint for this —
+`/admin/subscriptions` exposes plan, add-ons, cancel, resume and pause,
+but not create. Tickets have `POST /admin/tickets/grant`; memberships do
+not. Until one exists, a developer inserts the `PremiumMembership` row
+plus its `PremiumMembershipInvoice`, matching tier, cadence,
+`baseAmountCents`, `devFeePercent` and period bounds to the Stripe
+invoice, and updates `Garage.premiumTier` / `premiumUntil`. Do this
+inside a transaction holding `SELECT id FROM "Garage" ... FOR UPDATE`,
+the same lock the webhook takes.
+
+**Tell the member.** Their payment is safe and kept. Give a concrete
+time for the fix. Do not ask them to retry.
+
+## Refunds and support
+
+There is no refund tooling in the product. `app.stripe.refund` is only
+called from automatic branches inside the webhook handlers (duplicate
+ticket, revoked ticket, unavailable pickup, order expired, cart paid
+after expiry). There is no admin endpoint and no admin screen.
+
+- **Card, via Stripe:** refund from the Stripe dashboard. The
+  `charge.refunded` webhook then flips every order in the cart to
+  `refunded` and revokes the tickets. Verify in the DB, not just the
+  dashboard.
+- **Pix, via AbacatePay:** no documented refund API exists (see
+  `plans/jdma-260-abacatepay-refund-api-path.md`). It goes through the
+  vendor's support, manually.
+- **Who:** the founder. Single operator, alerts by email, no paging and
+  no on-call rotation. A failure that starts at 02:00 is seen in the
+  morning. For payments that is the accepted exposure today; it is worth
+  revisiting once volume makes a missed night expensive.
 
 ## Where to find things
 

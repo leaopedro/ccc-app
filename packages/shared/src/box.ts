@@ -45,6 +45,7 @@ export const boxViewSchema = z.object({
   overflowCents: z.number().int(),
   shippingCents: z.number().int(),
   chargeCents: z.number().int(),
+  orderId: z.string().nullable(),
   autoSendOptIn: z.boolean(),
   shippingAddressId: z.string().nullable(),
   items: z.array(boxViewItemSchema),
@@ -62,6 +63,13 @@ export const boxConfirmSchema = z.object({
   shippingAddressId: z.string().min(1),
 });
 export type BoxConfirm = z.infer<typeof boxConfirmSchema>;
+
+export const boxCheckoutResponseSchema = z.object({
+  brCode: z.string(),
+  amountCents: z.number().int(),
+  expiresAt: z.string(),
+});
+export type BoxCheckoutResponse = z.infer<typeof boxCheckoutResponseSchema>;
 
 export const boxCatalogItemSchema = z.object({
   id: z.string(),

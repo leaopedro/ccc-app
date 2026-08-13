@@ -22,14 +22,20 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * POST /webhooks/stripe-billing — Stripe subscription webhook (F8.04).
  *
  * Flow (canon §F8.4, §F8.5, §F8.11, §F8.15):
- *   1. Feature flag gate (GROWTH_PREMIUM_BILLING_ENABLED) → 200 + skipped.
- *   2. Verify Stripe signature against STRIPE_BILLING_WEBHOOK_SECRET.
- *      Missing/invalid → 400.
- *   3. Insert SubscriptionWebhookEvent — on P2002, inspect existing row:
+ *   1. Verify Stripe signature against STRIPE_BILLING_WEBHOOK_SECRET.
+ *      Missing/invalid → 400. Nothing is persisted before this.
+ *   2. Insert SubscriptionWebhookEvent — on P2002, inspect existing row:
  *      processedAt non-null → 200 deduped:true; null → 503 so Stripe retries
  *      (prevents silent drop when a prior attempt crashed mid-apply).
- *   4. normalizeStripeEvent → BillingEvent | StripeRefundMarker | null.
- *      Null → mark processed, return 200 ignored.
+ *   3. Feature flag gate (GROWTH_PREMIUM_BILLING_ENABLED) → 503 + stored.
+ *      Deliberately AFTER the insert and BEFORE any mutation: answering 200
+ *      here used to drop every delivery in the pre-flip window with no replay
+ *      path, which also made "smoke the subscription, then flip the flag"
+ *      impossible.
+ *   4. normalizeStripeEvent → BillingEvent | StripeRefundMarker |
+ *      UnrecognizedShapeMarker | null. Null → mark processed, 200 ignored.
+ *      Unrecognized shape → 503 + fatal alert, NOT marked processed (the
+ *      endpoint is rendering an API version this normalizer cannot parse).
  *   5. Refund marker → resolve garage from invoice → $transaction + FOR UPDATE
  *      → applyInvoiceRefund(tx, 'stripe', ref, amount).
  *   6. BillingEvent → resolve garage (Stripe Customer.metadata for activated,

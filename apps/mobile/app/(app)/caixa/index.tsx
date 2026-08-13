@@ -17,6 +17,7 @@ import { caixaCopy } from '~/copy/caixa';
 import { useBox } from '~/hooks/useBox';
 import { BudgetMeter } from '~/screens/caixa/BudgetMeter';
 import {
+  budgetMeter,
   canUnskip,
   cycleMonthLabel,
   hasDroppedLines,
@@ -140,7 +141,7 @@ function LineRow({
 /* ------------------------------------------------------------------ */
 
 function OpenBody({ box, onSkip }: { box: BoxView; onSkip: () => void }) {
-  const includedCents = Math.min(box.itemsTotalCents, box.budgetCents);
+  const includedCents = budgetMeter(box).includedCents;
 
   return (
     <>
@@ -621,9 +622,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: BORDER_GOLD_SOFT,
   },
-  lineRowDropped: {
-    borderBottomColor: BORDER_GOLD_SOFT,
-  },
+  lineRowDropped: {},
   lineRowText: {
     flex: 1,
     minWidth: 0,

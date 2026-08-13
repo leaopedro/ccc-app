@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const authedRequest = vi.fn();
 vi.mock('./client', () => ({ authedRequest: (...a: unknown[]) => authedRequest(...a) }));
 
-import { getBox, updateBoxSelection, skipBox, setBoxPreferences } from './box';
+import { getBox, updateBoxSelection, skipBox, setBoxPreferences, unskipBox } from './box';
 
 describe('box api client', () => {
   beforeEach(() => authedRequest.mockReset().mockResolvedValue(undefined));
@@ -34,5 +34,12 @@ describe('box api client', () => {
     const [path, , opts] = authedRequest.mock.calls[0]!;
     expect(path).toBe('/me/box/preferences');
     expect(opts.method).toBe('PUT');
+  });
+
+  it('unskipBox POSTs /me/box/unskip with no body', async () => {
+    await unskipBox();
+    const [path, , opts] = authedRequest.mock.calls[0]!;
+    expect(path).toBe('/me/box/unskip');
+    expect(opts.method).toBe('POST');
   });
 });

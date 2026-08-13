@@ -3,11 +3,34 @@ import { describe, expect, it } from 'vitest';
 import { normalizeStripeEvent } from '../../src/services/billing/normalize-stripe.js';
 import type { WebhookEvent } from '../../src/services/stripe/index.js';
 
-// Helper: build a minimal WebhookEvent stub
-const mkEvent = (type: string, object: Record<string, unknown>): WebhookEvent => ({
+// Helper: build a minimal WebhookEvent stub.
+// Cases author `previous_attributes` inline with the subscription fields for
+// readability; Stripe delivers it as a SIBLING of data.object, so lift it into
+// the envelope here. Without the lift these fixtures assert against a shape no
+// real delivery ever has, which is how the discriminators stayed broken.
+const mkEvent = (type: string, object: Record<string, unknown>): WebhookEvent => {
+  const { previous_attributes: prev, ...rest } = object;
+  return {
+    id: `evt_test_${type.replace(/\./g, '_')}`,
+    type,
+    data: {
+      object: rest,
+      ...(prev === undefined ? {} : { previous_attributes: prev as Record<string, unknown> }),
+    },
+  };
+};
+
+// Same, but placing previous_attributes where Stripe actually puts it: as a
+// SIBLING of data.object, not inside it. Every *.updated discriminator depends
+// on this, so a fixture that nests it under object silently tests nothing.
+const mkEventWithPrev = (
+  type: string,
+  object: Record<string, unknown>,
+  previousAttributes: Record<string, unknown>,
+): WebhookEvent => ({
   id: `evt_test_${type.replace(/\./g, '_')}`,
   type,
-  data: { object },
+  data: { object, previous_attributes: previousAttributes },
 });
 
 // Reusable Stripe invoice object (invoice.paid)
@@ -123,6 +146,24 @@ describe('normalizeStripeEvent', () => {
       if (result.kind !== 'subscription.past_due') return;
 
       expect(result.provider).toBe('stripe');
+      expect(result.providerSubRef).toBe('sub_test_001');
+    });
+  });
+
+  describe('customer.subscription.updated — previous_attributes at envelope level', () => {
+    it('detects cancel_at_period_end flip from envelope-level previous_attributes', () => {
+      const event = mkEventWithPrev(
+        'customer.subscription.updated',
+        makeSubscription({ cancel_at_period_end: true }),
+        { cancel_at_period_end: false },
+      );
+      const result = normalizeStripeEvent(event);
+
+      expect(result).not.toBeNull();
+      if (!result) return;
+      expect(result.kind).toBe('subscription.cancelled');
+      if (result.kind !== 'subscription.cancelled') return;
+
       expect(result.providerSubRef).toBe('sub_test_001');
     });
   });

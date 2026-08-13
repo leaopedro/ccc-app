@@ -32,7 +32,18 @@ export type CreateCheckoutSessionInput = {
 export type WebhookEvent = {
   id: string;
   type: string;
-  data: { object: Record<string, unknown> };
+  data: {
+    object: Record<string, unknown>;
+    /**
+     * Sibling of `object` in Stripe's event envelope, present on `*.updated`
+     * events. Load-bearing: the billing normalizer discriminates cancel,
+     * uncancel, pause, resume and tier change by diffing the subscription
+     * against it. Dropping it here silently disables every one of those
+     * transitions — the normalizer returns null and the membership never
+     * moves, while Stripe considers the event delivered.
+     */
+    previous_attributes?: Record<string, unknown>;
+  };
 };
 
 export type CreateSubscriptionCheckoutSessionInput = {
@@ -323,10 +334,15 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       const secret = webhookSecret ?? env.STRIPE_WEBHOOK_SECRET;
       try {
         const event = stripe.webhooks.constructEvent(payload, signature, secret);
+        const previousAttributes = (event.data as { previous_attributes?: Record<string, unknown> })
+          .previous_attributes;
         return {
           id: event.id,
           type: event.type,
-          data: { object: event.data.object as unknown as Record<string, unknown> },
+          data: {
+            object: event.data.object as unknown as Record<string, unknown>,
+            ...(previousAttributes ? { previous_attributes: previousAttributes } : {}),
+          },
         };
       } catch (err) {
         const needsEventNotificationPath =

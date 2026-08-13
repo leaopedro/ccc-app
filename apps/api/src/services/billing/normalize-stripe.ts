@@ -184,14 +184,17 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
           };
         }>;
       };
-      previous_attributes?: {
-        cancel_at_period_end?: boolean;
-        pause_collection?: { behavior?: string } | null;
-        items?: { data: Array<{ price: { id: string } }> };
-      };
     };
 
-    const prev = sub.previous_attributes ?? {};
+    // Stripe puts previous_attributes as a SIBLING of data.object, never
+    // inside it. Reading it off `sub` yields undefined for every real
+    // delivery, which collapses all five discriminators below into a silent
+    // null. See services/stripe/index.ts, which carries it through the seam.
+    const prev = (event.data.previous_attributes ?? {}) as {
+      cancel_at_period_end?: boolean;
+      pause_collection?: { behavior?: string } | null;
+      items?: { data: Array<{ price: { id: string } }> };
+    };
 
     // Discriminator 1: cancel_at_period_end flip
     if (prev.cancel_at_period_end !== undefined) {

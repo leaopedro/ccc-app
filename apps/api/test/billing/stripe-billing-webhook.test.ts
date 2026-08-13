@@ -87,8 +87,11 @@ const subscriptionUpdatedEvent = (
         ],
       },
       ...subOverride,
-      previous_attributes: previousAttributes,
     },
+    // Sibling of object, matching a real Stripe envelope. Nesting it inside
+    // object made every discriminator in this suite pass against a shape the
+    // normalizer never sees in production.
+    previous_attributes: previousAttributes,
   },
 });
 

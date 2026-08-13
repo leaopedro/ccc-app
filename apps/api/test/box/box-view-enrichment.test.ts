@@ -106,7 +106,7 @@ describe('GET /me/box enrichment', () => {
     expect(dropped?.dropReason).toBe('cutoff_budget_only');
   });
 
-  it('exposes the box shippingAddressId (null when unset)', async () => {
+  it('exposes the box shippingAddressId when set', async () => {
     const { user } = await createUser({ verified: true });
     const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
     const address = await prisma.shippingAddress.create({
@@ -160,5 +160,48 @@ describe('GET /me/box enrichment', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().shippingAddressId).toBe(address.id);
+  });
+
+  it('exposes null shippingAddressId when unset', async () => {
+    const { user } = await createUser({ verified: true, email: 'user-no-addr@jdm.test' });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_noaddr',
+        providerSubRef: `sub_noaddr_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey: '2026-08-01',
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: new Date('2026-08-25T00:00:00.000Z'),
+        budgetCentsSnapshot: 45000,
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/box',
+      headers: { authorization: bearer(env, user.id) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().shippingAddressId).toBeNull();
   });
 });

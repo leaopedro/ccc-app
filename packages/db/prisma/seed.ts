@@ -687,7 +687,24 @@ const main = async (): Promise<void> => {
 
   await seedStore();
 
-  await seedGarageSpotProduct();
+  // Retired from the default seed on 2026-08-13, opt-in only.
+  //
+  // "Vaga de Garagem Adicional" (R$49, virtual: true) is a non-consumable
+  // digital feature unlock sold through the normal cart. Apple guideline 3.1.5(a)
+  // covers physical goods and real-world services; it does not cover this, so
+  // the SKU would be the weakest item in an App Store submission that otherwise
+  // charges outside IAP. Decision recorded in
+  // docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md.
+  //
+  // The function, the virtual-singleton guards and the GarageSpot fulfillment
+  // path all stay: a spot granted by a premium plan is still a valid concept
+  // (GarageSpotSource.premium_membership), and the API tests seed the product
+  // themselves to exercise that machinery. Only the sale is retired, and the
+  // opt-in exists so that machinery can still be driven locally on purpose.
+  if (process.env.SEED_GARAGE_SPOT_PRODUCT === 'true') {
+    await seedGarageSpotProduct();
+    console.log('Seeded garage spot product (SEED_GARAGE_SPOT_PRODUCT=true).');
+  }
 
   await seedGaragesForExistingUsers();
 

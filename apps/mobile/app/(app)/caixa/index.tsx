@@ -7,9 +7,9 @@
 
 import type { BoxView } from '@ccc/shared/box';
 import { Button, Text } from '@ccc/ui';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { CheckCircle2, History, Hourglass, Lock, WifiOff } from 'lucide-react-native';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { unskipBox } from '~/api/box';
@@ -190,10 +190,12 @@ function SkippedBody({
   box,
   onUnskip,
   unskipping,
+  unskipError,
 }: {
   box: BoxView;
   onUnskip: () => void;
   unskipping: boolean;
+  unskipError: boolean;
 }) {
   const disabled = !canUnskip(box.cutoffAt) || unskipping;
 
@@ -214,6 +216,11 @@ function SkippedBody({
           {caixaCopy.skipped.back}
         </Text>
       </Pressable>
+      {unskipError ? (
+        <Text variant="bodySm" tone="danger" style={styles.centerBody}>
+          {caixaCopy.loadError.body}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -391,16 +398,27 @@ function ReadyBody({ box }: { box: BoxView }) {
 export default function CaixaHome() {
   const { box, loading, error, notOpen, refresh } = useBox();
   const [unskipping, setUnskipping] = useState(false);
+  const [unskipError, setUnskipError] = useState(false);
   const [skipSheetVisible, setSkipSheetVisible] = useState(false);
+
+  // Tab screens stay mounted, so a cutoff or payment transition that happens
+  // while the member is on another tab would otherwise show stale state.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   const onUnskip = async () => {
     if (unskipping || !box || !canUnskip(box.cutoffAt)) return;
     setUnskipping(true);
+    setUnskipError(false);
     try {
       await unskipBox();
       await refresh();
     } catch {
-      // Best-effort — the link stays put and the member can try again.
+      // Surface the failure so an offline request or cutoff race is not silent.
+      setUnskipError(true);
     } finally {
       setUnskipping(false);
     }
@@ -452,7 +470,12 @@ export default function CaixaHome() {
           <OpenBody box={box} onSkip={() => setSkipSheetVisible(true)} />
         ) : null}
         {variant === 'skipped' ? (
-          <SkippedBody box={box} onUnskip={() => void onUnskip()} unskipping={unskipping} />
+          <SkippedBody
+            box={box}
+            onUnskip={() => void onUnskip()}
+            unskipping={unskipping}
+            unskipError={unskipError}
+          />
         ) : null}
         {variant === 'awaiting_payment' ? <AwaitingPaymentBody box={box} /> : null}
         {variant === 'ready' ? (

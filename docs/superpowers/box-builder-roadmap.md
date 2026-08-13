@@ -153,9 +153,21 @@ Carry-forward pra 3b-2 (nao bloqueiam merge; feature dark):
   Adicionar icone de engrenagem/ajustes no header da home apontando pra la.
 - Antes de ligar `EXPO_PUBLIC_CAIXA_ENABLED`: o builder real (`montar.tsx` hoje e
   placeholder "Em breve") precisa existir.
+- ENDERECO DAS PREFERENCIAS (achados de review adiados, precisam de mudanca de
+  API; a tela e inalcancavel ate a 3b-2):
+  - Expor `shippingAddressId` no `BoxView` (serialize.ts + shared + teste) pra a
+    tela semear o endereco realmente salvo na caixa. Sem isso, salvar so o toggle
+    de auto-envio troca silenciosamente o endereco salvo pelo default da conta.
+  - Bloquear salvar com auto-envio ligado sem endereco selecionado (o worker de
+    cutoff pula caixa sem `shippingAddressId`, mas hoje a UI reporta sucesso).
 - Limpezas menores: remover `'post_cutoff'` da union de `homeVariant`; reusar
   `budgetMeter().includedCents` no `OpenBody`; remover override no-op de
   `lineRowDropped.borderBottomColor`; teste direto de `unskipBox` no client.
+
+Achados de review ja corrigidos nesta branch (3b-1): guarda do cache de premium
+em erro transitorio + refresh no foreground (`usePremiumSlot`); SkipSheet trata
+erro nao-ApiError (fim de rejeicao nao tratada); home da Caixa refaz fetch no
+foco; erro de unskip agora aparece na UI.
 
 #### Fase 3b-2 — mobile: builder interativo + offline (PENDENTE)
 

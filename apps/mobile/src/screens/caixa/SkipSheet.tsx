@@ -4,7 +4,6 @@
 // idiom from apps/mobile/app/(app)/store/index.tsx: a transparent RN Modal
 // with a scrim + a bottom sheet card.
 
-import { ApiError } from '~/api/client';
 import { skipBox } from '~/api/box';
 import { Button, Text } from '@ccc/ui';
 import { useState } from 'react';
@@ -35,12 +34,10 @@ export function SkipSheet({ visible, month, onClose, onDone }: SkipSheetProps) {
       await skipBox();
       onDone();
       onClose();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(true);
-      } else {
-        throw err;
-      }
+    } catch {
+      // Any failure (API error or a plain network/parse error) keeps the sheet
+      // open with the retry message — never rethrow into an unhandled rejection.
+      setError(true);
     } finally {
       setPending(false);
     }

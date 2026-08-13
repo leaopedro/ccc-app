@@ -8,7 +8,14 @@
 import type { BoxView } from '@ccc/shared/box';
 import { Button, Text } from '@ccc/ui';
 import { router, useFocusEffect } from 'expo-router';
-import { CheckCircle2, History, Hourglass, Lock, WifiOff } from 'lucide-react-native';
+import {
+  CheckCircle2,
+  History,
+  Hourglass,
+  Lock,
+  SlidersHorizontal,
+  WifiOff,
+} from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -46,6 +53,10 @@ function goToHistory() {
   router.push('/caixa/historico' as never);
 }
 
+function goToPreferences() {
+  router.push('/caixa/preferencias' as never);
+}
+
 function goToMontar() {
   router.push('/caixa/montar' as never);
 }
@@ -63,15 +74,26 @@ function Header({ title }: { title?: string }) {
         </Text>
         {title ? <Text style={styles.title}>{title}</Text> : null}
       </View>
-      <Pressable
-        onPress={goToHistory}
-        accessibilityRole="button"
-        accessibilityLabel={caixaCopy.history.title}
-        hitSlop={8}
-        style={styles.historyButton}
-      >
-        <History color={theme.colors.fg} size={22} strokeWidth={1.75} />
-      </Pressable>
+      <View style={styles.headerButtons}>
+        <Pressable
+          onPress={goToPreferences}
+          accessibilityRole="button"
+          accessibilityLabel={caixaCopy.preferences.title}
+          hitSlop={8}
+          style={styles.historyButton}
+        >
+          <SlidersHorizontal color={theme.colors.fg} size={22} strokeWidth={1.75} />
+        </Pressable>
+        <Pressable
+          onPress={goToHistory}
+          accessibilityRole="button"
+          accessibilityLabel={caixaCopy.history.title}
+          hitSlop={8}
+          style={styles.historyButton}
+        >
+          <History color={theme.colors.fg} size={22} strokeWidth={1.75} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -526,6 +548,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
     fontSize: 32,
     color: theme.colors.fg,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   historyButton: {
     padding: theme.spacing.xs,

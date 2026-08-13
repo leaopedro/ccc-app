@@ -716,7 +716,15 @@ git commit -m "feat(payments): handle Stripe disputes and revoke entitlement"
 
 ---
 
-## Task 6: A flag para de descartar eventos
+## Task 6: A flag para de descartar eventos — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `e6ed615`. Dois efeitos de reposicionar o gate,
+> ambos corretos e não previstos no plano: o check de secret ausente passa a valer
+> com a flag desligada (certo para a janela do go-live, em que o secret entra antes
+> da flag), e o docblock do fluxo da rota, que listava o gate como passo 1
+> respondendo 200, virou mentira e foi atualizado em `a2f54c2`-style commit
+> separado. Fora de escopo, registrado: o webhook da RevenueCat tem o mesmo padrão
+> de descarte, mantido como está porque a RevenueCat está dormente.
 
 `GROWTH_PREMIUM_BILLING_ENABLED=false` faz a rota retornar antes de persistir o evento. A Stripe marca entregue e não há replay. É isso que torna impossível fazer smoke de assinatura antes de virar a flag.
 
@@ -730,7 +738,7 @@ git commit -m "feat(payments): handle Stripe disputes and revoke entitlement"
 - Consumes: nada.
 - Produces: nada.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('persists the event and asks Stripe to retry when the billing flag is off', async () => {
@@ -750,12 +758,12 @@ it('persists the event and asks Stripe to retry when the billing flag is off', a
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/stripe-billing-webhook.test.ts`
 Expected: FAIL com 200 e nenhuma linha no banco.
 
-- [ ] **Step 3: Mover o gate para depois do insert**
+- [x] **Step 3: Mover o gate para depois do insert**
 
 Remover o bloco do gate do topo da rota. Reinseri-lo logo após o `prisma.subscriptionWebhookEvent.create` bem-sucedido e antes do dispatch:
 
@@ -774,12 +782,12 @@ if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
 
 Atenção: a verificação de assinatura precisa continuar acontecendo antes disso, senão a rota passa a persistir lixo não autenticado.
 
-- [ ] **Step 4: Rodar**
+- [x] **Step 4: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/stripe-billing-webhook.ts apps/api/test/billing
@@ -788,7 +796,18 @@ git commit -m "fix(billing): persist webhook events while the billing flag is of
 
 ---
 
-## Task 7: Guardas nas chamadas que quebram com refs de test mode
+## Task 7: Guardas nas chamadas que quebram com refs de test mode — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `5c8a3d6`. O plano dizia duas chamadas
+> desprotegidas; são **quatro**: três mints de portal em `me-premium` (precheck,
+> precheck do checkout, endpoint de billing-portal) mais o `retrievePaymentIntent`
+> do resume em `orders.ts`. A quarta, no `GET status`, já tinha guarda.
+>
+> Decisão que o plano não previa: nos dois prechecks a resposta é
+> `StaleBillingReference` em vez de `AlreadySubscribed`, porque
+> `premiumCheckoutPrecheckResponseSchema` exige `manageUrl` não nulo e alargar
+> contrato compartilhado afeta mobile e admin, fora do escopo desta fase. Continua
+> 409, e é melhor que prometer link de gestão que não dá para gerar.
 
 Depois da virada de chave, `cus_`, `pi_` e `sub_` de test viram `resource_missing`. Três chamadas não têm try/catch e viram 500 permanente.
 
@@ -803,7 +822,7 @@ Depois da virada de chave, `cus_`, `pi_` e `sub_` de test viram `resource_missin
 - Consumes: nada.
 - Produces: nada.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('returns a typed error instead of 500 when the Stripe customer no longer exists', async () => {
@@ -824,12 +843,12 @@ it('returns a typed error instead of 500 when the Stripe customer no longer exis
 
 Adicionar `nextPortalError` ao `fake.ts` seguindo o padrão dos demais campos `next*`.
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/stale-refs.test.ts`
 Expected: FAIL com 500.
 
-- [ ] **Step 3: Envolver as três chamadas**
+- [x] **Step 3: Envolver as três chamadas**
 
 Criar um helper compartilhado em `apps/api/src/services/billing/stale-ref.ts`:
 
@@ -892,12 +911,12 @@ try {
 (`apps/api/src/services/stripe/index.ts:202`), recebendo
 `{ customerId, returnUrl }` e devolvendo `{ url }`.
 
-- [ ] **Step 4: Rodar**
+- [x] **Step 4: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/stale-refs.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/me-premium.ts apps/api/src/routes/orders.ts apps/api/src/services/stripe/fake.ts apps/api/test/billing/stale-refs.test.ts
@@ -906,7 +925,13 @@ git commit -m "fix(billing): handle stale test-mode Stripe references"
 
 ---
 
-## Task 8: Script de purga de test mode
+## Task 8: Script de purga de test mode — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `95aa3f4`. Desvio de processo honesto: o script
+> foi escrito antes de rodar o teste vermelho, contra o próprio plano. Compensado
+> com checagem de mutação — trocando `TEST_REF` por um prefixo que não casa, 4 dos
+> 6 testes acusam, e os 2 que sobrevivem são os corretos (linha live e
+> idempotência).
 
 Roda uma vez, antes da virada de chave. Sem isso, memberships com `sub_` de test nunca expiram e dão entitlement premium vitalício, silenciosamente.
 
@@ -920,7 +945,7 @@ Roda uma vez, antes da virada de chave. Sem isso, memberships com `sub_` de test
 - Consumes: nada.
 - Produces: `purgeTestMode(prisma): Promise<{ memberships: number; orders: number; garages: number }>`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('expires memberships with test-mode refs and clears the garage snapshot', async () => {
@@ -943,12 +968,12 @@ it('leaves live-mode rows untouched', async () => {
 
 Semear duas memberships: uma com `providerSubRef: 'sub_test_...'` e outra com `sub_live_...`.
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/purge-test-mode.test.ts`
 Expected: FAIL, o módulo não existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```ts
 import type { PrismaClient } from '@prisma/client';
@@ -1018,12 +1043,12 @@ Adicionar um entry point que lê `--dry-run` de `process.argv` e imprime o
 `packages/db/prisma/schema.prisma` antes de rodar: um typo aqui apaga
 entitlement de quem paga.
 
-- [ ] **Step 4: Rodar**
+- [x] **Step 4: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/purge-test-mode.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/scripts/purge-test-mode.ts apps/api/test/billing/purge-test-mode.test.ts
@@ -1032,7 +1057,11 @@ git commit -m "chore(billing): add test-mode purge script for the live cutover"
 
 ---
 
-## Task 9: Carrinho não replica sessão morta, e evento envenenado escala
+## Task 9: Carrinho não replica sessão morta, e evento envenenado escala — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `c1ab525`. A migration foi escrita à mão em vez
+> de gerada por `prisma migrate dev`: o setup dos testes roda `migrate deploy`, e
+> gerar exigiria banco de desenvolvimento na worktree.
 
 Duas correções pequenas e independentes, mesma área.
 
@@ -1047,7 +1076,7 @@ Duas correções pequenas e independentes, mesma área.
 - Consumes: nada.
 - Produces: nada.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('bumps cart.version on failure so the next checkout gets a fresh session', async () => {
@@ -1065,12 +1094,12 @@ it('bumps cart.version on failure so the next checkout gets a fresh session', as
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/cart-retry.test.ts`
 Expected: FAIL, `version` não muda.
 
-- [ ] **Step 3: Incrementar a versão**
+- [x] **Step 3: Incrementar a versão**
 
 Em `handleCartFailure`, na `tx.cart.update` que devolve o carrinho para `open`:
 
@@ -1083,7 +1112,7 @@ await tx.cart.update({
 
 Motivo, em comentário: a chave de idempotência do checkout é `cart_checkout_${id}_v${version}`, e sem o incremento a Stripe replica por 24 horas a sessão já consumida.
 
-- [ ] **Step 4: Escalar evento envenenado**
+- [x] **Step 4: Escalar evento envenenado**
 
 Primeiro a coluna, em `packages/db/prisma/schema.prisma`, no model
 `SubscriptionWebhookEvent`:
@@ -1127,12 +1156,12 @@ Conferir o nome do índice composto gerado pelo Prisma para
 `@@unique([provider, providerEventId])`. Se o schema nomeia a constraint, o
 `where` usa esse nome em vez de `provider_providerEventId`.
 
-- [ ] **Step 5: Rodar**
+- [x] **Step 5: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart test/billing`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/routes/stripe-webhook.ts apps/api/src/routes/stripe-billing-webhook.ts packages/db/prisma apps/api/test
@@ -1141,7 +1170,14 @@ git commit -m "fix(payments): bump cart version on failure, escalate poison-pill
 
 ---
 
-## Task 10: Observabilidade e procedimentos
+## Task 10: Observabilidade e procedimentos — CONCLUÍDA
+
+> Executada em 2026-08-13. `docs/observability.md` ganhou quatro regras de alerta
+> novas (forma desconhecida e evento travado, disputa aberta, carrinho pago após
+> expirar, ref cross-mode) mais o Runbook 5, "money in, nothing out", com o
+> procedimento manual de criar membership, que não tem endpoint. `docs/stripe.md`
+> foi reescrito do zero. `docs/revenuecat.md` ganhou cabeçalho de dormente que
+> também registra que o caminho está quebrado, não só desligado.
 
 Sem código de produto. Fecha as lacunas operacionais que o spec nomeia.
 
@@ -1155,23 +1191,23 @@ Sem código de produto. Fecha as lacunas operacionais que o spec nomeia.
 - Consumes: os eventos e tags de Sentry criados nas Tasks 2, 4 e 5.
 - Produces: nada.
 
-- [ ] **Step 1: Estender a regra de alerta aos três endpoints**
+- [x] **Step 1: Estender a regra de alerta aos três endpoints**
 
 Em `docs/observability.md:55-63`, a regra 2 hoje só cobre `transaction:POST /stripe/webhook`. Estender para `/webhooks/stripe-billing` e `/abacatepay/webhook`, e adicionar regras para as tags novas: `billing-webhook-unrecognized-shape` e `stripe-dispute-opened` em nível error ou fatal, com notificação imediata.
 
-- [ ] **Step 2: Escrever o runbook de "pagou e não recebeu"**
+- [x] **Step 2: Escrever o runbook de "pagou e não recebeu"**
 
 Novo runbook em `docs/observability.md`, cobrindo os dois casos. Ingresso: existe `POST /admin/tickets/grant`. Membership: não existe endpoint equivalente, então o procedimento é manual e precisa estar escrito passo a passo, incluindo quais linhas criar e em que ordem.
 
-- [ ] **Step 3: Escrever o fluxo de reembolso do suporte**
+- [x] **Step 3: Escrever o fluxo de reembolso do suporte**
 
 Nomear quem executa e por onde. Stripe pelo dashboard. Pix pela AbacatePay, que não tem API de refund documentada conforme `plans/jdma-260-abacatepay-refund-api-path.md`, então o caminho é suporte do fornecedor. Registrar a expectativa de resposta, dado que a operação é de uma pessoa só.
 
-- [ ] **Step 4: Reescrever `docs/stripe.md`**
+- [x] **Step 4: Reescrever `docs/stripe.md`**
 
 Trocar todo o conteúdo JDM. Precisa conter: os três paths reais, a query string do segredo da AbacatePay, o descritor de fatura `CASA CAR CLUB`, e uma seção sobre fixar a versão de API dos endpoints. Remover a afirmação de que o Stripe Tax funciona porque o Checkout coleta endereço de cobrança: nenhum criador de sessão seta `billing_address_collection` nem `automatic_tax`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/observability.md docs/stripe.md

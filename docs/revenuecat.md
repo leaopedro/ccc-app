@@ -1,8 +1,24 @@
 # RevenueCat dashboard configuration
 
-How to configure RevenueCat for JDM Experience iOS billing. This is operational
-setup only — no application code changes. Apply once; keep in sync as App Store
-Connect subscription settings change.
+> **DORMANTE desde 2026-08-12. Não seguir este documento sem decidir antes.**
+>
+> A decisão registrada em
+> `docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md` é que o iOS cobra
+> via Stripe e Apple Pay, não via StoreKit. A RevenueCat fica no repositório como
+> plano B, para o caso de a App Review exigir IAP na assinatura.
+>
+> Estado real do código: `apps/mobile/src/lib/revenuecat.ts` define
+> `initRevenueCat` e **nada no app chama**. O `PremiumScreen` ainda renderiza um
+> botão de assinar no iOS que chamaria `fetchOfferings()` contra um SDK não
+> configurado. Completar esse caminho não é tarefa pequena: é integração
+> inacabada, mais produtos na App Store Connect, mais um ciclo de review.
+>
+> O conteúdo abaixo é da JDM Experience: nomes de projeto, bundle id
+> `com.jdmexperience.app`, produtos "JDM Premium Gold" e URLs
+> `jdm-experience.com`. Nada disso vale para o Casa Car Club. Se a RevenueCat for
+> reativada, este documento precisa ser reescrito antes de ser usado.
+
+Setup histórico, mantido para referência.
 
 ---
 

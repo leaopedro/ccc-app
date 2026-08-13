@@ -277,6 +277,10 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(serializeBox(fresh, app.uploads));
   });
 
+  // hook: 'preHandler' is required because the keyGenerator reads
+  // request.user, which only exists after app.authenticate runs. Without it
+  // the rate-limit plugin keys on the earlier onRequest hook and falls back
+  // to req.ip, rate-limiting every user behind one NAT as a single caller.
   await app.register(async (scoped) => {
     scoped.addHook('preHandler', app.authenticate);
     await scoped.register(rateLimit, {

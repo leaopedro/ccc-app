@@ -88,16 +88,19 @@ export const checkoutBoxOrder = async (args: {
   return prisma.$transaction(async (tx) => {
     const boxRow = await tx.monthlyBox.findUnique({
       where: { id: phaseA.boxId },
-      select: { garageId: true, status: true },
+      select: { garageId: true },
     });
     if (!boxRow) return { kind: 'not_found' as const };
     await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${boxRow.garageId} FOR UPDATE`;
     const stamped = await tx.order.updateMany({
-      where: { id: phaseA.orderId, status: 'pending' },
+      where: { id: phaseA.orderId, status: 'pending', providerRef: null },
       data: { providerRef: billing.id, brCode: billing.brCode },
     });
     if (stamped.count === 0) {
-      // Cutoff worker cancelled between phases. Orphan billing expires at cutoff.
+      // Either the cutoff worker cancelled between phases, or a concurrent
+      // checkout already stamped providerRef first. Either way, do not
+      // clobber. This orphaned billing expires at cutoff; the loser's next
+      // checkout hits Phase A's reuse path and gets the winner's brCode.
       return { kind: 'locked' as const };
     }
     return {

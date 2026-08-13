@@ -97,5 +97,17 @@ export const caixaCopy = {
     reviewCta: 'Revisar e confirmar',
     writeError: 'Não foi possível salvar. Tente de novo.',
     soon: 'Em breve',
+    continueCta: 'Continuar',
+  },
+  partners: {
+    title: 'Parceiros',
+    banner: 'Módulos de parceiro são sempre cobrados à parte, fora do budget do plano.',
+    inBox: 'Na caixa · cobrado à parte',
+    add: 'Adicionar à caixa',
+    reviewCta: 'Revisar e confirmar',
+    empty: {
+      title: 'Sem parceiros neste ciclo',
+      body: 'Nenhum módulo de parceiro disponível agora. Você já pode revisar.',
+    },
   },
 } as const;

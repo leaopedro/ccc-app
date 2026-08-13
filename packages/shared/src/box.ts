@@ -46,6 +46,7 @@ export const boxViewSchema = z.object({
   shippingCents: z.number().int(),
   chargeCents: z.number().int(),
   autoSendOptIn: z.boolean(),
+  shippingAddressId: z.string().nullable(),
   items: z.array(boxViewItemSchema),
   partnerItems: z.array(boxViewPartnerItemSchema),
 });

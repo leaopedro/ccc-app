@@ -82,4 +82,20 @@ export const caixaCopy = {
   },
   offline: { banner: 'Você está offline. Alterações não são salvas.' },
   loadError: { title: 'Não foi possível carregar', body: 'Verifique sua conexão e tente de novo.' },
+  builder: {
+    title: 'Montar a caixa',
+    all: 'Todos',
+    remaining: (value: string) => `restam ${value}`,
+    add: 'Adicionar',
+    soldOut: 'ESGOTADO',
+    soldOutButton: 'Sem estoque',
+    overflowBanner: (value: string) =>
+      `Você passou do budget. O excedente de ${value} é cobrado à parte antes do fechamento.`,
+    extraTag: 'EXTRA',
+    withinBudget: (n: number) => `${n} ${n === 1 ? 'item' : 'itens'} · dentro do budget`,
+    noExtraCharge: 'Sem cobrança extra',
+    reviewCta: 'Revisar e confirmar',
+    writeError: 'Não foi possível salvar. Tente de novo.',
+    soon: 'Em breve',
+  },
 } as const;

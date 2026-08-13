@@ -2,9 +2,7 @@ import type { BoxStatus, BoxView } from '@ccc/shared/box';
 
 import { caixaCopy } from '~/copy/caixa';
 
-export function homeVariant(
-  status: BoxStatus,
-): 'open' | 'skipped' | 'awaiting_payment' | 'ready' | 'post_cutoff' {
+export function homeVariant(status: BoxStatus): 'open' | 'skipped' | 'awaiting_payment' | 'ready' {
   if (status === 'cancelled') {
     return 'skipped';
   }

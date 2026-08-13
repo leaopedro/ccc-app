@@ -17,6 +17,7 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
+import { blockedUserIdsFor } from '../services/feed/blocks.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
 import rateLimit from '@fastify/rate-limit';
@@ -121,7 +122,14 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     if (access === 'forbidden')
       return reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
 
-    const where = { eventId, status: 'visible' as const };
+    // Symmetric block filter: hide people this reader blocked AND people who
+    // blocked them (App Store guideline 1.2). Empty for anonymous readers.
+    const blockedIds = await blockedUserIdsFor(userId);
+    const where = {
+      eventId,
+      status: 'visible' as const,
+      ...(blockedIds.length > 0 ? { authorUserId: { notIn: blockedIds } } : {}),
+    };
     const [total, posts] = await Promise.all([
       prisma.feedPost.count({ where }),
       prisma.feedPost.findMany({
@@ -204,7 +212,12 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       if (access !== 'ok')
         return reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
 
-      const where = { postId, status: 'visible' as const };
+      const blockedIds = await blockedUserIdsFor(userId);
+      const where = {
+        postId,
+        status: 'visible' as const,
+        ...(blockedIds.length > 0 ? { authorUserId: { notIn: blockedIds } } : {}),
+      };
       const [total, comments] = await Promise.all([
         prisma.feedComment.count({ where }),
         prisma.feedComment.findMany({

@@ -84,6 +84,8 @@ model User {
   reportsFiled        Report[]              @relation("ReportReporter")
   reportsResolved     Report[]              @relation("ReportResolver")
   feedBans            FeedBan[]             @relation("FeedBanUser")
+  blocksMade          UserBlock[]           @relation("UserBlockBlocker")
+  blocksReceived      UserBlock[]           @relation("UserBlockBlocked")
   feedBansIssued      FeedBan[]             @relation("FeedBanActor")
   consents            Consent[]
   documents           UserDocument[]
@@ -1655,6 +1657,24 @@ enum ReportTargetKind {
 enum BanScope {
   view
   post
+}
+
+/// User-to-user block, required by App Store guideline 1.2 (FeedBan is
+/// admin-applied and event-scoped, so it does not cover this). Filtering is
+/// SYMMETRIC: see services/feed/blocks.ts.
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  /// Load-bearing for the second direction of the symmetric filter: "who has
+  /// blocked me" is a lookup by blockedId.
+  @@index([blockedId])
 }
 
 model FeedBan {

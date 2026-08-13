@@ -673,6 +673,39 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(tickets.every((t) => t.status === 'revoked')).toBe(true);
   });
 
+  it('refunds instead of ignoring when a cart is paid after its orders expired', async () => {
+    // ORDER_EXPIRY_MS is 15 minutes but the Checkout Session lives 30+. Pay in
+    // that gap, after the reservation sweep expired the orders, and the handler
+    // used to answer `ignored: true`: money in, no order, no refund, no alert.
+    // The single-order path already refunds here; the cart path did not.
+    const { user } = await createUser({ verified: true });
+    const { cart } = await seedCartWithOrders(user.id);
+    await prisma.order.updateMany({ where: { cartId: cart.id }, data: { status: 'expired' } });
+
+    stripe.nextEvent = {
+      id: 'evt_cart_paid_after_expiry',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_cart_after_expiry', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const refunds = stripe.calls.filter((c) => c.kind === 'refund');
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]?.payload).toMatchObject({ paymentIntentId: 'pi_cart_after_expiry' });
+
+    // No ticket may exist for an order that was already expired.
+    expect(await prisma.ticket.count({ where: { userId: user.id } })).toBe(0);
+  });
+
   it('payment_intent.succeeded settles product-only carts without issuing tickets', async () => {
     const { user } = await createUser({ verified: true });
     const { cart, orders } = await seedProductCartWithOrders(user.id);

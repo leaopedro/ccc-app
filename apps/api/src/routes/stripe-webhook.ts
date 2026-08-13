@@ -126,6 +126,33 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         await markProcessed(webhookEvent.id, webhookEvent);
         return reply.status(200).send({ ok: true, deduped: true });
       }
+
+      // Nothing pending and nothing paid, but the cart HAS orders: the
+      // reservation sweep expired them (ORDER_EXPIRY_MS is 15 min) while the
+      // Checkout Session was still valid (30+ min), and the customer paid in
+      // that gap. Answering `ignored` here takes the money and leaves no order,
+      // no refund and no alert. The single-order path already refunds in this
+      // exact case; the cart path — the primary web flow — did not.
+      const dead = await prisma.order.findMany({
+        where: { cartId, status: { in: ['expired', 'failed'] } },
+        select: { id: true },
+      });
+
+      if (dead.length > 0) {
+        await app.stripe.refund(piId, 'order-expired');
+        Sentry.captureMessage('stripe webhook: cart paid after expiry, refunded', {
+          level: 'error',
+          tags: { kind: 'cart-paid-after-expiry', provider: 'stripe' },
+          extra: { cartId, paymentIntentId: piId, orders: dead.length },
+        });
+        request.log.warn(
+          { cartId, piId, orders: dead.length },
+          'stripe webhook: cart paid after expiry, refunded',
+        );
+        await markProcessed(webhookEvent.id, webhookEvent);
+        return reply.status(200).send({ ok: true, refunded: true, reason: 'expired' });
+      }
+
       return reply.status(200).send({ ok: true, ignored: true });
     }
 

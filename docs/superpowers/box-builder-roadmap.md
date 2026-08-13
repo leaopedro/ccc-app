@@ -169,23 +169,84 @@ em erro transitorio + refresh no foreground (`usePremiumSlot`); SkipSheet trata
 erro nao-ApiError (fim de rejeicao nao tratada); home da Caixa refaz fetch no
 foco; erro de unskip agora aparece na UI.
 
-#### Fase 3b-2 — mobile: builder interativo + offline (PENDENTE)
+A 3b-2 foi fatiada em duas: 3b-2a (builder do catalogo) e 3b-2b (parceiros,
+revisao/endereco, offline, flip do flag).
 
-Tela do assinante montar a caixa dentro do budget (telas 02/03/04/05), sobre a
-fundacao da 3b-1. Plano a escrever.
+#### Fase 3b-2a — mobile: builder do catalogo (CONCLUIDA)
 
-Decisoes de escopo:
+Tela do assinante montar a caixa (telas 02/03) sobre a fundacao da 3b-1, atras
+do flag `EXPO_PUBLIC_CAIXA_ENABLED` (default OFF, merge dark). Entregue em
+`feat/box-builder-fase-3b-2a-mobile` (PR #17). Plano:
+`docs/superpowers/plans/2026-08-12-box-builder-fase-3b-2a-mobile-builder.md`.
+Executada via subagent-driven-development (7 tasks TDD, review por task + review
+de branch no opus).
 
-- Builder ate confirmar. Telas de pagamento (06/07) e timeline de fulfillment
-  (09) sao Fase 4; `ready` ja tem a tela minimal na 3b-1.
-- Extras: "confirma e estaciona". Confirm com charge > 0 vai pra
-  `awaiting_payment` read-only; sem pagamento ate o cutoff, o worker corta pro
-  budget-only.
-- Grade de catalogo com steppers, animacao da barra de budget, modulos de
-  parceiro, revisao + endereco, confirm.
-- Offline: persist local minimo (AsyncStorage + reenvio ao reconectar).
-- Ao fim da 3b-2: ligar `EXPO_PUBLIC_CAIXA_ENABLED` por padrao e fechar os
-  carry-forwards da 3b-1 acima.
+Entregue: `shippingAddressId` no `BoxView` (shared + serialize + teste
+Testcontainers); limpezas da 3b-1 (union de `homeVariant`, reuso de
+`includedCents`, estilo no-op, teste de `unskipBox`); `useBoxCatalog`;
+`builder-selection.ts` puro (totais otimistas, indice de preco, payload,
+filtro de categoria); `useBoxBuilder` (PUT debounced, reconciliacao pelo
+servidor, saves serializados, flush no blur/unmount, preserva parceiros); tela
+`montar.tsx` (02/03) + `CatalogItemCard` + barra de budget animada (RN
+`Animated`) + placeholder `revisar.tsx`; ponto de entrada de preferencias no
+header da home.
+
+Carry-forwards da 3b-1 fechados nesta fase: ponto de entrada de preferencias;
+`shippingAddressId` exposto no `BoxView` (base pros achados de endereco); as
+quatro limpezas menores.
+
+Correcoes pos-review (mesma branch/PR):
+
+- Review de branch (opus): barra animada renderizava cheia abaixo do budget
+  (faltava o segmento espaçador do modo estatico). Corrigido.
+- Review de PR (tres passadas): `toSelectionUpdate` agora manda `quantity: 0`
+  explicito (o PUT e diff-based; sem isso a remocao de item nao persistia);
+  fixture do `boxViewSchema` no shared ganhou `shippingAddressId` (quebrava o
+  vitest do shared / CI); saves serializados no `useBoxBuilder` (um PUT em voo,
+  reenvio da ultima selecao) pro last-write-wins valer tambem no servidor.
+
+#### Fase 3b-2b — mobile: parceiros, revisao, offline (CONCLUIDA)
+
+Fecha o builder sobre a 3b-2a. Entregue em `feat/box-builder-fase-3b-2b-mobile`,
+mergeada em `main` pelo PR #20.
+Plano: `docs/superpowers/plans/2026-08-13-box-builder-fase-3b-2b-mobile.md`.
+Executado via subagent-driven-development (7 tasks, review por task, review final).
+
+Escopo entregue:
+
+- Parceiros (tela 04): tela `/caixa/parceiros` com toggle de modulos sobre o
+  `partners` semeado no controlador da 3b-2a. Parceiros nunca movem a barra de
+  budget. Fluxo linear: Montar -> Parceiros -> Revisao (CTA do builder virou
+  "Continuar").
+- Revisao + endereco (tela 05): `revisar.tsx` real substitui o placeholder.
+  Semeia o endereco de `BoxView.shippingAddressId`; confirm via `confirmBox`;
+  sucesso cai na home read-only (`awaiting_payment`/`ready`). Frete nao e
+  mostrado antes do confirm (resolucao da Q1); linha muted "Frete calculado na
+  confirmacao".
+- Dois achados de endereco da 3b-1 fechados na tela de Preferencias: semear do
+  box (nao so do default); bloquear auto-envio sem endereco.
+- Offline: persist local minimo (`builder-offline.ts`, draft AsyncStorage por
+  box, reenviado no mount se ficou sujo). Sem lib de conectividade.
+
+Fixes de review (review final opus + review do PR #20):
+
+- Draft nao e marcado limpo se uma edicao chegou durante o PUT em voo.
+- Resume no mount nao sobrescreve uma edicao feita durante o `loadDraft` async.
+- `flush()` resolve true so quando a selecao esta salva; Montar/Parceiros so
+  navegam pra frente com sucesso (PUT falho mantem o usuario na tela de retry).
+- Revisao trata erro de carga de endereco separado de lista vazia (com retry).
+- Revisao redireciona pra `/caixa` e desabilita confirmar quando o box nao esta
+  `open`.
+
+Residual conhecido: janela `open` mas pos-cutoff (antes do worker rodar) nao e
+pega pelo redirect; o servidor rejeita o confirm com `box_locked` e o feedback
+aparece. Consistente com Montar.
+
+Go-live (apos QA manual do fluxo completo):
+
+- Ligar `EXPO_PUBLIC_CAIXA_ENABLED=true` no ambiente de build do mobile
+  (perfil EAS / .env). O default no codigo fica OFF; o flip e config, nao
+  codigo. Testar num cliente premium real antes de promover.
 
 ### Fase 4 — Checkout dos extras (PENDENTE)
 

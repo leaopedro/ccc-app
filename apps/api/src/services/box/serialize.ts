@@ -23,6 +23,7 @@ export const serializeBox = (box: MonthlyBoxWithLines, uploads: Uploads): BoxVie
   shippingCents: box.shippingCents,
   chargeCents: box.chargeCents,
   autoSendOptIn: box.autoSendOptIn,
+  shippingAddressId: box.shippingAddressId,
   items: box.items.map((i) => ({
     catalogItemId: i.catalogItemId,
     quantity: i.quantity,

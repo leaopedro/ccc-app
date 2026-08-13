@@ -17,6 +17,7 @@ describe('box shared schemas', () => {
       shippingCents: 0,
       chargeCents: 0,
       autoSendOptIn: false,
+      shippingAddressId: null,
       items: [
         {
           catalogItemId: 'ci_1',

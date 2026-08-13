@@ -105,4 +105,60 @@ describe('GET /me/box enrichment', () => {
     expect(included?.imageUrl).toContain('box_item/u/x1.jpg');
     expect(dropped?.dropReason).toBe('cutoff_budget_only');
   });
+
+  it('exposes the box shippingAddressId (null when unset)', async () => {
+    const { user } = await createUser({ verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'Fulano',
+        line1: 'Rua A',
+        number: '100',
+        district: 'Centro',
+        city: 'São Paulo',
+        stateCode: 'SP',
+        postalCode: '01000-000',
+      },
+    });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_addr',
+        providerSubRef: `sub_addr_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey: '2026-08-01',
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: new Date('2026-08-25T00:00:00.000Z'),
+        budgetCentsSnapshot: 45000,
+        shippingAddressId: address.id,
+      },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/box',
+      headers: { authorization: bearer(env, user.id) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().shippingAddressId).toBe(address.id);
+  });
 });

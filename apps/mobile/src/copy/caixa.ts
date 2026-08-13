@@ -85,7 +85,6 @@ export const caixaCopy = {
   builder: {
     title: 'Montar a caixa',
     all: 'Todos',
-    usedOfPlan: (used: string, total: string) => `${used} de ${total}`,
     remaining: (value: string) => `restam ${value}`,
     add: 'Adicionar',
     soldOut: 'ESGOTADO',

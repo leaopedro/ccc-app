@@ -16,7 +16,7 @@ import type { BoxCatalog, BoxView } from '@ccc/shared/box';
 import { Button, Text } from '@ccc/ui';
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { caixaCopy } from '~/copy/caixa';
@@ -271,13 +271,6 @@ function BuilderBody({ box, catalog }: { box: BoxView; catalog: BoxCatalog }) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const hasOverflow = builder.totals.overflowCents > 0;
-  // Latches once overflow first appears so a later re-render never replays
-  // an entrance transition for the banner — it just stays declaratively
-  // visible for as long as hasOverflow is true.
-  const overflowShown = useRef(false);
-  useEffect(() => {
-    if (hasOverflow) overflowShown.current = true;
-  }, [hasOverflow]);
 
   const filteredItems = useMemo(
     () => filterByCategory(catalog.items, activeCategory),

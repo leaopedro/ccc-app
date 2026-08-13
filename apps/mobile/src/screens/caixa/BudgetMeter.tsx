@@ -56,6 +56,12 @@ export function BudgetMeter({ box, compact = false, animated = false }: BudgetMe
     }).start();
   }, [animated, meter.fillRatio, meter.overflowRatio, fill, over]);
 
+  // Mirrors the static branch's trailing spacer — without it, `fill` and
+  // `over` alone (summing to < 1 whenever there's no overflow) would each
+  // get sized as if they were the only two flex children, so `fill` renders
+  // full-width instead of stopping at fillRatio.
+  const rest = Animated.subtract(1, Animated.add(fill, over));
+
   return (
     <View style={[styles.card, compact && styles.cardCompact]}>
       <View style={compact ? styles.valueRowCompact : styles.valueRow}>
@@ -72,6 +78,7 @@ export function BudgetMeter({ box, compact = false, animated = false }: BudgetMe
           <>
             <Animated.View style={[styles.fill, { flex: fill }]} />
             <Animated.View style={[styles.overflowFill, { flex: over }]} />
+            <Animated.View style={{ flex: rest }} accessible={false} />
           </>
         ) : (
           <>

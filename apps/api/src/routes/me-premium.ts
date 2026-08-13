@@ -28,6 +28,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { requireUser } from '../plugins/auth.js';
+import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
 
@@ -94,11 +95,23 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
       let manageUrl: string;
       if (liveMembership.provider === 'stripe') {
-        const portal = await app.stripe.createBillingPortalSession({
-          customerId: liveMembership.providerCustomerRef,
-          returnUrl: `${app.env.APP_WEB_BASE_URL}/me/billing`,
-        });
-        manageUrl = portal.url;
+        try {
+          const portal = await app.stripe.createBillingPortalSession({
+            customerId: liveMembership.providerCustomerRef,
+            returnUrl: `${app.env.APP_WEB_BASE_URL}/me/billing`,
+          });
+          manageUrl = portal.url;
+        } catch (err) {
+          handleStaleRef(err, liveMembership.providerCustomerRef, 'premium_precheck');
+          // premiumCheckoutPrecheckResponseSchema requires a non-null manageUrl,
+          // and widening that shared contract is out of scope here. Answering
+          // StaleBillingReference is still a 409 and beats both an unhandled 500
+          // and promising a manage link that cannot be minted.
+          return reply.status(409).send({
+            error: 'StaleBillingReference',
+            message: 'billing reference no longer valid',
+          });
+        }
       } else {
         manageUrl = APPLE_MANAGE_URL;
       }
@@ -253,11 +266,19 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       if (liveMembership) {
         let manageUrl: string;
         if (liveMembership.provider === 'stripe') {
-          const portal = await app.stripe.createBillingPortalSession({
-            customerId: liveMembership.providerCustomerRef,
-            returnUrl: `${app.env.APP_WEB_BASE_URL}/me/billing`,
-          });
-          manageUrl = portal.url;
+          try {
+            const portal = await app.stripe.createBillingPortalSession({
+              customerId: liveMembership.providerCustomerRef,
+              returnUrl: `${app.env.APP_WEB_BASE_URL}/me/billing`,
+            });
+            manageUrl = portal.url;
+          } catch (err) {
+            handleStaleRef(err, liveMembership.providerCustomerRef, 'premium_checkout_precheck');
+            return reply.status(409).send({
+              error: 'StaleBillingReference',
+              message: 'billing reference no longer valid',
+            });
+          }
         } else {
           manageUrl = APPLE_MANAGE_URL;
         }
@@ -416,10 +437,19 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const portal = await app.stripe.createBillingPortalSession({
-        customerId: membership.providerCustomerRef,
-        returnUrl,
-      });
+      let portal;
+      try {
+        portal = await app.stripe.createBillingPortalSession({
+          customerId: membership.providerCustomerRef,
+          returnUrl,
+        });
+      } catch (err) {
+        handleStaleRef(err, membership.providerCustomerRef, 'premium_billing_portal');
+        return reply.status(409).send({
+          error: 'StaleBillingReference',
+          message: 'billing reference no longer valid',
+        });
+      }
 
       return reply.status(200).send(premiumBillingPortalResponseSchema.parse(portal));
     },

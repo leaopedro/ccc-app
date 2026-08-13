@@ -26,6 +26,7 @@ import {
 import rateLimit from '@fastify/rate-limit';
 import { reserveExtras, validateTickets } from '../services/orders/validate-tickets.js';
 import { applyDevFee } from '../services/pricing/dev-fee.js';
+import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
 
 type PreparedOrder = {
@@ -687,7 +688,18 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       if (!order.providerRef) {
         return reply.status(409).send({ error: 'OrderNotPending', status: order.status });
       }
-      const pi = await app.stripe.retrievePaymentIntent(order.providerRef);
+      let pi;
+      try {
+        pi = await app.stripe.retrievePaymentIntent(order.providerRef);
+      } catch (err) {
+        // A `pi_test_...` ref under a live key raises resource_missing. This call
+        // had no guard, so resume returned an unhandled 500 forever for every
+        // pending order created before the cutover.
+        handleStaleRef(err, order.providerRef, 'order_resume');
+        return reply
+          .status(409)
+          .send({ error: 'StaleBillingReference', message: 'payment reference no longer valid' });
+      }
       return reply.status(200).send(
         resumeOrderResponseSchema.parse({
           method: 'card',

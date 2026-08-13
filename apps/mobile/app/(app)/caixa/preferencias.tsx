@@ -16,6 +16,7 @@ import { caixaCopy } from '~/copy/caixa';
 import { useBox } from '~/hooks/useBox';
 import { useBoxPreferences } from '~/hooks/useBoxPreferences';
 import { useShippingAddresses } from '~/hooks/useShippingAddresses';
+import { canEnableAutoSend, pickInitialAddressId } from '~/screens/caixa/address-select';
 import { mapSaveResult, type PreferencesSaveFeedback } from '~/screens/caixa/preferences-result';
 import { formatShippingAddress } from '~/shipping/format-address';
 import { theme } from '~/theme';
@@ -84,15 +85,14 @@ export default function BoxPreferencesScreen() {
     if (box) setAutoSendOptIn(box.autoSendOptIn);
   }, [box]);
 
-  // Default to the account's default address once addresses load, without
-  // clobbering a manual selection.
+  // Seed from the box first (spec: BoxView.shippingAddressId), then default,
+  // without clobbering a manual selection.
   useEffect(() => {
     setSelectedAddressId((current) => {
       if (current && addresses.some((address) => address.id === current)) return current;
-      if (addresses.length === 0) return null;
-      return addresses.find((address) => address.isDefault)?.id ?? addresses[0]!.id;
+      return pickInitialAddressId(box?.shippingAddressId ?? null, addresses);
     });
-  }, [addresses]);
+  }, [box, addresses]);
 
   useEffect(
     () => () => {
@@ -111,6 +111,10 @@ export default function BoxPreferencesScreen() {
 
   const onSave = async () => {
     setFeedback(null);
+    if (autoSendOptIn && !canEnableAutoSend(selectedAddressId)) {
+      showFeedback({ kind: 'address_error', message: caixaCopy.preferences.autoSendNeedsAddress });
+      return;
+    }
     const result = await save({
       autoSendOptIn,
       ...(selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
@@ -193,7 +197,16 @@ export default function BoxPreferencesScreen() {
           </View>
           <Switch
             value={autoSendOptIn}
-            onValueChange={setAutoSendOptIn}
+            onValueChange={(next) => {
+              if (next && !canEnableAutoSend(selectedAddressId)) {
+                setFeedback({
+                  kind: 'address_error',
+                  message: caixaCopy.preferences.autoSendNeedsAddress,
+                });
+                return;
+              }
+              setAutoSendOptIn(next);
+            }}
             disabled={!isOpen}
             trackColor={{ false: theme.colors.border, true: GOLD_LABEL }}
             thumbColor={theme.colors.fg}

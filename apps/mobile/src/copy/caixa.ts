@@ -68,6 +68,7 @@ export const caixaCopy = {
     saved: 'Preferências salvas.',
     saveError: 'Não foi possível salvar. Tente de novo.',
     addressInvalid: 'Endereço inválido. Escolha outro endereço.',
+    autoSendNeedsAddress: 'Escolha um endereço para ativar o envio automático.',
     locked: {
       title: 'Caixa travada',
       body: 'As preferências só podem ser alteradas enquanto a caixa está em montagem.',

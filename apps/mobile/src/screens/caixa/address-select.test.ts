@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickInitialAddressId } from './address-select';
+import { canEnableAutoSend, pickInitialAddressId } from './address-select';
 
 const addrs = [
   { id: 'a1', isDefault: false },
@@ -23,5 +23,12 @@ describe('pickInitialAddressId', () => {
 
   it('returns null when there are no addresses', () => {
     expect(pickInitialAddressId('a1', [])).toBeNull();
+  });
+});
+
+describe('canEnableAutoSend', () => {
+  it('requires a selected address', () => {
+    expect(canEnableAutoSend('a1')).toBe(true);
+    expect(canEnableAutoSend(null)).toBe(false);
   });
 });

@@ -12,3 +12,9 @@ export function pickInitialAddressId(
   if (addresses.length === 0) return null;
   return addresses.find((a) => a.isDefault)?.id ?? addresses[0]!.id;
 }
+
+// Auto-send at cutoff requires a shipping address, otherwise the worker's
+// auto-confirm branch has nowhere to ship. Block the opt-in without one.
+export function canEnableAutoSend(selectedAddressId: string | null): boolean {
+  return selectedAddressId !== null;
+}

@@ -139,6 +139,9 @@ describe('POST /me/box/confirm', () => {
     expect(order.status).toBe('pending');
     expect(order.devFeePercent).toBe(0);
     expect(order.amountCents).toBe(2000);
+    const view = res.json();
+    expect(view.orderId).toBe(fresh.orderId);
+    expect(view.orderId).not.toBeNull();
   });
 
   it('second confirm on an already-confirmed box returns 409 and does not create a second Order (Fix C)', async () => {

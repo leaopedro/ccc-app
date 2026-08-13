@@ -110,4 +110,18 @@ export const caixaCopy = {
       body: 'Nenhum módulo de parceiro disponível agora. Você já pode revisar.',
     },
   },
+  review: {
+    title: 'Revisão',
+    planItems: 'ITENS DO PLANO',
+    partners: 'PARCEIROS · COBRADO À PARTE',
+    delivery: 'ENTREGA',
+    shippingAtConfirm: 'Frete calculado na confirmação',
+    lockWarning: 'Confirmar trava a caixa. Não dá pra editar depois.',
+    confirmCta: 'Confirmar caixa',
+    addressRequired: 'Escolha um endereço para confirmar.',
+    confirmError: 'Não foi possível confirmar. Tente de novo.',
+    addressInvalid: 'Endereço inválido. Escolha outro endereço.',
+    locked: 'A caixa não está mais em montagem.',
+    lineQty: (qty: number, unit: string) => `${qty} × ${unit}`,
+  },
 } as const;

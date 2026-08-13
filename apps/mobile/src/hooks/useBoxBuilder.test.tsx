@@ -180,6 +180,42 @@ describe('useBoxBuilder', () => {
     });
   });
 
+  it('does not mark the draft clean when a newer edit arrives mid-flight', async () => {
+    // Hold the PUT open so a newer edit can land while it is still in flight.
+    let resolveFirst!: (v: unknown) => void;
+    updateBoxSelection.mockReset();
+    updateBoxSelection.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    let flush1!: Promise<void>;
+    await act(async () => {
+      api.setItemQty('a', 1);
+      flush1 = api.flush();
+    });
+    expect(updateBoxSelection).toHaveBeenCalledTimes(1);
+
+    // A newer edit arrives while the PUT sent above is still pending.
+    await act(async () => {
+      api.setItemQty('a', 3);
+    });
+
+    await act(async () => {
+      resolveFirst(box);
+      await flush1;
+    });
+
+    // The PUT that just succeeded was for quantity 1 — a snapshot taken
+    // before the newer edit (quantity 3) landed. Since that newer edit was
+    // never part of this PUT, the draft must NOT be marked clean at all: not
+    // for the stale (quantity 1) selection that was actually sent, and not
+    // for the newer (quantity 3) selection that was NOT sent.
+    expect(saveDraftMock).not.toHaveBeenCalledWith(expect.objectContaining({ dirty: false }));
+  });
+
   it('resends a dirty draft on mount', async () => {
     loadDraftMock.mockResolvedValueOnce({
       version: 1,

@@ -65,18 +65,25 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
       do {
         pending.current = false;
         setWriteError(false);
+        // Snapshot exactly what we send, so we only mark the draft clean when
+        // no newer edit arrived mid-flight. setItems/setPartners change these
+        // references only on a real edit; re-renders (setServerBox) do not.
+        const sentItems = latest.current.items;
+        const sentPartners = latest.current.partners;
         try {
-          const result = await updateBoxSelection(
-            toSelectionUpdate(latest.current.items, latest.current.partners),
-          );
+          const result = await updateBoxSelection(toSelectionUpdate(sentItems, sentPartners));
           setWriteError(false);
           setServerBox(result);
-          void saveDraft({
-            boxId: box.id,
-            items: latest.current.items,
-            partners: latest.current.partners,
-            dirty: false,
-          });
+          if (latest.current.items === sentItems && latest.current.partners === sentPartners) {
+            void saveDraft({
+              boxId: box.id,
+              items: sentItems,
+              partners: sentPartners,
+              dirty: false,
+            });
+          }
+          // else: a newer edit exists; leave the draft dirty so the follow-up
+          // send (its debounce is already armed) cleans it.
         } catch {
           setWriteError(true);
         }

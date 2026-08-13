@@ -93,10 +93,18 @@ describe('computeOptimisticTotals', () => {
 });
 
 describe('toSelectionUpdate', () => {
-  it('drops zero quantities and shapes the PUT payload', () => {
+  it('keeps zero quantities so the diff-based API deletes removed lines', () => {
+    // The API only deletes a saved line when it receives quantity: 0; an omitted
+    // id is left unchanged. So a decrement-to-zero must be sent, not dropped.
     expect(toSelectionUpdate({ a: 2, b: 0 }, { p1: 1, p2: 0 })).toEqual({
-      items: [{ catalogItemId: 'a', quantity: 2 }],
-      partnerItems: [{ partnerModuleId: 'p1', quantity: 1 }],
+      items: [
+        { catalogItemId: 'a', quantity: 2 },
+        { catalogItemId: 'b', quantity: 0 },
+      ],
+      partnerItems: [
+        { partnerModuleId: 'p1', quantity: 1 },
+        { partnerModuleId: 'p2', quantity: 0 },
+      ],
     });
   });
 });

@@ -125,4 +125,44 @@ describe('useBoxBuilder', () => {
     });
     expect(api.writeError).toBe(true);
   });
+
+  it('serializes overlapping sends and the trailing send uses the latest selection', async () => {
+    // Hold the first PUT open so a second send is requested while it is in flight.
+    let resolveFirst!: (v: unknown) => void;
+    updateBoxSelection.mockReset();
+    updateBoxSelection
+      .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
+      .mockResolvedValue(box);
+
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    // First send is now in flight, awaiting the held promise.
+    let flush1!: Promise<void>;
+    await act(async () => {
+      api.setItemQty('a', 1);
+      flush1 = api.flush();
+    });
+    expect(updateBoxSelection).toHaveBeenCalledTimes(1);
+
+    // A second flush while in flight must NOT start a concurrent PUT.
+    await act(async () => {
+      api.setItemQty('a', 3);
+      void api.flush();
+    });
+    expect(updateBoxSelection).toHaveBeenCalledTimes(1);
+
+    // Once the first resolves, the queued trailing send fires with the latest selection.
+    await act(async () => {
+      resolveFirst(box);
+      await flush1;
+    });
+    expect(updateBoxSelection).toHaveBeenCalledTimes(2);
+    expect(updateBoxSelection).toHaveBeenLastCalledWith({
+      items: [{ catalogItemId: 'a', quantity: 3 }],
+      partnerItems: [],
+    });
+  });
 });

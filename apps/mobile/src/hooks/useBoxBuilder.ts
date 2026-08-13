@@ -40,26 +40,42 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
   // Latest selection, read at flush time (avoids stale closures).
   const latest = useRef({ items, partners });
   latest.current = { items, partners };
-  // Guards against overlapping sends: only the most recent one may write state.
-  const reqSeq = useRef(0);
+  // Serialize writes: at most one PUT in flight. Without this, the debounce
+  // timer and a blur/flush can fire two concurrent PUTs; the server serializes
+  // them by lock-acquisition order, not send order, so a delayed older request
+  // could commit AFTER a newer one and leave the DB with a stale selection. A
+  // call made while a send is in flight sets `pending`; the in-flight send then
+  // loops and re-sends the latest selection, so the last write always wins on
+  // the server too.
+  const inFlight = useRef(false);
+  const pending = useRef(false);
 
   const send = useCallback(async () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    const seq = ++reqSeq.current;
-    setWriteError(false);
+    if (inFlight.current) {
+      pending.current = true;
+      return;
+    }
+    inFlight.current = true;
     try {
-      const result = await updateBoxSelection(
-        toSelectionUpdate(latest.current.items, latest.current.partners),
-      );
-      if (seq === reqSeq.current) {
+      do {
+        pending.current = false;
         setWriteError(false);
-        setServerBox(result);
-      }
-    } catch {
-      if (seq === reqSeq.current) setWriteError(true);
+        try {
+          const result = await updateBoxSelection(
+            toSelectionUpdate(latest.current.items, latest.current.partners),
+          );
+          setWriteError(false);
+          setServerBox(result);
+        } catch {
+          setWriteError(true);
+        }
+      } while (pending.current);
+    } finally {
+      inFlight.current = false;
     }
   }, []);
 

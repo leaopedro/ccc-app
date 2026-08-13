@@ -77,14 +77,18 @@ export function computeOptimisticTotals(
   };
 }
 
+// The API is diff-based: an explicit `quantity: 0` deletes a saved line, while
+// an OMITTED id is left unchanged (apps/api/src/routes/box.ts). So a decrement
+// to zero must be SENT as 0, not dropped — otherwise the removal never persists.
+// The selection map only ever holds seeded (existing) or user-touched ids, so
+// sending every entry (zeros included) is the correct whole-selection diff.
 export function toSelectionUpdate(items: SelectionMap, partners: SelectionMap): BoxSelectionUpdate {
   return {
-    items: Object.entries(items)
-      .filter(([, q]) => q > 0)
-      .map(([catalogItemId, quantity]) => ({ catalogItemId, quantity })),
-    partnerItems: Object.entries(partners)
-      .filter(([, q]) => q > 0)
-      .map(([partnerModuleId, quantity]) => ({ partnerModuleId, quantity })),
+    items: Object.entries(items).map(([catalogItemId, quantity]) => ({ catalogItemId, quantity })),
+    partnerItems: Object.entries(partners).map(([partnerModuleId, quantity]) => ({
+      partnerModuleId,
+      quantity,
+    })),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   feedReactionSummarySchema,
   type FeedReactionSummary,
 } from '@ccc/shared/feed';
+import { reportCreateResponseSchema } from '@ccc/shared/reports';
 import { z } from 'zod';
 
 import { ApiError, authedRequest, request } from './client';
@@ -105,3 +106,34 @@ export const createFeedComment = (
     method: 'POST',
     body: input,
   });
+
+// App Store guideline 1.2 — report objectionable content and block a person.
+// The API answers 201 on a new report and 200 when this reporter had already
+// reported the same target, so both are success here: reporting twice is not a
+// user error and the UI must not treat it as one.
+export const reportFeedPost = (eventId: string, postId: string, reason: string) =>
+  authedRequest(`/events/${enc(eventId)}/feed/${enc(postId)}/report`, reportCreateResponseSchema, {
+    method: 'POST',
+    body: { reason },
+  });
+
+export const reportFeedComment = (eventId: string, commentId: string, reason: string) =>
+  authedRequest(
+    `/events/${enc(eventId)}/feed/comments/${enc(commentId)}/report`,
+    reportCreateResponseSchema,
+    { method: 'POST', body: { reason } },
+  );
+
+// By post, not by user id: the feed payload does not expose authorUserId and
+// adding it would put a new user identifier into a shared contract. The server
+// resolves the author.
+export const blockPostAuthor = (eventId: string, postId: string): Promise<null> =>
+  authedRequest(`/events/${enc(eventId)}/feed/${enc(postId)}/block-author`, z.null(), {
+    method: 'PUT',
+  });
+
+export const blockUser = (userId: string): Promise<null> =>
+  authedRequest(`/api/me/blocks/${enc(userId)}`, z.null(), { method: 'PUT' });
+
+export const unblockUser = (userId: string): Promise<null> =>
+  authedRequest(`/api/me/blocks/${enc(userId)}`, z.null(), { method: 'DELETE' });

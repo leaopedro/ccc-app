@@ -28,6 +28,8 @@ import {
   patchFeedPost,
   removeFeedReaction,
   toggleFeedReaction,
+  blockPostAuthor,
+  reportFeedPost,
 } from '~/api/feed';
 import { useAuth } from '~/auth/context';
 import { feedCopy } from '~/copy/feed';
@@ -201,6 +203,53 @@ export function EventFeedSection({
     ]);
   };
 
+  // Guideline 1.2. Alert.prompt is iOS-only, and this flow has to work on
+  // Android too, so the reason is fixed text plus the post id rather than free
+  // typing. The API stores whatever string it gets and the admin queue reads it;
+  // a category picker is a product decision nobody has made yet.
+  const handleReportPost = (post: FeedPostResponse) => {
+    Alert.alert(feedCopy.post.report.title, feedCopy.post.report.prompt, [
+      { text: feedCopy.post.report.cancel, style: 'cancel' },
+      {
+        text: feedCopy.post.report.submit,
+        onPress: () => {
+          void (async () => {
+            try {
+              await reportFeedPost(post.eventId, post.id, `Denúncia via app — post ${post.id}`);
+              Alert.alert(feedCopy.post.report.done);
+            } catch {
+              Alert.alert(feedCopy.post.report.error);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const handleBlockAuthor = (post: FeedPostResponse) => {
+    Alert.alert(feedCopy.post.block.title, feedCopy.post.block.body, [
+      { text: feedCopy.post.block.cancel, style: 'cancel' },
+      {
+        text: feedCopy.post.block.confirm,
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await blockPostAuthor(post.eventId, post.id);
+              // The client never learns the author id, so it cannot filter
+              // locally. Drop this post for immediate feedback and let the next
+              // fetch apply the server-side filter to the rest.
+              setPosts((prev) => prev.filter((p) => p.id !== post.id));
+              Alert.alert(feedCopy.post.block.done);
+            } catch {
+              Alert.alert(feedCopy.post.block.error);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
   const navigateToBuyTicket = () => {
     router.push({
       pathname: '/events/[slug]',
@@ -242,6 +291,8 @@ export function EventFeedSection({
                 }
               : {})}
             onDelete={handleDeletePost}
+            onReport={handleReportPost}
+            onBlock={handleBlockAuthor}
           />
         ))
       )}

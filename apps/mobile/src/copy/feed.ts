@@ -30,6 +30,25 @@ export const feedCopy = {
     menu: {
       edit: 'Editar',
       delete: 'Excluir',
+      report: 'Denunciar',
+      block: 'Bloquear',
+    },
+    report: {
+      title: 'Denunciar publicação',
+      prompt: 'Conte rapidamente o que está errado. Um moderador vai avaliar.',
+      placeholder: 'Motivo da denúncia',
+      submit: 'Enviar denúncia',
+      cancel: 'Cancelar',
+      done: 'Denúncia enviada. Obrigado por avisar.',
+      error: 'Não foi possível enviar a denúncia agora.',
+    },
+    block: {
+      title: 'Bloquear esta pessoa?',
+      body: 'Você não vai mais ver publicações e comentários dela, e ela não vai ver os seus.',
+      confirm: 'Bloquear',
+      cancel: 'Cancelar',
+      done: 'Pessoa bloqueada.',
+      error: 'Não foi possível bloquear agora.',
     },
   },
   locked: {

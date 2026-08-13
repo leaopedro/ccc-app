@@ -169,6 +169,51 @@ describe('user blocks', () => {
     expect(res.json().comments).toHaveLength(0);
   });
 
+  it('blocks the author of a post without the client knowing their id', async () => {
+    // The feed payload deliberately does not expose authorUserId, so blocking
+    // goes through the post and the server resolves the author.
+    const event = await seedEvent();
+    const { user: me } = await createUser({ email: 'ba-reader@jdm.test', verified: true });
+    const { user: other } = await createUser({ email: 'ba-author@jdm.test', verified: true });
+    const post = await prisma.feedPost.create({
+      data: { eventId: event.id, authorUserId: other.id, body: 'post a bloquear' },
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/events/${event.id}/feed/${post.id}/block-author`,
+      headers: { authorization: bearer(env, me.id, 'user') },
+    });
+
+    expect(res.statusCode).toBe(204);
+    const row = await prisma.userBlock.findFirstOrThrow({ where: { blockerId: me.id } });
+    expect(row.blockedId).toBe(other.id);
+
+    const feed = await app.inject({
+      method: 'GET',
+      url: `/events/${event.id}/feed`,
+      headers: { authorization: bearer(env, me.id, 'user') },
+    });
+    expect(feed.json().posts).toHaveLength(0);
+  });
+
+  it('refuses blocking the author of your own post', async () => {
+    const event = await seedEvent();
+    const { user: me } = await createUser({ email: 'ba-self@jdm.test', verified: true });
+    const post = await prisma.feedPost.create({
+      data: { eventId: event.id, authorUserId: me.id, body: 'meu post' },
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/events/${event.id}/feed/${post.id}/block-author`,
+      headers: { authorization: bearer(env, me.id, 'user') },
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(await prisma.userBlock.count()).toBe(0);
+  });
+
   it('does not filter anything for an anonymous reader', async () => {
     const event = await seedEvent();
     const { user: me } = await createUser({ email: 'anon-a@jdm.test', verified: true });

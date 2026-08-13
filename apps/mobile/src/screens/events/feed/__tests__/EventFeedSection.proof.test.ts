@@ -467,6 +467,27 @@ describe('Feed post action visibility — production wiring', () => {
     expect(visibility.showDelete).toBe(false);
   });
 
+  it('non-owned post => report and block visible for a regular user', () => {
+    // Guideline 1.2: a reviewer has to be able to flag content and block a
+    // person from the post itself, without moderator role.
+    const visibility = resolveFeedPostActionVisibility(false, canModerateFeedPost('user'));
+    expect(visibility.showReport).toBe(true);
+    expect(visibility.showBlock).toBe(true);
+  });
+
+  it('own post => report and block hidden', () => {
+    // Reporting yourself is noise, and the API refuses a self-block with 422.
+    const visibility = resolveFeedPostActionVisibility(true, canModerateFeedPost('user'));
+    expect(visibility.showReport).toBe(false);
+    expect(visibility.showBlock).toBe(false);
+  });
+
+  it('moderator on a non-owned post keeps report and block too', () => {
+    const visibility = resolveFeedPostActionVisibility(false, canModerateFeedPost('admin'));
+    expect(visibility.showReport).toBe(true);
+    expect(visibility.showBlock).toBe(true);
+  });
+
   it('owner post => edit and delete visible', () => {
     const canModerate = canModerateFeedPost('user');
     const visibility = resolveFeedPostActionVisibility(true, canModerate);

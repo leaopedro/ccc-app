@@ -32,6 +32,8 @@ type Props = {
   onToggleReaction: (postId: string, kind: 'like' | 'dislike') => void;
   onEdit?: (post: FeedPostResponse) => void;
   onDelete?: (post: FeedPostResponse) => void;
+  onReport?: (post: FeedPostResponse) => void;
+  onBlock?: (post: FeedPostResponse) => void;
 };
 
 export function FeedPostCard({
@@ -44,10 +46,15 @@ export function FeedPostCard({
   onToggleReaction,
   onEdit,
   onDelete,
+  onReport,
+  onBlock,
 }: Props) {
   const car = post.car;
   const carLabel = car ? `${car.nickname ?? car.make} ${car.model} ${car.year}` : '—';
-  const { showEdit, showDelete } = resolveFeedPostActionVisibility(isOwn, canModerate);
+  const { showEdit, showDelete, showReport, showBlock } = resolveFeedPostActionVisibility(
+    isOwn,
+    canModerate,
+  );
 
   return (
     <View style={styles.card}>
@@ -70,7 +77,7 @@ export function FeedPostCard({
             <ModificationPills modifications={car.modifications} />
           ) : null}
         </View>
-        {showEdit || showDelete ? (
+        {showEdit || showDelete || showReport || showBlock ? (
           <View style={styles.actions}>
             {showEdit && onEdit ? (
               <Pressable
@@ -94,6 +101,30 @@ export function FeedPostCard({
                 <Text style={[styles.actionText, styles.deleteText]}>
                   {feedCopy.post.menu.delete}
                 </Text>
+              </Pressable>
+            ) : null}
+            {/* Visible controls on purpose: guideline 1.2 expects a reviewer to
+                find report and block without guessing at a long-press. */}
+            {showReport && onReport ? (
+              <Pressable
+                onPress={() => onReport(post)}
+                accessibilityRole="button"
+                accessibilityLabel={feedCopy.post.menu.report}
+                hitSlop={8}
+                style={styles.actionBtn}
+              >
+                <Text style={styles.actionText}>{feedCopy.post.menu.report}</Text>
+              </Pressable>
+            ) : null}
+            {showBlock && onBlock ? (
+              <Pressable
+                onPress={() => onBlock(post)}
+                accessibilityRole="button"
+                accessibilityLabel={feedCopy.post.menu.block}
+                hitSlop={8}
+                style={styles.actionBtn}
+              >
+                <Text style={styles.actionText}>{feedCopy.post.menu.block}</Text>
               </Pressable>
             ) : null}
           </View>

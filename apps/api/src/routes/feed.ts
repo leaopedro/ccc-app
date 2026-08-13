@@ -610,6 +610,39 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     });
 
+    // ---- PUT /events/:eventId/feed/:postId/block-author ----
+    // Blocking is by POST, not by user id, on purpose: the feed payload does not
+    // expose authorUserId and adding it would put a new user identifier into a
+    // contract shared with admin and web. The server resolves the author here
+    // instead. PUT because blocking twice is a no-op, not an error.
+    scoped.put('/events/:eventId/feed/:postId/block-author', {}, async (request, reply) => {
+      const { sub } = requireUser(request);
+      const { eventId, postId } = postIdParam.parse(request.params);
+
+      const post = await prisma.feedPost.findFirst({
+        where: { id: postId, eventId },
+        select: { authorUserId: true },
+      });
+      if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+      if (!post.authorUserId) {
+        // Author deleted their account (onDelete: SetNull). Nothing to block.
+        return reply.status(409).send({ error: 'Conflict', message: 'post has no author' });
+      }
+      if (post.authorUserId === sub) {
+        return reply
+          .status(422)
+          .send({ error: 'UnprocessableEntity', message: 'cannot block yourself' });
+      }
+
+      try {
+        await prisma.userBlock.create({ data: { blockerId: sub, blockedId: post.authorUserId } });
+      } catch (err) {
+        if (!isUniqueConstraintError(err)) throw err;
+      }
+
+      return reply.status(204).send();
+    });
+
     // ---- POST /events/:eventId/feed/:postId/report ----
     // App Store guideline 1.2 requires users to be able to report objectionable
     // content. The Report model already existed; nothing ever created a row.

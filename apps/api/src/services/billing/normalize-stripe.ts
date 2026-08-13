@@ -11,7 +11,53 @@ export type StripeRefundMarker = {
   totalAmountCents: number;
 };
 
-export type NormalizeStripeResult = BillingEvent | StripeRefundMarker | null;
+/**
+ * The event is a subscription invoice we could not parse — almost always
+ * because the webhook endpoint renders a newer Stripe API version than the
+ * shapes below were written against (`2026-04-22.dahlia`). In the 2026+ shape
+ * the subscription ref moved to `parent.subscription_details.subscription` and
+ * invoice lines carry `pricing.price_details.price` (a bare id) instead of an
+ * expanded `price` object, so `metadata.devFeePercent` and `recurring.interval`
+ * are simply absent from the payload — remapping fields cannot recover them.
+ *
+ * Deliberately NOT `null`. `null` means "legitimately not our concern" and the
+ * route marks it processed and answers 200. Doing that to a paid subscription
+ * invoice charges the card, never creates the membership, and Stripe never
+ * retries. The route turns this sentinel into a 503 plus a fatal alert so the
+ * event is redelivered once the endpoint is repinned.
+ *
+ * Note `charge.refunded` is NOT discriminated this way: a one-time payment
+ * charge and a 2026-shape subscription charge are indistinguishable (both lack
+ * `invoice` and both carry `payment_intent`), so flagging would 503-loop every
+ * legitimate ticket refund. Pinning the endpoint's API version is the only
+ * defense there.
+ */
+export type UnrecognizedShapeMarker = { kind: 'unrecognized_shape' };
+
+/**
+ * Single shared instance so callers can compare by identity
+ * (`normalized === UNRECOGNIZED_SHAPE`) or by discriminant
+ * (`normalized.kind === 'unrecognized_shape'`). Modelled as an object rather
+ * than a Symbol so it keeps the `kind` discriminant every other member of
+ * NormalizeStripeResult carries.
+ */
+export const UNRECOGNIZED_SHAPE: UnrecognizedShapeMarker = { kind: 'unrecognized_shape' };
+
+export type NormalizeStripeResult =
+  | BillingEvent
+  | StripeRefundMarker
+  | null
+  | UnrecognizedShapeMarker;
+
+/**
+ * Subscription ref as rendered by the 2026+ API shape. Presence means "this IS
+ * a subscription invoice" even when the legacy top-level `subscription` field
+ * is gone.
+ */
+function newShapeSubscriptionRef(obj: Record<string, unknown>): string | undefined {
+  return (obj as { parent?: { subscription_details?: { subscription?: string } } }).parent
+    ?.subscription_details?.subscription;
+}
 
 /** Extract cadence from a Stripe Price recurring interval. */
 function cadenceFromInterval(interval: string | undefined): 'monthly' | 'annual' {
@@ -90,10 +136,15 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       lines: { data: StripeInvoiceLine[] };
     };
 
-    if (!invoice.subscription) return null;
+    if (!invoice.subscription) {
+      return newShapeSubscriptionRef(obj) ? UNRECOGNIZED_SHAPE : null;
+    }
 
+    // A subscription invoice always has at least one line with an expanded
+    // price in the shape we parse. Missing means the shape moved, not that the
+    // invoice is irrelevant.
     const linePrice = invoice.lines.data[0]?.price;
-    if (!linePrice) return null;
+    if (!linePrice) return UNRECOGNIZED_SHAPE;
 
     const pricing = pricingFromInvoice(invoice);
     const lines = linesFromInvoice(invoice.lines.data);
@@ -158,7 +209,9 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
 
   if (event.type === 'invoice.payment_failed') {
     const invoice = obj as { subscription?: string; customer?: string };
-    if (!invoice.subscription) return null;
+    if (!invoice.subscription) {
+      return newShapeSubscriptionRef(obj) ? UNRECOGNIZED_SHAPE : null;
+    }
     return {
       kind: 'subscription.past_due',
       provider: 'stripe',

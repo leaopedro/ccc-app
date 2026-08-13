@@ -226,6 +226,48 @@ describe('POST /webhooks/stripe-billing', () => {
     expect(count).toBe(0);
   });
 
+  it('returns 503 and leaves the event unprocessed when the payload shape is unrecognized', async () => {
+    // A 2026+ shape invoice.paid. Answering 200 here would mark it processed and
+    // stop Stripe retrying: the card is charged and no membership exists. 503
+    // keeps it redeliverable once the endpoint is repinned to the API version
+    // this normalizer parses.
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.nextEvent = {
+      id: 'evt_unrecognized_shape_1',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_test_new_shape',
+          customer: 'cus_test_001',
+          billing_reason: 'subscription_create',
+          amount_paid: 4990,
+          currency: 'brl',
+          period_start: 1748300000,
+          period_end: 1750892000,
+          parent: { subscription_details: { subscription: 'sub_test_001' } },
+          lines: { data: [{ pricing: { price_details: { price: 'price_monthly_test' } } }] },
+        },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(503);
+
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: 'evt_unrecognized_shape_1' },
+    });
+    expect(row.processedAt).toBeNull();
+
+    // And nothing was provisioned off an invoice we could not read.
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
   // -------------------------------------------------------------------------
   // Test 2: Missing signature
   // -------------------------------------------------------------------------

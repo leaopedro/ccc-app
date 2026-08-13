@@ -11,7 +11,7 @@ import {
   reconcileMembershipAddonsAmount,
 } from '../services/billing/apply-membership-event.js';
 import { openMonthlyBoxIfEligible } from '../services/box/open.js';
-import { normalizeStripeEvent } from '../services/billing/normalize-stripe.js';
+import { normalizeStripeEvent, UNRECOGNIZED_SHAPE } from '../services/billing/normalize-stripe.js';
 import type {
   NormalizeStripeResult,
   StripeRefundMarker,
@@ -331,6 +331,30 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // Normalize event
     // -----------------------------------------------------------------------
     const normalized: NormalizeStripeResult = normalizeStripeEvent(event);
+
+    if (normalized !== null && normalized.kind === UNRECOGNIZED_SHAPE.kind) {
+      // A subscription invoice we cannot parse — the endpoint is almost
+      // certainly rendering a newer Stripe API version than the normalizer
+      // parses. Deliberately NOT marked processed: 503 keeps Stripe retrying,
+      // so the event survives until the endpoint is repinned. Marking it
+      // processed and answering 200 would mean a charged card with no
+      // membership and no redelivery.
+      Sentry.withScope((scope) => {
+        scope.setTag('kind', 'billing-webhook-unrecognized-shape');
+        scope.setTag('provider', 'stripe');
+        scope.setLevel('fatal');
+        scope.setExtra('eventId', event.id);
+        scope.setExtra('eventType', event.type);
+        Sentry.captureMessage('stripe billing webhook: unrecognized payload shape');
+      });
+      request.log.error(
+        { eventId: event.id, type: event.type },
+        'stripe-billing webhook: unrecognized payload shape, check endpoint API version',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'unrecognized payload shape' });
+    }
 
     if (normalized === null) {
       await prisma.subscriptionWebhookEvent.update({

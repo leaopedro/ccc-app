@@ -18,7 +18,11 @@ Specs: [Fase 0](../specs/2026-08-12-billing-fixes-design.md) ·
 Implementada. PR [#21](https://github.com/leaopedro/ccc-app/pull/21). Suíte
 completa verde: 262 arquivos, 2268 testes.
 
-- [ ] **PEDRO** Revisar e mergear o PR #21.
+- [ ] **PEDRO** Revisar e mergear o PR #21. Primeira revisão devolveu cinco
+      achados, todos válidos: quatro defeitos de código e um artefato de diff por
+      branch atrasada. Corrigidos em `ee3f8e8` e no merge `c5729dc`, com resposta
+      no PR. O mais grave era que evento guardado nunca recuperava, o que
+      invalidava três afirmações minhas na documentação.
 - [ ] **PEDRO** Setar `ANTHROPIC_API_KEY` nos secrets do repo. O check
       `claude-review` falha em 30s em todo PR porque a variável chega vazia. Não
       é problema de código.
@@ -77,9 +81,12 @@ completa verde: 262 arquivos, 2268 testes.
 
 1. [ ] **PEDRO** Ler a versão de API do endpoint de webhook de test e criar todo
        endpoint live fixado na mesma. **Gate de tudo.** Motivo em `docs/stripe.md` §0.
-2. [ ] **PEDRO** Rodar `purge-test-mode --dry-run` contra um dump e conferir as
-       contagens à mão antes de rodar valendo. Falso positivo revoga entitlement
-       de quem paga.
+2. [ ] **PEDRO** Rodar a purga em dry run contra um dump e conferir as contagens
+       à mão antes de rodar valendo. Falso positivo revoga entitlement de quem
+       paga. O comando exige o instante da virada, sem default:
+       `tsx src/scripts/purge-test-mode.ts --created-before=<ISO> --dry-run`.
+       O discriminador é tempo, não o id: id de test mode de Customer,
+       Subscription e PaymentIntent é igual ao live.
 3. [ ] **PEDRO** Criar produtos e preços live, com `devFeePercent` em todo Price
        de plano e `baseAmountCents` igual ao `unit_amount`.
 4. [ ] **PEDRO** Definir o descritor de fatura da conta como `CASA CAR CLUB`.

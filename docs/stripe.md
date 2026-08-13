@@ -124,8 +124,15 @@ montado com preço de test. Elas também são obrigatórias para
 **Sobre `GROWTH_PREMIUM_BILLING_ENABLED`.** Default `true` no código, precisa
 estar `false` no Railway até o smoke de avulso passar. Ela é global, não por
 plataforma, e também silencia o worker de reconciliação. Com ela desligada o
-webhook de billing agora **grava** o evento e responde 503, então nada se perde
-na janela antes da virada.
+webhook de billing **grava** o evento e responde 503, então nada se perde na
+janela antes da virada.
+
+O que faz esse evento guardado aplicar depois é o ramo de duplicata tratar
+linha não processada com mais de 60 segundos como abandonada e adotá-la. Sem
+isso, guardar não serviria de nada: a Stripe reentrega com o mesmo id, cairia
+sempre no mesmo 503 e a linha ficaria inalcançável. Esse detalhe foi corrigido
+depois de revisão, e a implicação prática está no Runbook 5 de
+`docs/observability.md`: espere um minuto antes de reentregar à mão.
 
 Nenhum valor `sk_` ou `whsec_` entra no repositório. Considerar chave restrita em
 vez de `sk_live` de acesso total, dado que a conta é compartilhada com outro

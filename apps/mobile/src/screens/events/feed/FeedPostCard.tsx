@@ -27,6 +27,7 @@ type Props = {
   myCars: Car[];
   isOwn: boolean;
   canModerate: boolean;
+  isAuthenticated?: boolean;
   canPost: boolean;
   reactionLoading: boolean;
   onToggleReaction: (postId: string, kind: 'like' | 'dislike') => void;
@@ -41,6 +42,7 @@ export function FeedPostCard({
   myCars,
   isOwn,
   canModerate,
+  isAuthenticated = false,
   canPost,
   reactionLoading,
   onToggleReaction,
@@ -54,6 +56,7 @@ export function FeedPostCard({
   const { showEdit, showDelete, showReport, showBlock } = resolveFeedPostActionVisibility(
     isOwn,
     canModerate,
+    isAuthenticated,
   );
 
   return (

@@ -7,7 +7,7 @@ import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 
 const env = loadEnv();
 
-const seedEvent = () =>
+const seedEvent = (feedAccess: 'public' | 'attendees' | 'members_only' = 'public') =>
   prisma.event.create({
     data: {
       title: 'Report Test Event',
@@ -19,7 +19,7 @@ const seedEvent = () =>
       status: 'published',
       capacity: 100,
       feedEnabled: true,
-      feedAccess: 'public',
+      feedAccess,
       postingAccess: 'attendees',
     },
   });
@@ -127,6 +127,83 @@ describe('POST /events/:eventId/feed/:postId/report', () => {
 
     const row = await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } });
     expect(row.status).toBe('visible');
+  });
+
+  it('refuses a reporter who cannot even read the feed', async () => {
+    // Shipped without this gate: an outsider with no ticket could report on a
+    // feed they are not allowed to see, and three throwaway accounts could push
+    // any post past the auto-hide threshold.
+    const event = await seedEvent('attendees');
+    const { user: author } = await createUser({ email: 'gate-author@jdm.test', verified: true });
+    const post = await seedPost(event.id, author.id);
+    const [outsider] = await seedReporters(1);
+
+    const res = await report(event.id, post.id, outsider!.id);
+
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.report.count()).toBe(0);
+  });
+
+  it('refuses a reporter banned from the feed', async () => {
+    const event = await seedEvent();
+    const { user: author } = await createUser({ email: 'ban-author@jdm.test', verified: true });
+    const post = await seedPost(event.id, author.id);
+    const [banned] = await seedReporters(1);
+    const { user: staff } = await createUser({ email: 'ban-staff@jdm.test', verified: true });
+    await prisma.feedBan.create({
+      data: { eventId: event.id, userId: banned!.id, scope: 'view', bannedById: staff.id },
+    });
+
+    const res = await report(event.id, post.id, banned!.id);
+
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.report.count()).toBe(0);
+  });
+
+  it('refuses a reporter whose email is not verified', async () => {
+    // Signup hands out a working token with emailVerifiedAt null, and each new
+    // email opens its own rate-limit bucket, so unverified accounts are free and
+    // unlimited — the wrong cost model for hiding other people's content.
+    const event = await seedEvent();
+    const { user: author } = await createUser({ email: 'unv-author@jdm.test', verified: true });
+    const post = await seedPost(event.id, author.id);
+    const { user: unverified } = await createUser({
+      email: 'unverified@jdm.test',
+      verified: false,
+    });
+
+    const res = await report(event.id, post.id, unverified.id);
+
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.report.count()).toBe(0);
+  });
+
+  it('a duplicate report does not re-hide a post a moderator restored', async () => {
+    // The counter must never override a moderator. Restoring leaves the Report
+    // rows `open` (dismissal is per-report), so re-evaluating the threshold on a
+    // duplicate let one attacker re-hide the post indefinitely.
+    const event = await seedEvent();
+    const { user: author } = await createUser({ email: 'restore-author@jdm.test', verified: true });
+    const post = await seedPost(event.id, author.id);
+    const reporters = await seedReporters(3);
+
+    for (const r of reporters) await report(event.id, post.id, r.id);
+    expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } })).status).toBe(
+      'hidden',
+    );
+
+    // Moderator restores, without dismissing every report.
+    await prisma.feedPost.update({
+      where: { id: post.id },
+      data: { status: 'visible', hiddenAt: null, hiddenById: null },
+    });
+
+    const replay = await report(event.id, post.id, reporters[0]!.id);
+
+    expect(replay.json()).toMatchObject({ autoHidden: false });
+    expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } })).status).toBe(
+      'visible',
+    );
   });
 
   it('rejects an unauthenticated report', async () => {

@@ -19,6 +19,12 @@ export const meBlocksRoutes: FastifyPluginAsync = async (app) => {
   await app.register(rateLimit, {
     max: 60,
     timeWindow: '1 minute',
+    // hook: 'preHandler' is required, not cosmetic. The default onRequest hook
+    // runs BEFORE the route's authenticate preHandler, so req.user is undefined
+    // and the key silently degrades to req.ip — which on carrier NAT lets one
+    // abusive client lock out every other user behind the same address. Same
+    // reasoning as me-documents.ts.
+    hook: 'preHandler',
     keyGenerator: (req) => req.user?.sub ?? req.ip,
   });
 

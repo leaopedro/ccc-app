@@ -42,6 +42,20 @@ describe('seedReviewAccount', () => {
     expect(tier.quantityTotal).toBeGreaterThan(0);
   });
 
+  it('seeds posts by another member so report and block are reachable', async () => {
+    // An empty feed means FeedPostCard never mounts, so the 1.2 controls do not
+    // exist on screen. The posts must belong to someone else: report and block
+    // are hidden on your own content.
+    const result = await seedReviewAccount(prisma, INPUT);
+
+    expect(result.demoPosts).toBeGreaterThan(0);
+    const event = await prisma.event.findUniqueOrThrow({ where: { slug: result.eventSlug } });
+    const posts = await prisma.feedPost.findMany({ where: { eventId: event.id } });
+    expect(posts.length).toBeGreaterThan(0);
+    expect(posts.every((p) => p.authorUserId !== result.userId)).toBe(true);
+    expect(posts.every((p) => p.status === 'visible')).toBe(true);
+  });
+
   it('is idempotent and does not stack memberships or events', async () => {
     const first = await seedReviewAccount(prisma, INPUT);
     const second = await seedReviewAccount(prisma, INPUT);
@@ -52,6 +66,7 @@ describe('seedReviewAccount', () => {
     expect(await prisma.premiumMembership.count()).toBe(1);
     expect(await prisma.event.count({ where: { slug: first.eventSlug } })).toBe(1);
     expect(await prisma.ticketTier.count()).toBe(1);
+    expect(second.demoPosts).toBe(first.demoPosts);
   });
 
   it('resets the password on re-run so App Store Connect stays the source of truth', async () => {

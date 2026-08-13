@@ -41,7 +41,6 @@ export const fileReport = async (input: {
 }): Promise<ReportResult> => {
   const { target, reporterUserId, reason } = input;
 
-  let created = true;
   try {
     await prisma.report.create({
       data:
@@ -51,9 +50,13 @@ export const fileReport = async (input: {
     });
   } catch (err) {
     if (!isUniqueConstraintError(err)) throw err;
-    // Same reporter, same target. Not an error: fall through and re-evaluate
-    // the threshold, which keeps the endpoint idempotent.
-    created = false;
+    // Same reporter, same target. Not an error, but it must NOT re-evaluate the
+    // threshold. Adversarial review proved why: a moderator restoring a post to
+    // `visible` leaves the Report rows `open` (dismissal is per-report), so a
+    // single attacker replaying their own duplicate report re-crossed the
+    // threshold and re-hid the post, indefinitely. The counter must never
+    // override a moderator.
+    return { created: false, autoHidden: false };
   }
 
   const where =
@@ -68,7 +71,7 @@ export const fileReport = async (input: {
   });
 
   if (distinctReporters.length < AUTO_HIDE_REPORT_THRESHOLD) {
-    return { created, autoHidden: false };
+    return { created: true, autoHidden: false };
   }
 
   // Guarded update: only flip a target that is still visible, so a second
@@ -85,5 +88,5 @@ export const fileReport = async (input: {
           data: { status: 'hidden', hiddenAt: new Date(), hiddenById: null },
         });
 
-  return { created, autoHidden: hidden.count > 0 };
+  return { created: true, autoHidden: hidden.count > 0 };
 };

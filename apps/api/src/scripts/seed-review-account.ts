@@ -33,6 +33,8 @@ export type SeedReviewAccountResult = {
   created: boolean;
   membership: 'created' | 'kept';
   eventSlug: string;
+  /** Posts by another member, so the report and block controls are reachable. */
+  demoPosts: number;
 };
 
 const REVIEW_EVENT_SLUG = 'app-review-demo';
@@ -180,12 +182,52 @@ export const seedReviewAccount = async (
     });
   }
 
+  // Seed posts by SOMEONE ELSE. Without this the demo feed is empty, the post
+  // card never mounts, and the Denunciar / Bloquear controls that guideline 1.2
+  // requires are unreachable on a clean review pass — the reviewer writes the
+  // same rejection the whole feature was built to prevent. They must not be the
+  // reviewer's own posts, because report and block are hidden on your own
+  // content by design.
+  const demoAuthorEmail = 'demo-autor@casacar.club';
+  let demoAuthor = await prisma.user.findUnique({
+    where: { email: demoAuthorEmail },
+    select: { id: true },
+  });
+  if (!demoAuthor) {
+    demoAuthor = await prisma.user.create({
+      data: {
+        email: demoAuthorEmail,
+        name: 'Membro CCC',
+        emailVerifiedAt: new Date(),
+        ageAttestedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    const slug = await findFreeGarageSlug(prisma, defaultGarageSlugForUserId(demoAuthor.id));
+    await prisma.garage.create({
+      data: { userId: demoAuthor.id, name: 'Garagem', slug, isPublic: false },
+    });
+  }
+
+  const existingPosts = await prisma.feedPost.count({ where: { eventId: event.id } });
+  if (existingPosts === 0) {
+    for (const body of [
+      'Confirmado pro encontro. Levando o carro lavado dessa vez.',
+      'Alguém sabe se vai ter espaço coberto? Previsão de chuva no sábado.',
+    ]) {
+      await prisma.feedPost.create({
+        data: { eventId: event.id, authorUserId: demoAuthor.id, body },
+      });
+    }
+  }
+
   return {
     userId: user.id,
     garageId: garage.id,
     created: !existing,
     membership: liveMembership ? 'kept' : 'created',
     eventSlug: event.slug,
+    demoPosts: await prisma.feedPost.count({ where: { eventId: event.id } }),
   };
 };
 

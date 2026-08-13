@@ -18,9 +18,16 @@ export const canModerateFeedPost = (role: UserRoleName): boolean =>
 export const resolveFeedPostActionVisibility = (
   isOwn: boolean,
   canModerate: boolean,
+  /**
+   * Whether there is a signed-in user. Load-bearing: guest browsing is
+   * supported, and both handlers hit authenticated routes, so showing the
+   * controls to a visitor renders the 1.2 feature visibly broken — the tap ends
+   * in a generic error alert.
+   */
+  isAuthenticated = false,
 ): { showEdit: boolean; showDelete: boolean; showReport: boolean; showBlock: boolean } => ({
   showEdit: isOwn,
   showDelete: isOwn || canModerate,
-  showReport: !isOwn,
-  showBlock: !isOwn,
+  showReport: isAuthenticated && !isOwn,
+  showBlock: isAuthenticated && !isOwn,
 });

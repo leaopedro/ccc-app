@@ -275,7 +275,12 @@ export function EventFeedSection({
             key={post.id}
             post={post}
             myCars={myCars}
-            isOwn={myCars.some((c) => c.id === post.car?.id)}
+            // `car?.id` is the only author signal the payload carries, so a
+            // car-less post of your own reads as someone else's. Treating a
+            // car-less post as "not mine" would put Denunciar and Bloquear on
+            // your own content, and self-report has no server-side guard.
+            isOwn={post.car ? myCars.some((c) => c.id === post.car?.id) : true}
+            isAuthenticated={authStatus === 'authenticated'}
             canModerate={isPostStaff}
             canPost={canPost}
             reactionLoading={reactionLoadingIds.has(post.id)}

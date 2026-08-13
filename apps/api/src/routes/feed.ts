@@ -128,7 +128,14 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     const where = {
       eventId,
       status: 'visible' as const,
-      ...(blockedIds.length > 0 ? { authorUserId: { notIn: blockedIds } } : {}),
+      // OR with `authorUserId: null` is load-bearing: SQL `NULL NOT IN (...)`
+      // evaluates to NULL, so a bare notIn silently drops every post whose
+      // author deleted their account (the FK is onDelete: SetNull). Without
+      // this, anyone holding a single block loses all tombstoned-author posts
+      // in every event, and `total` is wrong the same way.
+      ...(blockedIds.length > 0
+        ? { OR: [{ authorUserId: null }, { authorUserId: { notIn: blockedIds } }] }
+        : {}),
     };
     const [total, posts] = await Promise.all([
       prisma.feedPost.count({ where }),
@@ -216,7 +223,10 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       const where = {
         postId,
         status: 'visible' as const,
-        ...(blockedIds.length > 0 ? { authorUserId: { notIn: blockedIds } } : {}),
+        // Same NULL semantics as the post list above.
+        ...(blockedIds.length > 0
+          ? { OR: [{ authorUserId: null }, { authorUserId: { notIn: blockedIds } }] }
+          : {}),
       };
       const [total, comments] = await Promise.all([
         prisma.feedComment.count({ where }),
@@ -610,14 +620,80 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     });
 
+    /**
+     * Gate shared by report and block-author.
+     *
+     * These three routes shipped with NO authorization beyond authentication:
+     * every neighbour in this scope runs `feedEnabled` plus
+     * checkFeedPostAccess/checkFeedReadAccess plus isFeedBanned, and the new
+     * ones ran only an existence check. Adversarial review proved the
+     * consequence with probes: an outsider with no ticket could report on a
+     * members-only feed, a user banned from the feed could report, and three
+     * throwaway accounts could push any post past the auto-hide threshold.
+     *
+     * Email verification is required on top, because signup returns a working
+     * access token with `emailVerifiedAt` null and each new email opens its own
+     * rate-limit bucket — so unverified accounts are free and unlimited, which
+     * is exactly the wrong cost model for something that hides other people's
+     * content.
+     */
+    const gateFeedModerationAction = async (
+      eventId: string,
+      userId: string,
+      role: 'user' | 'organizer' | 'admin' | 'staff',
+      reply: {
+        status: (n: number) => { send: (b: unknown) => unknown };
+      },
+    ): Promise<boolean> => {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { feedEnabled: true },
+      });
+      if (!event) {
+        reply.status(404).send({ error: 'NotFound', message: 'Event not found' });
+        return true;
+      }
+      if (!event.feedEnabled) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Feed disabled' });
+        return true;
+      }
+
+      const actor = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { emailVerifiedAt: true },
+      });
+      if (!actor?.emailVerifiedAt) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Verify your email first' });
+        return true;
+      }
+
+      const access = await checkFeedReadAccess(eventId, userId, role);
+      if (access === 'banned') {
+        reply.status(403).send({ error: 'Forbidden', message: 'Banned from feed' });
+        return true;
+      }
+      if (access === 'forbidden') {
+        reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
+        return true;
+      }
+      if (await isFeedBanned(eventId, userId)) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Banned from feed' });
+        return true;
+      }
+
+      return false;
+    };
+
     // ---- PUT /events/:eventId/feed/:postId/block-author ----
     // Blocking is by POST, not by user id, on purpose: the feed payload does not
     // expose authorUserId and adding it would put a new user identifier into a
     // contract shared with admin and web. The server resolves the author here
     // instead. PUT because blocking twice is a no-op, not an error.
     scoped.put('/events/:eventId/feed/:postId/block-author', {}, async (request, reply) => {
-      const { sub } = requireUser(request);
+      const { sub, role } = requireUser(request);
       const { eventId, postId } = postIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
 
       const post = await prisma.feedPost.findFirst({
         where: { id: postId, eventId },
@@ -647,8 +723,10 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     // App Store guideline 1.2 requires users to be able to report objectionable
     // content. The Report model already existed; nothing ever created a row.
     scoped.post('/events/:eventId/feed/:postId/report', {}, async (request, reply) => {
-      const { sub } = requireUser(request);
+      const { sub, role } = requireUser(request);
       const { eventId, postId } = postIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
 
       const parsed = reportCreateRequestSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -677,8 +755,10 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
     // ---- POST /events/:eventId/feed/comments/:commentId/report ----
     scoped.post('/events/:eventId/feed/comments/:commentId/report', {}, async (request, reply) => {
-      const { sub } = requireUser(request);
+      const { sub, role } = requireUser(request);
       const { eventId, commentId } = commentIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
 
       const parsed = reportCreateRequestSchema.safeParse(request.body);
       if (!parsed.success) {

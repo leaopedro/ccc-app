@@ -62,8 +62,11 @@ function PartnersBody({ box, catalog }: { box: BoxView; catalog: BoxCatalog }) {
   };
 
   const handleReview = () => {
-    void builder.flush().then(() => {
-      router.push('/caixa/revisar' as never);
+    // Only advance once the selection is safely saved; a failed PUT keeps the
+    // user here with the retry affordance instead of opening Review over a
+    // stale server selection.
+    void builder.flush().then((ok) => {
+      if (ok) router.push('/caixa/revisar' as never);
     });
   };
 

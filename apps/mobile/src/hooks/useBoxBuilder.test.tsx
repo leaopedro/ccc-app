@@ -154,7 +154,7 @@ describe('useBoxBuilder', () => {
     });
 
     // First send is now in flight, awaiting the held promise.
-    let flush1!: Promise<void>;
+    let flush1!: Promise<boolean>;
     await act(async () => {
       api.setItemQty('a', 1);
       flush1 = api.flush();
@@ -191,7 +191,7 @@ describe('useBoxBuilder', () => {
       root.render(<Probe />);
     });
 
-    let flush1!: Promise<void>;
+    let flush1!: Promise<boolean>;
     await act(async () => {
       api.setItemQty('a', 1);
       flush1 = api.flush();
@@ -214,6 +214,53 @@ describe('useBoxBuilder', () => {
     // for the stale (quantity 1) selection that was actually sent, and not
     // for the newer (quantity 3) selection that was NOT sent.
     expect(saveDraftMock).not.toHaveBeenCalledWith(expect.objectContaining({ dirty: false }));
+  });
+
+  it('flush resolves false when the PUT fails and true when it succeeds', async () => {
+    updateBoxSelection.mockReset().mockRejectedValueOnce(new Error('net')).mockResolvedValue(box);
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    await act(async () => {
+      api.setItemQty('a', 1);
+    });
+    let firstOk: boolean | undefined;
+    await act(async () => {
+      firstOk = await api.flush();
+    });
+    let secondOk: boolean | undefined;
+    await act(async () => {
+      secondOk = await api.flush();
+    });
+    expect(firstOk).toBe(false);
+    expect(secondOk).toBe(true);
+  });
+
+  it('does not clobber a newer edit with a draft that resolved after mount', async () => {
+    // Hold loadDraft open so the user can edit before the draft resolves.
+    let resolveLoad!: (v: unknown) => void;
+    loadDraftMock.mockReset().mockImplementationOnce(() => new Promise((r) => (resolveLoad = r)));
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    // User edits while loadDraft is still in flight.
+    await act(async () => {
+      api.setItemQty('a', 5);
+    });
+    // The older dirty draft (quantity 3) now resolves.
+    await act(async () => {
+      resolveLoad({ version: 1, boxId, savedAt: 'x', dirty: true, items: { a: 3 }, partners: {} });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The user's edit stands; the stale draft was neither applied nor sent.
+    expect(api.items.a).toBe(5);
+    expect(updateBoxSelection).not.toHaveBeenCalledWith({
+      items: [{ catalogItemId: 'a', quantity: 3 }],
+      partnerItems: [],
+    });
   });
 
   it('resends a dirty draft on mount', async () => {

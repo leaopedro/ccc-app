@@ -21,9 +21,11 @@ type UseBoxBuilder = {
   totals: OptimisticTotals;
   setItemQty: (id: string, qty: number) => void;
   setPartnerQty: (id: string, qty: number) => void;
-  flush: () => Promise<void>;
+  // Resolves true only when the current selection is safely on the server, so
+  // callers can gate forward navigation on a successful save.
+  flush: () => Promise<boolean>;
   writeError: boolean;
-  retry: () => Promise<void>;
+  retry: () => Promise<boolean>;
 };
 
 export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder {
@@ -50,47 +52,61 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
   // the server too.
   const inFlight = useRef(false);
   const pending = useRef(false);
+  // The current send cycle's result. A caller arriving while a send is in
+  // flight (flush during a debounce) awaits this SAME cycle — which loops to
+  // include the caller's latest selection — instead of resolving early with an
+  // unknown outcome.
+  const inFlightResult = useRef<Promise<boolean> | null>(null);
 
-  const send = useCallback(async () => {
+  const send = useCallback((): Promise<boolean> => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
     if (inFlight.current) {
       pending.current = true;
-      return;
+      return inFlightResult.current ?? Promise.resolve(false);
     }
     inFlight.current = true;
-    try {
-      do {
-        pending.current = false;
-        setWriteError(false);
-        // Snapshot exactly what we send, so we only mark the draft clean when
-        // no newer edit arrived mid-flight. setItems/setPartners change these
-        // references only on a real edit; re-renders (setServerBox) do not.
-        const sentItems = latest.current.items;
-        const sentPartners = latest.current.partners;
-        try {
-          const result = await updateBoxSelection(toSelectionUpdate(sentItems, sentPartners));
+    const run = (async (): Promise<boolean> => {
+      let ok = false;
+      try {
+        do {
+          pending.current = false;
           setWriteError(false);
-          setServerBox(result);
-          if (latest.current.items === sentItems && latest.current.partners === sentPartners) {
-            void saveDraft({
-              boxId: box.id,
-              items: sentItems,
-              partners: sentPartners,
-              dirty: false,
-            });
+          // Snapshot exactly what we send, so we only mark the draft clean when
+          // no newer edit arrived mid-flight. setItems/setPartners change these
+          // references only on a real edit; re-renders (setServerBox) do not.
+          const sentItems = latest.current.items;
+          const sentPartners = latest.current.partners;
+          try {
+            const result = await updateBoxSelection(toSelectionUpdate(sentItems, sentPartners));
+            setWriteError(false);
+            setServerBox(result);
+            ok = true;
+            if (latest.current.items === sentItems && latest.current.partners === sentPartners) {
+              void saveDraft({
+                boxId: box.id,
+                items: sentItems,
+                partners: sentPartners,
+                dirty: false,
+              });
+            }
+            // else: a newer edit exists; leave the draft dirty so the follow-up
+            // send (its debounce is already armed) cleans it.
+          } catch {
+            setWriteError(true);
+            ok = false;
           }
-          // else: a newer edit exists; leave the draft dirty so the follow-up
-          // send (its debounce is already armed) cleans it.
-        } catch {
-          setWriteError(true);
-        }
-      } while (pending.current);
-    } finally {
-      inFlight.current = false;
-    }
+        } while (pending.current);
+      } finally {
+        inFlight.current = false;
+        inFlightResult.current = null;
+      }
+      return ok;
+    })();
+    inFlightResult.current = run;
+    return run;
   }, [box.id]);
 
   const schedule = useCallback(() => {
@@ -109,8 +125,13 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
     [box.id],
   );
 
+  // Set once the user touches the selection, so the async resume-on-mount below
+  // never clobbers a newer edit with a stale draft.
+  const userEdited = useRef(false);
+
   const setItemQty = useCallback(
     (id: string, qty: number) => {
+      userEdited.current = true;
       setItems((prev) => {
         const next = { ...prev, [id]: Math.max(0, qty) };
         persistDirty(next, latest.current.partners);
@@ -123,6 +144,7 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
 
   const setPartnerQty = useCallback(
     (id: string, qty: number) => {
+      userEdited.current = true;
       setPartners((prev) => {
         const next = { ...prev, [id]: Math.max(0, qty) };
         persistDirty(latest.current.items, next);
@@ -149,7 +171,9 @@ export function useBoxBuilder(box: BoxView, catalog: BoxCatalog): UseBoxBuilder 
     resumed.current = true;
     void (async () => {
       const draft = await loadDraft(box.id);
-      if (!draft || !draft.dirty) return;
+      // If the user edited while loadDraft was in flight, their selection is
+      // newer than the persisted draft — never overwrite it.
+      if (!draft || !draft.dirty || userEdited.current) return;
       setItems(draft.items);
       setPartners(draft.partners);
       latest.current = { items: draft.items, partners: draft.partners };

@@ -297,8 +297,11 @@ function BuilderBody({ box, catalog }: { box: BoxView; catalog: BoxCatalog }) {
   };
 
   const handleReview = () => {
-    void builder.flush().then(() => {
-      router.push('/caixa/parceiros' as never);
+    // Only advance once the selection is safely saved. A failed PUT keeps the
+    // user here with the writeError banner + retry instead of opening the next
+    // screen over a stale server selection.
+    void builder.flush().then((ok) => {
+      if (ok) router.push('/caixa/parceiros' as never);
     });
   };
 

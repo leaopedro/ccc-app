@@ -113,6 +113,7 @@ export default function RevisarCaixaScreen() {
   const {
     items: addresses,
     loading: loadingAddresses,
+    error: addressesError,
     refresh: refreshAddresses,
   } = useShippingAddresses();
   const { confirm, confirming } = useBoxConfirm();
@@ -136,6 +137,15 @@ export default function RevisarCaixaScreen() {
     });
   }, [box, addresses]);
 
+  // Home owns every non-open status. If the box locked/confirmed while we were
+  // away (e.g. refocus after cutoff), bounce back instead of showing an
+  // editable confirm over a box the server will reject.
+  const isOpen = !!box && box.status === 'open';
+  useEffect(() => {
+    if (loading || error) return;
+    if (!isOpen) router.replace('/caixa' as never);
+  }, [loading, error, isOpen]);
+
   if (loading && !box) return <CaixaSkeleton />;
 
   if (error || !box) {
@@ -155,7 +165,7 @@ export default function RevisarCaixaScreen() {
   const itemLines = reviewItemLines(box);
   const partnerLines = reviewPartnerLines(box);
   const includedCents = Math.min(box.itemsTotalCents, box.budgetCents);
-  const confirmEnabled = canConfirm(box, selectedAddressId) && !confirming;
+  const confirmEnabled = canConfirm(box, selectedAddressId) && box.status === 'open' && !confirming;
 
   const onConfirm = async () => {
     if (!selectedAddressId) {
@@ -201,6 +211,22 @@ export default function RevisarCaixaScreen() {
           </Text>
           {loadingAddresses ? (
             <ActivityIndicator color={theme.colors.accent} style={styles.addressLoading} />
+          ) : addressesError ? (
+            <View style={styles.addressErrorBlock}>
+              <Text variant="bodySm" tone="muted">
+                {caixaCopy.loadError.body}
+              </Text>
+              <Pressable
+                onPress={() => void refreshAddresses()}
+                accessibilityRole="button"
+                accessibilityLabel={caixaCopy.actions.retry}
+                hitSlop={8}
+              >
+                <Text variant="bodySm" tone="brand" weight="semibold">
+                  {caixaCopy.actions.retry}
+                </Text>
+              </Pressable>
+            </View>
           ) : addresses.length === 0 ? (
             <View style={styles.noAddress}>
               <Text variant="bodySm" weight="semibold">
@@ -343,6 +369,7 @@ const styles = StyleSheet.create({
   lineBody: { flex: 1, gap: 2 },
   dropped: { textDecorationLine: 'line-through', opacity: 0.6 },
   addressLoading: { alignSelf: 'flex-start' },
+  addressErrorBlock: { gap: theme.spacing.xs },
   noAddress: {
     borderWidth: 1,
     borderStyle: 'dashed',

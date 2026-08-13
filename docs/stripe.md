@@ -1,256 +1,171 @@
-# Stripe Dashboard configuration
+# Stripe — configuração operacional
 
-How to configure Stripe for JDM Experience. This is operational setup — no
-application code changes. Apply once per environment (test mode for staging +
-smoke; live mode for production).
+Como configurar a Stripe para o Casa Car Club. Isto é setup de painel, não
+código. Aplicar uma vez por ambiente: test mode para preview e smoke, live mode
+para produção.
 
-## 1. Product — "JDM Premium Gold"
+Este documento substitui a versão anterior, que descrevia a JDM Experience:
+produto único "JDM Premium Gold", domínios `jdm-experience.com` e um caminho de
+webhook que não existe. Seguir aquele texto quebrava o go-live.
 
-### 1.1 Create the product
-
-1. Open Stripe Dashboard → **Products** → **Add product**.
-2. Fill the fields:
-
-   | Field                | Value                                             |
-   | -------------------- | ------------------------------------------------- |
-   | Name                 | `JDM Premium Gold`                                |
-   | Description          | `Acesso Premium Gold à plataforma JDM Experience` |
-   | Statement descriptor | `JDM PREMIUM`                                     |
-   | Tax code             | `txcd_20030000` (Software as a service)           |
-
-3. Under **Tax behavior**: select **Inclusive** (price shown already includes
-   tax). Stripe Tax for Brazil (IOF/PIS/COFINS) is operational config — no
-   application code is involved.
-4. Click **Save product**. Note the Product ID (`prod_...`). You will reference
-   it when creating both Prices below.
-
-### 1.2 Create the monthly Price
-
-While still on the product detail page, click **Add price**.
-
-| Field          | Value                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| Pricing model  | Standard pricing                                                                         |
-| Billing period | Monthly                                                                                  |
-| Price          | R$ XX,XX (your catalog base price; this is what Stripe charges and what the member pays) |
-| Currency       | BRL                                                                                      |
-| Lookup key     | `premium_gold_monthly`                                                                   |
-
-Under **Additional options → Metadata**, add:
-
-| Key               | Value                                                                                               |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| `baseAmountCents` | The Price above in cents (e.g., `49000` for R$ 490,00). Must equal your Stripe Price `unit_amount`. |
-| `devFeePercent`   | `10` (or whatever `DEV_FEE_PERCENT` env is set to)                                                  |
-
-These two metadata keys are **load-bearing** (spec §F8.1). The webhook
-handler reads them at time-of-charge to compute the member's charge and an
-internal revenue split.
-
-The member is charged only `baseAmountCents`. `devFeePercent` is **not** added
-to the member's charge. Instead, it is read from the Price metadata and used
-to compute `devFeeAmountCents = ceil(baseAmountCents * devFeePercent/100)`,
-an internal split recorded on `PremiumMembership` and `PremiumMembershipInvoice`
-for revenue-share accounting between the platform and the operator. The snapshot
-in the invoice row is the source of truth and is never re-derived from env.
-
-### 1.3 Create the annual Price
-
-Click **Add price** again on the same product.
-
-| Field          | Value                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| Pricing model  | Standard pricing                                                                         |
-| Billing period | Yearly                                                                                   |
-| Price          | R$ YY,YY (your catalog base price; this is what Stripe charges and what the member pays) |
-| Currency       | BRL                                                                                      |
-| Lookup key     | `premium_gold_annual`                                                                    |
-
-Under **Additional options → Metadata**, add the same keys:
-
-| Key               | Value                                                                 |
-| ----------------- | --------------------------------------------------------------------- |
-| `baseAmountCents` | The Price above in cents. Must equal your Stripe Price `unit_amount`. |
-| `devFeePercent`   | `10` (match the monthly value unless intentionally different)         |
-
-### 1.4 Stripe Tax — Brazilian VAT behavior
-
-Stripe Tax for Brazil handles IOF, PIS, and COFINS automatically when:
-
-1. The product's **Tax code** is set to `txcd_20030000` (SaaS).
-2. **Tax behavior** on each Price is set to **Inclusive**.
-3. The Stripe account has **Tax** enabled (Stripe Dashboard → Tax → Get started).
-4. The customer's billing address is collected at checkout (Stripe Checkout
-   `billing_address_collection: 'required'`).
-
-No application code is required. Stripe computes and remits the tax.
+Specs relacionados: `docs/superpowers/specs/2026-08-12-stripe-live-web-design.md`
+(Spec A) e `docs/superpowers/specs/2026-08-12-billing-fixes-design.md` (Fase 0).
 
 ---
 
-## 2. Webhook endpoint
+## 0. Antes de tudo: a versão de API dos endpoints
 
-### 2.1 Register the endpoint
+**Ler a versão de API do endpoint de webhook existente no dashboard e criar todo
+endpoint novo fixado na mesma versão.**
 
-1. Stripe Dashboard → **Developers** → **Webhooks** → **Add endpoint**.
-2. Set the URL:
-   - **Staging / smoke:** `https://api-preview.jdm-experience.com/webhooks/stripe-billing`
-     (or your Railway preview URL)
-   - **Production:** `https://api.jdm-experience.com/webhooks/stripe-billing`
-3. Under **Select events to listen to**, add exactly these events:
+O motivo não é preferência. O normalizador em
+`apps/api/src/services/billing/normalize-stripe.ts` lê a invoice na forma em que
+`subscription` fica no topo do objeto e a linha traz o `price` expandido, com
+`metadata` e `recurring`. Em versões mais novas a Stripe move o vínculo para
+`parent.subscription_details.subscription` e a linha passa a trazer só o id do
+preço em `pricing.price_details.price`. Nessa forma o `devFeePercent` e a
+cadência simplesmente não estão no payload, então não existe remapeamento de
+campo que resolva.
 
-   | Event                           | Why                                                       |
-   | ------------------------------- | --------------------------------------------------------- |
-   | `invoice.paid`                  | Subscription activation (create) + renewal (cycle)        |
-   | `invoice.payment_failed`        | Moves membership to `past_due`                            |
-   | `customer.subscription.updated` | Cancel-at-period-end, uncancellation, cadence/tier change |
-   | `customer.subscription.deleted` | Natural expiry                                            |
-   | `charge.refunded`               | Invoice refund accounting (canon §F8.10)                  |
+Endpoint novo nasce na versão corrente da conta, não na do SDK. Se ele render a
+forma nova, o handler não consegue ler a invoice. Ele não vai fingir que leu: a
+Fase 0 fez esse caminho responder 503 com alerta fatal e sem marcar o evento
+como processado, para a entrega sobreviver até a versão ser corrigida. Mas isso é
+rede de segurança, não substituto da configuração.
 
-4. Click **Add endpoint**. Reveal and copy the **Signing secret** (`whsec_...`).
-5. Set `STRIPE_BILLING_WEBHOOK_SECRET=whsec_...` in Railway (API service → Variables).
-   This is a **separate** secret from `STRIPE_WEBHOOK_SECRET` (the one-time ticket
-   purchase webhook).
-
-### 2.2 Test the endpoint
-
-In test mode, use the Stripe CLI to verify delivery:
-
-```bash
-stripe listen --forward-to https://<preview-api>/webhooks/stripe-billing
-stripe trigger invoice.paid
-```
-
-Expected: the CLI prints `200 OK` for each forwarded event. Check Railway logs
-for the billing handler's structured log output.
+O SDK está fixado em `stripe@22.1.0` com `apiVersion: '2026-04-22.dahlia'`
+(`apps/api/src/services/stripe/index.ts`).
 
 ---
 
-## 3. Stripe Billing Portal
+## 1. Produtos e preços
 
-Enable the hosted billing portal for Stripe-paid users to manage their subscription
-(cancel, update payment method, view invoice history):
+Um Product por plano (Bronze, Silver, Gold) e um por módulo de add-on. Um Price
+recorrente mensal em BRL por produto.
 
-1. Stripe Dashboard → **Settings** → **Billing** → **Customer portal**.
-2. Enable the portal. Under **Cancellations**, choose **Cancel immediately** or
-   **At end of billing period** (recommend "At end of billing period" — maps to
-   `cancel_at_period_end=true`).
-3. Enable **Invoice history**.
-4. Save. No code change required; the API creates portal sessions server-side
-   via `stripe.billingPortal.sessions.create({ customer, returnUrl })`.
+Invariantes que a Stripe ou o webhook impõem:
 
----
+| Regra                                               | Consequência de violar                                                                                                               |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Todos os Prices no mesmo intervalo e moeda          | A Stripe recusa a Checkout Session combinada; a API traduz para 503                                                                  |
+| Metadata `devFeePercent` em todo Price de **plano** | Omitir grava o split de receita como `0` na invoice e na membership, sem alerta, e a linha da invoice é fonte da verdade para sempre |
+| Metadata `baseAmountCents` igual ao `unit_amount`   | Não é lido pelo webhook (que usa o catálogo do banco), mas é lido por `GET /api/premium/pricing` e pelo worker de reconciliação      |
 
-## 4. Test cards (smoke reference)
+Add-ons não precisam de `devFeePercent`.
 
-| Card number           | Behavior                    |
-| --------------------- | --------------------------- |
-| `4242 4242 4242 4242` | Successful payment          |
-| `4000 0025 0000 3155` | Requires 3DS authentication |
-| `4000 0000 0000 9995` | Declined                    |
+**Descritor de fatura.** Definir o descritor da conta como `CASA CAR CLUB` antes
+da primeira cobrança live. Nenhum criador de sessão ou intent seta
+`statement_descriptor` no código, então vale o da conta. A conta é pessoa física:
+descritor com nome pessoal em fatura de cliente gera contestação, e contestação
+agora revoga ingresso automaticamente.
 
-Use any future expiry, any CVC, any postal code.
-
----
-
-## 5. Environment variable checklist
-
-| Variable                        | Where set     | Notes                                                     |
-| ------------------------------- | ------------- | --------------------------------------------------------- |
-| `STRIPE_SECRET_KEY`             | Railway       | `sk_test_...` for test mode; `sk_live_...` for production |
-| `STRIPE_BILLING_WEBHOOK_SECRET` | Railway       | Signing secret from the billing endpoint above            |
-| `STRIPE_WEBHOOK_SECRET`         | Railway       | Existing one-time ticket webhook; unchanged               |
-| `STRIPE_PUBLISHABLE_KEY`        | Railway + EAS | `pk_test_...` / `pk_live_...`                             |
-
-Never commit any `sk_` or `whsec_` values. They live in Railway Variables only.
+**Portal de billing.** Habilitar, com cancelamento ao fim do período (mapeia para
+`cancel_at_period_end=true`) e histórico de invoices ligado.
 
 ---
 
-## 6. Multi-tier subscriptions with add-on modules
+## 2. Webhooks
 
-### 6.1 Price creation workflow
+Os caminhos não seguem um padrão único. Foram conferidos no código, e nenhum tem
+prefixo (`apps/api/src/app.ts` registra os três sem `prefix`).
 
-1. In Stripe Dashboard, create one **Product** per plan (Bronze, Silver, Gold) and one
-   per add-on module (Detailing, Workshop).
+| Caminho                                     | Secret                          | Cobre                             |
+| ------------------------------------------- | ------------------------------- | --------------------------------- |
+| `/stripe/webhook`                           | `STRIPE_WEBHOOK_SECRET`         | Avulso: carrinho, ingressos, loja |
+| `/webhooks/stripe-billing`                  | `STRIPE_BILLING_WEBHOOK_SECRET` | Assinatura                        |
+| `/abacatepay/webhook?webhookSecret=<valor>` | `ABACATEPAY_WEBHOOK_SECRET`     | Pix                               |
 
-2. For each product, create **one monthly recurring Price in BRL**. All prices across
-   the checkout — both plan and add-ons — must share the same interval (monthly or
-   annual) and the same currency (BRL). Stripe combines plan and add-on prices into a
-   single Checkout Session and rejects mixed intervals or currencies with a 503 error.
+**A AbacatePay autentica por segredo na query string, não por header.** Registrar
+a URL sem `?webhookSecret=` faz toda entrega retornar 401
+(`apps/api/src/routes/abacatepay-webhook.ts`).
 
-3. On each **plan price** (Bronze, Silver, Gold), fill the metadata field
-   `devFeePercent` with a number like `10`. **This field is mandatory.** If omitted,
-   the fee is recorded as `0` on both the invoice row and the membership — silently
-   zeroing the platform's revenue-share cut for that plan. The member's charge is
-   unaffected either way, since it is always `baseAmountCents` (see §1.2). Add-on
-   module prices do not need this metadata.
+### Eventos do endpoint de avulso
 
-4. Copy the `price_...` ID from each Price (both plan and add-on) and paste it into
-   the admin portal at `/premium/catalogo`, matching the plan tier or add-on key to
-   the correct `stripePriceId` field.
+`checkout.session.completed`, `checkout.session.expired`,
+`payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`,
+`charge.dispute.created`, `charge.dispute.closed`.
 
-5. Verify by calling `GET /api/plans` that all three plan tiers appear with their
-   prices. If any `stripePriceId` field is empty on a plan, the checkout endpoint
-   will return 503 `ServiceUnavailable` with message `"billing price not configured"`;
-   the response body does not name the missing field — check the API error logs for
-   the `tier`, `cadence`, and `planSlug` that failed. For add-ons, an empty
-   `stripePriceId` also returns 503, but that response includes `missingAddonKeys` in
-   the body (only add-on modules selected by the member are validated at checkout time).
+Os dois de `payment_intent` já suportam carrinho multi-pedido e ficam ociosos até
+o Apple Pay nativo existir. Registrar agora evita uma segunda passada no
+dashboard. Os dois de `dispute` foram adicionados na Fase 0.
 
-### 6.2 Common operator mistakes and their error symptoms
+### Eventos do endpoint de billing
 
-**Unknown or inactive add-on key:** If a member requests an add-on with a key that
-does not exist in the catalog or is marked inactive, the checkout returns 400
-BadRequest. This is a client error — the member sent a bad selection — not an operator
-config problem.
+`invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`,
+`customer.subscription.deleted`, `charge.refunded`.
 
-**Missing plan or add-on price ID:** If the catalog references a Stripe Price ID that
-no longer exists in Stripe, or if a plan or active add-on module has no `stripePriceId`
-configured, the checkout returns 503 ServiceUnavailable. This signals an operator
-misconfiguration. For add-ons, the response includes `missingAddonKeys` in the body;
-for plans, the response is generic (`"billing price not configured"`) and the missing
-field names appear only in the API error logs.
+`customer.subscription.updated` é o que carrega cancelamento, pausa e troca de
+tier. Ele depende de `previous_attributes`, que a Stripe entrega como irmão de
+`data.object`. Não remover esse evento da assinatura pensando que é ruído.
 
-**Mixed intervals or currencies:** If the plan price and any selected add-on price have
-different billing intervals (e.g., monthly vs. annual) or different currencies, Stripe
-rejects the Checkout Session creation request. The API translates any such failure to
-a 503 ServiceUnavailable. Ensure every Price — plan and all add-ons in the catalog —
-uses the same interval and currency (monthly recurring, BRL).
+---
 
-### 6.3 Webhook behavior when invoice lines do not match the catalog
+## 3. Variáveis de ambiente
 
-When `invoice.paid` webhook fires, the handler resolves each line item against the
-`PremiumPlanPrice` and `PremiumAddonModule` catalog tables. Two scenarios cause the
-webhook to refuse the invoice:
+| Variável                            | Onde          | Notas                                 |
+| ----------------------------------- | ------------- | ------------------------------------- |
+| `STRIPE_SECRET_KEY`                 | Railway       | `sk_test_` ou `sk_live_`              |
+| `STRIPE_PUBLISHABLE_KEY`            | Railway + EAS | `pk_test_` ou `pk_live_`              |
+| `STRIPE_WEBHOOK_SECRET`             | Railway       | Endpoint de avulso                    |
+| `STRIPE_BILLING_WEBHOOK_SECRET`     | Railway       | Endpoint de billing, secret distinto  |
+| `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` | Railway       | Load-bearing, ver abaixo              |
+| `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL`  | Railway       | Load-bearing, ver abaixo              |
+| `ABACATEPAY_API_KEY`                | Railway       |                                       |
+| `ABACATEPAY_WEBHOOK_SECRET`         | Railway       | Vai também na query string do webhook |
+| `ABACATEPAY_DEV_WEBHOOK_ENABLED`    | Railway       | `false` em produção                   |
+| `GROWTH_PREMIUM_BILLING_ENABLED`    | Railway       | Interruptor do go-live                |
 
-**Scenario A: No plan price match, or multiple distinct plan prices.** If zero lines
-match a registered `PremiumPlanPrice`, or if lines match more than one **distinct**
-registered plan price, the webhook responds with HTTP 200 (not an error to Stripe, since
-Stripe must not redeliver — the fix is an operator action). The event is marked
-processed in the audit table, a Sentry alert at error level is raised, and **no
-membership is created or renewed**. The invoice remains unpaid from the application's
-perspective.
+**Armadilha nas duas variáveis de preço gold.** Para o tier gold, se o
+`stripePriceId` do catálogo estiver vazio, `me-premium.ts` cai silenciosamente no
+preço do env. Deixadas com valores de test sob chave live, um checkout de gold é
+montado com preço de test. Elas também são obrigatórias para
+`GET /api/premium/pricing`, que alimenta a página `/premium` do admin.
 
-The distinction is important: an invoice may legitimately carry two lines for the
-**same** price (e.g., a proration credit on one date and a charge on another, both at
-the same price across a billing cycle boundary). That is not ambiguous — both lines
-resolve to one plan, and the membership applies normally. But two lines matching two
-**different** registered plan prices (e.g., a plan-change invoice crediting the old
-price and charging the new one) cannot be applied — the webhook does not know which
-tier to activate or renew, so it refuses.
+**Sobre `GROWTH_PREMIUM_BILLING_ENABLED`.** Default `true` no código, precisa
+estar `false` no Railway até o smoke de avulso passar. Ela é global, não por
+plataforma, e também silencia o worker de reconciliação. Com ela desligada o
+webhook de billing agora **grava** o evento e responde 503, então nada se perde
+na janela antes da virada.
 
-**Recovery:** After an invoice.paid refusal:
+Nenhum valor `sk_` ou `whsec_` entra no repositório. Considerar chave restrita em
+vez de `sk_live` de acesso total, dado que a conta é compartilhada com outro
+negócio.
 
-1. Examine the Sentry error alert to see which Stripe price IDs were on the invoice.
-2. In the admin `/premium/catalogo`, verify that the missing price ID is registered in
-   the correct plan row, and that the `devFeePercent` metadata is set in Stripe.
-3. Call the member with the news: their payment was received by Stripe but the
-   membership could not be activated because the price was not configured in the
-   catalog. Tell them their payment is safe and will be kept.
-4. Once the price is registered and verified in `/api/plans`, **the webhook does not
-   automatically re-run** — the event is already marked processed. Contact a developer
-   to manually trigger the invoice handler or re-create the membership row with the
-   correct tier and cadence. Do not ask the member to pay again.
+---
 
-**Scenario B: Multiple add-on prices.** Unlike plan prices, add-on prices are allowed to
-coexist on the same invoice (a member can add both Detailing and Workshop). No ambiguity
-check applies to add-ons — all matching `PremiumAddonModule` rows are applied.
+## 4. Catálogo no admin
+
+Cadastrar cada `price_...` em `/premium/catalogo`, casando tier de plano e chave
+de add-on. Verificar com `GET /api/plans`.
+
+Campo vazio derruba o checkout com 503. Para add-on a resposta traz
+`missingAddonKeys`; para plano a resposta é genérica e só o log da API diz qual
+tier, cadência e slug falharam. Para gold, ver a armadilha do fallback acima.
+
+---
+
+## 5. Cartões de teste
+
+| Número                | Comportamento |
+| --------------------- | ------------- |
+| `4242 4242 4242 4242` | Aprovado      |
+| `4000 0025 0000 3155` | Exige 3DS     |
+| `4000 0000 0000 9995` | Recusado      |
+
+Qualquer validade futura, qualquer CVC.
+
+---
+
+## 6. Impostos: o que este documento NÃO diz
+
+A versão anterior mandava configurar tax code `txcd_20030000` (SaaS) com tax
+behavior inclusive, e afirmava que o Stripe Tax funcionaria porque o Checkout
+coleta endereço de cobrança. As duas coisas são falsas aqui.
+
+Nenhum criador de sessão no código seta `billing_address_collection` nem
+`automatic_tax` (`apps/api/src/services/stripe/index.ts`). E o CCC vende
+majoritariamente bem físico e serviço presencial, não SaaS.
+
+Stripe Tax e, principalmente, emissão de nota fiscal são decisões do contador,
+registradas como pendência aberta no Spec A. Stripe Tax calcula imposto; não
+emite documento fiscal brasileiro.

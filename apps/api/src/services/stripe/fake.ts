@@ -74,6 +74,12 @@ export type FakeStripe = StripeClient & {
   nextDeletedCustomerCount: number;
   /** Next billing portal payload returned by createBillingPortalSession. */
   nextBillingPortalSession: BillingPortalSessionResult;
+  /**
+   * When set, createBillingPortalSession throws this instead of returning.
+   * Used to drive the stale cross-mode reference path (Stripe `resource_missing`
+   * for a customer id created in the other mode).
+   */
+  nextBillingPortalError: Error | null;
   /** Next list returned by listOpenSubscriptionCheckoutSessions. Defaults to []. */
   nextOpenSubscriptionCheckoutSessions: OpenSubscriptionCheckoutSession[];
   /** When set, createSubscriptionCheckoutSession throws this error. */
@@ -131,6 +137,7 @@ export const buildFakeStripe = (): FakeStripe => {
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
     nextDeletedCustomerCount: 0,
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
+    nextBillingPortalError: null,
     nextOpenSubscriptionCheckoutSessions: [],
     nextCreateSubscriptionCheckoutSessionError: null,
     nextExpireCheckoutSessionError: null,
@@ -238,6 +245,7 @@ export const buildFakeStripe = (): FakeStripe => {
       input: CreateBillingPortalSessionInput,
     ): Promise<BillingPortalSessionResult> => {
       fake.calls.push({ kind: 'createBillingPortalSession', payload: input });
+      if (fake.nextBillingPortalError) throw fake.nextBillingPortalError;
       return fake.nextBillingPortalSession;
     },
 

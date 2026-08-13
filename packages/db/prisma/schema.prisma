@@ -454,6 +454,11 @@ model SubscriptionWebhookEvent {
   payload         Json
   receivedAt      DateTime        @default(now())
   processedAt     DateTime?
+  /// Redeliveries that landed on the unprocessed-replay branch (503). Past
+  /// POISON_PILL_THRESHOLD the event is escalated to a fatal alert: without
+  /// counting, a deterministically failing apply just 503s for ~3 days until
+  /// Stripe gives up, and the event is lost with only a replay-stale warning.
+  attempts        Int             @default(0)
 
   @@unique([provider, providerEventId])
   @@index([receivedAt])

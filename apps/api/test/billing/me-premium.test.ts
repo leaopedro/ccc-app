@@ -429,6 +429,54 @@ describe('POST /api/me/premium/billing-portal', () => {
     expect(json(res).url).toBe(PORTAL_URL);
   });
 
+  it('returns 409 StaleBillingReference when the Stripe customer no longer exists', async () => {
+    // Production ran entirely in test mode, so live rows carry `cus_test_...`.
+    // Under a live key Stripe raises resource_missing, and this call had no
+    // try/catch: an unhandled 500 that repeats forever, locking that member out
+    // of ever subscribing again. Retrying never fixes it — only a purge does —
+    // so the answer must be a typed 409, not a 5xx.
+    const { app: builtApp, stripe } = await buildPremiumApp(true);
+    app = builtApp;
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'stale@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id, 'active', 'stripe', 'cus_test_stale_ref');
+
+    stripe.nextBillingPortalError = Object.assign(new Error('No such customer'), {
+      code: 'resource_missing',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/billing-portal',
+      headers: { authorization: bearer(env, user.id, 'user') },
+      payload: { returnUrl: 'https://app.jdm.com/me/billing' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(json(res)).toMatchObject({ error: 'StaleBillingReference' });
+  });
+
+  it('still propagates unrelated Stripe failures instead of masking them as stale', async () => {
+    const { app: builtApp, stripe } = await buildPremiumApp(true);
+    app = builtApp;
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'boom@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id, 'active', 'stripe', 'cus_portal_boom');
+
+    stripe.nextBillingPortalError = new Error('stripe is down');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/billing-portal',
+      headers: { authorization: bearer(env, user.id, 'user') },
+      payload: { returnUrl: 'https://app.jdm.com/me/billing' },
+    });
+
+    expect(res.statusCode).toBe(500);
+  });
+
   it('returns 404 when user has no active membership', async () => {
     ({ app } = await buildPremiumApp(true));
     const env = loadEnv();

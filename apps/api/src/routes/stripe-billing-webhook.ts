@@ -11,7 +11,7 @@ import {
   reconcileMembershipAddonsAmount,
 } from '../services/billing/apply-membership-event.js';
 import { openMonthlyBoxIfEligible } from '../services/box/open.js';
-import { normalizeStripeEvent } from '../services/billing/normalize-stripe.js';
+import { normalizeStripeEvent, UNRECOGNIZED_SHAPE } from '../services/billing/normalize-stripe.js';
 import type {
   NormalizeStripeResult,
   StripeRefundMarker,
@@ -22,14 +22,20 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * POST /webhooks/stripe-billing — Stripe subscription webhook (F8.04).
  *
  * Flow (canon §F8.4, §F8.5, §F8.11, §F8.15):
- *   1. Feature flag gate (GROWTH_PREMIUM_BILLING_ENABLED) → 200 + skipped.
- *   2. Verify Stripe signature against STRIPE_BILLING_WEBHOOK_SECRET.
- *      Missing/invalid → 400.
- *   3. Insert SubscriptionWebhookEvent — on P2002, inspect existing row:
+ *   1. Verify Stripe signature against STRIPE_BILLING_WEBHOOK_SECRET.
+ *      Missing/invalid → 400. Nothing is persisted before this.
+ *   2. Insert SubscriptionWebhookEvent — on P2002, inspect existing row:
  *      processedAt non-null → 200 deduped:true; null → 503 so Stripe retries
  *      (prevents silent drop when a prior attempt crashed mid-apply).
- *   4. normalizeStripeEvent → BillingEvent | StripeRefundMarker | null.
- *      Null → mark processed, return 200 ignored.
+ *   3. Feature flag gate (GROWTH_PREMIUM_BILLING_ENABLED) → 503 + stored.
+ *      Deliberately AFTER the insert and BEFORE any mutation: answering 200
+ *      here used to drop every delivery in the pre-flip window with no replay
+ *      path, which also made "smoke the subscription, then flip the flag"
+ *      impossible.
+ *   4. normalizeStripeEvent → BillingEvent | StripeRefundMarker |
+ *      UnrecognizedShapeMarker | null. Null → mark processed, 200 ignored.
+ *      Unrecognized shape → 503 + fatal alert, NOT marked processed (the
+ *      endpoint is rendering an API version this normalizer cannot parse).
  *   5. Refund marker → resolve garage from invoice → $transaction + FOR UPDATE
  *      → applyInvoiceRefund(tx, 'stripe', ref, amount).
  *   6. BillingEvent → resolve garage (Stripe Customer.metadata for activated,
@@ -41,6 +47,26 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * REQUIRE the caller to hold `SELECT id FROM "Garage" WHERE id = $garageId FOR UPDATE`
  * inside the same transaction. This route is the lock owner.
  */
+/**
+ * Redeliveries on the unprocessed-replay branch before the event is escalated
+ * to a fatal alert. Stripe retries an endpoint for roughly three days; five
+ * attempts is well inside that, so a human hears about it while the event can
+ * still be replayed.
+ */
+const POISON_PILL_THRESHOLD = 5;
+
+/**
+ * How long an unprocessed SubscriptionWebhookEvent row must sit before a
+ * redelivery is allowed to resume it instead of being told to retry.
+ *
+ * Sized to separate two different situations that look identical in the DB:
+ * two concurrent deliveries of the same event (seconds apart) versus a previous
+ * attempt that will never finish (crash, refused payload, or the billing flag
+ * being off at the time). Stripe's own retry backoff is minutes, so a minute is
+ * comfortably past real concurrency and far inside the ~3-day retry window.
+ */
+const STALE_UNPROCESSED_MS = 60_000;
+
 /**
  * Parses devFeePercent from the plan line's Stripe Price metadata (canon
  * §F8.1 — the one value still read from metadata, never the catalog).
@@ -186,26 +212,19 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
   }
 
   app.post('/webhooks/stripe-billing', async (request, reply) => {
-    // -----------------------------------------------------------------------
-    // §F8.11 — Feature flag gate
-    // -----------------------------------------------------------------------
-    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-      request.log.info(
-        {},
-        'stripe-billing webhook: GROWTH_PREMIUM_BILLING_ENABLED=false, skipping',
-      );
-      return reply.status(200).send({ ok: true, skipped: true, reason: 'flag_disabled' });
-    }
-
+    // The §F8.11 feature-flag gate used to sit HERE, before verification and
+    // before the audit insert, returning 200. That silently dropped every
+    // delivery while the flag was off: Stripe marked them delivered and no
+    // replay path existed. It also made the documented go-live order
+    // impossible — smoke the subscription, THEN flip the flag — since the
+    // checkout 503s and the webhook was discarded. The gate now lives after
+    // the audit insert and answers 503, so the window's events survive.
     const billingSecret = app.env.STRIPE_BILLING_WEBHOOK_SECRET;
     if (!billingSecret) {
-      Sentry.captureMessage(
-        'stripe-billing webhook: STRIPE_BILLING_WEBHOOK_SECRET missing while flag enabled',
-        {
-          level: 'error',
-          tags: { kind: 'billing-webhook-misconfig', provider: 'stripe' },
-        },
-      );
+      Sentry.captureMessage('stripe-billing webhook: STRIPE_BILLING_WEBHOOK_SECRET missing', {
+        level: 'error',
+        tags: { kind: 'billing-webhook-misconfig', provider: 'stripe' },
+      });
       return reply
         .status(500)
         .send({ error: 'Misconfigured', message: 'billing webhook secret missing' });
@@ -242,14 +261,27 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
 
     // -----------------------------------------------------------------------
     // §F8.15 — Layer 1 idempotency: insert SubscriptionWebhookEvent.
-    // On P2002 (replay) inspect the existing row's processedAt:
-    //   - non-null → safe replay, short-circuit 200 OK + deduped:true.
-    //   - null     → prior attempt is mid-flight or crashed before marking
-    //                processed. Return 503 so Stripe retries. Downstream apply
-    //                is idempotent (SAVEPOINT-guarded invoice insert, awardXp
-    //                sourceRef uniqueness, advance-only period guard).
-    // The unique index (provider, providerEventId) is the dedup boundary.
-    // payload is stored unconditionally (load-bearing for prod debugging).
+    // On P2002 (replay) inspect the existing row:
+    //   - processedAt non-null → safe replay, short-circuit 200 + deduped.
+    //   - processedAt null, row younger than STALE_UNPROCESSED_MS → another
+    //     delivery is very likely mid-flight. 503 so Stripe retries.
+    //   - processedAt null, row older than that → the previous attempt is not
+    //     coming back (crash mid-apply, a payload shape we refused, or the
+    //     billing flag being off when it arrived). RESUME it: adopt the existing
+    //     row id and fall through to normal processing.
+    //
+    // That last case is load-bearing and used to be missing. Returning 503
+    // unconditionally on an unprocessed row meant every retry bounced here
+    // before reaching the flag gate or the dispatch below, so a stored-but-
+    // unprocessed event could NEVER be processed — including the two cases this
+    // route deliberately creates (flag off, unrecognized shape). Stripe keeps
+    // the same event id on redelivery, so the row is hit forever. The attempts
+    // counter measured that loop instead of breaking it.
+    //
+    // Resuming is safe because downstream apply is idempotent: SAVEPOINT-guarded
+    // invoice insert, awardXp sourceRef uniqueness, advance-only period guard.
+    // The age check is what keeps genuine concurrency out: two deliveries of the
+    // same event land seconds apart, Stripe retries land minutes apart.
     // -----------------------------------------------------------------------
     let webhookEventId: string;
     try {
@@ -269,7 +301,7 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           where: {
             provider_providerEventId: { provider: 'stripe', providerEventId: event.id },
           },
-          select: { processedAt: true },
+          select: { id: true, processedAt: true, receivedAt: true },
         });
 
         if (existing && existing.processedAt !== null) {
@@ -280,23 +312,71 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(200).send({ ok: true, deduped: true });
         }
 
-        request.log.warn(
-          { eventId: event.id, type: event.type },
-          'stripe-billing webhook: concurrent or stale unprocessed event, signalling retry',
-        );
-        Sentry.captureMessage(
-          'stripe-billing webhook: stale unprocessed event on replay, asking Stripe to retry',
-          {
-            level: 'warning',
-            tags: { kind: 'billing-webhook-replay-stale', provider: 'stripe' },
-            extra: { eventId: event.id, type: event.type },
+        // Count the redelivery. A deterministically failing apply otherwise
+        // just 503s until Stripe gives up (~3 days) and the event is lost with
+        // nothing louder than the warning below.
+        const bumped = await prisma.subscriptionWebhookEvent.update({
+          where: {
+            provider_providerEventId: { provider: 'stripe', providerEventId: event.id },
           },
-        );
-        return reply
-          .status(503)
-          .send({ error: 'Processing', message: 'concurrent or stale unprocessed event, retry' });
+          data: { attempts: { increment: 1 } },
+          select: { attempts: true },
+        });
+
+        if (bumped.attempts >= POISON_PILL_THRESHOLD) {
+          Sentry.captureMessage('stripe-billing webhook: event stuck, Stripe will stop retrying', {
+            level: 'fatal',
+            tags: { kind: 'billing-webhook-poison-pill', provider: 'stripe' },
+            extra: { eventId: event.id, type: event.type, attempts: bumped.attempts },
+          });
+        }
+
+        const ageMs = existing ? Date.now() - existing.receivedAt.getTime() : 0;
+        if (existing && ageMs >= STALE_UNPROCESSED_MS) {
+          // The prior attempt is not coming back. Adopt the row and process.
+          request.log.warn(
+            { eventId: event.id, type: event.type, attempts: bumped.attempts, ageMs },
+            'stripe-billing webhook: resuming stale unprocessed event',
+          );
+          webhookEventId = existing.id;
+        } else {
+          request.log.warn(
+            { eventId: event.id, type: event.type, attempts: bumped.attempts, ageMs },
+            'stripe-billing webhook: concurrent unprocessed event, signalling retry',
+          );
+          Sentry.captureMessage(
+            'stripe-billing webhook: concurrent unprocessed event on replay, asking Stripe to retry',
+            {
+              level: 'warning',
+              tags: { kind: 'billing-webhook-replay-stale', provider: 'stripe' },
+              extra: { eventId: event.id, type: event.type, attempts: bumped.attempts },
+            },
+          );
+          return reply
+            .status(503)
+            .send({ error: 'Processing', message: 'concurrent unprocessed event, retry' });
+        }
+      } else {
+        throw err;
       }
-      throw err;
+    }
+
+    // -----------------------------------------------------------------------
+    // §F8.11 — Feature flag gate.
+    // Deliberately AFTER the audit insert and BEFORE any mutation (the add-ons
+    // seam below already writes). 503 rather than 200 so Stripe keeps retrying:
+    // the row is stored with processedAt null, and the event applies for real
+    // once the flag goes true. Answering 200 here is what used to lose the
+    // entire pre-flip window.
+    // -----------------------------------------------------------------------
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      request.log.info(
+        { eventId: event.id, type: event.type, webhookEventId },
+        'stripe-billing webhook: flag disabled, stored unprocessed for replay',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'billing disabled', stored: true });
     }
 
     // -----------------------------------------------------------------------
@@ -331,6 +411,30 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // Normalize event
     // -----------------------------------------------------------------------
     const normalized: NormalizeStripeResult = normalizeStripeEvent(event);
+
+    if (normalized !== null && normalized.kind === UNRECOGNIZED_SHAPE.kind) {
+      // A subscription invoice we cannot parse — the endpoint is almost
+      // certainly rendering a newer Stripe API version than the normalizer
+      // parses. Deliberately NOT marked processed: 503 keeps Stripe retrying,
+      // so the event survives until the endpoint is repinned. Marking it
+      // processed and answering 200 would mean a charged card with no
+      // membership and no redelivery.
+      Sentry.withScope((scope) => {
+        scope.setTag('kind', 'billing-webhook-unrecognized-shape');
+        scope.setTag('provider', 'stripe');
+        scope.setLevel('fatal');
+        scope.setExtra('eventId', event.id);
+        scope.setExtra('eventType', event.type);
+        Sentry.captureMessage('stripe billing webhook: unrecognized payload shape');
+      });
+      request.log.error(
+        { eventId: event.id, type: event.type },
+        'stripe-billing webhook: unrecognized payload shape, check endpoint API version',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'unrecognized payload shape' });
+    }
 
     if (normalized === null) {
       await prisma.subscriptionWebhookEvent.update({

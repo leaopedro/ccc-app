@@ -123,11 +123,73 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true },
       });
       if (alreadyPaid) {
+        // Backfill the stamp before short-circuiting. Settlement happens before
+        // the providerRef write further down, so a crash in between leaves the
+        // cart paid with no reference — and this branch is where every retry
+        // lands after that. Without the backfill, charge.refunded and
+        // charge.dispute.created can never resolve the cart, so a refunded or
+        // disputed ticket stays valid. Guarded on providerRef: null and on the
+        // ref not already being taken, since Order has @@unique([provider,
+        // providerRef]).
+        const alreadyStamped = await prisma.order.findFirst({
+          where: { provider: 'stripe', providerRef: piId },
+          select: { id: true },
+        });
+        if (!alreadyStamped) {
+          const canonical = await prisma.order.findFirst({
+            where: { cartId },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+          });
+          if (canonical) {
+            await prisma.order.updateMany({
+              where: { id: canonical.id, providerRef: null },
+              data: { providerRef: piId },
+            });
+            request.log.warn(
+              { cartId, piId, orderId: canonical.id },
+              'stripe webhook: backfilled providerRef on already-paid cart',
+            );
+          }
+        }
+
         await markProcessed(webhookEvent.id, webhookEvent);
         return reply.status(200).send({ ok: true, deduped: true });
       }
+
+      // Nothing pending and nothing paid, but the cart HAS orders: the
+      // reservation sweep expired them (ORDER_EXPIRY_MS is 15 min) while the
+      // Checkout Session was still valid (30+ min), and the customer paid in
+      // that gap. Answering `ignored` here takes the money and leaves no order,
+      // no refund and no alert. The single-order path already refunds in this
+      // exact case; the cart path — the primary web flow — did not.
+      const dead = await prisma.order.findMany({
+        where: { cartId, status: { in: ['expired', 'failed'] } },
+        select: { id: true },
+      });
+
+      if (dead.length > 0) {
+        await app.stripe.refund(piId, 'order-expired');
+        Sentry.captureMessage('stripe webhook: cart paid after expiry, refunded', {
+          level: 'error',
+          tags: { kind: 'cart-paid-after-expiry', provider: 'stripe' },
+          extra: { cartId, paymentIntentId: piId, orders: dead.length },
+        });
+        request.log.warn(
+          { cartId, piId, orders: dead.length },
+          'stripe webhook: cart paid after expiry, refunded',
+        );
+        await markProcessed(webhookEvent.id, webhookEvent);
+        return reply.status(200).send({ ok: true, refunded: true, reason: 'expired' });
+      }
+
       return reply.status(200).send({ ok: true, ignored: true });
     }
+
+    // Capture the canonical order BEFORE the settlement re-sort below: after it,
+    // orders[0] is whichever kind settles first, not the oldest row. The
+    // providerRef stamp further down must be deterministic across redeliveries.
+    const canonicalOrderId = orders[0]?.id;
 
     orders.sort((a, b) => cartSettlementPriority(a.kind) - cartSettlementPriority(b.kind));
 
@@ -165,6 +227,31 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
           continue;
         }
         throw err;
+      }
+    }
+
+    // Stamp the PaymentIntent on the canonical (first) cart order. Cart orders
+    // are settled with `{ cartId }` and every settle/issue path deliberately
+    // skips providerRef for them, while cart.ts only writes it when the
+    // Checkout Session already carries a payment_intent — which it never does
+    // at creation, since a `payment` mode session starts with
+    // payment_intent: null. The result was that charge.refunded and
+    // charge.dispute.created, which both resolve by providerRef, could not find
+    // the order: money went out and the ticket stayed valid.
+    // Order has @@unique([provider, providerRef]), so exactly one row per
+    // PaymentIntent: skip when a sibling already holds this ref (redelivery, or
+    // a session-resolved cart whose canonical order was stamped by cart.ts).
+    // Writing it unconditionally raises P2002 and 500s the webhook.
+    if (canonicalOrderId) {
+      const alreadyStamped = await prisma.order.findFirst({
+        where: { provider: 'stripe', providerRef: piId },
+        select: { id: true },
+      });
+      if (!alreadyStamped) {
+        await prisma.order.updateMany({
+          where: { id: canonicalOrderId, providerRef: null },
+          data: { providerRef: piId },
+        });
       }
     }
 
@@ -267,9 +354,15 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // Bump the version, not just the status. The checkout idempotency key is
+      // `cart_checkout_${id}_v${version}` (cart.ts), so reopening without a bump
+      // makes the customer's retry send the same key: Stripe replays the
+      // original response for 24h, handing back the already consumed session
+      // URL. They land on a dead checkout page and cannot pay. Lost revenue,
+      // not lost money.
       await tx.cart.update({
         where: { id: cartId },
-        data: { status: 'open' },
+        data: { status: 'open', version: { increment: 1 } },
       });
     });
 
@@ -307,6 +400,66 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     const orderId = intent.metadata?.orderId;
     const cartId = intent.metadata?.cartId;
 
+    // Disputes and chargebacks. Before this, a disputed ticket order stayed
+    // `paid` with a valid QR: the attendee walks in and keeps the money. The
+    // dispute itself is an operator problem (evidence, deadlines), so the code
+    // does the one thing that must not wait — pull the entitlement — and alerts.
+    if (event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') {
+      const dispute = event.data.object as {
+        payment_intent?: string;
+        amount?: number;
+        status?: string;
+      };
+      const disputedPi = dispute.payment_intent;
+
+      const anchor = disputedPi
+        ? await prisma.order.findFirst({
+            where: { provider: 'stripe', providerRef: disputedPi },
+            select: { id: true, cartId: true },
+          })
+        : null;
+
+      Sentry.captureMessage(`stripe webhook: ${event.type}`, {
+        level: event.type === 'charge.dispute.created' ? 'error' : 'warning',
+        tags: {
+          kind:
+            event.type === 'charge.dispute.created'
+              ? 'stripe-dispute-opened'
+              : 'stripe-dispute-closed',
+          provider: 'stripe',
+        },
+        extra: {
+          paymentIntentId: disputedPi ?? null,
+          orderId: anchor?.id ?? null,
+          amount: dispute.amount ?? null,
+          status: dispute.status ?? null,
+        },
+      });
+
+      // Only `created` revokes. On `closed`, winning does not re-issue and
+      // losing does not revoke twice — the operator decides what follows.
+      if (event.type === 'charge.dispute.created' && anchor) {
+        const ids = anchor.cartId
+          ? (
+              await prisma.order.findMany({
+                where: { cartId: anchor.cartId },
+                select: { id: true },
+              })
+            ).map((o) => o.id)
+          : [anchor.id];
+        for (const id of ids) {
+          await revokeTicketsForRefundedOrder(id);
+        }
+      }
+
+      const firstTime = await markProcessed(event.id, event);
+      request.log.warn(
+        { eventType: event.type, paymentIntentId: disputedPi, orderId: anchor?.id, firstTime },
+        'stripe webhook: dispute event',
+      );
+      return reply.status(200).send({ ok: true, dispute: true, deduped: !firstTime });
+    }
+
     if (event.type === 'charge.refunded') {
       const charge = event.data.object as {
         payment_intent?: string;
@@ -323,7 +476,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
 
       const order = await prisma.order.findFirst({
         where: { provider: 'stripe', providerRef: piId },
-        select: { id: true, status: true },
+        select: { id: true, status: true, cartId: true },
       });
 
       if (!order) {
@@ -333,6 +486,18 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         );
         return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-order' });
       }
+
+      // One PaymentIntent covers the whole cart, but only the canonical order
+      // carries providerRef. Refunding just that row would leave every sibling
+      // `paid` with a valid ticket after a full refund.
+      const affectedIds = order.cartId
+        ? (
+            await prisma.order.findMany({
+              where: { cartId: order.cartId },
+              select: { id: true },
+            })
+          ).map((o) => o.id)
+        : [order.id];
 
       // Stripe partial refunds need separate handling (line-item attribution,
       // refundedCents partial accounting). Out of scope for JDMA-312; flag and
@@ -352,14 +517,22 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       }
 
       await prisma.order.updateMany({
-        where: { id: order.id, status: 'paid' },
+        where: { id: { in: affectedIds }, status: 'paid' },
         data: { status: 'refunded' },
       });
-      await revokeTicketsForRefundedOrder(order.id);
+      for (const id of affectedIds) {
+        await revokeTicketsForRefundedOrder(id);
+      }
 
       const firstTime = await markProcessed(event.id, event);
       request.log.info(
-        { orderId: order.id, paymentIntentId: piId, firstTime },
+        {
+          orderId: order.id,
+          cartId: order.cartId,
+          affected: affectedIds.length,
+          paymentIntentId: piId,
+          firstTime,
+        },
         'stripe webhook: charge.refunded settled',
       );
       return reply.status(200).send({ ok: true, refunded: true, deduped: !firstTime });

@@ -1,13 +1,39 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeStripeEvent } from '../../src/services/billing/normalize-stripe.js';
+import {
+  normalizeStripeEvent,
+  UNRECOGNIZED_SHAPE,
+} from '../../src/services/billing/normalize-stripe.js';
 import type { WebhookEvent } from '../../src/services/stripe/index.js';
 
-// Helper: build a minimal WebhookEvent stub
-const mkEvent = (type: string, object: Record<string, unknown>): WebhookEvent => ({
+// Helper: build a minimal WebhookEvent stub.
+// Cases author `previous_attributes` inline with the subscription fields for
+// readability; Stripe delivers it as a SIBLING of data.object, so lift it into
+// the envelope here. Without the lift these fixtures assert against a shape no
+// real delivery ever has, which is how the discriminators stayed broken.
+const mkEvent = (type: string, object: Record<string, unknown>): WebhookEvent => {
+  const { previous_attributes: prev, ...rest } = object;
+  return {
+    id: `evt_test_${type.replace(/\./g, '_')}`,
+    type,
+    data: {
+      object: rest,
+      ...(prev === undefined ? {} : { previous_attributes: prev as Record<string, unknown> }),
+    },
+  };
+};
+
+// Same, but placing previous_attributes where Stripe actually puts it: as a
+// SIBLING of data.object, not inside it. Every *.updated discriminator depends
+// on this, so a fixture that nests it under object silently tests nothing.
+const mkEventWithPrev = (
+  type: string,
+  object: Record<string, unknown>,
+  previousAttributes: Record<string, unknown>,
+): WebhookEvent => ({
   id: `evt_test_${type.replace(/\./g, '_')}`,
   type,
-  data: { object },
+  data: { object, previous_attributes: previousAttributes },
 });
 
 // Reusable Stripe invoice object (invoice.paid)
@@ -123,6 +149,24 @@ describe('normalizeStripeEvent', () => {
       if (result.kind !== 'subscription.past_due') return;
 
       expect(result.provider).toBe('stripe');
+      expect(result.providerSubRef).toBe('sub_test_001');
+    });
+  });
+
+  describe('customer.subscription.updated — previous_attributes at envelope level', () => {
+    it('detects cancel_at_period_end flip from envelope-level previous_attributes', () => {
+      const event = mkEventWithPrev(
+        'customer.subscription.updated',
+        makeSubscription({ cancel_at_period_end: true }),
+        { cancel_at_period_end: false },
+      );
+      const result = normalizeStripeEvent(event);
+
+      expect(result).not.toBeNull();
+      if (!result) return;
+      expect(result.kind).toBe('subscription.cancelled');
+      if (result.kind !== 'subscription.cancelled') return;
+
       expect(result.providerSubRef).toBe('sub_test_001');
     });
   });
@@ -264,6 +308,83 @@ describe('normalizeStripeEvent', () => {
     it('returns null for subscription.created (await invoice.paid instead)', () => {
       const event = mkEvent('customer.subscription.created', makeSubscription());
       const result = normalizeStripeEvent(event);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('unrecognized payload shape → sentinel, never a silent null', () => {
+    // The normalizer casts the raw payload to hand-written types, so TypeScript
+    // cannot catch a Stripe API version whose invoice shape moved. If a live
+    // endpoint renders the 2026+ shape, `subscription` sits under
+    // parent.subscription_details and the line carries `pricing` (a price ID)
+    // instead of an expanded `price`. Returning null there means the route marks
+    // the event processed and answers 200: card charged, membership never
+    // created, Stripe never retries. This sentinel is what makes that loud.
+    const newShapeInvoice = (billingReason: string) => ({
+      id: 'in_test_new_shape',
+      customer: 'cus_test_001',
+      billing_reason: billingReason,
+      amount_paid: 4990,
+      currency: 'brl',
+      period_start: 1748300000,
+      period_end: 1750892000,
+      status_transitions: { paid_at: 1748300100 },
+      parent: { subscription_details: { subscription: 'sub_test_001' } },
+      lines: { data: [{ pricing: { price_details: { price: 'price_monthly_test' } } }] },
+    });
+
+    it('flags invoice.paid carrying the 2026+ subscription shape', () => {
+      const result = normalizeStripeEvent(
+        mkEvent('invoice.paid', newShapeInvoice('subscription_create')),
+      );
+
+      expect(result).toBe(UNRECOGNIZED_SHAPE);
+    });
+
+    it('flags invoice.paid whose subscription is known but line price is not expanded', () => {
+      const result = normalizeStripeEvent(
+        mkEvent('invoice.paid', {
+          ...makeInvoice('subscription_create'),
+          lines: { data: [{ pricing: { price_details: { price: 'price_monthly_test' } } }] },
+        }),
+      );
+
+      expect(result).toBe(UNRECOGNIZED_SHAPE);
+    });
+
+    it('flags invoice.payment_failed carrying the 2026+ subscription shape', () => {
+      const result = normalizeStripeEvent(
+        mkEvent('invoice.payment_failed', {
+          customer: 'cus_test_001',
+          parent: { subscription_details: { subscription: 'sub_test_001' } },
+        }),
+      );
+
+      expect(result).toBe(UNRECOGNIZED_SHAPE);
+    });
+
+    it('still returns null for a one-off invoice with no subscription anywhere', () => {
+      const result = normalizeStripeEvent(
+        mkEvent('invoice.paid', {
+          id: 'in_test_oneoff',
+          customer: 'cus_test_001',
+          billing_reason: 'manual',
+          amount_paid: 1000,
+          currency: 'brl',
+          period_start: 1748300000,
+          period_end: 1750892000,
+          lines: { data: [] },
+        }),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('still returns null for invoice.payment_failed with no subscription anywhere', () => {
+      const result = normalizeStripeEvent(
+        mkEvent('invoice.payment_failed', { customer: 'cus_test_001' }),
+      );
 
       expect(result).toBeNull();
     });

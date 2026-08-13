@@ -25,6 +25,7 @@ import { useBoxBuilder } from '~/hooks/useBoxBuilder';
 import { useBoxCatalog } from '~/hooks/useBoxCatalog';
 import { BudgetMeter } from '~/screens/caixa/BudgetMeter';
 import {
+  countSelectedPartners,
   filterByCategory,
   summaryState,
   type OptimisticTotals,
@@ -252,7 +253,7 @@ function SummaryFooter({
       )}
 
       <Button
-        label={caixaCopy.builder.reviewCta}
+        label={caixaCopy.builder.continueCta}
         onPress={onReview}
         disabled={ctaDisabled}
         className="mt-3"
@@ -277,10 +278,7 @@ function BuilderBody({ box, catalog }: { box: BoxView; catalog: BoxCatalog }) {
     [catalog.items, activeCategory],
   );
 
-  const partnerCount = useMemo(
-    () => Object.values(builder.partners).filter((qty) => qty > 0).length,
-    [builder.partners],
-  );
+  const partnerCount = useMemo(() => countSelectedPartners(builder.partners), [builder.partners]);
 
   const meterBox = useMemo(
     () => ({
@@ -299,8 +297,11 @@ function BuilderBody({ box, catalog }: { box: BoxView; catalog: BoxCatalog }) {
   };
 
   const handleReview = () => {
-    void builder.flush().then(() => {
-      router.push('/caixa/revisar' as never);
+    // Only advance once the selection is safely saved. A failed PUT keeps the
+    // user here with the writeError banner + retry instead of opening the next
+    // screen over a stale server selection.
+    void builder.flush().then((ok) => {
+      if (ok) router.push('/caixa/parceiros' as never);
     });
   };
 

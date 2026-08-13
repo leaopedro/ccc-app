@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPriceIndex,
   computeOptimisticTotals,
+  countSelectedPartners,
   filterByCategory,
+  isPartnerSelected,
   seedSelection,
   summaryState,
   toSelectionUpdate,
@@ -120,5 +122,20 @@ describe('summaryState', () => {
   it('collapses when charge is zero', () => {
     expect(summaryState({ chargeCents: 0, catalogCount: 3 } as never).collapsed).toBe(true);
     expect(summaryState({ chargeCents: 100, catalogCount: 3 } as never).collapsed).toBe(false);
+  });
+});
+
+describe('isPartnerSelected', () => {
+  it('is true only for a positive quantity', () => {
+    expect(isPartnerSelected({ m1: 1 }, 'm1')).toBe(true);
+    expect(isPartnerSelected({ m1: 0 }, 'm1')).toBe(false);
+    expect(isPartnerSelected({}, 'm1')).toBe(false);
+  });
+});
+
+describe('countSelectedPartners', () => {
+  it('counts only positive quantities', () => {
+    expect(countSelectedPartners({ a: 1, b: 0, c: 2 })).toBe(2);
+    expect(countSelectedPartners({})).toBe(0);
   });
 });

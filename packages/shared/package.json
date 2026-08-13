@@ -142,6 +142,10 @@
       "types": "./src/notifications.ts",
       "default": "./dist/notifications.js"
     },
+    "./reports": {
+      "types": "./src/reports.ts",
+      "default": "./dist/reports.js"
+    },
     "./store": {
       "types": "./src/store.ts",
       "default": "./dist/store.js"

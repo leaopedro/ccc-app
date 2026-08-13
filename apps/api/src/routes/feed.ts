@@ -9,11 +9,13 @@ import {
   feedPostResponseSchema,
   feedReactionInputSchema,
 } from '@ccc/shared/feed';
+import { reportCreateRequestSchema } from '@ccc/shared/reports';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
+import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
@@ -593,6 +595,69 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
       await prisma.feedComment.delete({ where: { id: commentId } });
       return reply.status(204).send();
+    });
+
+    // ---- POST /events/:eventId/feed/:postId/report ----
+    // App Store guideline 1.2 requires users to be able to report objectionable
+    // content. The Report model already existed; nothing ever created a row.
+    scoped.post('/events/:eventId/feed/:postId/report', {}, async (request, reply) => {
+      const { sub } = requireUser(request);
+      const { eventId, postId } = postIdParam.parse(request.params);
+
+      const parsed = reportCreateRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(422).send({
+          error: 'UnprocessableEntity',
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        });
+      }
+
+      const post = await prisma.feedPost.findFirst({
+        where: { id: postId, eventId },
+        select: { id: true },
+      });
+      if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+
+      const result = await fileReport({
+        target: { kind: 'post', postId },
+        reporterUserId: sub,
+        reason: parsed.data.reason,
+      });
+
+      return reply
+        .status(result.created ? 201 : 200)
+        .send({ reported: true, autoHidden: result.autoHidden });
+    });
+
+    // ---- POST /events/:eventId/feed/comments/:commentId/report ----
+    scoped.post('/events/:eventId/feed/comments/:commentId/report', {}, async (request, reply) => {
+      const { sub } = requireUser(request);
+      const { eventId, commentId } = commentIdParam.parse(request.params);
+
+      const parsed = reportCreateRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(422).send({
+          error: 'UnprocessableEntity',
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        });
+      }
+
+      const comment = await prisma.feedComment.findFirst({
+        where: { id: commentId, post: { eventId } },
+        select: { id: true },
+      });
+      if (!comment)
+        return reply.status(404).send({ error: 'NotFound', message: 'Comment not found' });
+
+      const result = await fileReport({
+        target: { kind: 'comment', commentId },
+        reporterUserId: sub,
+        reason: parsed.data.reason,
+      });
+
+      return reply
+        .status(result.created ? 201 : 200)
+        .send({ reported: true, autoHidden: result.autoHidden });
     });
 
     // ---- POST /events/:eventId/feed/:postId/reactions ----

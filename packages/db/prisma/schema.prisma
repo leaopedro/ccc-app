@@ -1772,6 +1772,13 @@ model Report {
   reporter User?        @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
   resolver User?        @relation("ReportResolver", fields: [resolverId], references: [id], onDelete: SetNull)
 
+  /// One report per reporter per target, enforced by the DB rather than a
+  /// read-then-write check. Postgres allows many rows where an indexed column
+  /// is NULL, so a post report (commentId null) never collides with another
+  /// post report, and the two indexes coexist. A repeat report raises P2002,
+  /// which the route answers idempotently — reporting twice is not an error.
+  @@unique([reporterUserId, postId])
+  @@unique([reporterUserId, commentId])
   @@index([postId])
   @@index([commentId])
   @@index([reporterUserId])

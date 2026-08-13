@@ -16,6 +16,7 @@
 - Dedupe por id de evento do provedor, via constraint única no banco, nunca leitura seguida de escrita.
 - Testes de integração da API batem em Postgres real via Testcontainers, nunca mocks (CLAUDE.md).
 - Rodar um arquivo: `cd apps/api && pnpm exec vitest run test/<caminho>`. **Não** usar `pnpm --filter @ccc/api test -- <arquivo>`: o `--` não filtra, roda a suíte inteira (2243 testes, cerca de 13 minutos) e mesmo assim mostra o resultado do arquivo no meio do ruído. Medido em 2026-08-13.
+- Worktree nova exige build dos pacotes do workspace antes de qualquer teste: `pnpm --filter @ccc/db --filter @ccc/shared --filter @ccc/design build`. Sem isso 20 arquivos de teste falham com `Failed to resolve entry for package "@ccc/db"`, mensagem que não sugere a causa. Os hooks de git também não instalam em worktree (`.git` é arquivo, não diretório), então rodar `prettier --write` na mão antes de commitar.
 - Docker precisa estar rodando. O `test/global-setup.ts` sobe Postgres via Testcontainers para **toda** a suíte, inclusive testes puros de unidade como os do normalizador. Sem daemon, nada roda: `Could not find a working container runtime strategy`.
 - `eslint` na raiz estoura memória; lintar por pacote com `cd apps/api && pnpm lint`. A base tem 72 warnings pré-existentes e 0 erros; o alvo é não aumentar nenhum dos dois.
 - Idioma do código e dos comentários novos: inglês, como o resto de `apps/api`.
@@ -179,7 +180,24 @@ git commit -m "fix(billing): carry previous_attributes through the webhook seam"
 
 ---
 
-## Task 2: Forma de invoice desconhecida falha alto em vez de sumir
+## Task 2: Forma de invoice desconhecida falha alto em vez de sumir — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `6ac524a`. Dois desvios do plano, ambos deliberados:
+>
+> 1. **`charge.refunded` ficou fora.** O plano mandava marcar como forma desconhecida
+>    quando falta `invoice` e existe `payment_intent`. Isso está errado: toda cobrança
+>    avulsa tem exatamente essa assinatura, então a regra viraria 503 em loop em todo
+>    refund de ingresso. As duas formas são indistinguíveis nesse evento. Ali a única
+>    defesa é fixar a versão de API do endpoint.
+> 2. **Marcador com `kind`, não Symbol.** O plano pedia `Symbol`. Symbol é truthy, e os
+>    testes existentes fazem `if (!result) return; result.kind`, então o typecheck
+>    quebrava em dezenas de call sites. Um objeto `{ kind: 'unrecognized_shape' }` mantém
+>    o discriminante que todo outro membro da união já carrega, e fica consistente com o
+>    `StripeRefundMarker` que já existia no arquivo.
+>
+> Cuidado no narrowing: comparar por identidade (`normalized === UNRECOGNIZED_SHAPE`) não
+> estreita o tipo no TypeScript. A rota compara pelo discriminante, depois da checagem de
+> null.
 
 O normalizador lê `invoice.subscription`, `line.price` e `charge.invoice`. Nenhum dos três existe nos tipos do SDK fixado. Se um endpoint live renderizar a forma nova, `invoice.paid` vira `null`, o handler marca processado e responde 200. Cartão cobrado, membership inexistente, Stripe nunca reenvia.
 
@@ -199,7 +217,7 @@ Por isso o desenho é: defesa primária é fixar a versão de API do endpoint (o
 - Consumes: `WebhookEvent.data.previous_attributes` da Task 1.
 - Produces: sentinela `UNRECOGNIZED_SHAPE` exportada de `normalize-stripe.ts`, tratada pela rota de billing. Assinatura: `export const UNRECOGNIZED_SHAPE = Symbol('unrecognized_stripe_shape');` e `NormalizeStripeResult` passa a incluir `typeof UNRECOGNIZED_SHAPE`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('flags an invoice.paid in the new API shape as unrecognized, not ignorable', () => {
@@ -242,12 +260,12 @@ it('still returns null for a one-off invoice with no subscription at all', () =>
 
 Importar `UNRECOGNIZED_SHAPE` no topo do arquivo de teste.
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: FAIL. Hoje o primeiro caso devolve `null`, indistinguível do segundo.
 
-- [ ] **Step 3: Exportar a sentinela e detectar a forma nova**
+- [x] **Step 3: Exportar a sentinela e detectar a forma nova**
 
 Em `normalize-stripe.ts`, no topo:
 
@@ -288,12 +306,12 @@ if (!linePrice) return UNRECOGNIZED_SHAPE;
 
 Aplicar o mesmo padrão nos blocos `invoice.payment_failed` e `charge.refunded`. Para `charge.refunded`, a forma nova não tem `charge.invoice`: se `charge.invoice` estiver ausente **e** existir `charge.payment_intent`, devolver `UNRECOGNIZED_SHAPE`; se não houver nem um nem outro, `null`.
 
-- [ ] **Step 4: Rodar os testes do normalizador**
+- [x] **Step 4: Rodar os testes do normalizador**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/normalize-stripe.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Escrever o teste de rota**
+- [x] **Step 5: Escrever o teste de rota**
 
 Em `apps/api/test/billing/stripe-billing-webhook.test.ts`, um teste de integração que entrega um `invoice.paid` na forma nova e afirma 503 mais linha não processada:
 
@@ -333,12 +351,12 @@ it('returns 503 and leaves the event unprocessed when the payload shape is unrec
 });
 ```
 
-- [ ] **Step 6: Rodar e confirmar que falha**
+- [x] **Step 6: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing/stripe-billing-webhook.test.ts`
 Expected: FAIL com 200, porque a rota trata `null` e `UNRECOGNIZED_SHAPE` do mesmo jeito.
 
-- [ ] **Step 7: Tratar a sentinela na rota**
+- [x] **Step 7: Tratar a sentinela na rota**
 
 Em `apps/api/src/routes/stripe-billing-webhook.ts`, no ponto onde o resultado do normalizador é testado contra `null` (ramo de ignorar, ~linhas 335-345), inserir ANTES do teste de `null`:
 
@@ -362,12 +380,12 @@ if (normalized === UNRECOGNIZED_SHAPE) {
 
 Importar `UNRECOGNIZED_SHAPE` do normalizador.
 
-- [ ] **Step 8: Rodar**
+- [x] **Step 8: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/billing`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/api/src/services/billing/normalize-stripe.ts apps/api/src/routes/stripe-billing-webhook.ts apps/api/test/billing

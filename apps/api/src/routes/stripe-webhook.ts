@@ -324,9 +324,15 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // Bump the version, not just the status. The checkout idempotency key is
+      // `cart_checkout_${id}_v${version}` (cart.ts), so reopening without a bump
+      // makes the customer's retry send the same key: Stripe replays the
+      // original response for 24h, handing back the already consumed session
+      // URL. They land on a dead checkout page and cannot pay. Lost revenue,
+      // not lost money.
       await tx.cart.update({
         where: { id: cartId },
-        data: { status: 'open' },
+        data: { status: 'open', version: { increment: 1 } },
       });
     });
 

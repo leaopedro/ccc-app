@@ -235,6 +235,39 @@ describe('POST /webhooks/stripe-billing', () => {
     expect(await prisma.premiumMembership.count()).toBe(0);
   });
 
+  it('counts redeliveries of an unprocessed event so a stuck one can be escalated', async () => {
+    // A deterministically failing apply used to just 503 until Stripe gave up
+    // after ~3 days, losing the event with nothing louder than a warning.
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_attempts_1');
+
+    // Seed the row as unprocessed, which is the state a crashed prior attempt
+    // leaves behind.
+    await prisma.subscriptionWebhookEvent.create({
+      data: {
+        provider: 'stripe',
+        providerEventId: 'evt_attempts_1',
+        type: 'invoice.paid',
+        payload: {},
+      },
+    });
+
+    for (const expected of [1, 2]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/stripe-billing',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+        payload: rawJson(stripe.nextEvent),
+      });
+      expect(res.statusCode).toBe(503);
+
+      const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+        where: { providerEventId: 'evt_attempts_1' },
+      });
+      expect(row.attempts).toBe(expected);
+    }
+  });
+
   it('rejects an unsigned payload before persisting, even with the flag off', async () => {
     // The gate moved below the signature check, so unauthenticated garbage must
     // not reach the audit table.

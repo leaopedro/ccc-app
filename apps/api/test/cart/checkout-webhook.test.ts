@@ -805,6 +805,37 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(orders.every((o) => o.status === 'paid')).toBe(true);
   });
 
+  it('bumps cart.version on failure so the retry gets a fresh Stripe session', async () => {
+    // The checkout idempotency key is `cart_checkout_${id}_v${version}`. Without
+    // the bump, a customer retrying an unchanged cart sends the same key and
+    // Stripe replays the original response for 24h — including the already
+    // consumed session URL. They land on a dead checkout page and cannot pay.
+    const { user } = await createUser({ verified: true });
+    const { cart } = await seedCartWithOrders(user.id);
+    const before = await prisma.cart.findUniqueOrThrow({ where: { id: cart.id } });
+
+    stripe.nextEvent = {
+      id: 'evt_cart_pi_failed_version',
+      type: 'payment_intent.payment_failed',
+      data: {
+        object: { id: 'pi_cart_failed_version', metadata: { cartId: cart.id, userId: user.id } },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const after = await prisma.cart.findUniqueOrThrow({ where: { id: cart.id } });
+    expect(after.status).toBe('open');
+    expect(after.version).toBe(before.version + 1);
+  });
+
   it('payment_intent.succeeded settles product-only carts without issuing tickets', async () => {
     const { user } = await createUser({ verified: true });
     const { cart, orders } = await seedProductCartWithOrders(user.id);

@@ -58,6 +58,14 @@ import type { BillingAddonLine, BillingEvent, BillingLine } from '../services/bi
  * finite value in [0, 100], fall back to 0, and alert so an operator can fix
  * the Stripe Price metadata.
  */
+/**
+ * Redeliveries on the unprocessed-replay branch before the event is escalated
+ * to a fatal alert. Stripe retries an endpoint for roughly three days; five
+ * attempts is well inside that, so a human hears about it while the event can
+ * still be replayed.
+ */
+const POISON_PILL_THRESHOLD = 5;
+
 const parseDevFeePercent = (raw: string | undefined): number => {
   if (raw === undefined) return 0;
   const n = Number(raw);
@@ -279,8 +287,27 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(200).send({ ok: true, deduped: true });
         }
 
+        // Count the redelivery. A deterministically failing apply otherwise
+        // just 503s until Stripe gives up (~3 days) and the event is lost with
+        // nothing louder than the warning below.
+        const bumped = await prisma.subscriptionWebhookEvent.update({
+          where: {
+            provider_providerEventId: { provider: 'stripe', providerEventId: event.id },
+          },
+          data: { attempts: { increment: 1 } },
+          select: { attempts: true },
+        });
+
+        if (bumped.attempts >= POISON_PILL_THRESHOLD) {
+          Sentry.captureMessage('stripe-billing webhook: event stuck, Stripe will stop retrying', {
+            level: 'fatal',
+            tags: { kind: 'billing-webhook-poison-pill', provider: 'stripe' },
+            extra: { eventId: event.id, type: event.type, attempts: bumped.attempts },
+          });
+        }
+
         request.log.warn(
-          { eventId: event.id, type: event.type },
+          { eventId: event.id, type: event.type, attempts: bumped.attempts },
           'stripe-billing webhook: concurrent or stale unprocessed event, signalling retry',
         );
         Sentry.captureMessage(
@@ -288,7 +315,7 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           {
             level: 'warning',
             tags: { kind: 'billing-webhook-replay-stale', provider: 'stripe' },
-            extra: { eventId: event.id, type: event.type },
+            extra: { eventId: event.id, type: event.type, attempts: bumped.attempts },
           },
         );
         return reply

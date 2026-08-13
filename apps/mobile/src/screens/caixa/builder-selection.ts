@@ -106,3 +106,11 @@ export function summaryState(totals: Pick<OptimisticTotals, 'chargeCents' | 'cat
 } {
   return { collapsed: totals.chargeCents === 0, catalogCount: totals.catalogCount };
 }
+
+export function isPartnerSelected(partners: SelectionMap, moduleId: string): boolean {
+  return (partners[moduleId] ?? 0) > 0;
+}
+
+export function countSelectedPartners(partners: SelectionMap): number {
+  return Object.values(partners).filter((qty) => qty > 0).length;
+}

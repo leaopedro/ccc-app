@@ -88,6 +88,70 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: bundleId[variant],
     supportsTablet: false,
+    // Declares what the app actually collects. Shipping the default empty
+    // NSPrivacyCollectedDataTypes while collecting email, phone, CPF, photos and
+    // an identity document is an App Store 5.1.2 problem, and it also contradicts
+    // the privacy policy the app itself renders.
+    //
+    // Linked: true everywhere because all of it hangs off an authenticated
+    // account. Tracking: false everywhere — nothing here is shared with a data
+    // broker or used for cross-app advertising, and there is no ad SDK.
+    privacyManifests: {
+      NSPrivacyTracking: false,
+      NSPrivacyCollectedDataTypes: [
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeEmailAddress',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypePhoneNumber',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeName',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          // CPF and the CNH/RG upload. Apple has no dedicated national-ID type;
+          // OtherDataTypes is the documented catch-all.
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeOtherDataTypes',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypePhotosorVideos',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypePurchaseHistory',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeUserContent',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+        },
+        {
+          // Sentry crash and performance data.
+          NSPrivacyCollectedDataType: 'NSPrivacyCollectedDataTypeCrashData',
+          NSPrivacyCollectedDataTypeLinked: true,
+          NSPrivacyCollectedDataTypeTracking: false,
+          NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAnalytics'],
+        },
+      ],
+    },
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSPhotoLibraryUsageDescription:
@@ -106,7 +170,25 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     ...devLauncherPlugins,
-    'expo-secure-store',
+    // faceIDPermission: false omits NSFaceIDUsageDescription. The default
+    // injects a generic English string, and the app has no biometrics at all
+    // (no expo-local-authentication anywhere) — a permission string for an
+    // absent feature is an App Store 5.1.1 rejection.
+    ['expo-secure-store', { faceIDPermission: false }],
+    // Same reasoning. expo-image-picker is autolinked as a dependency and was
+    // not listed here, so its config plugin injected generic English camera and
+    // microphone strings. The app only picks from the library (no
+    // launchCameraAsync, no expo-camera), so both are dropped and the photo
+    // string is the PT-BR one already declared in ios.infoPlist below.
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'O Casa Car Club acessa suas fotos para definir seu avatar, adicionar fotos de veículos e anexar imagens ao suporte.',
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
     'expo-web-browser',
     [
       '@stripe/stripe-react-native',

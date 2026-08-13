@@ -207,7 +207,8 @@ Correcoes pos-review (mesma branch/PR):
 
 #### Fase 3b-2b — mobile: parceiros, revisao, offline (CONCLUIDA)
 
-Fecha o builder sobre a 3b-2a. Entregue em `feat/box-builder-fase-3b-2b-mobile`.
+Fecha o builder sobre a 3b-2a. Entregue em `feat/box-builder-fase-3b-2b-mobile`,
+mergeada em `main` pelo PR #20.
 Plano: `docs/superpowers/plans/2026-08-13-box-builder-fase-3b-2b-mobile.md`.
 Executado via subagent-driven-development (7 tasks, review por task, review final).
 
@@ -225,8 +226,21 @@ Escopo entregue:
 - Dois achados de endereco da 3b-1 fechados na tela de Preferencias: semear do
   box (nao so do default); bloquear auto-envio sem endereco.
 - Offline: persist local minimo (`builder-offline.ts`, draft AsyncStorage por
-  box, reenviado no mount se ficou sujo). Sem lib de conectividade. Fix de
-  review: o draft nao e marcado limpo se uma edicao chegou durante o PUT em voo.
+  box, reenviado no mount se ficou sujo). Sem lib de conectividade.
+
+Fixes de review (review final opus + review do PR #20):
+
+- Draft nao e marcado limpo se uma edicao chegou durante o PUT em voo.
+- Resume no mount nao sobrescreve uma edicao feita durante o `loadDraft` async.
+- `flush()` resolve true so quando a selecao esta salva; Montar/Parceiros so
+  navegam pra frente com sucesso (PUT falho mantem o usuario na tela de retry).
+- Revisao trata erro de carga de endereco separado de lista vazia (com retry).
+- Revisao redireciona pra `/caixa` e desabilita confirmar quando o box nao esta
+  `open`.
+
+Residual conhecido: janela `open` mas pos-cutoff (antes do worker rodar) nao e
+pega pelo redirect; o servidor rejeita o confirm com `box_locked` e o feedback
+aparece. Consistente com Montar.
 
 Go-live (apos QA manual do fluxo completo):
 

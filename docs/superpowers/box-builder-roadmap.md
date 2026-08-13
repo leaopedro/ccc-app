@@ -205,25 +205,34 @@ Correcoes pos-review (mesma branch/PR):
   vitest do shared / CI); saves serializados no `useBoxBuilder` (um PUT em voo,
   reenvio da ultima selecao) pro last-write-wins valer tambem no servidor.
 
-#### Fase 3b-2b — mobile: parceiros, revisao, offline (PENDENTE)
+#### Fase 3b-2b — mobile: parceiros, revisao, offline (CONCLUIDA)
 
-Fecha o builder sobre a 3b-2a. Plano a escrever.
+Fecha o builder sobre a 3b-2a. Entregue em `feat/box-builder-fase-3b-2b-mobile`.
+Plano: `docs/superpowers/plans/2026-08-13-box-builder-fase-3b-2b-mobile.md`.
+Executado via subagent-driven-development (7 tasks, review por task, review final).
 
-Decisoes de escopo:
+Escopo entregue:
 
-- Parceiros (tela 04): UI de modulos sobre o `partners` ja semeado no
-  controlador da 3b-2a.
-- Revisao + endereco (tela 05): substituir o placeholder `revisar.tsx`; usar
-  `BoxView.shippingAddressId` (ja exposto) pra semear o endereco salvo e fechar
-  os dois achados de endereco adiados da 3b-1 (semear do box; bloquear
-  auto-envio sem endereco).
-- Extras: "confirma e estaciona". Confirm com charge > 0 vai pra
-  `awaiting_payment` read-only; sem pagamento ate o cutoff, o worker corta pro
-  budget-only. Telas de pagamento (06/07) e timeline (09) sao Fase 4.
-- Offline: persist local minimo (AsyncStorage + reenvio ao reconectar; hoje nao
-  ha lib de conectividade).
-- Ao fim da 3b-2b: ligar `EXPO_PUBLIC_CAIXA_ENABLED` por padrao (decisao de
-  go-live, apos QA manual).
+- Parceiros (tela 04): tela `/caixa/parceiros` com toggle de modulos sobre o
+  `partners` semeado no controlador da 3b-2a. Parceiros nunca movem a barra de
+  budget. Fluxo linear: Montar -> Parceiros -> Revisao (CTA do builder virou
+  "Continuar").
+- Revisao + endereco (tela 05): `revisar.tsx` real substitui o placeholder.
+  Semeia o endereco de `BoxView.shippingAddressId`; confirm via `confirmBox`;
+  sucesso cai na home read-only (`awaiting_payment`/`ready`). Frete nao e
+  mostrado antes do confirm (resolucao da Q1); linha muted "Frete calculado na
+  confirmacao".
+- Dois achados de endereco da 3b-1 fechados na tela de Preferencias: semear do
+  box (nao so do default); bloquear auto-envio sem endereco.
+- Offline: persist local minimo (`builder-offline.ts`, draft AsyncStorage por
+  box, reenviado no mount se ficou sujo). Sem lib de conectividade. Fix de
+  review: o draft nao e marcado limpo se uma edicao chegou durante o PUT em voo.
+
+Go-live (apos QA manual do fluxo completo):
+
+- Ligar `EXPO_PUBLIC_CAIXA_ENABLED=true` no ambiente de build do mobile
+  (perfil EAS / .env). O default no codigo fica OFF; o flip e config, nao
+  codigo. Testar num cliente premium real antes de promover.
 
 ### Fase 4 — Checkout dos extras (PENDENTE)
 

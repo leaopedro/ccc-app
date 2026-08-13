@@ -394,7 +394,21 @@ git commit -m "fix(billing): fail loudly on unrecognized Stripe payload shape"
 
 ---
 
-## Task 3: Pedido de carrinho grava `providerRef`, e refund encontra o carrinho
+## Task 3: Pedido de carrinho grava `providerRef`, e refund encontra o carrinho — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `267f946`. Testes escritos dentro do
+> `test/cart/checkout-webhook.test.ts` que já existia, não em arquivo novo: o
+> helper `seedCartWithOrders` e o padrão de entrega por `app.inject` já estavam lá.
+>
+> Dois fatos que só apareceram implementando, e ambos mudaram o código:
+>
+> 1. **`orders` é reordenado por prioridade de liquidação depois do fetch**, então
+>    `orders[0]` não é o pedido mais antigo. O canônico tem que ser capturado antes
+>    do `sort`, senão o stamp muda entre reentregas.
+> 2. **`Order` tem unique em `(provider, providerRef)`**, ou seja, só um pedido por
+>    PaymentIntent. Gravar sem checar levanta P2002 e derruba o webhook com 500 no
+>    caso de carrinho resolvido por sessão. Esse mesmo constraint é a razão de o
+>    refund precisar resolver por `cartId`: confiar no ref só acha um pedido.
 
 Hoje pedido de carrinho nunca recebe `providerRef`, então `charge.refunded` não acha o pedido, não marca `refunded` e não revoga o ingresso. Dinheiro sai, entrada continua válida.
 
@@ -408,7 +422,7 @@ Hoje pedido de carrinho nunca recebe `providerRef`, então `charge.refunded` nã
 - Consumes: nada.
 - Produces: garantia de que todo pedido de carrinho liquidado tem `providerRef` igual ao id da PaymentIntent.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `apps/api/test/cart/cart-refund.test.ts`, teste de integração com Postgres real seguindo o padrão dos testes de cart existentes. O caso:
 
@@ -440,12 +454,12 @@ it('flips every cart order to refunded and revokes the ticket on charge.refunded
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/cart-refund.test.ts`
 Expected: FAIL. O pedido segue `paid` e o log traz `charge.refunded for unknown order`.
 
-- [ ] **Step 3: Gravar `providerRef` na liquidação do carrinho**
+- [x] **Step 3: Gravar `providerRef` na liquidação do carrinho**
 
 Em `handleCartPaymentSucceeded`, logo após o loop de `settlePaidOrder` e antes do `prisma.cart.update` que marca `converted`:
 
@@ -463,7 +477,7 @@ if (firstOrderId) {
 }
 ```
 
-- [ ] **Step 4: Resolver o carrinho inteiro no refund**
+- [x] **Step 4: Resolver o carrinho inteiro no refund**
 
 No ramo `charge.refunded`, substituir a busca de pedido único por uma que cubra os irmãos do carrinho:
 
@@ -491,17 +505,17 @@ const affected = anchor.cartId
 
 Daí para baixo, o código que hoje opera sobre `order` passa a iterar sobre `affected`. O guard de refund parcial (`amountRefunded < amount`) continua antes do laço e inalterado.
 
-- [ ] **Step 5: Rodar**
+- [x] **Step 5: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/cart-refund.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Suite de cart e de webhook**
+- [x] **Step 6: Suite de cart e de webhook**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart test/stripe-webhook-push.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/routes/stripe-webhook.ts apps/api/test/cart/cart-refund.test.ts
@@ -510,7 +524,9 @@ git commit -m "fix(orders): write providerRef on cart orders and refund the whol
 
 ---
 
-## Task 4: Pedido de carrinho pago depois de expirar é reembolsado, não descartado
+## Task 4: Pedido de carrinho pago depois de expirar é reembolsado, não descartado — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `719c4d6`. Saiu como planejado.
 
 `ORDER_EXPIRY_MS` é 15 minutos; a Checkout Session vive 30 ou mais. Pagando na janela do meio, o handler responde `ignored: true` e ninguém fica sabendo. O caminho de pedido único já reembolsa nesse caso; o de carrinho não.
 
@@ -524,7 +540,7 @@ git commit -m "fix(orders): write providerRef on cart orders and refund the whol
 - Consumes: `providerRef` em pedido de carrinho, da Task 3.
 - Produces: nada consumido adiante.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('refunds and alerts when a cart is paid after its orders expired', async () => {
@@ -542,12 +558,12 @@ it('refunds and alerts when a cart is paid after its orders expired', async () =
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/cart-expired-payment.test.ts`
 Expected: FAIL. Nenhum refund é chamado; a resposta é `ignored: true`.
 
-- [ ] **Step 3: Tratar o ramo sem pendente e sem pago**
+- [x] **Step 3: Tratar o ramo sem pendente e sem pago**
 
 Em `handleCartPaymentSucceeded`, dentro de `if (orders.length === 0)`, depois do teste de `alreadyPaid`:
 
@@ -574,12 +590,12 @@ if (dead.length > 0) {
 }
 ```
 
-- [ ] **Step 4: Rodar**
+- [x] **Step 4: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/cart-expired-payment.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/stripe-webhook.ts apps/api/test/cart/cart-expired-payment.test.ts
@@ -588,7 +604,12 @@ git commit -m "fix(orders): refund cart payments that land after reservation exp
 
 ---
 
-## Task 5: Disputas e chargebacks
+## Task 5: Disputas e chargebacks — CONCLUÍDA
+
+> Executada em 2026-08-13, commit `5668c25`. Os dois eventos foram tratados no
+> mesmo ramo, com `created` revogando e `closed` só alertando. Dois dos três testes
+> passavam antes da implementação, pelo ramo genérico de ignorar; ficaram como pin
+> de que a resposta segue 200 e a entitlement não é mexida no `closed`.
 
 Não existe `charge.dispute.*` em lugar nenhum do caminho Stripe. Ingresso disputado segue válido e a pessoa entra no evento.
 
@@ -602,7 +623,7 @@ Não existe `charge.dispute.*` em lugar nenhum do caminho Stripe. Ingresso dispu
 - Consumes: `providerRef` da Task 3, e a resolução por carrinho do mesmo passo.
 - Produces: nada consumido adiante.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 ```ts
 it('revokes tickets and alerts on charge.dispute.created', async () => {
@@ -618,12 +639,12 @@ it('revokes tickets and alerts on charge.dispute.created', async () => {
 });
 ```
 
-- [ ] **Step 2: Rodar e confirmar que falha**
+- [x] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/dispute.test.ts`
 Expected: FAIL. O evento cai no ramo genérico `{ ok: true, ignored: true }`.
 
-- [ ] **Step 3: Implementar o ramo**
+- [x] **Step 3: Implementar o ramo**
 
 Em `stripe-webhook.ts`, junto dos demais testes de `event.type`:
 
@@ -681,12 +702,12 @@ if (event.type === 'charge.dispute.closed') {
 `revokeTicketsForRefundedOrder` vem de `../services/orders/revoke.js` e já está
 importado em `stripe-webhook.ts:7`. Nenhum import novo é necessário.
 
-- [ ] **Step 4: Rodar**
+- [x] **Step 4: Rodar**
 
 Run: `cd apps/api && pnpm exec vitest run test/cart/dispute.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/stripe-webhook.ts apps/api/test/cart/dispute.test.ts

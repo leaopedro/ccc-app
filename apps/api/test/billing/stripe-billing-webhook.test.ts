@@ -208,7 +208,12 @@ describe('POST /webhooks/stripe-billing', () => {
   // Test 1: Feature flag disabled
   // -------------------------------------------------------------------------
 
-  it('returns 200 and skips DB writes when GROWTH_PREMIUM_BILLING_ENABLED=false', async () => {
+  it('persists the event and asks Stripe to retry when GROWTH_PREMIUM_BILLING_ENABLED=false', async () => {
+    // Used to return 200 before persisting anything: Stripe marked the event
+    // delivered and there was no replay path. That made the subscription smoke
+    // impossible in the documented go-live order (smoke, THEN flip the flag),
+    // because with the flag off the checkout 503s and the webhook was discarded.
+    // 503 + a stored, unprocessed row means the window's events survive the flip.
     ({ app, stripe } = await buildBillingApp(false));
     stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_flag_disabled_1');
 
@@ -219,11 +224,33 @@ describe('POST /webhooks/stripe-billing', () => {
       payload: rawJson(stripe.nextEvent),
     });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true, skipped: true, reason: 'flag_disabled' });
+    expect(res.statusCode).toBe(503);
 
-    const count = await prisma.subscriptionWebhookEvent.count();
-    expect(count).toBe(0);
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: 'evt_flag_disabled_1' },
+    });
+    expect(row.processedAt).toBeNull();
+
+    // Still no side effects: nothing was applied, only recorded.
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
+  it('rejects an unsigned payload before persisting, even with the flag off', async () => {
+    // The gate moved below the signature check, so unauthenticated garbage must
+    // not reach the audit table.
+    ({ app, stripe } = await buildBillingApp(false));
+    stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_flag_disabled_unsigned');
+    stripe.nextSignatureValid = false;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=bad' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(await prisma.subscriptionWebhookEvent.count()).toBe(0);
   });
 
   it('returns 503 and leaves the event unprocessed when the payload shape is unrecognized', async () => {

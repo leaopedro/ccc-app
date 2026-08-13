@@ -186,26 +186,19 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
   }
 
   app.post('/webhooks/stripe-billing', async (request, reply) => {
-    // -----------------------------------------------------------------------
-    // §F8.11 — Feature flag gate
-    // -----------------------------------------------------------------------
-    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-      request.log.info(
-        {},
-        'stripe-billing webhook: GROWTH_PREMIUM_BILLING_ENABLED=false, skipping',
-      );
-      return reply.status(200).send({ ok: true, skipped: true, reason: 'flag_disabled' });
-    }
-
+    // The §F8.11 feature-flag gate used to sit HERE, before verification and
+    // before the audit insert, returning 200. That silently dropped every
+    // delivery while the flag was off: Stripe marked them delivered and no
+    // replay path existed. It also made the documented go-live order
+    // impossible — smoke the subscription, THEN flip the flag — since the
+    // checkout 503s and the webhook was discarded. The gate now lives after
+    // the audit insert and answers 503, so the window's events survive.
     const billingSecret = app.env.STRIPE_BILLING_WEBHOOK_SECRET;
     if (!billingSecret) {
-      Sentry.captureMessage(
-        'stripe-billing webhook: STRIPE_BILLING_WEBHOOK_SECRET missing while flag enabled',
-        {
-          level: 'error',
-          tags: { kind: 'billing-webhook-misconfig', provider: 'stripe' },
-        },
-      );
+      Sentry.captureMessage('stripe-billing webhook: STRIPE_BILLING_WEBHOOK_SECRET missing', {
+        level: 'error',
+        tags: { kind: 'billing-webhook-misconfig', provider: 'stripe' },
+      });
       return reply
         .status(500)
         .send({ error: 'Misconfigured', message: 'billing webhook secret missing' });
@@ -297,6 +290,24 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: 'Processing', message: 'concurrent or stale unprocessed event, retry' });
       }
       throw err;
+    }
+
+    // -----------------------------------------------------------------------
+    // §F8.11 — Feature flag gate.
+    // Deliberately AFTER the audit insert and BEFORE any mutation (the add-ons
+    // seam below already writes). 503 rather than 200 so Stripe keeps retrying:
+    // the row is stored with processedAt null, and the event applies for real
+    // once the flag goes true. Answering 200 here is what used to lose the
+    // entire pre-flip window.
+    // -----------------------------------------------------------------------
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      request.log.info(
+        { eventId: event.id, type: event.type, webhookEventId },
+        'stripe-billing webhook: flag disabled, stored unprocessed for replay',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'billing disabled', stored: true });
     }
 
     // -----------------------------------------------------------------------

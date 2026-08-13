@@ -107,28 +107,73 @@ Correcoes pos-review (PR #14):
   ciclo ja aberto.
 - Fix de typecheck de CI no teste do shared (acesso indexado nao-nulo).
 
-#### Fase 3b — UI mobile (PENDENTE)
+A 3b foi fatiada em duas: 3b-1 (fundacao + telas de leitura) e 3b-2 (builder
+interativo + offline).
 
-Tela do assinante montar a caixa dentro do budget, sobre a API da 3a. Plano a
-escrever quando a 3a mergear no `main`.
+#### Fase 3b-1 — mobile: fundacao + telas de leitura (CONCLUIDA)
+
+Camada de dados, navegacao premium-gated e todas as telas de leitura/estado da
+Caixa, atras do flag `EXPO_PUBLIC_CAIXA_ENABLED` (default OFF, merge dark).
+Entregue em `feat/box-builder-fase-3b-mobile`. Plano:
+`docs/superpowers/plans/2026-08-12-box-builder-fase-3b-1-mobile-foundation.md`.
+Executada via subagent-driven-development (10 tasks TDD, review por task + review
+de branch; final READY TO MERGE, zero Critical/Important).
+
+Entregue: `src/api/box.ts` (8 rotas), copy `caixa.ts` + formatadores puros,
+flag + resolver puro do slot premium, nav rework (slot premium-gated
+Caixa/Assinatura, Ingressos vira item do Perfil, anti-flicker via AsyncStorage),
+hooks `useBox`/`useBoxHistory`/`useBoxPreferences`, helpers de status/medidor,
+Caixa home com estados de leitura (open/skipped/awaiting_payment/ready/pos-cutoff),
+sheet de pular/voltar, historico, preferencias (auto-envio + endereco reusando o
+fluxo existente).
+
+Decisoes fechadas na 3b-1:
+
+- Screen 09 (ready) decide por `status`, nao por `fulfillmentStatus` (fora do
+  `BoxView`). Timeline fica na Fase 4.
+- Nav: o slot antigo de Ingressos virou o slot premium; `tickets` sempre
+  `href: null`, acessivel pelo Perfil. Loja ON/OFF inalterada.
+- `/caixa` adicionado ao `NEXT_ALLOWED_PREFIXES` (redirect-intent) pro returnTo
+  do add-address voltar pra preferencias.
+
+Correcoes pos-review (mesma branch):
+
+- 6 erros de tsc das primeiras tasks (metodo `PUT` ausente no `RequestOptions`
+  do client; acesso indexado nao-nulo) corrigidos; tsc agora e gate obrigatorio.
+- Regressao da Task 4: `ProfileMenuScreen.test.tsx` tinha mock lucide sem
+  `Ticket`; corrigido.
+- Listener web `tabPress` no slot premium visivel (Assinatura hoje tem rotas
+  aninhadas).
+- Historico usa `mes/ano` (`cycleMonthYearLabel`), nao so mes, pra nao duplicar
+  rotulos entre anos.
+
+Carry-forward pra 3b-2 (nao bloqueiam merge; feature dark):
+
+- PONTO DE ENTRADA: `caixa/index.tsx` nao linka pra `/caixa/preferencias`.
+  Adicionar icone de engrenagem/ajustes no header da home apontando pra la.
+- Antes de ligar `EXPO_PUBLIC_CAIXA_ENABLED`: o builder real (`montar.tsx` hoje e
+  placeholder "Em breve") precisa existir.
+- Limpezas menores: remover `'post_cutoff'` da union de `homeVariant`; reusar
+  `budgetMeter().includedCents` no `OpenBody`; remover override no-op de
+  `lineRowDropped.borderBottomColor`; teste direto de `unskipBox` no client.
+
+#### Fase 3b-2 — mobile: builder interativo + offline (PENDENTE)
+
+Tela do assinante montar a caixa dentro do budget (telas 02/03/04/05), sobre a
+fundacao da 3b-1. Plano a escrever.
 
 Decisoes de escopo:
 
 - Builder ate confirmar. Telas de pagamento (06/07) e timeline de fulfillment
-  (09) sao Fase 4; `ready` ganha uma tela minimal de confirmacao agora.
+  (09) sao Fase 4; `ready` ja tem a tela minimal na 3b-1.
 - Extras: "confirma e estaciona". Confirm com charge > 0 vai pra
   `awaiting_payment` read-only; sem pagamento ate o cutoff, o worker corta pro
   budget-only.
-- Nav: aba Ingressos vira item do Perfil; o slot vira premium-gated
-  (Caixa pra membro `active`, Assinatura pra free). Loja OFF cai pra 4 abas.
-- Auto-envio: novo `PUT /me/box/preferences` persiste `autoSendOptIn` +
-  endereco na caixa aberta (unico caminho de escrita do opt-in; removido do
-  confirm). Fecha a dependencia do worker de cutoff.
+- Grade de catalogo com steppers, animacao da barra de budget, modulos de
+  parceiro, revisao + endereco, confirm.
 - Offline: persist local minimo (AsyncStorage + reenvio ao reconectar).
-
-Novos endpoints do atendente: `GET /me/box/catalog`, `POST /me/box/skip` +
-`/unskip`, `GET /me/boxes`, `PUT /me/box/preferences`; box view enriquecida com
-`imageUrl` + linhas removidas (`included`/`dropReason`).
+- Ao fim da 3b-2: ligar `EXPO_PUBLIC_CAIXA_ENABLED` por padrao e fechar os
+  carry-forwards da 3b-1 acima.
 
 ### Fase 4 — Checkout dos extras (PENDENTE)
 

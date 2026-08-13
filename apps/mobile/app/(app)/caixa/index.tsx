@@ -293,13 +293,9 @@ function AwaitingPaymentBody({ box }: { box: BoxView }) {
       </View>
       <Button
         label={caixaCopy.actions.resumePayment}
-        disabled
-        onPress={() => {}}
+        onPress={() => router.replace('/caixa/pagar' as never)}
         className="mt-2"
       />
-      <Text variant="caption" tone="muted" style={styles.centerCaption}>
-        {caixaCopy.awaiting.comingSoon}
-      </Text>
       <Text variant="bodySm" tone="secondary" style={styles.centerCaption}>
         {caixaCopy.awaiting.note}
       </Text>

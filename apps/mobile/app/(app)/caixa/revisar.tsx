@@ -175,7 +175,7 @@ export default function RevisarCaixaScreen() {
     setFeedback(null);
     const result = await confirm({ shippingAddressId: selectedAddressId });
     if (result === 'ok') {
-      router.replace('/caixa' as never);
+      router.replace((box.chargeCents > 0 ? '/caixa/pagar' : '/caixa') as never);
       return;
     }
     setFeedback(mapConfirmError(result));

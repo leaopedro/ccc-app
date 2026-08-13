@@ -169,23 +169,61 @@ em erro transitorio + refresh no foreground (`usePremiumSlot`); SkipSheet trata
 erro nao-ApiError (fim de rejeicao nao tratada); home da Caixa refaz fetch no
 foco; erro de unskip agora aparece na UI.
 
-#### Fase 3b-2 — mobile: builder interativo + offline (PENDENTE)
+A 3b-2 foi fatiada em duas: 3b-2a (builder do catalogo) e 3b-2b (parceiros,
+revisao/endereco, offline, flip do flag).
 
-Tela do assinante montar a caixa dentro do budget (telas 02/03/04/05), sobre a
-fundacao da 3b-1. Plano a escrever.
+#### Fase 3b-2a — mobile: builder do catalogo (CONCLUIDA)
+
+Tela do assinante montar a caixa (telas 02/03) sobre a fundacao da 3b-1, atras
+do flag `EXPO_PUBLIC_CAIXA_ENABLED` (default OFF, merge dark). Entregue em
+`feat/box-builder-fase-3b-2a-mobile` (PR #17). Plano:
+`docs/superpowers/plans/2026-08-12-box-builder-fase-3b-2a-mobile-builder.md`.
+Executada via subagent-driven-development (7 tasks TDD, review por task + review
+de branch no opus).
+
+Entregue: `shippingAddressId` no `BoxView` (shared + serialize + teste
+Testcontainers); limpezas da 3b-1 (union de `homeVariant`, reuso de
+`includedCents`, estilo no-op, teste de `unskipBox`); `useBoxCatalog`;
+`builder-selection.ts` puro (totais otimistas, indice de preco, payload,
+filtro de categoria); `useBoxBuilder` (PUT debounced, reconciliacao pelo
+servidor, saves serializados, flush no blur/unmount, preserva parceiros); tela
+`montar.tsx` (02/03) + `CatalogItemCard` + barra de budget animada (RN
+`Animated`) + placeholder `revisar.tsx`; ponto de entrada de preferencias no
+header da home.
+
+Carry-forwards da 3b-1 fechados nesta fase: ponto de entrada de preferencias;
+`shippingAddressId` exposto no `BoxView` (base pros achados de endereco); as
+quatro limpezas menores.
+
+Correcoes pos-review (mesma branch/PR):
+
+- Review de branch (opus): barra animada renderizava cheia abaixo do budget
+  (faltava o segmento espaçador do modo estatico). Corrigido.
+- Review de PR (tres passadas): `toSelectionUpdate` agora manda `quantity: 0`
+  explicito (o PUT e diff-based; sem isso a remocao de item nao persistia);
+  fixture do `boxViewSchema` no shared ganhou `shippingAddressId` (quebrava o
+  vitest do shared / CI); saves serializados no `useBoxBuilder` (um PUT em voo,
+  reenvio da ultima selecao) pro last-write-wins valer tambem no servidor.
+
+#### Fase 3b-2b — mobile: parceiros, revisao, offline (PENDENTE)
+
+Fecha o builder sobre a 3b-2a. Plano a escrever.
 
 Decisoes de escopo:
 
-- Builder ate confirmar. Telas de pagamento (06/07) e timeline de fulfillment
-  (09) sao Fase 4; `ready` ja tem a tela minimal na 3b-1.
+- Parceiros (tela 04): UI de modulos sobre o `partners` ja semeado no
+  controlador da 3b-2a.
+- Revisao + endereco (tela 05): substituir o placeholder `revisar.tsx`; usar
+  `BoxView.shippingAddressId` (ja exposto) pra semear o endereco salvo e fechar
+  os dois achados de endereco adiados da 3b-1 (semear do box; bloquear
+  auto-envio sem endereco).
 - Extras: "confirma e estaciona". Confirm com charge > 0 vai pra
   `awaiting_payment` read-only; sem pagamento ate o cutoff, o worker corta pro
-  budget-only.
-- Grade de catalogo com steppers, animacao da barra de budget, modulos de
-  parceiro, revisao + endereco, confirm.
-- Offline: persist local minimo (AsyncStorage + reenvio ao reconectar).
-- Ao fim da 3b-2: ligar `EXPO_PUBLIC_CAIXA_ENABLED` por padrao e fechar os
-  carry-forwards da 3b-1 acima.
+  budget-only. Telas de pagamento (06/07) e timeline (09) sao Fase 4.
+- Offline: persist local minimo (AsyncStorage + reenvio ao reconectar; hoje nao
+  ha lib de conectividade).
+- Ao fim da 3b-2b: ligar `EXPO_PUBLIC_CAIXA_ENABLED` por padrao (decisao de
+  go-live, apos QA manual).
 
 ### Fase 4 — Checkout dos extras (PENDENTE)
 

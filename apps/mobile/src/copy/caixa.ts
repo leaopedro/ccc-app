@@ -17,7 +17,6 @@ export const caixaCopy = {
     edit: 'Editar minha caixa',
     skip: 'Pular esse mês',
     resumePayment: 'Retomar pagamento',
-    trackDelivery: 'Acompanhar entrega',
     retry: 'Tentar de novo',
     addAddress: 'Adicionar endereço',
   },
@@ -43,7 +42,10 @@ export const caixaCopy = {
     title: 'Sem caixa neste ciclo',
     body: 'Volte quando o próximo ciclo abrir.',
   },
-  ready: { banner: 'Caixa confirmada' },
+  ready: {
+    banner: 'Caixa confirmada',
+    timeline: { packing: 'Preparando', shipped: 'Enviado', delivered: 'Entregue' },
+  },
   postCutoff: {
     closedOn: (date: string) => `Caixa fechada em ${date}`,
     note: 'Os extras não foram pagos a tempo, então enviamos só o que cabe no budget. Nada foi cobrado.',

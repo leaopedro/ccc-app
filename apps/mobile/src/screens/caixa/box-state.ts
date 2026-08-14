@@ -1,4 +1,4 @@
-import type { BoxStatus, BoxView } from '@ccc/shared/box';
+import type { BoxFulfillmentStatus, BoxStatus, BoxView } from '@ccc/shared/box';
 
 import { caixaCopy } from '~/copy/caixa';
 
@@ -77,4 +77,37 @@ export function cycleMonthYearLabel(cycleKey: string): string {
 // stays a pure lookup (used by the /caixa/historico list, screen 12).
 export function boxStatusLabel(status: BoxStatus): string {
   return caixaCopy.history.status[status];
+}
+
+export type TimelineStepState = 'done' | 'current' | 'pending';
+
+export interface TimelineStep {
+  label: string;
+  state: TimelineStepState;
+}
+
+// Ship-only, 3 marcos (spec 4). Labels live in caixaCopy so this stays a pure
+// lookup, mirroring boxStatusLabel. `cancelled` is unreachable on the ready
+// screen (a cancelled box has status='cancelled'); mapped to the unfulfilled
+// shape defensively so the function stays total and never shows "cancelled".
+export function boxTimelineSteps(
+  status: BoxFulfillmentStatus,
+): [TimelineStep, TimelineStep, TimelineStep] {
+  const { packing, shipped, delivered } = caixaCopy.ready.timeline;
+  const states: Record<
+    BoxFulfillmentStatus,
+    [TimelineStepState, TimelineStepState, TimelineStepState]
+  > = {
+    unfulfilled: ['current', 'pending', 'pending'],
+    packed: ['done', 'current', 'pending'],
+    shipped: ['done', 'done', 'current'],
+    delivered: ['done', 'done', 'done'],
+    cancelled: ['current', 'pending', 'pending'],
+  };
+  const [s0, s1, s2] = states[status];
+  return [
+    { label: packing, state: s0 },
+    { label: shipped, state: s1 },
+    { label: delivered, state: s2 },
+  ];
 }

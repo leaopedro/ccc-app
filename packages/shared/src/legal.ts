@@ -1,9 +1,15 @@
 // Bumped 2026-08-14: the payment section claimed we do not collect CPF, while
 // the legal-basis table two sections below already listed CPF for subscription
 // identity validation, and the code encrypts and stores it at signup. The
-// document contradicted itself and the iOS privacy manifest. Nothing in the app
-// reads this constant, so the bump is documentary — it does not trigger
-// re-consent. Whether this change requires new consent is a legal call, tracked
+// document contradicted itself and the iOS privacy manifest.
+//
+// This constant is NOT inert: apps/admin/src/components/cookie-banner.tsx
+// compares it against the stored consent version, so bumping it re-shows the
+// cookie banner to every admin user. That is arguably the right behaviour for a
+// policy change, but it IS a user-visible effect — an earlier version of this
+// comment claimed the bump was purely documentary, which was wrong (the check
+// missed apps/admin). The mobile app and the API do not read it. Whether this
+// correction requires fresh consent from existing users is a legal call, tracked
 // in the payments roadmap.
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
 

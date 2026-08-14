@@ -54,8 +54,10 @@ completa verde: 262 arquivos, 2268 testes.
 - [x] **PEDRO** CPF: decidido em 2026-08-14 que a política é que estava errada. O
       CPF é coletado no perfil, criptografado, e usado no gate de assinatura; o
       manifesto de privacidade do iOS estava certo. A frase foi reescrita e a
-      versão subiu para `privacy-2026-08-14`. Nada no app lê essa constante, então
-      o bump não dispara re-consentimento.
+      versão subiu para `privacy-2026-08-14`. **Correção:** eu afirmei antes que
+      nada lê essa constante, e estava errado — meu grep não cobriu o `apps/admin`.
+      O `cookie-banner.tsx` compara a versão guardada com ela, então o bump faz o
+      banner de cookies reaparecer para quem usa o admin. Mobile e API não leem.
 - [ ] **PEDRO** Decidir, com apoio jurídico, se a correção da política exige novo
       consentimento dos usuários existentes.
 - [ ] **PEDRO** CPF no Pix: o campo `taxId` existe no tipo e nenhum chamador o

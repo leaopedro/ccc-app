@@ -10,6 +10,11 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    // Some routes (e.g. box fulfillment advance) send both a human-readable
+    // `error` category (mapped to `code` above, for backwards compat with
+    // existing callers) and a separate machine-readable `code` field with the
+    // specific failure reason. That value is captured here, unmapped.
+    readonly bodyCode?: string,
   ) {
     super(message);
   }
@@ -64,13 +69,18 @@ export const apiFetch = async <T>(
     }
   }
   if (!res.ok) {
-    let body: { error?: string; message?: string } = {};
+    let body: { error?: string; message?: string; code?: string } = {};
     try {
       body = (await res.json()) as typeof body;
     } catch {
       // ignore
     }
-    throw new ApiError(res.status, body.error ?? 'Error', body.message ?? res.statusText);
+    throw new ApiError(
+      res.status,
+      body.error ?? 'Error',
+      body.message ?? res.statusText,
+      body.code,
+    );
   }
   if (res.status === 204) return undefined as T;
   const json: unknown = await res.json();

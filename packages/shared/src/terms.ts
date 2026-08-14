@@ -5,7 +5,7 @@ import type { PolicySection } from './legal.js';
  * whenever the text below changes materially, so the DB records WHICH text each
  * person agreed to. Without that, the signup checkbox is decorative.
  */
-export const TERMS_VERSION = 'terms-2026-08-13' as const;
+export const TERMS_VERSION = 'terms-2026-08-14' as const;
 
 export const termsSections: PolicySection[] = [
   {
@@ -22,9 +22,9 @@ Se não concordar com algum ponto, não crie conta. Se já tiver conta e deixar 
     title: '2. Quem somos',
     body: `A **Casa Car Club** organiza eventos automotivos e mantém um clubhouse privado em Curitiba.
 
-- **Razão social:** a ser publicado antes do lançamento em produção
-- **CNPJ:** a ser publicado antes do lançamento em produção
-- **Endereço:** a ser publicado antes do lançamento em produção
+- **Razão social:** LIONS HUB ENGENHARIA DE SOFTWARE LTDA
+- **CNPJ:** 40.142.944/0001-18
+- **Endereço:** Rua Doutor Timóteo, 12, apto. 22 — Porto Alegre/RS
 - **E-mail:** contato@casacar.club
 
 Estes termos são regidos pela lei brasileira.`,

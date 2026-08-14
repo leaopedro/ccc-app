@@ -27,9 +27,9 @@ export const privacyPolicySections: PolicySection[] = [
 
 Nossos dados de contato:
 
-- **Razão social:** Casa Car Club
-- **CNPJ:** a ser publicado antes do lançamento em produção
-- **Endereço:** a ser publicado antes do lançamento em produção
+- **Razão social:** LIONS HUB ENGENHARIA DE SOFTWARE LTDA
+- **CNPJ:** 40.142.944/0001-18
+- **Endereço:** Rua Doutor Timóteo, 12, apto. 22 — Porto Alegre/RS
 - **E-mail comercial:** contato@casacar.club`,
   },
   {

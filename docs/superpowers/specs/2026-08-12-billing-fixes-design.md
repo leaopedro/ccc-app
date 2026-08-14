@@ -151,9 +151,22 @@ objetos de test. Nada as purga.
   Entitlement premium vitalício sem assinatura por trás, silencioso por
   construção.
 
-**Correção:** migração que expira as memberships com refs de test, limpa
+**Correção:** script que expira as memberships de test, limpa
 `Garage.premiumTier` e `premiumUntil` correspondentes, e expira os pedidos
-`pending`. Try/catch nas três chamadas desprotegidas. Isso vira o passo zero da
+`pending` **liberando a reserva de estoque** antes de virar o status: as
+varreduras de expiração só olham linhas `pending`, então mexer no status direto
+deixaria `quantitySold` inflado para sempre.
+
+**Correção após revisão (2026-08-13).** A primeira versão identificava linha de
+test pelo `_test_` no id, e afirmava isso como fato. É falso: id de test mode de
+Customer, Subscription e PaymentIntent é igual ao live, e o modo vive em
+`livemode`. Só Checkout Session carrega o modo no id, e essa não é lida aqui. O
+dry run reportaria zero com todas as linhas stale no lugar, o que é pior que não
+rodar, porque leria como "nada a fazer".
+
+O discriminador passa a ser tempo: produção não aceitou pagamento live antes da
+virada, então toda linha criada antes dela referencia objeto de test. O instante
+é obrigatório, sem default, porque errar isso revoga entitlement de quem paga. Try/catch nas três chamadas desprotegidas. Isso vira o passo zero da
 ordem de execução do Spec A.
 
 Junto: nem `Order` nem as tabelas de billing têm campo `livemode`, e
@@ -172,6 +185,22 @@ exatamente a ordem que o Spec A propunha.
 
 **Correção:** mover o gate para depois do insert, e responder 503 em vez de 200,
 para a Stripe reentregar quando a flag ligar.
+
+**Correção da correção, após revisão (2026-08-13).** Mover o gate e guardar a
+linha não bastava, e a primeira implementação afirmava o contrário. O ramo de
+duplicata devolvia 503 para **qualquer** linha não processada, e ele fica antes
+do gate e antes do dispatch. Como a Stripe reentrega com o mesmo id, a linha
+guardada ficava inalcançável para sempre.
+
+O mesmo buraco afetava a sentinela de forma desconhecida (§C2), que também
+depende de reentrega, e o contador de tentativas (§H5), que media o loop em vez
+de quebrá-lo.
+
+O ramo agora compara a idade da linha com `STALE_UNPROCESSED_MS`, 60 segundos.
+Linha nova é entrega concorrente e segue com 503; linha velha é adotada e
+processada. A separação por idade é o que mantém concorrência real de fora:
+reentrega da Stripe chega em minutos, entrega concorrente em segundos. Adotar é
+seguro porque o apply a jusante já é idempotente.
 
 ## H4 — Chave de idempotência do carrinho replica sessão morta
 

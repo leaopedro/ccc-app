@@ -212,14 +212,19 @@ do Spec A.
 - [ ] **PEDRO** Setar os mesmos valores em produção, em `/premium/catalogo`. O
       campo já existe no formulário do admin, então muda sem deploy — que é o
       certo para número que o próprio Pedro classificou como aproximado.
-- [ ] **PEDRO** Nome do fornecedor e valor de repasse por módulo de add-on, para
-      `vendorName` e `payoutAmountCents`. **Pergunta aberta em 2026-08-14:** a
-      resposta dada foi "Mercado Livre majoritariamente", mas esse campo não
-      descreve compra de produto: os dois módulos são `detailing` (3 acessos/mês
-      de lavagem) e `oficina` (5 horas/mês), que são serviços presenciais
-      executados por alguém. Falta saber **quem executa**. Se a resposta sobre
-      Mercado Livre era sobre onde os itens da caixa são comprados, isso é
-      procurement e não entra aqui.
+- [x] **PEDRO** Fornecedor do add-on de detailing: **Vortex Detailing**, Curitiba,
+      informado em 2026-08-14 e semeado em `vendorName`.
+- [x] **PEDRO** Oficina não é comercializada. O módulo passa a `active: false` no
+      seed. Verificado que nenhuma tela do app expõe add-on e que nenhum benefício
+      de plano menciona oficina, então ninguém comprava pela interface; o risco
+      real era `me-premium.ts` aceitar `addonKeys` do cliente conferindo só contra
+      módulos ativos.
+- [ ] **PEDRO** Valor de repasse do detailing, para `payoutAmountCents`. Segue em
+      zero, o que faz a margem exibida no admin igualar o valor cobrado.
+- [ ] **PEDRO** "Mercado Livre majoritariamente" foi a resposta sobre fornecedores.
+      Se isso descreve onde os itens da **caixa** são comprados, é procurement e
+      não tem campo no modelo — os campos de fornecedor descrevem quem presta o
+      serviço do add-on. Confirmar se há algo a registrar.
 - [ ] **DEV** Reescrever a folha "O que é Premium?" (`src/copy/garage.ts:99-106`
       e a versão em inglês em `:210-219`) para liderar com box, clube e serviços.
       Hoje os quatro benefícios listados são digitais, e é essa folha que o

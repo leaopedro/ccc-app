@@ -558,11 +558,11 @@ const PREMIUM_ADDON_MODULES = [
     name: 'Detailing',
     description: '3 acessos/mês para lavagem & detailing',
     monthlyDeltaCents: 15000,
-    // Repasse real ainda nao definido pelo operador. Zero e null deliberadamente:
-    // o seed nao inventa dado financeiro. Ate ser preenchido, a margem exibida no
-    // admin iguala o valor cobrado.
+    // Repasse real ainda nao definido pelo operador. Zero deliberadamente: o seed
+    // nao inventa dado financeiro. Ate ser preenchido, a margem exibida no admin
+    // iguala o valor cobrado.
     payoutAmountCents: 0,
-    vendorName: null,
+    vendorName: 'Vortex Detailing',
     quotaPerCycle: 3,
     quotaUnit: 'access' as const,
     sortOrder: 0,
@@ -577,6 +577,17 @@ const PREMIUM_ADDON_MODULES = [
     quotaPerCycle: 5,
     quotaUnit: 'hours' as const,
     sortOrder: 1,
+    // Informado pelo fundador em 2026-08-14: nao ha servico de oficina sendo
+    // comercializado.
+    //
+    // Escopo real do risco, verificado: nenhuma tela do app expoe add-on, e
+    // nenhum beneficio de plano menciona oficina, entao ninguem esta comprando
+    // isso pela interface. O que existe e a validacao em me-premium.ts, que
+    // aceita addonKeys enviadas pelo cliente conferindo apenas contra os modulos
+    // ATIVOS. Deixar ativo permitiria a um cliente direto incluir 'oficina' no
+    // checkout e gerar cobranca recorrente de um servico que ninguem presta.
+    // Reativar junto do fornecedor e do repasse.
+    active: false,
   },
 ];
 
@@ -635,7 +646,7 @@ const seedPremiumCatalog = async (): Promise<void> => {
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,
         sortOrder: m.sortOrder,
-        active: true,
+        active: m.active ?? true,
       },
       create: {
         key: m.key,
@@ -648,7 +659,7 @@ const seedPremiumCatalog = async (): Promise<void> => {
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,
         sortOrder: m.sortOrder,
-        active: true,
+        active: m.active ?? true,
       },
     });
   }

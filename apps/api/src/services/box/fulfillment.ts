@@ -1,5 +1,9 @@
 import { prisma } from '@ccc/db';
-import type { AdminBoxMonthlyListResponse } from '@ccc/shared/admin-box';
+import type {
+  AdminBoxMonthlyListResponse,
+  AdminBoxPickingResponse,
+  PickingRow,
+} from '@ccc/shared/admin-box';
 import type { BoxFulfillmentStatus } from '@ccc/shared/box';
 
 // Forward-only. delivered/cancelled are terminal. Predecessor of each target.
@@ -118,4 +122,63 @@ export const listAdminBoxes = async (
   });
 
   return { cycleKey, availableCycles, counts, boxes };
+};
+
+type PickingAccumulator = { title: string; totalQuantity: number; boxes: Set<string> };
+
+const foldRows = (acc: Map<string, PickingAccumulator>): PickingRow[] =>
+  Array.from(acc.entries()).map(([refId, v]) => ({
+    refId,
+    title: v.title,
+    totalQuantity: v.totalQuantity,
+    boxCount: v.boxes.size,
+  }));
+
+export const getAdminBoxPicking = async (
+  cycleKeyInput?: string,
+): Promise<AdminBoxPickingResponse> => {
+  const availableCycles = await distinctCyclesDesc();
+  const cycleKey = cycleKeyInput ?? availableCycles[0] ?? '';
+
+  const readyBoxes = await prisma.monthlyBox.findMany({
+    where: { cycleKey, status: 'ready' },
+    select: {
+      id: true,
+      items: {
+        where: { included: true },
+        select: { catalogItemId: true, titleSnapshot: true, quantity: true },
+      },
+      partnerItems: {
+        where: { included: true },
+        select: { partnerModuleId: true, nameSnapshot: true, quantity: true },
+      },
+    },
+  });
+
+  const items = new Map<string, PickingAccumulator>();
+  const partnerItems = new Map<string, PickingAccumulator>();
+  for (const box of readyBoxes) {
+    for (const line of box.items) {
+      const entry = items.get(line.catalogItemId) ?? {
+        title: line.titleSnapshot,
+        totalQuantity: 0,
+        boxes: new Set<string>(),
+      };
+      entry.totalQuantity += line.quantity;
+      entry.boxes.add(box.id);
+      items.set(line.catalogItemId, entry);
+    }
+    for (const line of box.partnerItems) {
+      const entry = partnerItems.get(line.partnerModuleId) ?? {
+        title: line.nameSnapshot,
+        totalQuantity: 0,
+        boxes: new Set<string>(),
+      };
+      entry.totalQuantity += line.quantity;
+      entry.boxes.add(box.id);
+      partnerItems.set(line.partnerModuleId, entry);
+    }
+  }
+
+  return { cycleKey, items: foldRows(items), partnerItems: foldRows(partnerItems) };
 };

@@ -2,11 +2,16 @@ import {
   adminBoxAdvanceRequestSchema,
   adminBoxMonthlyListResponseSchema,
   adminBoxMonthlyQuerySchema,
+  adminBoxPickingResponseSchema,
 } from '@ccc/shared/admin-box';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
-import { advanceBoxFulfillment, listAdminBoxes } from '../../services/box/fulfillment.js';
+import {
+  advanceBoxFulfillment,
+  getAdminBoxPicking,
+  listAdminBoxes,
+} from '../../services/box/fulfillment.js';
 
 const paramsSchema = z.object({ id: z.string().min(1) });
 
@@ -15,6 +20,12 @@ export const adminBoxFulfillmentRoutes: FastifyPluginAsync = async (app) => {
     const query = adminBoxMonthlyQuerySchema.parse(request.query);
     const result = await listAdminBoxes(query.cycleKey);
     return reply.send(adminBoxMonthlyListResponseSchema.parse(result));
+  });
+
+  app.get('/box/monthly/picking', async (request, reply) => {
+    const query = adminBoxMonthlyQuerySchema.parse(request.query);
+    const result = await getAdminBoxPicking(query.cycleKey);
+    return reply.send(adminBoxPickingResponseSchema.parse(result));
   });
 
   app.post('/box/monthly/:id/fulfillment', async (request, reply) => {

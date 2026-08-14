@@ -1,5 +1,8 @@
 import { prisma } from '@ccc/db';
-import { adminBoxMonthlyListResponseSchema } from '@ccc/shared/admin-box';
+import {
+  adminBoxMonthlyListResponseSchema,
+  adminBoxPickingResponseSchema,
+} from '@ccc/shared/admin-box';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -272,5 +275,158 @@ describe('GET /admin/box/monthly', () => {
     });
     const body = adminBoxMonthlyListResponseSchema.parse(res.json());
     expect(body.boxes[0]!.orderStatus).toBe('paid');
+  });
+});
+
+// Attaches an included catalog-item line + partner-module line to an existing box.
+const addBoxLines = async (
+  boxId: string,
+  opts: { catalogItemId: string; itemQty: number; partnerModuleId: string; partnerQty: number },
+) => {
+  await prisma.monthlyBoxItem.create({
+    data: {
+      boxId,
+      catalogItemId: opts.catalogItemId,
+      quantity: opts.itemQty,
+      unitPriceCents: 1000,
+      subtotalCents: 1000 * opts.itemQty,
+      titleSnapshot: 'Adesivo',
+      included: true,
+    },
+  });
+  await prisma.monthlyBoxPartnerItem.create({
+    data: {
+      boxId,
+      partnerModuleId: opts.partnerModuleId,
+      quantity: opts.partnerQty,
+      unitPriceCents: 5000,
+      subtotalCents: 5000 * opts.partnerQty,
+      nameSnapshot: 'Kit lavagem',
+      included: true,
+    },
+  });
+};
+
+describe('GET /admin/box/monthly/picking', () => {
+  let app: FastifyInstance;
+  beforeEach(async () => {
+    await resetDatabase();
+    app = await makeApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('aggregates included lines across ready boxes of the cycle', async () => {
+    const catalogItem = await prisma.boxCatalogItem.create({
+      data: {
+        slug: 'adesivo',
+        title: 'Adesivo',
+        description: 'x',
+        priceCents: 1000,
+        category: 'sticker',
+      },
+    });
+    const partner = await prisma.partner.create({
+      data: { slug: 'lavacar', name: 'LavaCar' },
+    });
+    const module = await prisma.partnerModule.create({
+      data: { partnerId: partner.id, name: 'Kit lavagem', priceCents: 5000 },
+    });
+
+    const a = await seedBox({
+      cycleKey: '2026-08-01',
+      status: 'ready',
+      fulfillmentStatus: 'unfulfilled',
+    });
+    const b = await seedBox({
+      cycleKey: '2026-08-01',
+      status: 'ready',
+      fulfillmentStatus: 'packed',
+    });
+    // An open box in the same cycle — its lines must NOT be aggregated.
+    const c = await seedBox({
+      cycleKey: '2026-08-01',
+      status: 'open',
+      fulfillmentStatus: 'unfulfilled',
+    });
+    await addBoxLines(a.box.id, {
+      catalogItemId: catalogItem.id,
+      itemQty: 2,
+      partnerModuleId: module.id,
+      partnerQty: 1,
+    });
+    await addBoxLines(b.box.id, {
+      catalogItemId: catalogItem.id,
+      itemQty: 3,
+      partnerModuleId: module.id,
+      partnerQty: 1,
+    });
+    await addBoxLines(c.box.id, {
+      catalogItemId: catalogItem.id,
+      itemQty: 9,
+      partnerModuleId: module.id,
+      partnerQty: 9,
+    });
+
+    const { header } = await orgAuth();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/box/monthly/picking?cycleKey=2026-08-01',
+      headers: { authorization: header },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = adminBoxPickingResponseSchema.parse(res.json());
+    expect(body.cycleKey).toBe('2026-08-01');
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({
+      refId: catalogItem.id,
+      title: 'Adesivo',
+      totalQuantity: 5,
+      boxCount: 2,
+    });
+    expect(body.partnerItems).toHaveLength(1);
+    expect(body.partnerItems[0]).toMatchObject({
+      refId: module.id,
+      title: 'Kit lavagem',
+      totalQuantity: 2,
+      boxCount: 2,
+    });
+  });
+
+  it('excludes dropped (included = false) lines', async () => {
+    const catalogItem = await prisma.boxCatalogItem.create({
+      data: {
+        slug: 'adesivo2',
+        title: 'Adesivo',
+        description: 'x',
+        priceCents: 1000,
+        category: 'sticker',
+      },
+    });
+    const { box } = await seedBox({
+      cycleKey: '2026-08-01',
+      status: 'ready',
+      fulfillmentStatus: 'unfulfilled',
+    });
+    await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: catalogItem.id,
+        quantity: 4,
+        unitPriceCents: 1000,
+        subtotalCents: 4000,
+        titleSnapshot: 'Adesivo',
+        included: false,
+      },
+    });
+    const { header } = await orgAuth();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/box/monthly/picking?cycleKey=2026-08-01',
+      headers: { authorization: header },
+    });
+    const body = adminBoxPickingResponseSchema.parse(res.json());
+    expect(body.items).toHaveLength(0);
   });
 });

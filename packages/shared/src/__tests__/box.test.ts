@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boxConfirmSchema,
+  boxFulfillmentStatusSchema,
   boxSelectionUpdateSchema,
   boxViewSchema,
   boxCheckoutResponseSchema,
@@ -12,6 +13,7 @@ describe('box shared schemas', () => {
     const view = {
       id: 'box_1',
       status: 'open',
+      fulfillmentStatus: 'unfulfilled',
       cycleKey: '2026-08-01',
       cutoffAt: '2026-08-27T00:00:00.000Z',
       budgetCents: 10000,
@@ -55,6 +57,7 @@ describe('box shared schemas', () => {
     const parsed = boxViewSchema.parse({
       id: 'box_1',
       status: 'awaiting_payment',
+      fulfillmentStatus: 'unfulfilled',
       cycleKey: '2026-08-01',
       cutoffAt: '2026-08-27T00:00:00.000Z',
       budgetCents: 10000,
@@ -77,6 +80,7 @@ describe('box shared schemas', () => {
     const view = boxViewSchema.parse({
       id: 'box_1',
       status: 'open',
+      fulfillmentStatus: 'unfulfilled',
       cycleKey: '2026-08-01',
       cutoffAt: '2026-08-27T00:00:00.000Z',
       budgetCents: 10000,
@@ -99,5 +103,34 @@ describe('box shared schemas', () => {
       expiresAt: '2026-08-27T00:00:00.000Z',
     });
     expect(res.brCode).toContain('000201');
+  });
+
+  it('exposes the 5-value box fulfillment enum and requires it on the view', () => {
+    expect(boxFulfillmentStatusSchema.options).toEqual([
+      'unfulfilled',
+      'packed',
+      'shipped',
+      'delivered',
+      'cancelled',
+    ]);
+    const missing = {
+      id: 'box_1',
+      status: 'ready',
+      cycleKey: '2026-08-01',
+      cutoffAt: '2026-08-27T00:00:00.000Z',
+      budgetCents: 10000,
+      currency: 'BRL',
+      itemsTotalCents: 0,
+      partnersTotalCents: 0,
+      overflowCents: 0,
+      shippingCents: 0,
+      chargeCents: 0,
+      orderId: null,
+      autoSendOptIn: false,
+      shippingAddressId: null,
+      items: [],
+      partnerItems: [],
+    };
+    expect(() => boxViewSchema.parse(missing)).toThrow();
   });
 });

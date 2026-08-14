@@ -11,6 +11,15 @@ export const boxStatusSchema = z.enum([
 ]);
 export type BoxStatus = z.infer<typeof boxStatusSchema>;
 
+export const boxFulfillmentStatusSchema = z.enum([
+  'unfulfilled',
+  'packed',
+  'shipped',
+  'delivered',
+  'cancelled',
+]);
+export type BoxFulfillmentStatus = z.infer<typeof boxFulfillmentStatusSchema>;
+
 export const boxViewItemSchema = z.object({
   catalogItemId: z.string(),
   quantity: z.number().int(),
@@ -36,6 +45,7 @@ export const boxViewPartnerItemSchema = z.object({
 export const boxViewSchema = z.object({
   id: z.string(),
   status: boxStatusSchema,
+  fulfillmentStatus: boxFulfillmentStatusSchema,
   cycleKey: z.string(),
   cutoffAt: z.string(),
   budgetCents: z.number().int(),

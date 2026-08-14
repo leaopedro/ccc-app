@@ -41,8 +41,10 @@ completa verde: 262 arquivos, 2268 testes.
 - [ ] **PEDRO** Preencher `packages/shared/src/legal.ts:17-19`. Está no ar hoje
       com `CNPJ: a ser publicado antes do lançamento em produção` e o mesmo para
       endereço. Precisa da razão social real do CNPJ.
-- [ ] **DEV** Rascunhar termos de uso e política de reembolso, com o prazo de
-      arrependimento de sete dias. Pedro revisa antes de publicar.
+- [x] **DEV** Termos de uso e política de reembolso escritos, com o prazo de
+      arrependimento de sete dias, e **revisados juridicamente** antes da
+      publicação (confirmado em 2026-08-14). Vivem em
+      `packages/shared/src/terms.ts`, com aceite versionado em `User.termsVersion`.
 - [ ] **PEDRO** Decidir nota fiscal: emitir desde a primeira venda via
       integração, ou aceitar a exposição com dono e prazo datados. Zero
       ocorrências no repositório hoje. Stripe Tax é cálculo, não emissão.

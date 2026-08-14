@@ -179,8 +179,9 @@ visível é motivo de rejeição, então o gatilho é um botão de reticências 
 - Create: página pública no admin, espelhando `(public)/privacidade`
 - Test: API mais componente
 
-**Decisões:** o texto foi escrito aqui e passou por revisão jurídica antes de
-publicar, confirmada pelo fundador em 2026-08-14. Cobre assinatura, ingresso de evento e
+**Decisões:** a política de reembolso vive dentro dos termos, em seção própria,
+em vez de documento separado: link separado dobra manutenção e some da vista no
+fechamento da compra. Cobre assinatura, ingresso de evento e
 loja, mais o prazo de arrependimento de sete dias do CDC. A política de reembolso
 entra no mesmo documento, com seção própria, porque link separado dobra
 manutenção sem ganho.

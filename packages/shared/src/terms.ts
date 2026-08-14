@@ -7,20 +7,6 @@ import type { PolicySection } from './legal.js';
  */
 export const TERMS_VERSION = 'terms-2026-08-13' as const;
 
-/**
- * Termos de uso vigentes. Revisados juridicamente antes da publicação
- * (confirmado pelo fundador em 2026-08-14).
- *
- * Cobre assinatura, ingresso de evento e loja, porque os três vendem por
- * canais diferentes com regras de cancelamento diferentes. A política de
- * reembolso vive aqui dentro, em seção própria, em vez de documento separado:
- * link separado dobra manutenção e some da vista no fechamento da compra.
- *
- * Este arquivo é a fonte canônica. A tela `app/(auth)/termos.tsx`, a página
- * pública em `apps/admin/app/(public)/termos` e o site consomem daqui, então
- * qualquer mudança de cláusula passa por revisão jurídica e sobe TERMS_VERSION,
- * que é o que fica gravado em User.termsVersion no aceite.
- */
 export const termsSections: PolicySection[] = [
   {
     id: 'aceite',

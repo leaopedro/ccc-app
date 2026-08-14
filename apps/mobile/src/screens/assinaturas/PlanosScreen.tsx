@@ -1,6 +1,6 @@
 // Assinaturas — "Planos disponíveis" screen (non-subscriber).
 //
-// Recreated from the Claude Design handoff (design_handoff_assinaturas). Data
+// Recreated from the design handoff (design_handoff_assinaturas). Data
 // now comes from the premium catalog API (usePremiumPlans / usePremiumAddonModules)
 // — the visual treatment is unchanged. Tapping a plan (card or CTA) opens the
 // plan detail screen, where the "Assinar" (contratação) stub lives.

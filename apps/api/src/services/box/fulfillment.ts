@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import type { AdminBoxMonthlyListResponse } from '@ccc/shared/admin-box';
 import type { BoxFulfillmentStatus } from '@ccc/shared/box';
 
 // Forward-only. delivered/cancelled are terminal. Predecessor of each target.
@@ -59,4 +60,62 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
     };
   }
   return { kind: 'ok', fulfillmentStatus: input.to };
+};
+
+const EMPTY_COUNTS = (): AdminBoxMonthlyListResponse['counts'] => ({
+  unfulfilled: 0,
+  packed: 0,
+  shipped: 0,
+  delivered: 0,
+  cancelled: 0,
+});
+
+const distinctCyclesDesc = async (): Promise<string[]> => {
+  const rows = await prisma.monthlyBox.findMany({
+    distinct: ['cycleKey'],
+    select: { cycleKey: true },
+    orderBy: { cycleKey: 'desc' },
+  });
+  return rows.map((r) => r.cycleKey);
+};
+
+export const listAdminBoxes = async (
+  cycleKeyInput?: string,
+): Promise<AdminBoxMonthlyListResponse> => {
+  const availableCycles = await distinctCyclesDesc();
+  const cycleKey = cycleKeyInput ?? availableCycles[0] ?? '';
+
+  const rows = await prisma.monthlyBox.findMany({
+    where: { cycleKey },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      status: true,
+      chargeCents: true,
+      currency: true,
+      fulfillmentStatus: true,
+      order: { select: { status: true } },
+      membership: {
+        select: { garage: { select: { user: { select: { name: true, email: true } } } } },
+      },
+    },
+  });
+
+  const counts = EMPTY_COUNTS();
+  const boxes = rows.map((b) => {
+    const fulfillmentStatus = b.fulfillmentStatus as BoxFulfillmentStatus;
+    if (b.status === 'ready') counts[fulfillmentStatus] += 1;
+    return {
+      id: b.id,
+      memberName: b.membership.garage.user.name,
+      memberEmail: b.membership.garage.user.email,
+      status: b.status,
+      chargeCents: b.chargeCents,
+      currency: b.currency,
+      fulfillmentStatus,
+      orderStatus: b.order?.status ?? null,
+    };
+  });
+
+  return { cycleKey, availableCycles, counts, boxes };
 };

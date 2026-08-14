@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { adminBoxMonthlyListResponseSchema } from '@ccc/shared/admin-box';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -199,5 +200,77 @@ describe('POST /admin/box/monthly/:id/fulfillment', () => {
       payload: { to: 'packed' },
     });
     expect(anonRes.statusCode).toBe(401);
+  });
+});
+
+describe('GET /admin/box/monthly', () => {
+  let app: FastifyInstance;
+  beforeEach(async () => {
+    await resetDatabase();
+    app = await makeApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('defaults to the latest cycle, lists all its boxes, and counts only ready boxes', async () => {
+    // Older cycle — must not be the default and its boxes must not appear.
+    await seedBox({ cycleKey: '2026-07-01', status: 'ready', fulfillmentStatus: 'delivered' });
+    // Target cycle: two ready (counted) + one open + one skipped (listed, not counted).
+    await seedBox({ cycleKey: '2026-08-01', status: 'ready', fulfillmentStatus: 'unfulfilled' });
+    await seedBox({ cycleKey: '2026-08-01', status: 'ready', fulfillmentStatus: 'packed' });
+    await seedBox({ cycleKey: '2026-08-01', status: 'open', fulfillmentStatus: 'unfulfilled' });
+    await seedBox({ cycleKey: '2026-08-01', status: 'skipped', fulfillmentStatus: 'unfulfilled' });
+
+    const { header } = await orgAuth();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/box/monthly',
+      headers: { authorization: header },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = adminBoxMonthlyListResponseSchema.parse(res.json());
+    expect(body.cycleKey).toBe('2026-08-01');
+    expect(body.availableCycles).toEqual(['2026-08-01', '2026-07-01']);
+    expect(body.boxes).toHaveLength(4); // all 2026-08-01 boxes, open/skipped included
+    expect(body.counts.unfulfilled).toBe(1); // only the ready+unfulfilled box
+    expect(body.counts.packed).toBe(1);
+    expect(body.counts.shipped).toBe(0);
+    const row = body.boxes.find((b) => b.status === 'ready' && b.fulfillmentStatus === 'packed');
+    expect(row?.memberEmail).toContain('@jdm.test');
+    expect(row?.orderStatus).toBeNull();
+  });
+
+  it('honours an explicit cycleKey query', async () => {
+    await seedBox({ cycleKey: '2026-07-01', status: 'ready', fulfillmentStatus: 'shipped' });
+    await seedBox({ cycleKey: '2026-08-01', status: 'ready', fulfillmentStatus: 'unfulfilled' });
+    const { header } = await orgAuth();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/box/monthly?cycleKey=2026-07-01',
+      headers: { authorization: header },
+    });
+    const body = adminBoxMonthlyListResponseSchema.parse(res.json());
+    expect(body.cycleKey).toBe('2026-07-01');
+    expect(body.counts.shipped).toBe(1);
+    expect(body.boxes).toHaveLength(1);
+  });
+
+  it('reflects orderStatus for Order-backed boxes', async () => {
+    await seedBox({
+      cycleKey: '2026-08-01',
+      status: 'ready',
+      fulfillmentStatus: 'unfulfilled',
+      withOrder: true,
+      chargeCents: 2000,
+    });
+    const { header } = await orgAuth();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/box/monthly',
+      headers: { authorization: header },
+    });
+    const body = adminBoxMonthlyListResponseSchema.parse(res.json());
+    expect(body.boxes[0]!.orderStatus).toBe('paid');
   });
 });

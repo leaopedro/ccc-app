@@ -100,6 +100,12 @@ once that integration lands.
   (test id under a live key). Permanent until purged: retrying never
   fixes it. A burst right after the live cutover means the purge script
   missed rows — see `apps/api/src/scripts/purge-test-mode.ts`.
+- **Note on the purge:** it discriminates by **creation time**, not by the
+  id. Stripe's test-mode ids for Customer, Subscription and PaymentIntent
+  look exactly like live ones and the mode lives in `livemode`, so no
+  string match on the id can work. Pass the live cutover instant:
+  `--created-before=<ISO>`. There is no default on purpose — guessing it
+  revokes entitlement from paying members.
 
 ### 3. Webhook signature mismatch
 
@@ -276,8 +282,26 @@ nothing. Never resolve this by asking the customer to pay again.
 is rendering a newer Stripe API version than the normalizer parses. Fix
 the endpoint's API version in the Stripe dashboard so it matches the
 version the other endpoints use, then redeliver the event from the
-dashboard. The route deliberately answered 503 and left the row
-unprocessed precisely so this redelivery works.
+dashboard. The route answered 503 and left the row unprocessed so the
+redelivery can pick it up.
+
+How the pickup actually works, because it is not obvious and an earlier
+version of this document got it wrong: Stripe reuses the same event id on
+redelivery, so the insert hits the unique index and lands on the
+duplicate-event branch. That branch used to answer 503 for **any**
+unprocessed row, which meant a stored-but-unprocessed event could never be
+processed — every retry bounced before reaching the dispatch. It now
+compares the row's age against `STALE_UNPROCESSED_MS` (60s): a fresh row is
+treated as a concurrent delivery and still gets 503, while an older row is
+adopted and processed.
+
+Practical consequence: **wait at least a minute** after fixing the API
+version before redelivering. Redelivering instantly can land inside the
+concurrency window and bounce.
+
+The same mechanism is what lets an event stored while
+`GROWTH_PREMIUM_BILLING_ENABLED` was false apply after the flag flips, and
+what recovers a row whose first attempt crashed mid-apply.
 
 **If the alert was `unknown-plan-price`.** The invoice carried a Stripe
 Price that is not registered in `PremiumPlanPrice`. Register it in the

@@ -725,6 +725,12 @@ git commit -m "feat(payments): handle Stripe disputes and revoke entitlement"
 > respondendo 200, virou mentira e foi atualizado em `a2f54c2`-style commit
 > separado. Fora de escopo, registrado: o webhook da RevenueCat tem o mesmo padrão
 > de descarte, mantido como está porque a RevenueCat está dormente.
+> **Revisão de 2026-08-13 derrubou parte disto.** Guardar a linha não era
+> suficiente: o ramo de duplicata devolvia 503 para qualquer linha não
+> processada, antes do gate e do dispatch, então a linha guardada ficava
+> inalcançável para sempre. O mesmo buraco afetava a Task 2 e tornava o
+> contador da Task 9 uma medida do loop. Corrigido no commit `ee3f8e8`, com
+> resume por idade (`STALE_UNPROCESSED_MS`). Detalhe no spec §H3.
 
 `GROWTH_PREMIUM_BILLING_ENABLED=false` faz a rota retornar antes de persistir o evento. A Stripe marca entregue e não há replay. É isso que torna impossível fazer smoke de assinatura antes de virar a flag.
 
@@ -932,6 +938,11 @@ git commit -m "fix(billing): handle stale test-mode Stripe references"
 > com checagem de mutação — trocando `TEST_REF` por um prefixo que não casa, 4 dos
 > 6 testes acusam, e os 2 que sobrevivem são os corretos (linha live e
 > idempotência).
+> **Revisão de 2026-08-13:** o predicado `_test_` estava errado como fato, não
+> só arriscado. Id de test mode de Customer, Subscription e PaymentIntent é
+> igual ao live; o modo vive em `livemode`. Trocado por instante de corte
+> obrigatório. E a purga passou a liberar reserva de estoque antes de expirar o
+> pedido, senão `quantitySold` ficava inflado para sempre. Commit `ee3f8e8`.
 
 Roda uma vez, antes da virada de chave. Sem isso, memberships com `sub_` de test nunca expiram e dão entitlement premium vitalício, silenciosamente.
 

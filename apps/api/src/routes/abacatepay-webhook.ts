@@ -633,10 +633,25 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: order.id },
-            select: { status: true },
+            select: { status: true, providerRef: true },
           });
           if (staleOrder?.status === 'paid') {
-            await markProcessed(event.id, event);
+            // Dedupe first, then flag only on the first delivery of this event
+            // so provider retries do not repeat the manual-refund alert.
+            const firstTime = await markProcessed(event.id, event);
+            if (firstTime && staleOrder.providerRef && staleOrder.providerRef !== billingId) {
+              flagManualRefund({
+                orderId: order.id,
+                providerRef: billingId,
+                userId: order.userId,
+                eventId: order.eventId,
+                reason: 'double-payment',
+              });
+              request.log.warn(
+                { orderId: order.id, billingId, storedProviderRef: staleOrder.providerRef },
+                'abacatepay webhook: distinct billing settled an already-paid order, manual refund flagged',
+              );
+            }
             return reply.status(200).send({ ok: true });
           }
           if (staleOrder?.status === 'expired') {

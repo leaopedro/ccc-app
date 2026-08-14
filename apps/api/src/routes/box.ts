@@ -1,9 +1,11 @@
 import { prisma } from '@ccc/db';
 import { boxConfirmSchema, boxPreferencesSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { requireUser } from '../plugins/auth.js';
 import { buildBoxCatalog } from '../services/box/catalog.js';
+import { checkoutBoxOrder } from '../services/box/checkout.js';
 import { confirmBox } from '../services/box/confirm.js';
 import { listBoxHistory } from '../services/box/history.js';
 import { setBoxPreferences } from '../services/box/preferences.js';
@@ -273,5 +275,41 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
       include: BOX_INCLUDE,
     });
     return reply.send(serializeBox(fresh, app.uploads));
+  });
+
+  // hook: 'preHandler' is required because the keyGenerator reads
+  // request.user, which only exists after app.authenticate runs. Without it
+  // the rate-limit plugin keys on the earlier onRequest hook and falls back
+  // to req.ip, rate-limiting every user behind one NAT as a single caller.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 5,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => `box-checkout:${req.user?.sub ?? req.ip}`,
+    });
+    scoped.post('/me/box/checkout', async (request, reply) => {
+      const { sub } = requireUser(request);
+      if (!app.abacatepay) return reply.status(503).send({ error: 'payment_unavailable' });
+      const membership = await loadEligibleMembership(sub);
+      if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+      const result = await checkoutBoxOrder({
+        userId: sub,
+        membershipId: membership.id,
+        abacatepay: app.abacatepay,
+      });
+      if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
+      if (result.kind === 'not_awaiting')
+        return reply.status(409).send({ error: 'box_not_awaiting' });
+      if (result.kind === 'locked') return reply.status(409).send({ error: 'box_locked' });
+      if (result.kind === 'upstream')
+        return reply.status(502).send({ error: 'payment_provider_error' });
+      return reply.send({
+        brCode: result.brCode,
+        amountCents: result.amountCents,
+        expiresAt: result.expiresAt,
+      });
+    });
   });
 };

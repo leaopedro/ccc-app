@@ -173,9 +173,12 @@ export default function RevisarCaixaScreen() {
       return;
     }
     setFeedback(null);
-    const result = await confirm({ shippingAddressId: selectedAddressId });
+    const { result, box: confirmed } = await confirm({ shippingAddressId: selectedAddressId });
     if (result === 'ok') {
-      router.replace('/caixa' as never);
+      // Route on the authoritative post-confirm charge, not the pre-confirm
+      // box: confirm adds shipping and can drop out-of-stock lines.
+      const charge = confirmed?.chargeCents ?? 0;
+      router.replace((charge > 0 ? '/caixa/pagar' : '/caixa') as never);
       return;
     }
     setFeedback(mapConfirmError(result));

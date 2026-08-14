@@ -25,7 +25,19 @@ export const caixaCopy = {
   awaiting: {
     banner: 'Aguardando pagamento',
     note: 'Sem pagamento até o corte, enviamos só os itens do budget.',
-    comingSoon: 'Pagamento pelo app disponível em breve.',
+  },
+  pay: {
+    title: 'Pagar a caixa',
+    instruction: 'Escaneie o QR ou copie o código Pix pra pagar.',
+    copyButton: 'Copiar código Pix',
+    copied: 'Código copiado',
+    expiresIn: 'Expira em',
+    amount: 'Valor',
+    success: 'Pagamento confirmado. Sua caixa está a caminho.',
+    closedBudgetOnly: 'A caixa fechou no corte e seguiu só com o budget. Nada foi cobrado.',
+    expired: 'O prazo do Pix acabou. A caixa fechou no corte.',
+    error: 'Não foi possível gerar o Pix. Tente de novo.',
+    reconnect: 'Reconectar',
   },
   notOpen: {
     title: 'Sem caixa neste ciclo',

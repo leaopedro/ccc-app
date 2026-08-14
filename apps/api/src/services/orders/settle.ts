@@ -15,7 +15,8 @@ type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 
 export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
-  | { kind: 'product' | 'mixed'; issued?: IssueResult[] };
+  | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
+  | { kind: 'box' };
 
 export const settlePaidOrder = async (
   orderId: string,
@@ -73,10 +74,41 @@ export const settlePaidOrder = async (
     return { kind: order.kind };
   }
 
-  // Fase 2: box orders stay pending and are never settled here. Fase 4 adds
-  // box settlement. Guard so a box order never falls through to ticket issuance.
   if (order.kind === 'box') {
-    throw new Error('box orders are not settled in this phase');
+    // Fase 4a: only a still-pending box order settles. The cutoff worker runs in
+    // parallel and cancels via updateMany(where status:'pending'); a cancelled
+    // order must never flip to paid. Non-pending -> throw so the webhook's
+    // OrderNotPendingError branch flags a manual refund (Pix has no refund API).
+    if (order.status !== 'pending') {
+      throw new OrderNotPendingError(orderId, order.status);
+    }
+    const box = await prisma.monthlyBox.findFirst({
+      where: { orderId },
+      select: { id: true, garageId: true },
+    });
+    if (!box) throw new OrderNotPendingError(orderId, 'cancelled');
+
+    await prisma.$transaction(async (tx) => {
+      // Same lock the cutoff worker takes, so the flip and a concurrent cancel
+      // serialize on the Garage row.
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${box.garageId} FOR UPDATE`;
+      const flipped = await tx.order.updateMany({
+        where: { id: orderId, status: 'pending' },
+        data: { status: 'paid', paidAt: new Date(), providerRef },
+      });
+      if (flipped.count === 0) {
+        const current = await tx.order.findUnique({
+          where: { id: orderId },
+          select: { status: true },
+        });
+        throw new OrderNotPendingError(orderId, current?.status ?? 'unknown');
+      }
+      await tx.monthlyBox.updateMany({
+        where: { id: box.id, status: 'awaiting_payment' },
+        data: { status: 'ready' },
+      });
+    });
+    return { kind: 'box' };
   }
 
   const issued = await issueTicketForPaidOrder(orderId, providerRef, env, intentMetadata);

@@ -5,12 +5,14 @@ import {
   boxSelectionUpdateSchema,
   boxConfirmSchema,
   boxPreferencesSchema,
+  boxCheckoutResponseSchema,
   type BoxView,
   type BoxCatalog,
   type BoxHistory,
   type BoxSelectionUpdate,
   type BoxConfirm,
   type BoxPreferences,
+  type BoxCheckoutResponse,
 } from '@ccc/shared/box';
 import { z } from 'zod';
 
@@ -53,3 +55,8 @@ export const skipBox = async (): Promise<void> => {
 export const unskipBox = async (): Promise<void> => {
   await authedRequest('/me/box/unskip', emptyResponseSchema, { method: 'POST' });
 };
+
+export const checkoutBox = (): Promise<BoxCheckoutResponse> =>
+  authedRequest('/me/box/checkout', boxCheckoutResponseSchema as z.ZodType<BoxCheckoutResponse>, {
+    method: 'POST',
+  });

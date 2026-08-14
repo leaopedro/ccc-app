@@ -15,10 +15,20 @@ import { resetDatabase } from '../helpers.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dbDir = path.resolve(here, '../../../../packages/db');
 
+// SEED_GARAGE_SPOT_PRODUCT is required since 2026-08-13: the default seed no
+// longer creates the garage spot product, because selling a virtual feature
+// unlock through the cart is the weakest item in an App Store submission that
+// charges outside IAP. The singleton machinery itself was NOT removed — a spot
+// granted by a premium plan is still a valid concept — so these tests opt in
+// explicitly and keep guarding it.
 const runSeed = () =>
   execSync('pnpm exec tsx prisma/seed.ts', {
     cwd: dbDir,
-    env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
+    env: {
+      ...process.env,
+      DATABASE_URL: process.env.DATABASE_URL,
+      SEED_GARAGE_SPOT_PRODUCT: 'true',
+    },
     stdio: 'pipe',
   });
 
@@ -45,6 +55,21 @@ describe('garage spot singleton seed', () => {
     expect(products[0]!.visibleInStore).toBe(false);
     expect(variants).toHaveLength(1);
     expect(variants[0]!.name).toBe(GARAGE_SPOT_VARIANT_NAME);
+  });
+
+  it('does NOT create the product when the opt-in is absent', async () => {
+    // Guards the 2026-08-13 retirement: the default seed must leave no
+    // purchasable garage spot product behind, in any environment. Without this
+    // pin, someone re-adding the unconditional call would only be caught by an
+    // App Store rejection.
+    execSync('pnpm exec tsx prisma/seed.ts', {
+      cwd: dbDir,
+      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
+      stdio: 'pipe',
+    });
+
+    const products = await prisma.product.findMany({ where: { slug: GARAGE_SPOT_PRODUCT_SLUG } });
+    expect(products).toHaveLength(0);
   });
 
   it('is idempotent — running seed three times still yields a single triple', async () => {

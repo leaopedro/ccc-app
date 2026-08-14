@@ -30,7 +30,6 @@ const AUDIT_COMMENT_MAP = {
   restore: 'feed.comment.restore',
 } as const;
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const adminFeedModerationRoutes: FastifyPluginAsync = async (app) => {
   // ---- Post moderation ----
   app.post('/events/:eventId/feed/posts/:postId/moderate', async (request, reply) => {
@@ -52,6 +51,18 @@ export const adminFeedModerationRoutes: FastifyPluginAsync = async (app) => {
         hiddenById: isRestore ? null : sub,
       },
     });
+
+    if (isRestore) {
+      // Close every report that was open at restore time. Without this the
+      // auto-hide counter keeps counting them, so a SINGLE new report crosses
+      // the threshold again and re-hides what a moderator just cleared. The
+      // earlier fix only stopped the same person replaying their own report;
+      // this is the baseline reset that makes the restore actually stick.
+      await prisma.report.updateMany({
+        where: { postId, status: 'open' },
+        data: { status: 'dismissed', resolverId: sub, resolvedAt: new Date() },
+      });
+    }
 
     await recordAudit({
       actorId: sub,
@@ -87,6 +98,14 @@ export const adminFeedModerationRoutes: FastifyPluginAsync = async (app) => {
         hiddenById: isRestore ? null : sub,
       },
     });
+
+    if (isRestore) {
+      // Same baseline reset as the post restore above.
+      await prisma.report.updateMany({
+        where: { commentId, status: 'open' },
+        data: { status: 'dismissed', resolverId: sub, resolvedAt: new Date() },
+      });
+    }
 
     await recordAudit({
       actorId: sub,

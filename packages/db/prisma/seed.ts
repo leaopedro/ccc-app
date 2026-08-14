@@ -503,6 +503,10 @@ const seedBadgeCatalog = async (): Promise<void> => {
 
 // Premium plans catalog. tier links to the existing GaragePremiumTier enum.
 // PT-BR display names: silver == Prata, gold == Ouro (enum stays bronze/silver/gold).
+// monthlyBoxBudgetCents é o valor da caixa mensal por tier. Estes números são
+// só para dev e preview: em produção o campo é editado em /premium/catalogo no
+// admin, que é onde ele deve mudar, já que muda sem deploy. Valores informados
+// pelo fundador em 2026-08-14 e declarados aproximados.
 const PREMIUM_PLANS = [
   {
     tier: 'bronze' as const,
@@ -510,6 +514,7 @@ const PREMIUM_PLANS = [
     name: 'Ingresso',
     sortOrder: 0,
     monthlyCents: 49000,
+    monthlyBoxBudgetCents: 4990,
     benefits: [
       'Acesso ao clube em horário comercial',
       'Eventos abertos da comunidade',
@@ -522,6 +527,7 @@ const PREMIUM_PLANS = [
     name: 'Estrada',
     sortOrder: 1,
     monthlyCents: 89000,
+    monthlyBoxBudgetCents: 10990,
     benefits: [
       'Tudo do Bronze',
       'Prioridade em eventos exclusivos',
@@ -535,6 +541,7 @@ const PREMIUM_PLANS = [
     name: 'Fundador',
     sortOrder: 2,
     monthlyCents: 149000,
+    monthlyBoxBudgetCents: 24990,
     benefits: [
       'Tudo da Prata',
       'Acesso ao clube 24 horas',
@@ -551,11 +558,11 @@ const PREMIUM_ADDON_MODULES = [
     name: 'Detailing',
     description: '3 acessos/mês para lavagem & detailing',
     monthlyDeltaCents: 15000,
-    // Repasse real ainda nao definido pelo operador. Zero e null deliberadamente:
-    // o seed nao inventa dado financeiro. Ate ser preenchido, a margem exibida no
-    // admin iguala o valor cobrado.
+    // Repasse real ainda nao definido pelo operador. Zero deliberadamente: o seed
+    // nao inventa dado financeiro. Ate ser preenchido, a margem exibida no admin
+    // iguala o valor cobrado.
     payoutAmountCents: 0,
-    vendorName: null,
+    vendorName: 'Vortex Detailing',
     quotaPerCycle: 3,
     quotaUnit: 'access' as const,
     sortOrder: 0,
@@ -570,6 +577,17 @@ const PREMIUM_ADDON_MODULES = [
     quotaPerCycle: 5,
     quotaUnit: 'hours' as const,
     sortOrder: 1,
+    // Informado pelo fundador em 2026-08-14: nao ha servico de oficina sendo
+    // comercializado.
+    //
+    // Escopo real do risco, verificado: nenhuma tela do app expoe add-on, e
+    // nenhum beneficio de plano menciona oficina, entao ninguem esta comprando
+    // isso pela interface. O que existe e a validacao em me-premium.ts, que
+    // aceita addonKeys enviadas pelo cliente conferindo apenas contra os modulos
+    // ATIVOS. Deixar ativo permitiria a um cliente direto incluir 'oficina' no
+    // checkout e gerar cobranca recorrente de um servico que ninguem presta.
+    // Reativar junto do fornecedor e do repasse.
+    active: false,
   },
 ];
 
@@ -579,7 +597,16 @@ const seedPremiumCatalog = async (): Promise<void> => {
     const plan = await prisma.premiumPlan.upsert({
       where: { tier: p.tier },
       update: { slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
-      create: { tier: p.tier, slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
+      // monthlyBoxBudgetCents entra só no create: o update não o toca, para uma
+      // reexecução do seed não sobrescrever o valor ajustado no admin.
+      create: {
+        tier: p.tier,
+        slug: p.slug,
+        name: p.name,
+        sortOrder: p.sortOrder,
+        active: true,
+        monthlyBoxBudgetCents: p.monthlyBoxBudgetCents,
+      },
     });
 
     // Monthly price. Upsert on composite [planId, cadence].
@@ -619,7 +646,7 @@ const seedPremiumCatalog = async (): Promise<void> => {
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,
         sortOrder: m.sortOrder,
-        active: true,
+        active: m.active ?? true,
       },
       create: {
         key: m.key,
@@ -632,7 +659,7 @@ const seedPremiumCatalog = async (): Promise<void> => {
         quotaPerCycle: m.quotaPerCycle,
         quotaUnit: m.quotaUnit,
         sortOrder: m.sortOrder,
-        active: true,
+        active: m.active ?? true,
       },
     });
   }
@@ -687,7 +714,24 @@ const main = async (): Promise<void> => {
 
   await seedStore();
 
-  await seedGarageSpotProduct();
+  // Retired from the default seed on 2026-08-13, opt-in only.
+  //
+  // "Vaga de Garagem Adicional" (R$49, virtual: true) is a non-consumable
+  // digital feature unlock sold through the normal cart. Apple guideline 3.1.5(a)
+  // covers physical goods and real-world services; it does not cover this, so
+  // the SKU would be the weakest item in an App Store submission that otherwise
+  // charges outside IAP. Decision recorded in
+  // docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md.
+  //
+  // The function, the virtual-singleton guards and the GarageSpot fulfillment
+  // path all stay: a spot granted by a premium plan is still a valid concept
+  // (GarageSpotSource.premium_membership), and the API tests seed the product
+  // themselves to exercise that machinery. Only the sale is retired, and the
+  // opt-in exists so that machinery can still be driven locally on purpose.
+  if (process.env.SEED_GARAGE_SPOT_PRODUCT === 'true') {
+    await seedGarageSpotProduct();
+    console.log('Seeded garage spot product (SEED_GARAGE_SPOT_PRODUCT=true).');
+  }
 
   await seedGaragesForExistingUsers();
 

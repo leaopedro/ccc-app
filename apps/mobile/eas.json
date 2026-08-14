@@ -8,14 +8,22 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "ios": { "simulator": true },
-      "env": { "APP_VARIANT": "development" }
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "APP_VARIANT": "development"
+      }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "ios": { "simulator": false },
-      "android": { "buildType": "apk" },
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "APP_VARIANT": "preview",
         "EXPO_PUBLIC_API_BASE_URL": "https://api.casacar.club",
@@ -31,15 +39,18 @@
         "APP_VARIANT": "production",
         "EXPO_PUBLIC_API_BASE_URL": "https://api.casacar.club",
         "EXPO_PUBLIC_R2_PUBLIC_BASE_URL": "https://pub-6a05fbfb9a984c578a0c0b9055e52c46.r2.dev",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51RD9T6PNWmr3Tc4tbQZ5Zq80wRCRfLCSKfvsJhGoRkdjgNFVWMfftNKrOuBgaRm1oSygfi8odFj3179hWzqXjfgc00w4zA61zM",
         "SENTRY_ALLOW_FAILURE": "true"
       }
     }
   },
   "submit": {
     "production": {
-      "ios": { "ascAppId": "6798074856" },
-      "android": { "serviceAccountKeyPath": "./secrets/play-service-account.json" }
+      "ios": {
+        "ascAppId": "6798074856"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./secrets/play-service-account.json"
+      }
     }
   }
 }

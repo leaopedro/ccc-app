@@ -1,4 +1,28 @@
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
+// Bumped 2026-08-14: the payment section claimed we do not collect CPF, while
+// the legal-basis table two sections below already listed CPF for subscription
+// identity validation, and the code encrypts and stores it at signup. The
+// document contradicted itself and the iOS privacy manifest.
+//
+// This constant is NOT inert: apps/admin/src/components/cookie-banner.tsx
+// compares it against the stored consent version, so bumping it re-shows the
+// cookie banner to every admin user. That is arguably the right behaviour for a
+// policy change, but it IS a user-visible effect — an earlier version of this
+// comment claimed the bump was purely documentary, which was wrong (the check
+// missed apps/admin). The mobile app and the API do not read it. Whether this
+// correction requires fresh consent from existing users is a legal call, tracked
+// in the payments roadmap.
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
+
+/**
+ * The version this one replaced. Interpolated into section 12 instead of being
+ * typed into the prose, together with the effective date that used to live
+ * there: bumping PRIVACY_POLICY_VERSION and leaving those two lines hand-written
+ * made the document announce a new version, an old effective date, and a
+ * predecessor that was two versions back — a contradiction inside a single
+ * section. The date is gone entirely because the version string already carries
+ * it; one source, not three.
+ */
+export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
 
 export type PolicySection = {
   id: string;
@@ -14,9 +38,9 @@ export const privacyPolicySections: PolicySection[] = [
 
 Nossos dados de contato:
 
-- **Razão social:** Casa Car Club
-- **CNPJ:** a ser publicado antes do lançamento em produção
-- **Endereço:** a ser publicado antes do lançamento em produção
+- **Razão social:** LIONS HUB ENGENHARIA DE SOFTWARE LTDA
+- **CNPJ:** 40.142.944/0001-18
+- **Endereço:** Rua Doutor Timóteo, 12, apto. 22 — Porto Alegre/RS
 - **E-mail comercial:** contato@casacar.club`,
   },
   {
@@ -57,7 +81,8 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Pagamento**
 - Dados de cartão de crédito/débito: processados pela **Stripe** nos EUA — nunca armazenados por nós
-- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação. **Não** coletamos nem armazenamos CPF/CNPJ
+- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação e **não** enviamos seu CPF ao processador de Pix
+- CPF: coletado no seu perfil e armazenado de forma criptografada. Usado para validar sua identidade na contratação de assinatura e para obrigações fiscais. Ver a tabela de bases legais abaixo
 - Assinaturas premium: gerenciadas pela **RevenueCat**, que recebe apenas um identificador interno da sua conta
 
 **Notificações**
@@ -207,8 +232,7 @@ Em caso de incidente de segurança com risco real aos titulares, notificaremos a
 - Se as mudanças exigirem novo consentimento (base legal Art. 7, I), solicitaremos sua confirmação antes de continuar o tratamento
 
 **Versão atual:** ${PRIVACY_POLICY_VERSION}
-**Data de vigência:** 6 de agosto de 2026
-**Versão anterior:** privacy-2026-05-14`,
+**Versão anterior:** ${PREVIOUS_PRIVACY_POLICY_VERSION}`,
   },
   {
     id: 'anpd',

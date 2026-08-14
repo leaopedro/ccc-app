@@ -1,5 +1,5 @@
 import { brand } from '@ccc/design';
-import { privacyPolicySections, PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
+import { TERMS_VERSION, termsSections } from '@ccc/shared/terms';
 import { Text } from '@ccc/ui';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -7,7 +7,7 @@ import { Pressable, SafeAreaView, ScrollView, View } from 'react-native';
 
 import { PolicyBody } from '~/legal/PolicyBody';
 
-export default function PrivacidadeScreen() {
+export default function TermosScreen() {
   const router = useRouter();
 
   return (
@@ -42,7 +42,7 @@ export default function PrivacidadeScreen() {
             {brand.name}
           </Text>
           <Text variant="h3" weight="bold">
-            Política de privacidade
+            Termos de uso
           </Text>
         </View>
       </View>
@@ -53,10 +53,10 @@ export default function PrivacidadeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text variant="caption" tone="muted" style={{ marginBottom: 24 }}>
-          Versão: {PRIVACY_POLICY_VERSION}
+          Versão: {TERMS_VERSION}
         </Text>
 
-        {privacyPolicySections.map((section) => (
+        {termsSections.map((section) => (
           <View key={section.id} style={{ marginBottom: 28 }}>
             <Text variant="body" weight="semibold" style={{ marginBottom: 8 }}>
               {section.title}
@@ -69,8 +69,8 @@ export default function PrivacidadeScreen() {
           style={{ borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingTop: 16, marginTop: 8 }}
         >
           <Text variant="caption" tone="muted">
-            Dúvidas? Fale com nosso Encarregado:{'\n'}
-            {brand.contact.privacyEmail}
+            Dúvidas, reembolso ou arrependimento:{'\n'}
+            {brand.contact.contactEmail}
           </Text>
         </View>
       </ScrollView>

@@ -41,6 +41,12 @@ model User {
   // 18+ self-attestation captured at signup. We store only the fact/timestamp
   // of acceptance, never a date of birth (privacy policy: no DOB collected).
   ageAttestedAt      DateTime?
+  /// Which Terms of Use text this person accepted, and when. Storing the
+  /// VERSION (not just a boolean) is what makes the signup checkbox auditable:
+  /// without it we cannot say which wording someone agreed to, and the checkbox
+  /// is decorative. See packages/shared/src/terms.ts TERMS_VERSION.
+  termsVersion       String?    @db.VarChar(40)
+  termsAcceptedAt    DateTime?
   tokenInvalidatedAt DateTime?
   deletedAt          DateTime?
   anonymizedAt       DateTime?
@@ -84,6 +90,8 @@ model User {
   reportsFiled        Report[]              @relation("ReportReporter")
   reportsResolved     Report[]              @relation("ReportResolver")
   feedBans            FeedBan[]             @relation("FeedBanUser")
+  blocksMade          UserBlock[]           @relation("UserBlockBlocker")
+  blocksReceived      UserBlock[]           @relation("UserBlockBlocked")
   feedBansIssued      FeedBan[]             @relation("FeedBanActor")
   consents            Consent[]
   documents           UserDocument[]
@@ -1662,6 +1670,24 @@ enum BanScope {
   post
 }
 
+/// User-to-user block, required by App Store guideline 1.2 (FeedBan is
+/// admin-applied and event-scoped, so it does not cover this). Filtering is
+/// SYMMETRIC: see services/feed/blocks.ts.
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  /// Load-bearing for the second direction of the symmetric filter: "who has
+  /// blocked me" is a lookup by blockedId.
+  @@index([blockedId])
+}
+
 model FeedBan {
   id         String   @id @default(cuid())
   eventId    String
@@ -1777,6 +1803,13 @@ model Report {
   reporter User?        @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
   resolver User?        @relation("ReportResolver", fields: [resolverId], references: [id], onDelete: SetNull)
 
+  /// One report per reporter per target, enforced by the DB rather than a
+  /// read-then-write check. Postgres allows many rows where an indexed column
+  /// is NULL, so a post report (commentId null) never collides with another
+  /// post report, and the two indexes coexist. A repeat report raises P2002,
+  /// which the route answers idempotently — reporting twice is not an error.
+  @@unique([reporterUserId, postId])
+  @@unique([reporterUserId, commentId])
   @@index([postId])
   @@index([commentId])
   @@index([reporterUserId])

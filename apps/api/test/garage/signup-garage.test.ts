@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@ccc/shared/terms';
 import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -25,6 +26,7 @@ describe('POST /auth/signup creates Garage atomically with User', () => {
         password: 'correct-horse-battery-staple',
         name: 'Tiago Apellido Pessoal',
         ageAttestation: true,
+        termsVersion: TERMS_VERSION,
       },
     });
     expect(res.statusCode).toBe(201);

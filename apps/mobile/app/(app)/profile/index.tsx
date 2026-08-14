@@ -35,6 +35,7 @@ import { profileCopy } from '~/copy/profile';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { useUnreadCount } from '~/hooks/useUnreadCount';
 import { pickAndUpload } from '~/lib/upload-image';
+import { PREMIUM_BILLING_ENABLED } from '~/lib/premium-runtime';
 import { theme } from '~/theme';
 
 type MenuRowProps = {
@@ -240,12 +241,18 @@ export default function ProfileMenuScreen() {
           hint={profileCopy.menu.garageHint}
           onPress={() => router.push('/profile/garage' as never)}
         />
-        <MenuRow
-          icon={<Gem color={theme.colors.fg} size={18} strokeWidth={1.75} />}
-          label={profileCopy.menu.assinatura}
-          hint={profileCopy.menu.assinaturaHint}
-          onPress={() => router.push('/assinaturas' as never)}
-        />
+        {/* Gated on the same flag as the tab bar. The tab was already hidden when
+            billing is off, but this row was not, so the "Assinaturas em breve."
+            placeholder stayed two taps from the Profile tab — placeholder content
+            on a primary path is an App Store 2.1 rejection. */}
+        {PREMIUM_BILLING_ENABLED ? (
+          <MenuRow
+            icon={<Gem color={theme.colors.fg} size={18} strokeWidth={1.75} />}
+            label={profileCopy.menu.assinatura}
+            hint={profileCopy.menu.assinaturaHint}
+            onPress={() => router.push('/assinaturas' as never)}
+          />
+        ) : null}
         <MenuRow
           icon={<MessageCircle color={theme.colors.fg} size={18} strokeWidth={1.75} />}
           label={profileCopy.menu.support}

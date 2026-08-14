@@ -196,6 +196,7 @@ const makePost = (overrides: Partial<FeedPostResponse> = {}): FeedPostResponse =
   car: null,
   body: 'post body',
   status: 'visible',
+  isOwn: false,
   photos: [],
   reactions: { likes: 3, mine: false },
   commentCount: 0,
@@ -465,6 +466,35 @@ describe('Feed post action visibility — production wiring', () => {
     const visibility = resolveFeedPostActionVisibility(false, canModerate);
     expect(visibility.showEdit).toBe(false);
     expect(visibility.showDelete).toBe(false);
+  });
+
+  it('non-owned post => report and block visible for a signed-in regular user', () => {
+    // Guideline 1.2: a reviewer has to be able to flag content and block a
+    // person from the post itself, without moderator role.
+    const visibility = resolveFeedPostActionVisibility(false, canModerateFeedPost('user'), true);
+    expect(visibility.showReport).toBe(true);
+    expect(visibility.showBlock).toBe(true);
+  });
+
+  it('guest => report and block hidden', () => {
+    // Guest browsing is supported and both handlers hit authenticated routes, so
+    // showing these to a visitor renders the 1.2 feature visibly broken.
+    const visibility = resolveFeedPostActionVisibility(false, canModerateFeedPost('user'), false);
+    expect(visibility.showReport).toBe(false);
+    expect(visibility.showBlock).toBe(false);
+  });
+
+  it('own post => report and block hidden', () => {
+    // Reporting yourself is noise, and the API refuses a self-block with 422.
+    const visibility = resolveFeedPostActionVisibility(true, canModerateFeedPost('user'), true);
+    expect(visibility.showReport).toBe(false);
+    expect(visibility.showBlock).toBe(false);
+  });
+
+  it('moderator on a non-owned post keeps report and block too', () => {
+    const visibility = resolveFeedPostActionVisibility(false, canModerateFeedPost('admin'), true);
+    expect(visibility.showReport).toBe(true);
+    expect(visibility.showBlock).toBe(true);
   });
 
   it('owner post => edit and delete visible', () => {

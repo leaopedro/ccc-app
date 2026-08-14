@@ -205,9 +205,21 @@ do Spec A.
 
 ### Reposicionamento do produto, antes do código
 
-- [ ] **PEDRO** Valor de orçamento da caixa por tier, para `monthlyBoxBudgetCents`.
+- [x] **PEDRO** Valor da caixa por tier, informado em 2026-08-14 e declarado
+      aproximado: bronze R$ 49,90, silver R$ 109,90, gold R$ 249,90. Semeado para
+      dev e preview em `packages/db/prisma/seed.ts`, só no `create`, para uma
+      reexecução não sobrescrever ajuste feito no admin.
+- [ ] **PEDRO** Setar os mesmos valores em produção, em `/premium/catalogo`. O
+      campo já existe no formulário do admin, então muda sem deploy — que é o
+      certo para número que o próprio Pedro classificou como aproximado.
 - [ ] **PEDRO** Nome do fornecedor e valor de repasse por módulo de add-on, para
-      `vendorName` e `payoutAmountCents`.
+      `vendorName` e `payoutAmountCents`. **Pergunta aberta em 2026-08-14:** a
+      resposta dada foi "Mercado Livre majoritariamente", mas esse campo não
+      descreve compra de produto: os dois módulos são `detailing` (3 acessos/mês
+      de lavagem) e `oficina` (5 horas/mês), que são serviços presenciais
+      executados por alguém. Falta saber **quem executa**. Se a resposta sobre
+      Mercado Livre era sobre onde os itens da caixa são comprados, isso é
+      procurement e não entra aqui.
 - [ ] **DEV** Reescrever a folha "O que é Premium?" (`src/copy/garage.ts:99-106`
       e a versão em inglês em `:210-219`) para liderar com box, clube e serviços.
       Hoje os quatro benefícios listados são digitais, e é essa folha que o

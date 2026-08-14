@@ -503,6 +503,10 @@ const seedBadgeCatalog = async (): Promise<void> => {
 
 // Premium plans catalog. tier links to the existing GaragePremiumTier enum.
 // PT-BR display names: silver == Prata, gold == Ouro (enum stays bronze/silver/gold).
+// monthlyBoxBudgetCents é o valor da caixa mensal por tier. Estes números são
+// só para dev e preview: em produção o campo é editado em /premium/catalogo no
+// admin, que é onde ele deve mudar, já que muda sem deploy. Valores informados
+// pelo fundador em 2026-08-14 e declarados aproximados.
 const PREMIUM_PLANS = [
   {
     tier: 'bronze' as const,
@@ -510,6 +514,7 @@ const PREMIUM_PLANS = [
     name: 'Ingresso',
     sortOrder: 0,
     monthlyCents: 49000,
+    monthlyBoxBudgetCents: 4990,
     benefits: [
       'Acesso ao clube em horário comercial',
       'Eventos abertos da comunidade',
@@ -522,6 +527,7 @@ const PREMIUM_PLANS = [
     name: 'Estrada',
     sortOrder: 1,
     monthlyCents: 89000,
+    monthlyBoxBudgetCents: 10990,
     benefits: [
       'Tudo do Bronze',
       'Prioridade em eventos exclusivos',
@@ -535,6 +541,7 @@ const PREMIUM_PLANS = [
     name: 'Fundador',
     sortOrder: 2,
     monthlyCents: 149000,
+    monthlyBoxBudgetCents: 24990,
     benefits: [
       'Tudo da Prata',
       'Acesso ao clube 24 horas',
@@ -579,7 +586,16 @@ const seedPremiumCatalog = async (): Promise<void> => {
     const plan = await prisma.premiumPlan.upsert({
       where: { tier: p.tier },
       update: { slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
-      create: { tier: p.tier, slug: p.slug, name: p.name, sortOrder: p.sortOrder, active: true },
+      // monthlyBoxBudgetCents entra só no create: o update não o toca, para uma
+      // reexecução do seed não sobrescrever o valor ajustado no admin.
+      create: {
+        tier: p.tier,
+        slug: p.slug,
+        name: p.name,
+        sortOrder: p.sortOrder,
+        active: true,
+        monthlyBoxBudgetCents: p.monthlyBoxBudgetCents,
+      },
     });
 
     // Monthly price. Upsert on composite [planId, cadence].

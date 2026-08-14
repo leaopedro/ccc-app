@@ -33,6 +33,7 @@ import {
 import { CaixaSkeleton } from '~/screens/caixa/CaixaSkeleton';
 import { CutoffBanner } from '~/screens/caixa/CutoffBanner';
 import { EmptyState } from '~/screens/caixa/EmptyState';
+import { FulfillmentTimeline } from '~/screens/caixa/FulfillmentTimeline';
 import { formatBRL } from '~/screens/caixa/format';
 import { OfflineBanner } from '~/screens/caixa/OfflineBanner';
 import { SkipSheet } from '~/screens/caixa/SkipSheet';
@@ -335,6 +336,7 @@ function PostCutoffBody({ box }: { box: BoxView }) {
           {caixaCopy.postCutoff.closedOn(closedDateFormatter.format(new Date(box.cutoffAt)))}
         </Text>
       </View>
+      <FulfillmentTimeline status={box.fulfillmentStatus} />
       <Text variant="bodySm" tone="secondary">
         {caixaCopy.postCutoff.note}
       </Text>
@@ -406,6 +408,7 @@ function ReadyBody({ box }: { box: BoxView }) {
           ),
         )}
       </View>
+      <FulfillmentTimeline status={box.fulfillmentStatus} />
     </>
   );
 }

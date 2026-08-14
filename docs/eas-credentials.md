@@ -445,6 +445,34 @@ Production submit remains blocked on:
 - `apps/mobile/secrets/play-service-account.json`
 - Store listing metadata and compliance screens
 
+## Step 4b: Conta de revisão da Apple
+
+App Review precisa entrar no app. `apps/mobile/app/_layout.tsx` manda todo
+usuário sem `emailVerifiedAt` para `/verify-email-pending`, então um revisor que
+se cadastra sozinho trava naquela tela e rejeita a build por não conseguir usar o
+app. A conta tem que chegar pronta.
+
+```bash
+REVIEW_ACCOUNT_EMAIL=review@casacar.club \
+REVIEW_ACCOUNT_PASSWORD='<gere na hora, não versione>' \
+  pnpm --filter @ccc/api exec tsx src/scripts/seed-review-account.ts
+```
+
+O script é idempotente: rode antes de cada submissão. Ele deixa pronto:
+
+- conta já verificada, com termos aceitos na versão vigente;
+- assinatura ativa, para as superfícies pagas não estarem vazias;
+- evento futuro publicado com ingresso disponível;
+- **posts de outro membro** no feed desse evento.
+
+O último item não é enfeite. Sem post no feed o card nunca monta, e os controles
+de denúncia e bloqueio que a regra 1.2 exige ficam inalcançáveis numa passada
+limpa de review. Os posts precisam ser de outra pessoa, porque em conteúdo
+próprio esses controles ficam escondidos de propósito.
+
+A senha é reescrita a cada execução: a fonte da verdade é o App Store Connect,
+não o banco. Cole email e senha em App Store Connect → App Review Information.
+
 ## Step 5: Evidence required for `JDMA-116`
 
 Before Phase 0.9 can move toward done, capture all of this on the issue:

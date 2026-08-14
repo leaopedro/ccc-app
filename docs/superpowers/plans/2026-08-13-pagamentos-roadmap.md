@@ -51,9 +51,16 @@ completa verde: 262 arquivos, 2268 testes.
 - [ ] **PEDRO** Parcelamento no cartão: hoje está desligado, sem
       `payment_method_options`. No Brasil, ticket acima de uns R$200 sem
       parcelamento converte pior. Decidir e registrar.
-- [ ] **PEDRO** CPF no Pix: o campo `taxId` existe no tipo e nenhum chamador
-      preenche, enquanto `legal.ts` promete que não coletamos CPF no Pix e o CPF
-      é coletado no perfil. Decidir e reconciliar a frase.
+- [x] **PEDRO** CPF: decidido em 2026-08-14 que a política é que estava errada. O
+      CPF é coletado no perfil, criptografado, e usado no gate de assinatura; o
+      manifesto de privacidade do iOS estava certo. A frase foi reescrita e a
+      versão subiu para `privacy-2026-08-14`. Nada no app lê essa constante, então
+      o bump não dispara re-consentimento.
+- [ ] **PEDRO** Decidir, com apoio jurídico, se a correção da política exige novo
+      consentimento dos usuários existentes.
+- [ ] **PEDRO** CPF no Pix: o campo `taxId` existe no tipo e nenhum chamador o
+      preenche. Decidir se o Pix passa a enviar CPF, o que conversa com a
+      obrigação de nota fiscal.
 
 ### Código
 
@@ -145,11 +152,13 @@ do Spec A.
 
 ### Regra 2.3.1 — benefício anunciado e não implementado
 
-- [ ] **PEDRO** Decidir, item por item: implementar ou remover da copy. Não
-      existe ordenação premium no feed, nem condicional de rodapé na página
-      pública, nem contador de convidados, nem desconto de parceiro, nem
-      verificação de membership na porta, e `GarageSpotSource.premium_membership`
-      nunca é usado.
+- [x] **DEV** Removidos da folha do Premium em 2026-08-14, decisão do Pedro:
+      "Garagem em destaque" e "Página pública premium", nas versões PT e EN.
+      Nenhum dos dois existe no código. Reintroduzir só junto da implementação.
+- [ ] **PEDRO** Os demais seguem abertos, e são benefícios de plano no seed, não
+      copy do app: contador de convidados, desconto de parceiro, verificação de
+      membership na porta, e `GarageSpotSource.premium_membership`, que está no
+      enum e nunca é usado.
 
 ### Configuração de build
 

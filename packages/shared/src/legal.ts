@@ -1,4 +1,11 @@
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
+// Bumped 2026-08-14: the payment section claimed we do not collect CPF, while
+// the legal-basis table two sections below already listed CPF for subscription
+// identity validation, and the code encrypts and stores it at signup. The
+// document contradicted itself and the iOS privacy manifest. Nothing in the app
+// reads this constant, so the bump is documentary — it does not trigger
+// re-consent. Whether this change requires new consent is a legal call, tracked
+// in the payments roadmap.
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
 
 export type PolicySection = {
   id: string;
@@ -57,7 +64,8 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Pagamento**
 - Dados de cartão de crédito/débito: processados pela **Stripe** nos EUA — nunca armazenados por nós
-- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação. **Não** coletamos nem armazenamos CPF/CNPJ
+- Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação e **não** enviamos seu CPF ao processador de Pix
+- CPF: coletado no seu perfil e armazenado de forma criptografada. Usado para validar sua identidade na contratação de assinatura e para obrigações fiscais. Ver a tabela de bases legais abaixo
 - Assinaturas premium: gerenciadas pela **RevenueCat**, que recebe apenas um identificador interno da sua conta
 
 **Notificações**

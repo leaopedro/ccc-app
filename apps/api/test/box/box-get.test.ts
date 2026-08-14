@@ -80,5 +80,6 @@ describe('GET /me/box', () => {
     const view = boxViewSchema.parse(res.json());
     expect(view.budgetCents).toBe(15000);
     expect(view.status).toBe('open');
+    expect(view.fulfillmentStatus).toBe('unfulfilled');
   });
 });

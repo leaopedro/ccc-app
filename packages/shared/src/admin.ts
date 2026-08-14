@@ -60,6 +60,7 @@ export const adminAuditActionSchema = z.enum([
   'product_type.update',
   'product_type.delete',
   'store.order.fulfillment_update',
+  'box.fulfillment.advance',
   'store.pickup_voucher.claim',
   'support.ticket.close',
   'support.ticket.internal_status_update',

@@ -6,6 +6,8 @@ import type {
 } from '@ccc/shared/admin-box';
 import type { BoxFulfillmentStatus } from '@ccc/shared/box';
 
+import { recordAudit } from '../admin-audit.js';
+
 // Forward-only. delivered/cancelled are terminal. Predecessor of each target.
 const PREDECESSOR: Record<'packed' | 'shipped' | 'delivered', BoxFulfillmentStatus> = {
   packed: 'unfulfilled',
@@ -13,20 +15,41 @@ const PREDECESSOR: Record<'packed' | 'shipped' | 'delivered', BoxFulfillmentStat
   delivered: 'shipped',
 };
 
-export type BoxAdvanceInput = { boxId: string; to: 'packed' | 'shipped' | 'delivered' };
+export type BoxAdvanceInput = {
+  boxId: string;
+  to: 'packed' | 'shipped' | 'delivered';
+  actorId: string;
+};
 export type BoxAdvanceResult =
   | { kind: 'ok'; fulfillmentStatus: BoxFulfillmentStatus }
   | { kind: 'not_found' }
   | { kind: 'not_ready' }
+  | { kind: 'order_not_paid' }
   | { kind: 'invalid_transition'; from: BoxFulfillmentStatus; to: string };
+
+// Thrown inside the advance transaction to abort (and roll back the box update)
+// when a concurrent refund flips the linked Order away from `paid` mid-flight.
+class OrderNotPaidAbort extends Error {}
 
 export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<BoxAdvanceResult> => {
   const box = await prisma.monthlyBox.findUnique({
     where: { id: input.boxId },
-    select: { id: true, status: true, fulfillmentStatus: true, orderId: true },
+    select: {
+      id: true,
+      status: true,
+      fulfillmentStatus: true,
+      orderId: true,
+      order: { select: { status: true } },
+    },
   });
   if (!box) return { kind: 'not_found' };
   if (box.status !== 'ready') return { kind: 'not_ready' };
+  // An Order-backed box must still be paid. A refund/dispute webhook can flip the
+  // linked Order to `refunded`/`failed` while the box stays `ready`; do not fulfill
+  // (nor overwrite the order's fulfillmentStatus) in that case. Budget-only boxes
+  // (no Order) have no payment to void, so they advance freely. Mirrors the store
+  // fulfillment guard (`services/store/orders.ts`).
+  if (box.orderId && box.order?.status !== 'paid') return { kind: 'order_not_paid' };
 
   const from = box.fulfillmentStatus as BoxFulfillmentStatus;
   const predecessor = PREDECESSOR[input.to];
@@ -35,24 +58,42 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
   }
 
   // Race-safe: only the caller that still sees `predecessor` wins. Sync the
-  // Order in the same transaction when the box is Order-backed. Never touch
-  // Order.status — that flips to paid only from a verified webhook.
-  const advanced = await prisma.$transaction(async (tx) => {
-    const updated = await tx.monthlyBox.updateMany({
-      where: { id: box.id, status: 'ready', fulfillmentStatus: predecessor },
-      data: { fulfillmentStatus: input.to },
-    });
-    if (updated.count === 0) return false;
-    if (box.orderId) {
-      await tx.order.update({
-        where: { id: box.orderId },
+  // Order in the same transaction when the box is Order-backed, guarding on
+  // status:'paid' so a refund landing mid-flight aborts the whole advance.
+  // Never touch Order.status — that flips to paid only from a verified webhook.
+  let outcome: 'ok' | 'stale';
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      const updated = await tx.monthlyBox.updateMany({
+        where: { id: box.id, status: 'ready', fulfillmentStatus: predecessor },
         data: { fulfillmentStatus: input.to },
       });
-    }
-    return true;
-  });
+      if (updated.count === 0) return 'stale';
+      if (box.orderId) {
+        const order = await tx.order.updateMany({
+          where: { id: box.orderId, status: 'paid' },
+          data: { fulfillmentStatus: input.to },
+        });
+        if (order.count === 0) throw new OrderNotPaidAbort();
+      }
+      await recordAudit(
+        {
+          actorId: input.actorId,
+          action: 'box.fulfillment.advance',
+          entityType: 'monthly_box',
+          entityId: box.id,
+          metadata: { from: predecessor, to: input.to, orderId: box.orderId },
+        },
+        tx,
+      );
+      return 'ok';
+    });
+  } catch (e) {
+    if (e instanceof OrderNotPaidAbort) return { kind: 'order_not_paid' };
+    throw e;
+  }
 
-  if (!advanced) {
+  if (outcome === 'stale') {
     const fresh = await prisma.monthlyBox.findUnique({
       where: { id: box.id },
       select: { fulfillmentStatus: true },

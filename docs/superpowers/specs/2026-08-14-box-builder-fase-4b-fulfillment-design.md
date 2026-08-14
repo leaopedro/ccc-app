@@ -59,8 +59,12 @@ type BoxAdvanceResult =
   | { kind: 'invalid_transition'; from: BoxFulfillmentStatus; to: string };
 ```
 
-Guardas: `box.status` precisa ser `ready`; o status atual precisa ser o
-predecessor imediato de `to`. Flip race-safe via `updateMany(where
+Guardas: `box.status` precisa ser `ready`; se ha `Order`, ele precisa
+continuar `paid` (um webhook de refund pode virar `refunded`/`failed` com o
+box ainda `ready`; nesse caso retorna `order_not_paid`, guardado tambem
+dentro da transacao contra corrida); o status atual precisa ser o
+predecessor imediato de `to`. Cada avanco grava um `AdminAudit`
+(`box.fulfillment.advance`, ator + from/to) na mesma transacao. Flip race-safe via `updateMany(where
 fulfillmentStatus = predecessor)`; count 0 re-le e retorna
 `invalid_transition`. Se `orderId` setado, sincroniza
 `Order.fulfillmentStatus` na mesma transacao (mesmo valor). Dedupe natural:

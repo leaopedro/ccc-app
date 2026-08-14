@@ -324,6 +324,8 @@ export const advanceBoxFulfillmentAction = async (
   } catch (e) {
     if (e instanceof ApiError) {
       if (e.bodyCode === 'box_not_ready') return { error: 'Caixa não está confirmada.' };
+      if (e.bodyCode === 'order_not_paid')
+        return { error: 'Pagamento reembolsado; a caixa não pode ser processada.' };
       if (e.bodyCode === 'invalid_transition')
         return { error: 'Transição inválida para o status atual.' };
       if (e.status === 404) return { error: 'Caixa não encontrada.' };

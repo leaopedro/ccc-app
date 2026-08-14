@@ -187,6 +187,41 @@ describe('POST /admin/box/monthly/:id/fulfillment', () => {
     expect(res.json()).toMatchObject({ code: 'box_not_found' });
   });
 
+  it('refuses to advance an Order-backed box whose order was refunded (409 order_not_paid)', async () => {
+    const { box, orderId } = await seedBox({ withOrder: true, fulfillmentStatus: 'unfulfilled' });
+    // A refund/dispute webhook flips the linked Order away from paid while the
+    // box stays ready. Advance must refuse and leave both untouched.
+    await prisma.order.update({ where: { id: orderId! }, data: { status: 'refunded' } });
+    const { header } = await orgAuth();
+
+    const res = await advance(app, header, box.id, 'packed');
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'order_not_paid' });
+
+    const freshBox = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId! } });
+    expect(freshBox.fulfillmentStatus).toBe('unfulfilled');
+    expect(freshOrder.fulfillmentStatus).toBe('unfulfilled');
+    expect(freshOrder.status).toBe('refunded');
+  });
+
+  it('records an AdminAudit entry with the actor and status transition on advance', async () => {
+    const { box } = await seedBox({ fulfillmentStatus: 'unfulfilled' });
+    const { user, header } = await orgAuth();
+
+    expect((await advance(app, header, box.id, 'packed')).statusCode).toBe(200);
+
+    const audits = await prisma.adminAudit.findMany({
+      where: { entityType: 'monthly_box', entityId: box.id },
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      actorId: user.id,
+      action: 'box.fulfillment.advance',
+    });
+    expect(audits[0]!.metadata).toMatchObject({ from: 'unfulfilled', to: 'packed' });
+  });
+
   it('rejects staff role (403) and unauthenticated (401)', async () => {
     const { box } = await seedBox({ fulfillmentStatus: 'unfulfilled' });
     const { user: staff } = await createUser({

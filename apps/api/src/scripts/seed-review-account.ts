@@ -209,6 +209,25 @@ export const seedReviewAccount = async (
     });
   }
 
+  // If the reviewer tried "Bloquear" on a previous pass, the block survives and
+  // the symmetric filter hides every demo post from them — so a re-run would
+  // hand back the empty feed this whole block exists to prevent. Clear it, in
+  // both directions, and un-hide anything auto-hidden by a reviewer testing
+  // "Denunciar".
+  await prisma.userBlock.deleteMany({
+    where: {
+      OR: [
+        { blockerId: user.id, blockedId: demoAuthor.id },
+        { blockerId: demoAuthor.id, blockedId: user.id },
+      ],
+    },
+  });
+  await prisma.report.deleteMany({ where: { post: { eventId: event.id } } });
+  await prisma.feedPost.updateMany({
+    where: { eventId: event.id, status: { not: 'visible' } },
+    data: { status: 'visible', hiddenAt: null, hiddenById: null },
+  });
+
   const existingPosts = await prisma.feedPost.count({ where: { eventId: event.id } });
   if (existingPosts === 0) {
     for (const body of [

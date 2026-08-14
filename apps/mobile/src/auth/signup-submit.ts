@@ -2,6 +2,7 @@
 // component so the highest-risk behaviors (digits-not-mask, which field a
 // 400 lands on, the document upload never blocking the account) are
 // testable without mounting the screen.
+import { TERMS_VERSION } from '@ccc/shared/terms';
 import type { PublicUser, SignupInput, SignupRequestInput } from '@ccc/shared/auth';
 import type { UserDocumentType } from '@ccc/shared/documents';
 
@@ -30,6 +31,7 @@ export const buildSignupPayload = (values: SignupInput): SignupRequestInput => {
   return {
     ...values,
     ageAttestation: true,
+    termsVersion: TERMS_VERSION,
     cpf: cpfDigits.length > 0 ? cpfDigits : undefined,
     phone: phoneDigits.length > 0 ? phoneDigits : undefined,
   };

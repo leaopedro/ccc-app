@@ -9,6 +9,13 @@ import {
 } from './redirect-intent';
 
 describe('isPublicPath', () => {
+  it('treats the legal documents as public', () => {
+    // The signup form links to both, so an anonymous user tapping them must not
+    // be bounced to /login. The privacy link had this bug before /termos existed.
+    expect(isPublicPath('/termos')).toBe(true);
+    expect(isPublicPath('/privacidade')).toBe(true);
+  });
+
   it('allows root, welcome and events list', () => {
     expect(isPublicPath('/')).toBe(true);
     expect(isPublicPath('/welcome')).toBe(true);

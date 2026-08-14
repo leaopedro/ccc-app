@@ -25,3 +25,26 @@ export const blockedUserIdsFor = async (userId: string | null): Promise<string[]
   }
   return [...ids];
 };
+
+/**
+ * True when a block exists in EITHER direction between the two users.
+ *
+ * Used on the write paths (comment create, reaction). Filtering only the read
+ * lists left a real harassment channel: someone who kept a postId in local state
+ * could still comment under the post of a person who blocked them, and every
+ * other member saw it — only the victim did not. The read filter alone made the
+ * abuse invisible to the victim instead of preventing it.
+ */
+export const isBlockedBetween = async (a: string, b: string | null): Promise<boolean> => {
+  if (!b || a === b) return false;
+  const row = await prisma.userBlock.findFirst({
+    where: {
+      OR: [
+        { blockerId: a, blockedId: b },
+        { blockerId: b, blockedId: a },
+      ],
+    },
+    select: { id: true },
+  });
+  return row !== null;
+};

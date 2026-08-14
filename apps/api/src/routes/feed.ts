@@ -17,7 +17,7 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
-import { blockedUserIdsFor } from '../services/feed/blocks.js';
+import { blockedUserIdsFor, isBlockedBetween } from '../services/feed/blocks.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
 import rateLimit from '@fastify/rate-limit';
@@ -165,6 +165,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
           feedPostResponseSchema.parse({
             id: p.id,
             eventId: p.eventId,
+            isOwn: userId !== null && p.authorUserId === userId,
             car: serializeCarProfile(p.car, buildUrl),
             body: p.body,
             status: p.status,
@@ -237,6 +238,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             postId: true,
             body: true,
             status: true,
+            authorUserId: true,
             createdAt: true,
             updatedAt: true,
             car: { select: CAR_SELECT },
@@ -254,6 +256,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             feedCommentResponseSchema.parse({
               id: c.id,
               postId: c.postId,
+              isOwn: userId !== null && c.authorUserId === userId,
               car: serializeCarProfile(c.car, buildUrl),
               body: c.body,
               status: c.status,
@@ -374,6 +377,8 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedPostResponseSchema.parse({
           id: post.id,
           eventId: post.eventId,
+          // Create: the author is the caller by construction.
+          isOwn: true,
           car: serializeCarProfile(post.car, buildUrl),
           body: post.body,
           status: post.status,
@@ -473,6 +478,9 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedPostResponseSchema.parse({
           id: updated.id,
           eventId: updated.eventId,
+          // Patch: only the author or a moderator reaches here; the moderator
+          // case is corrected below.
+          isOwn: updated.authorUserId === sub,
           car: serializeCarProfile(updated.car, buildUrl),
           body: updated.body,
           status: updated.status,
@@ -545,7 +553,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
       const post = await prisma.feedPost.findFirst({
         where: { id: postId, eventId, status: 'visible' },
-        select: { id: true },
+        select: { id: true, authorUserId: true },
       });
       if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
 
@@ -554,6 +562,12 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(403).send({ error: 'Forbidden', message: 'Banned from posting' });
       if (access === 'forbidden')
         return reply.status(403).send({ error: 'Forbidden', message: 'Posting access denied' });
+
+      // A block has to stop writing, not just reading. Hiding the thread from the
+      // victim while everyone else still sees the comment is not a block.
+      if (await isBlockedBetween(sub, post.authorUserId)) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Blocked' });
+      }
 
       const { carId, body } = feedCommentCreateInputSchema.parse(request.body);
 
@@ -587,6 +601,8 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedCommentResponseSchema.parse({
           id: comment.id,
           postId: comment.postId,
+          // Create: the author is the caller by construction.
+          isOwn: true,
           car: serializeCarProfile(comment.car, buildUrl),
           body: comment.body,
           status: comment.status,
@@ -811,6 +827,12 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true, authorUserId: true },
       });
       if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+
+      // Same reasoning as the comment path: a block must stop the interaction,
+      // not merely hide it from the person who asked for the block.
+      if (await isBlockedBetween(sub, post.authorUserId)) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Blocked' });
+      }
 
       const where = { postId_userId: { postId, userId: sub } };
 

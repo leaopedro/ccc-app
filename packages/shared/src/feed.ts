@@ -98,6 +98,24 @@ export const feedPostResponseSchema = z.object({
   photos: z.array(feedPostPhotoSchema),
   reactions: feedReactionSummarySchema,
   commentCount: z.number().int().nonnegative(),
+  /**
+   * Whether the requesting user wrote this post. Computed server-side and
+   * defaulted to false for anonymous readers.
+   *
+   * Exists because the client used to infer authorship from car identity, which
+   * is the only author signal the payload carried. That breaks for a post with
+   * no car: it reads as somebody else's (offering report and block on your own
+   * content) or as your own (hiding them on everyone else's), depending on which
+   * way the fallback leans. Neither is acceptable for App Store guideline 1.2.
+   * A boolean is used instead of the author id so no new user identifier enters
+   * a payload that anonymous readers receive.
+   *
+   * Required, not defaulted: a default splits zod's input and output types and
+   * the divergence leaks into every call site. Deploy order matters as a result —
+   * the API ships this field before a client build that reads it. An older app
+   * binary is unaffected, since zod strips unknown keys.
+   */
+  isOwn: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -109,6 +127,8 @@ export const feedCommentResponseSchema = z.object({
   car: publicCarProfileSchema.nullable(),
   body: z.string(),
   status: feedCommentStatusSchema,
+  /** Same reasoning as feedPostResponseSchema.isOwn. */
+  isOwn: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

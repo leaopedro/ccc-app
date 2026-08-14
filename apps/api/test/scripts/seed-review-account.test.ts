@@ -56,6 +56,29 @@ describe('seedReviewAccount', () => {
     expect(posts.every((p) => p.status === 'visible')).toBe(true);
   });
 
+  it('clears a reviewer block and un-hides reported posts on re-run', async () => {
+    // If the reviewer tests Bloquear or Denunciar, the effects survive. A re-run
+    // would then hand back an empty feed — exactly what the demo posts exist to
+    // prevent. The seed has to be self-healing, not merely non-duplicating.
+    const first = await seedReviewAccount(prisma, INPUT);
+    const event = await prisma.event.findUniqueOrThrow({ where: { slug: first.eventSlug } });
+    const post = await prisma.feedPost.findFirstOrThrow({ where: { eventId: event.id } });
+
+    await prisma.userBlock.create({
+      data: { blockerId: first.userId, blockedId: post.authorUserId! },
+    });
+    await prisma.feedPost.update({
+      where: { id: post.id },
+      data: { status: 'hidden', hiddenAt: new Date() },
+    });
+
+    await seedReviewAccount(prisma, INPUT);
+
+    expect(await prisma.userBlock.count({ where: { blockerId: first.userId } })).toBe(0);
+    const after = await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } });
+    expect(after.status).toBe('visible');
+  });
+
   it('is idempotent and does not stack memberships or events', async () => {
     const first = await seedReviewAccount(prisma, INPUT);
     const second = await seedReviewAccount(prisma, INPUT);

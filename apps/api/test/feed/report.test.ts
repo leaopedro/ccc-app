@@ -206,6 +206,45 @@ describe('POST /events/:eventId/feed/:postId/report', () => {
     );
   });
 
+  it('a NEW report after a moderator restore does not immediately re-hide', async () => {
+    // The earlier fix only stopped the same person replaying their own report.
+    // The reports stayed `open`, so the counter still had three of them and a
+    // single fresh reporter crossed the threshold again. Restoring has to reset
+    // the baseline, otherwise the moderator is overridden by one tap.
+    const event = await seedEvent();
+    const { user: author } = await createUser({ email: 'baseline@jdm.test', verified: true });
+    const post = await seedPost(event.id, author.id);
+    const reporters = await seedReporters(4);
+
+    for (const r of reporters.slice(0, 3)) await report(event.id, post.id, r.id);
+    expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } })).status).toBe(
+      'hidden',
+    );
+
+    const { user: mod } = await createUser({
+      email: 'mod@jdm.test',
+      verified: true,
+      role: 'admin',
+    });
+    const restore = await app.inject({
+      method: 'POST',
+      url: `/admin/events/${event.id}/feed/posts/${post.id}/moderate`,
+      headers: { authorization: bearer(env, mod.id, 'admin') },
+      payload: { action: 'restore' },
+    });
+    expect(restore.statusCode).toBe(200);
+
+    const fresh = await report(event.id, post.id, reporters[3]!.id);
+
+    expect(fresh.json()).toMatchObject({ autoHidden: false });
+    expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } })).status).toBe(
+      'visible',
+    );
+    expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: post.id } })).status).toBe(
+      'visible',
+    );
+  });
+
   it('rejects an unauthenticated report', async () => {
     const event = await seedEvent();
     const { user: author } = await createUser({ email: 'author5@jdm.test', verified: true });

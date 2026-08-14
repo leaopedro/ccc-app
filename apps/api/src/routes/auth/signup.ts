@@ -1,6 +1,5 @@
 import { prisma } from '@ccc/db';
 import { authResponseSchema, signupRequestSchema } from '@ccc/shared/auth';
-import { TERMS_VERSION } from '@ccc/shared/terms';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { verificationMail } from '../../services/auth/mail-templates.js';
@@ -40,10 +39,10 @@ export const signupRoute: FastifyPluginAsync = async (app) => {
           name: input.name,
           passwordHash,
           ageAttestedAt: new Date(),
-          // The signup form requires ticking "Aceito os Termos", so record WHICH
-          // text was accepted. A boolean would not survive the first revision of
-          // the terms.
-          termsVersion: TERMS_VERSION,
+          // Record what the client actually sent, not what the server assumes.
+          // Stamping TERMS_VERSION unconditionally recorded a consent the API had
+          // never received.
+          termsVersion: input.termsVersion,
           termsAcceptedAt: new Date(),
           // Permissive signup: both optional. Written in the same tx as the
           // User + Garage create so a half-filled profile never lands.

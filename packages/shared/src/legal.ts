@@ -13,6 +13,17 @@
 // in the payments roadmap.
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
 
+/**
+ * The version this one replaced. Interpolated into section 12 instead of being
+ * typed into the prose, together with the effective date that used to live
+ * there: bumping PRIVACY_POLICY_VERSION and leaving those two lines hand-written
+ * made the document announce a new version, an old effective date, and a
+ * predecessor that was two versions back — a contradiction inside a single
+ * section. The date is gone entirely because the version string already carries
+ * it; one source, not three.
+ */
+export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
+
 export type PolicySection = {
   id: string;
   title: string;
@@ -221,8 +232,7 @@ Em caso de incidente de segurança com risco real aos titulares, notificaremos a
 - Se as mudanças exigirem novo consentimento (base legal Art. 7, I), solicitaremos sua confirmação antes de continuar o tratamento
 
 **Versão atual:** ${PRIVACY_POLICY_VERSION}
-**Data de vigência:** 6 de agosto de 2026
-**Versão anterior:** privacy-2026-05-14`,
+**Versão anterior:** ${PREVIOUS_PRIVACY_POLICY_VERSION}`,
   },
   {
     id: 'anpd',

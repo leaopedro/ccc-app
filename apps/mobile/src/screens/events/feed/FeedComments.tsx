@@ -149,11 +149,10 @@ export function FeedComments({ eventId, postId, commentCount, myCars, canPost }:
               <Text style={styles.commentBody}>{c.body}</Text>
               {/* Guideline 1.2 applies to comments too, and a comment thread is
                   the classic harassment surface. Own comments are excluded the
-                  same way posts are: reporting yourself is noise. Author identity
-                  comes from car ownership, the only signal the payload carries,
-                  so a car-less comment counts as yours and hides the control
-                  rather than offering a self-report. */}
-              {isAuthed && !(c.car ? myCars.some((mc) => mc.id === c.car?.id) : true) ? (
+                  same way posts are: reporting yourself is noise. Authorship is
+                  server-computed (isOwn) rather than inferred from car identity,
+                  which was wrong for every comment without a car. */}
+              {isAuthed && !c.isOwn ? (
                 <Pressable
                   onPress={() => handleReportComment(c)}
                   accessibilityRole="button"

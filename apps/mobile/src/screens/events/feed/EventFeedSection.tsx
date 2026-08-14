@@ -275,11 +275,12 @@ export function EventFeedSection({
             key={post.id}
             post={post}
             myCars={myCars}
-            // `car?.id` is the only author signal the payload carries, so a
-            // car-less post of your own reads as someone else's. Treating a
-            // car-less post as "not mine" would put Denunciar and Bloquear on
-            // your own content, and self-report has no server-side guard.
-            isOwn={post.car ? myCars.some((c) => c.id === post.car?.id) : true}
+            // Server-computed. Inferring authorship from car identity was wrong
+            // for any post without a car — which is most of them, including the
+            // ones the App Review seed creates. The fallback hid Denunciar and
+            // Bloquear on every car-less post and offered Editar and Excluir
+            // instead, which then failed on authorization.
+            isOwn={post.isOwn}
             isAuthenticated={authStatus === 'authenticated'}
             canModerate={isPostStaff}
             canPost={canPost}

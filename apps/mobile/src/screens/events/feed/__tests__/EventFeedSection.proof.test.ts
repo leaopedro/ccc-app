@@ -196,6 +196,7 @@ const makePost = (overrides: Partial<FeedPostResponse> = {}): FeedPostResponse =
   car: null,
   body: 'post body',
   status: 'visible',
+  isOwn: false,
   photos: [],
   reactions: { likes: 3, mine: false },
   commentCount: 0,

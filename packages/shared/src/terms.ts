@@ -118,7 +118,7 @@ Não respondemos por serviços prestados por fornecedores parceiros além do que
   {
     id: 'mudancas',
     title: '13. Mudanças nestes termos',
-    body: `Podemos atualizar estes termos. Mudança relevante é avisada no app e pede novo aceite. A versão vigente e sua data ficam sempre publicadas aqui.
+    body: `Podemos atualizar estes termos. Mudança relevante é avisada no app e pede novo aceite. A versão vigente fica sempre publicada aqui, e a data está no próprio identificador da versão.
 
 **Versão atual:** ${TERMS_VERSION}`,
   },

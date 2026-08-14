@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@ccc/shared/terms';
 import { prisma } from '@ccc/db';
 import { authResponseSchema } from '@ccc/shared/auth';
 import type { FastifyInstance } from 'fastify';
@@ -28,6 +29,7 @@ describe('POST /auth/signup', () => {
         password: 'correct-horse-battery-staple',
         name: 'New',
         ageAttestation: true,
+        termsVersion: TERMS_VERSION,
       },
     });
     expect(res.statusCode).toBe(201);
@@ -46,12 +48,33 @@ describe('POST /auth/signup', () => {
     expect(captured?.html).toContain('/verify?token=');
   });
 
+  it('refuses a signup that does not accept the terms', async () => {
+    // The API used to stamp User.termsVersion unconditionally while the payload
+    // carried no acceptance at all, so the database recorded a consent nobody
+    // gave: a direct client could create an account without ever seeing the
+    // terms and still look like it agreed.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: {
+        email: 'sem-termos@jdm.test',
+        name: 'Sem Termos',
+        password: 'correct-horse-battery-staple',
+        ageAttestation: true,
+      },
+    });
+
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(await prisma.user.findUnique({ where: { email: 'sem-termos@jdm.test' } })).toBeNull();
+  });
+
   it('rejects duplicate emails', async () => {
     const payload = {
       email: 'dup@jdm.test',
       password: 'correct-horse-battery-staple',
       name: 'Dup',
       ageAttestation: true,
+      termsVersion: TERMS_VERSION,
     };
     const first = await app.inject({ method: 'POST', url: '/auth/signup', payload });
     expect(first.statusCode).toBe(201);
@@ -77,6 +100,7 @@ describe('POST /auth/signup', () => {
         password: 'correct-horse-battery-staple',
         name: 'Alice',
         ageAttestation: true,
+        termsVersion: TERMS_VERSION,
       },
     });
     const saved = await prisma.user.findUnique({ where: { email: 'alice@jdm.test' } });

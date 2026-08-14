@@ -53,6 +53,15 @@ export type SignupInput = z.infer<typeof signupSchema>;
 // (checkbox) and echoed here so the server can persist the attestation.
 export const signupRequestSchema = signupSchema.extend({
   ageAttestation: z.literal(true),
+  /**
+   * Which Terms of Use text the person accepted. Required, and echoed rather
+   * than assumed: the API used to stamp User.termsVersion unconditionally while
+   * the payload carried no acceptance at all, so the database recorded a consent
+   * that was never given — a direct client could create an account without ever
+   * seeing the terms and still look like it agreed. Sending the version (not a
+   * boolean) is what makes the record say WHICH text was accepted.
+   */
+  termsVersion: z.string().min(1).max(40),
 });
 export type SignupRequestInput = z.infer<typeof signupRequestSchema>;
 

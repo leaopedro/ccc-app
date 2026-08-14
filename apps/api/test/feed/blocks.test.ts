@@ -214,6 +214,47 @@ describe('user blocks', () => {
     expect(await prisma.userBlock.count()).toBe(0);
   });
 
+  it('stops a blocked user from commenting with a postId they already had', async () => {
+    // The read filter alone made the abuse invisible to the victim instead of
+    // preventing it: the comment still landed and everyone else saw it.
+    const event = await seedEvent();
+    const { user: victim } = await createUser({ email: 'w-victim@jdm.test', verified: true });
+    const { user: troll } = await createUser({ email: 'w-troll@jdm.test', verified: true });
+    const post = await prisma.feedPost.create({
+      data: { eventId: event.id, authorUserId: victim.id, body: 'post da vitima' },
+    });
+    await block(victim.id, troll.id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/events/${event.id}/feed/${post.id}/comments`,
+      headers: { authorization: bearer(env, troll.id, 'user') },
+      payload: { body: 'comentario indesejado' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.feedComment.count({ where: { postId: post.id } })).toBe(0);
+  });
+
+  it('stops a blocked user from reacting', async () => {
+    const event = await seedEvent();
+    const { user: victim } = await createUser({ email: 'r-victim@jdm.test', verified: true });
+    const { user: troll } = await createUser({ email: 'r-troll@jdm.test', verified: true });
+    const post = await prisma.feedPost.create({
+      data: { eventId: event.id, authorUserId: victim.id, body: 'post da vitima' },
+    });
+    await block(victim.id, troll.id);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/events/${event.id}/feed/${post.id}/reactions`,
+      headers: { authorization: bearer(env, troll.id, 'user') },
+      payload: { kind: 'like' },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
   it('does not filter anything for an anonymous reader', async () => {
     const event = await seedEvent();
     const { user: me } = await createUser({ email: 'anon-a@jdm.test', verified: true });

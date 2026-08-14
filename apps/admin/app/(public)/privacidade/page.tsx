@@ -19,8 +19,7 @@ export default function PrivacidadePage() {
           Versão:{' '}
           <code className="rounded bg-[color:var(--color-surface)] px-1 py-0.5 font-mono text-xs">
             {PRIVACY_POLICY_VERSION}
-          </code>{' '}
-          · Vigência: 14 de maio de 2026
+          </code>
         </p>
       </header>
 

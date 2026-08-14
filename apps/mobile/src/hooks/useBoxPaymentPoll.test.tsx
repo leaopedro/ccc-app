@@ -12,6 +12,7 @@ import { useBoxPaymentPoll } from './useBoxPaymentPoll';
 const view = (over: Partial<BoxView>): BoxView => ({
   id: 'b',
   status: 'awaiting_payment',
+  fulfillmentStatus: 'unfulfilled',
   cycleKey: '2026-08-01',
   cutoffAt: '2026-08-27T00:00:00.000Z',
   budgetCents: 10000,

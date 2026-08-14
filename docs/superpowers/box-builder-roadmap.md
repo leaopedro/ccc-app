@@ -73,10 +73,9 @@ Correcoes pos-review (PR #11):
   por outra via libera estoque e resolve, em vez de travar).
 - `maxPerCycle` aplicado no PUT (422).
 
-Nota: Fase 4 ainda e dona de: checkout do provider + flip do webhook para pago
-
-- fulfillment e refund no admin. `settlePaidOrder` hoje lanca de proposito para
-  `kind === 'box'`, como guarda ate a Fase 4 implementar a liquidacao.
+Nota: checkout do provider + flip do webhook para pago entregues na Fase 4a
+(a guarda de `settlePaidOrder` pra `kind === 'box'` foi removida). Fulfillment
+(4b) e refund no admin (4c) ainda pendentes.
 
 ### Fase 3 — UI mobile (DESIGN CONCLUIDO)
 
@@ -248,11 +247,69 @@ Go-live (apos QA manual do fluxo completo):
   (perfil EAS / .env). O default no codigo fica OFF; o flip e config, nao
   codigo. Testar num cliente premium real antes de promover.
 
-### Fase 4 — Checkout dos extras (PENDENTE)
+### Fase 4 — Checkout dos extras (EM ANDAMENTO)
 
-Checkout dos modulos de parceiro + webhook + fulfillment no admin. Manter a
-invariante: pedido so vira `paid` por webhook verificado, nunca por chamada
-do cliente. Webhooks idempotentes por event id.
+Fatiada em tres: 4a (pagamento Pix), 4b (fulfillment), 4c (refund). Invariante
+mantida: pedido so vira `paid` por webhook verificado, nunca por chamada do
+cliente; webhooks idempotentes por event id.
+
+#### Fase 4a — Pagamento Pix (CONCLUIDA)
+
+Fecha o fluxo do assinante pagar o extra da caixa por Pix. Entregue em
+`feat/box-builder-fase-4`, mergeada em `main` pelo PR #24.
+Spec: `docs/superpowers/specs/2026-08-13-box-builder-fase-4a-payment-design.md`.
+Plano: `docs/superpowers/plans/2026-08-13-box-builder-fase-4a-payment.md`.
+Executada via subagent-driven-development (10 tasks TDD em 7 dispatches, review
+por task + review final no opus: READY TO MERGE, 0 Critical/Important).
+
+Escopo entregue:
+
+- `POST /me/box/checkout` (`services/box/checkout.ts`): cria a cobranca Pix pro
+  Order de box `awaiting_payment` e carimba `providerRef`/`brCode`. Tres fases:
+  valida + reusa cobranca ativa (Fase A) e carimba (Fase C) sob `Garage FOR
+UPDATE`; `createPixBilling` (Fase B) roda fora do lock. `expiresInSeconds` =
+  tempo ate o cutoff (piso de 60s). Rate-limited (5/min por usuario), guarda
+  `503` quando o provider nao esta configurado.
+- Ramo `box` no `settlePaidOrder`: flip so-se-`pending` via `updateMany(where
+status:'pending')` sob o lock da Garage; box `awaiting_payment -> ready`. Order
+  cancelado no cutoff nunca vira `paid` (lanca `OrderNotPendingError` -> webhook
+  sinaliza refund manual). Guarda da Fase 2 removida.
+- Hardening do webhook: ramo "already paid" compara `billingId` com o
+  `providerRef` gravado; segunda cobranca distinta pro mesmo Order sinaliza
+  `flagManualRefund('double-payment')` (gated no first-time do event pra nao
+  repetir alerta em retry).
+- Mobile: `orderId` no `BoxView`; tela `/caixa/pagar` (QR + copia-e-cola +
+  contagem + polling); hooks `useBoxPay`/`useBoxPaymentPoll`; distingue pago de
+  trim-no-cutoff pelo `orderId` nulado. Entradas: confirm da revisao (quando ha
+  cobranca) e "Retomar pagamento" na home.
+
+Fixes de review (PR #24):
+
+- Revisao roteia pelo charge pos-confirm (confirm adiciona frete / dropa estoque),
+  nao pelo `chargeCents` pre-confirm; `useBoxConfirm` retorna o box confirmado.
+- Tela de pagamento esconde QR/copia no 00:00 (expiracao imediata); ignora
+  resposta tardia do checkout apos desmontar.
+
+Residual conhecido: uma corrida real de duplo-checkout pode criar uma cobranca
+orfa no provider (Fase B fora do lock); so uma e carimbada/mostrada, a orfa
+expira no cutoff, e se paga o webhook sinaliza refund manual. Prevenir a criacao
+exigiria pre-claim sob o lock; fora de escopo no 4a.
+
+Go-live (antes de ligar `EXPO_PUBLIC_CAIXA_ENABLED`): validar em sandbox da
+AbacatePay (dev mode + `POST /v1/pixQrCode/simulate-payment`) que pagar apos o
+`expiresIn` falha. A doc nao garante isso por escrito; o settle e a rede de
+seguranca de qualquer jeito (nunca liquida Order cancelado). Sinal
+`transparent.lost` disponivel pra reconciliacao futura de cobranca expirada.
+Fast-follow: copy de `mapPayError` pros casos raros `not_found`/`not_eligible`.
+
+#### Fase 4b — Fulfillment (PENDENTE)
+
+Status/rastreio/timeline (tela 09) + rotas admin de box.
+
+#### Fase 4c — Refund (PENDENTE)
+
+Refund do Pix (AbacatePay nao tem refund API hoje) + tratamento de pagamento
+tardio alem do expiry. Hoje o sinal e `flagManualRefund` (Sentry), refund manual.
 
 ### Fase 5 — Notificacoes (PENDENTE)
 

@@ -80,12 +80,16 @@ import {
 import {
   adminBoxCatalogItemSchema,
   adminBoxCatalogListSchema,
+  adminBoxMonthlyListResponseSchema,
+  adminBoxPickingResponseSchema,
   adminBoxSettingsSchema,
   adminPartnerListSchema,
   adminPartnerModuleSchema,
   adminPartnerSchema,
   type AdminBoxCatalogItemCreate,
   type AdminBoxCatalogItemUpdate,
+  type AdminBoxMonthlyListResponse,
+  type AdminBoxPickingResponse,
   type AdminBoxSettingsUpdate,
   type AdminPartnerCreate,
   type AdminPartnerModuleCreate,
@@ -99,6 +103,7 @@ import {
   type AdminSubscriptionAddonAttach,
   type AdminSubscriptionChangePlan,
 } from '@ccc/shared/admin-subscription';
+import { boxFulfillmentStatusSchema } from '@ccc/shared/box';
 import {
   checkInEventsResponseSchema,
   extraClaimRequestSchema,
@@ -1019,4 +1024,28 @@ export const updateBoxSettings = (input: AdminBoxSettingsUpdate) =>
     method: 'PUT',
     body: JSON.stringify(input),
     schema: adminBoxSettingsSchema,
+  });
+
+// --- Box monthly fulfillment console (Fase 4b) ---
+
+const advanceBoxResultSchema = z.object({
+  id: z.string(),
+  fulfillmentStatus: boxFulfillmentStatusSchema,
+});
+
+export const listAdminBoxMonthly = (cycleKey?: string): Promise<AdminBoxMonthlyListResponse> => {
+  const qs = cycleKey ? `?cycleKey=${encodeURIComponent(cycleKey)}` : '';
+  return apiFetch(`/admin/box/monthly${qs}`, { schema: adminBoxMonthlyListResponseSchema });
+};
+
+export const getAdminBoxPicking = (cycleKey?: string): Promise<AdminBoxPickingResponse> => {
+  const qs = cycleKey ? `?cycleKey=${encodeURIComponent(cycleKey)}` : '';
+  return apiFetch(`/admin/box/monthly/picking${qs}`, { schema: adminBoxPickingResponseSchema });
+};
+
+export const advanceAdminBoxFulfillment = (id: string, to: 'packed' | 'shipped' | 'delivered') =>
+  apiFetch(`/admin/box/monthly/${id}/fulfillment`, {
+    method: 'POST',
+    body: JSON.stringify({ to }),
+    schema: advanceBoxResultSchema,
   });

@@ -33,14 +33,41 @@ completa verde: 262 arquivos, 2268 testes.
 
 ### Bloqueadores jurídicos, antes da primeira cobrança real
 
-- [ ] **PEDRO** Resolver a divergência de entidade: a Stripe recebe como pessoa
-      física, os documentos legais do app vão nomear o CNPJ. Quem recebe e quem
-      responde ao consumidor passam a ser entidades diferentes, e a nota fiscal
-      sairia por um CNPJ que não recebeu. Decisão registrada: seguir assim por
-      ora.
-- [ ] **PEDRO** Preencher `packages/shared/src/legal.ts:17-19`. Está no ar hoje
-      com `CNPJ: a ser publicado antes do lançamento em produção` e o mesmo para
-      endereço. Precisa da razão social real do CNPJ.
+- [ ] **PEDRO** Migrar a conta Stripe para o CNPJ **antes de produção**. Decidido
+      em 2026-08-14. Isso resolve a divergência de merchant of record: quem recebe
+      passa a ser a mesma entidade que os documentos legais nomeiam
+      (LIONS HUB ENGENHARIA DE SOFTWARE LTDA, 40.142.944/0001-18) e a nota fiscal
+      sai por quem recebeu.
+
+      **Consequências que mudam o Spec A**, porque trocar de conta é mais amplo que
+      trocar de modo:
+
+      - Chaves, secrets de webhook e endpoints são todos novos.
+      - **Todo `price_...` muda**, então o catálogo em `/premium/catalogo` é
+        recadastrado do zero e as duas variáveis de preço gold no Railway também.
+      - **Todo `cus_`, `sub_` e `pi_` guardado no banco fica inválido**, não só os
+        de test mode. É exatamente o caso `resource_missing` que virou 409
+        `StaleBillingReference`, e é o que o script de purga limpa. O
+        discriminador por instante de corte continua correto, e passa a cobrir
+        mais linhas do que cobriria numa simples virada test → live.
+      - O descritor de fatura `CASA CAR CLUB` precisa ser configurado na conta
+        nova.
+
+      **Risco que aumenta, e é o que mais importa.** O Spec A manda ler a versão de
+      API do endpoint de test existente e fixar os endpoints live na mesma. Numa
+      conta **nova** não existe endpoint antigo para copiar: os endpoints nascem na
+      versão corrente da Stripe, que é mais nova que a `2026-04-22.dahlia` que o
+      normalizador lê. Ou seja, o descasamento de forma de invoice deixa de ser
+      possibilidade e vira o caso provável. Fixe explicitamente a versão de cada
+      endpoint novo em `2026-04-22.dahlia` na criação. A sentinela
+      `UNRECOGNIZED_SHAPE` existe como rede, não como substituto: ela responde 503
+      e alerta, e o evento só aplica depois que a versão for corrigida.
+
+- [x] **PEDRO** Preencher a identificação da entidade nos documentos legais. Feito
+      em 2026-08-14 com os dados da política publicada.
+- [ ] **PEDRO** Alinhar o rótulo de versão da política no site. O conteúdo lá já
+      tem a correção de CPF, mas o rótulo ainda diz `privacy-2026-08-06`, enquanto
+      o repositório vai para `privacy-2026-08-14`.
 - [x] **DEV** Termos de uso e política de reembolso publicados, com o prazo de
       arrependimento de sete dias. Vivem em `packages/shared/src/terms.ts`, com
       aceite versionado em `User.termsVersion`.

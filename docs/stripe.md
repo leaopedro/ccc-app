@@ -18,6 +18,12 @@ Specs relacionados: `docs/superpowers/specs/2026-08-12-stripe-live-web-design.md
 **Ler a versão de API do endpoint de webhook existente no dashboard e criar todo
 endpoint novo fixado na mesma versão.**
 
+> **Conta nova não tem endpoint antigo para copiar.** A migração para o CNPJ,
+> decidida em 2026-08-14, cria uma conta do zero, e endpoint novo nasce na versão
+> corrente da Stripe, que é mais nova que a fixada aqui. Nesse caminho o
+> descasamento abaixo deixa de ser possibilidade e vira o caso provável: fixe
+> explicitamente cada endpoint em `2026-04-22.dahlia` no momento da criação.
+
 O motivo não é preferência. O normalizador em
 `apps/api/src/services/billing/normalize-stripe.ts` lê a invoice na forma em que
 `subscription` fica no topo do objeto e a linha traz o `price` expandido, com

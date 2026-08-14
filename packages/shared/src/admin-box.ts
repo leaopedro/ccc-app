@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import { boxFulfillmentStatusSchema, boxStatusSchema } from './box.js';
+import { orderStatusSchema } from './orders.js';
+
 const slug = z
   .string()
   .trim()
@@ -178,3 +181,60 @@ export const adminBoxSettingsUpdateSchema = z.object({
   shippingFeeCents: z.number().int().nonnegative().optional(),
 });
 export type AdminBoxSettingsUpdate = z.infer<typeof adminBoxSettingsUpdateSchema>;
+
+// ----- Box fulfillment (Fase 4b) -----
+
+export const boxAdvanceTargetSchema = z.enum(['packed', 'shipped', 'delivered']);
+export type BoxAdvanceTarget = z.infer<typeof boxAdvanceTargetSchema>;
+
+export const adminBoxAdvanceRequestSchema = z.object({ to: boxAdvanceTargetSchema });
+export type AdminBoxAdvanceRequest = z.infer<typeof adminBoxAdvanceRequestSchema>;
+
+export const adminBoxMonthlyQuerySchema = z.object({
+  cycleKey: z.string().trim().min(1).max(10).optional(),
+});
+export type AdminBoxMonthlyQuery = z.infer<typeof adminBoxMonthlyQuerySchema>;
+
+export const boxFulfillmentCountsSchema = z.object({
+  unfulfilled: z.number().int().nonnegative(),
+  packed: z.number().int().nonnegative(),
+  shipped: z.number().int().nonnegative(),
+  delivered: z.number().int().nonnegative(),
+  cancelled: z.number().int().nonnegative(),
+});
+export type BoxFulfillmentCounts = z.infer<typeof boxFulfillmentCountsSchema>;
+
+export const adminBoxRowSchema = z.object({
+  id: z.string(),
+  memberName: z.string(),
+  memberEmail: z.string(),
+  status: boxStatusSchema,
+  chargeCents: z.number().int(),
+  currency: z.string(),
+  fulfillmentStatus: boxFulfillmentStatusSchema,
+  orderStatus: orderStatusSchema.nullable(),
+});
+export type BoxAdminRow = z.infer<typeof adminBoxRowSchema>;
+
+export const adminBoxMonthlyListResponseSchema = z.object({
+  cycleKey: z.string(),
+  availableCycles: z.array(z.string()),
+  counts: boxFulfillmentCountsSchema,
+  boxes: z.array(adminBoxRowSchema),
+});
+export type AdminBoxMonthlyListResponse = z.infer<typeof adminBoxMonthlyListResponseSchema>;
+
+export const boxPickingRowSchema = z.object({
+  refId: z.string(),
+  title: z.string(),
+  totalQuantity: z.number().int(),
+  boxCount: z.number().int(),
+});
+export type PickingRow = z.infer<typeof boxPickingRowSchema>;
+
+export const adminBoxPickingResponseSchema = z.object({
+  cycleKey: z.string(),
+  items: z.array(boxPickingRowSchema),
+  partnerItems: z.array(boxPickingRowSchema),
+});
+export type AdminBoxPickingResponse = z.infer<typeof adminBoxPickingResponseSchema>;

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  adminBoxAdvanceRequestSchema,
   adminBoxCatalogItemCreateSchema,
   adminBoxCatalogItemSchema,
+  adminBoxMonthlyListResponseSchema,
+  adminBoxPickingResponseSchema,
   adminBoxSettingsUpdateSchema,
   adminPartnerModuleCreateSchema,
+  boxPickingRowSchema,
 } from '../admin-box.js';
 
 describe('admin-box catalog + partner schemas', () => {
@@ -84,5 +88,51 @@ describe('admin-box settings schema', () => {
   it('rejects cutoff out of range', () => {
     const parsed = adminBoxSettingsUpdateSchema.safeParse({ cutoffDaysBeforeRenewal: 40 });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('admin-box fulfillment schemas', () => {
+  it('accepts a valid advance request and rejects unfulfilled/cancelled targets', () => {
+    expect(adminBoxAdvanceRequestSchema.safeParse({ to: 'packed' }).success).toBe(true);
+    expect(adminBoxAdvanceRequestSchema.safeParse({ to: 'unfulfilled' }).success).toBe(false);
+    expect(adminBoxAdvanceRequestSchema.safeParse({ to: 'cancelled' }).success).toBe(false);
+  });
+
+  it('parses a full monthly list response', () => {
+    const parsed = adminBoxMonthlyListResponseSchema.parse({
+      cycleKey: '2026-08-01',
+      availableCycles: ['2026-08-01', '2026-07-01'],
+      counts: { unfulfilled: 1, packed: 0, shipped: 0, delivered: 0, cancelled: 0 },
+      boxes: [
+        {
+          id: 'box_1',
+          memberName: 'Fulano',
+          memberEmail: 'fulano@jdm.test',
+          status: 'ready',
+          chargeCents: 0,
+          currency: 'BRL',
+          fulfillmentStatus: 'unfulfilled',
+          orderStatus: null,
+        },
+      ],
+    });
+    expect(parsed.boxes[0]!.orderStatus).toBeNull();
+    expect(parsed.counts.unfulfilled).toBe(1);
+  });
+
+  it('parses a picking response with item and partner rows', () => {
+    const row = boxPickingRowSchema.parse({
+      refId: 'ci_1',
+      title: 'Adesivo',
+      totalQuantity: 4,
+      boxCount: 2,
+    });
+    expect(row.boxCount).toBe(2);
+    const parsed = adminBoxPickingResponseSchema.parse({
+      cycleKey: '2026-08-01',
+      items: [row],
+      partnerItems: [],
+    });
+    expect(parsed.items).toHaveLength(1);
   });
 });

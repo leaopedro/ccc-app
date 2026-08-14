@@ -47,43 +47,45 @@ async function mount() {
 }
 
 describe('useBoxConfirm', () => {
-  it('returns ok on success', async () => {
-    confirmBox.mockResolvedValueOnce({});
+  it('returns ok and the confirmed box on success', async () => {
+    confirmBox.mockResolvedValueOnce({ chargeCents: 1990 });
     await mount();
-    let result: string | undefined;
+    let out: { result: string; box: { chargeCents?: number } | null } | undefined;
     await act(async () => {
-      result = await snap.confirm({ shippingAddressId: 'a1' });
+      out = await snap.confirm({ shippingAddressId: 'a1' });
     });
-    expect(result).toBe('ok');
+    expect(out?.result).toBe('ok');
+    expect(out?.box?.chargeCents).toBe(1990);
   });
 
-  it('maps a 400 ApiError to bad_address', async () => {
+  it('maps a 400 ApiError to bad_address with a null box', async () => {
     confirmBox.mockRejectedValueOnce(new ApiError(400, { error: 'bad_address' }));
     await mount();
-    let result: string | undefined;
+    let out: { result: string; box: unknown } | undefined;
     await act(async () => {
-      result = await snap.confirm({ shippingAddressId: 'a1' });
+      out = await snap.confirm({ shippingAddressId: 'a1' });
     });
-    expect(result).toBe('bad_address');
+    expect(out?.result).toBe('bad_address');
+    expect(out?.box).toBeNull();
   });
 
   it('maps a 409 ApiError to box_locked', async () => {
     confirmBox.mockRejectedValueOnce(new ApiError(409, { error: 'box_locked' }));
     await mount();
-    let result: string | undefined;
+    let out: { result: string } | undefined;
     await act(async () => {
-      result = await snap.confirm({ shippingAddressId: 'a1' });
+      out = await snap.confirm({ shippingAddressId: 'a1' });
     });
-    expect(result).toBe('box_locked');
+    expect(out?.result).toBe('box_locked');
   });
 
   it('maps other failures to error', async () => {
     confirmBox.mockRejectedValueOnce(new Error('net'));
     await mount();
-    let result: string | undefined;
+    let out: { result: string } | undefined;
     await act(async () => {
-      result = await snap.confirm({ shippingAddressId: 'a1' });
+      out = await snap.confirm({ shippingAddressId: 'a1' });
     });
-    expect(result).toBe('error');
+    expect(out?.result).toBe('error');
   });
 });

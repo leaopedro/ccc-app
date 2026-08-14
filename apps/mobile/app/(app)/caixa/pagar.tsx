@@ -31,12 +31,16 @@ function useCountdown(expiresAt: string) {
     return () => clearInterval(id);
   }, []);
 
-  const remaining = Math.max(0, new Date(expiresAt).getTime() - now);
+  const target = new Date(expiresAt).getTime();
+  const remaining = Math.max(0, target - now);
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1000);
   const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  // Only expired once we have a real target that has passed. An empty
+  // expiresAt (before checkout resolves) yields NaN, which is not expired.
+  const isExpired = Number.isFinite(target) && remaining <= 0;
 
-  return { display };
+  return { display, isExpired };
 }
 
 function goBack() {
@@ -71,9 +75,20 @@ export default function PagarCaixaScreen() {
   const [checkoutError, setCheckoutError] = useState<PayErrorFeedback | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const activeRef = useRef(true);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+    };
+  }, []);
+
   const runCheckout = useCallback(async () => {
     setCheckoutError(null);
     const { result, data } = await checkout();
+    // The screen may have unmounted while checkout was in flight; a late
+    // response must not navigate or set state on a dead screen.
+    if (!activeRef.current) return;
     if (result === 'ok' && data) {
       setBrCode(data.brCode);
       setAmountCents(data.amountCents);
@@ -98,7 +113,7 @@ export default function PagarCaixaScreen() {
     void runCheckout();
   }, [runCheckout]);
 
-  const { display } = useCountdown(expiresAt ?? '');
+  const { display, isExpired } = useCountdown(expiresAt ?? '');
   const { status, retry } = useBoxPaymentPoll({
     expiresAt: expiresAt ?? '',
     enabled: expiresAt !== null,
@@ -169,7 +184,11 @@ export default function PagarCaixaScreen() {
     );
   }
 
-  if (status === 'expired') {
+  // `isExpired` fires the instant the countdown hits 00:00, before the next
+  // poll would flip status. Paid/closed are handled above, so this cannot mask
+  // a settlement. Renders the expired screen immediately so the QR and copy
+  // action stop being usable at the deadline.
+  if (status === 'expired' || isExpired) {
     return (
       <View style={styles.screen}>
         <Header />

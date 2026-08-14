@@ -107,8 +107,16 @@ cobranca ativa nao expirada, **reusa** e retorna o `brCode` sem criar outra.
 (`count === 0`), **nao carimba**: retorna `box_locked`. A cobranca orfa expira no
 cutoff; e se o provider ainda liquidar, o settle a barra e sinaliza refund manual.
 
-Serializar Fases A e C sob o lock da `Garage` fecha o duplo-checkout: dois
-requests concorrentes nao criam duas cobrancas vivas pro mesmo Order.
+Serializar Fases A e C sob o lock da `Garage` garante que o Order carimba **uma
+so** cobranca: o `updateMany(where ... providerRef: null)` da Fase C so deixa o
+primeiro request gravar; o perdedor de uma corrida real volta `box_locked` e nao
+sobrescreve. Ressalva honesta: dois requests concorrentes que passam a Fase A
+antes de qualquer carimbo podem cada um criar uma cobranca no provider (a Fase B
+roda fora do lock). So uma e carimbada e mostrada ao cliente; a orfa do perdedor
+nunca chega ao app e expira no cutoff. Se por acaso for paga, o webhook sinaliza
+`double-payment` (refund manual). Prevenir a criacao da segunda cobranca exigiria
+um pre-claim sob o lock antes da Fase B; fora de escopo no 4a (rate limit de
+5/min por usuario ja limita o abuso).
 
 - Erros:
   - `403 box_not_eligible` — sem membership elegivel.

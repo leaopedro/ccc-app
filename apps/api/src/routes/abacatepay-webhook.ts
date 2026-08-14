@@ -636,7 +636,10 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
             select: { status: true, providerRef: true },
           });
           if (staleOrder?.status === 'paid') {
-            if (staleOrder.providerRef && staleOrder.providerRef !== billingId) {
+            // Dedupe first, then flag only on the first delivery of this event
+            // so provider retries do not repeat the manual-refund alert.
+            const firstTime = await markProcessed(event.id, event);
+            if (firstTime && staleOrder.providerRef && staleOrder.providerRef !== billingId) {
               flagManualRefund({
                 orderId: order.id,
                 providerRef: billingId,
@@ -649,7 +652,6 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
                 'abacatepay webhook: distinct billing settled an already-paid order, manual refund flagged',
               );
             }
-            await markProcessed(event.id, event);
             return reply.status(200).send({ ok: true });
           }
           if (staleOrder?.status === 'expired') {

@@ -1442,6 +1442,9 @@ model Notification {
   destination Json?
   dedupeKey   String    @db.VarChar(80)
   sentAt      DateTime?
+  attemptCount   Int       @default(0)
+  lastAttemptAt  DateTime?
+  failureCode    String?   @db.VarChar(80)
   readAt      DateTime?
   createdAt   DateTime  @default(now())
 
@@ -1450,6 +1453,7 @@ model Notification {
   @@unique([userId, kind, dedupeKey])
   @@index([userId, createdAt])
   @@index([userId, readAt])
+  @@index([sentAt, attemptCount])
 }
 
 model Cart {

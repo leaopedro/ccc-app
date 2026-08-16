@@ -245,5 +245,6 @@ describe('POST /abacatepay/webhook — box double-payment hardening', () => {
     expect(notif?.dedupeKey).toBe(box.id);
     expect(notif?.title).toBe('Pagamento confirmado');
     expect(notif?.destination).toEqual({ kind: 'internal_path', path: '/caixa' });
+    expect(notif?.sentAt).toBeNull();
   });
 });

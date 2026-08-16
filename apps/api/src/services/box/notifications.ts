@@ -1,5 +1,7 @@
+import type { Prisma } from '@prisma/client';
+
 import type { PushSender } from '../push/index.js';
-import { sendTransactionalPush } from '../push/transactional.js';
+import { enqueueNotification, sendTransactionalPush } from '../push/transactional.js';
 
 export type BoxPushKind = 'box.paid' | 'box.ready' | 'box.shipped' | 'box.delivered';
 
@@ -20,6 +22,29 @@ const COPY: Record<BoxPushKind, { title: string; body: string }> = {
     title: 'Caixa entregue',
     body: 'Sua caixa foi entregue. Aproveite.',
   },
+};
+
+// Enqueue a box milestone notification INSIDE a state-change transaction, so
+// the inbox row is durable with the transition (a crash cannot lose it). The
+// delivery worker sends it. dedupeKey = boxId. Destination lands the member on
+// the Caixa screen after opening the inbox item.
+export const enqueueBoxNotification = async (
+  tx: Prisma.TransactionClient,
+  input: { userId: string; boxId: string; kind: BoxPushKind },
+): Promise<void> => {
+  const copy = COPY[input.kind];
+  await enqueueNotification(
+    {
+      userId: input.userId,
+      kind: input.kind,
+      dedupeKey: input.boxId,
+      title: copy.title,
+      body: copy.body,
+      data: { boxId: input.boxId },
+      destination: { kind: 'internal_path', path: '/caixa' },
+    },
+    tx,
+  );
 };
 
 // Single reuse point for all four box milestone pushes. dedupeKey = boxId

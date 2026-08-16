@@ -109,9 +109,14 @@ describe('settlePaidOrder — box', () => {
     expect(freshOrder.status).toBe('cancelled');
   });
 
-  it('returns paidBox with owner userId and boxId on box settle', async () => {
+  it('settles a box order and enqueues a pending box.paid notification', async () => {
     const { user, order, box } = await seedAwaitingBox(2000);
     const result = await settlePaidOrder(order.id, 'bill_paid_1', env);
-    expect(result).toEqual({ kind: 'box', paidBox: { userId: user.id, boxId: box.id } });
+    expect(result).toEqual({ kind: 'box' });
+    const n = await prisma.notification.findFirstOrThrow({
+      where: { userId: user.id, kind: 'box.paid' },
+    });
+    expect(n.dedupeKey).toBe(box.id);
+    expect(n.sentAt).toBeNull(); // delivered later by the worker
   });
 });

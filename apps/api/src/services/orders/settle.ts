@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 
+import { enqueueBoxNotification } from '../box/notifications.js';
 import { assignEventPickupTicket } from '../store/event-pickup.js';
 import {
   issueTicketForPaidOrder,
@@ -16,7 +17,7 @@ type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
-  | { kind: 'box'; paidBox?: { userId: string; boxId: string } };
+  | { kind: 'box' };
 
 export const settlePaidOrder = async (
   orderId: string,
@@ -111,11 +112,13 @@ export const settlePaidOrder = async (
         where: { id: box.id, status: 'awaiting_payment' },
         data: { status: 'ready' },
       });
+      await enqueueBoxNotification(tx, {
+        userId: box.membership.garage.userId,
+        boxId: box.id,
+        kind: 'box.paid',
+      });
     });
-    return {
-      kind: 'box',
-      paidBox: { userId: box.membership.garage.userId, boxId: box.id },
-    };
+    return { kind: 'box' };
   }
 
   const issued = await issueTicketForPaidOrder(orderId, providerRef, env, intentMetadata);

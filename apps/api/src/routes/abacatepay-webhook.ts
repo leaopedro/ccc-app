@@ -10,7 +10,6 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacateWebhookEvent } from '../services/abacatepay/index.js';
 import { releaseAllReservationsForOrders } from '../services/orders/expire.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
-import { sendBoxPush } from '../services/box/notifications.js';
 import { settlePaidOrder } from '../services/orders/settle.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
@@ -581,20 +580,6 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
               scope.setExtras({ orderId: order.id });
               Sentry.captureException(pushErr);
             });
-          }
-        }
-        if (settled.kind === 'box' && settled.paidBox) {
-          try {
-            await sendBoxPush(app.push, {
-              userId: settled.paidBox.userId,
-              boxId: settled.paidBox.boxId,
-              kind: 'box.paid',
-            });
-          } catch (pushErr) {
-            request.log.warn(
-              { err: pushErr, orderId: order.id },
-              'abacatepay webhook: box.paid push failed',
-            );
           }
         }
         // M2: Don't leak internal state in response

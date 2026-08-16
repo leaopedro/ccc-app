@@ -189,13 +189,28 @@ describe('runBoxCutoffTick', () => {
     await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
     // Simulate the Pix settling first: mark the Order paid directly in the DB.
     await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
+    await prisma.deviceToken.create({
+      data: {
+        userId: garage.userId,
+        expoPushToken: 'ExponentPushToken[abc1234567]',
+        platform: 'ios',
+      },
+    });
+    const sender = new DevPushSender();
 
-    await runBoxCutoffTick({});
+    await runBoxCutoffTick({ sender });
 
     const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(freshOrder.status).toBe('paid');
     expect(fresh.status).toBe('awaiting_payment');
+    // No double-notify: the cutoff tick must not send box.ready while the
+    // Order-settled path is left for the webhook/paid flow to handle.
+    const notifCount = await prisma.notification.count({
+      where: { userId: garage.userId, kind: 'box.ready' },
+    });
+    expect(notifCount).toBe(0);
+    expect(sender.captured.length).toBe(0);
   });
 
   it('awaiting_payment with shippingCents>0 is skipped and order cancelled (Fix B)', async () => {

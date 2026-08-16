@@ -216,7 +216,7 @@ describe('POST /abacatepay/webhook — box double-payment hardening', () => {
         shippingCents: 0,
       },
     });
-    await prisma.monthlyBox.create({
+    const box = await prisma.monthlyBox.create({
       data: {
         membershipId: membership.id,
         garageId: garage.id,
@@ -242,6 +242,8 @@ describe('POST /abacatepay/webhook — box double-payment hardening', () => {
     const notif = await prisma.notification.findFirst({
       where: { userId: user.id, kind: 'box.paid' },
     });
-    expect(notif?.dedupeKey).toBeTruthy();
+    expect(notif?.dedupeKey).toBe(box.id);
+    expect(notif?.title).toBe('Pagamento confirmado');
+    expect(notif?.destination).toEqual({ kind: 'internal_path', path: '/caixa' });
   });
 });

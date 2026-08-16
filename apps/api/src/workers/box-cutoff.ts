@@ -3,13 +3,18 @@ import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
+import { sendBoxPush } from '../services/box/notifications.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
+import type { PushSender } from '../services/push/index.js';
 
-type Deps = { log?: FastifyBaseLogger };
+type Deps = { log?: FastifyBaseLogger; sender?: PushSender };
 
 /** Trim a box to budget-only in-tx: drop all partners, LIFO-trim catalog, reserve stock. */
-const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): Promise<void> => {
+const resolveBudgetOnly = async (
+  tx: Prisma.TransactionClient,
+  boxId: string,
+): Promise<'ready' | 'skipped'> => {
   const box = await tx.monthlyBox.findUniqueOrThrow({
     where: { id: boxId },
     include: { items: true, partnerItems: true },
@@ -22,7 +27,7 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
   // region auto-send box arrives here with shippingCents > 0 and is skipped.
   if (box.shippingCents > 0) {
     await tx.monthlyBox.update({ where: { id: boxId }, data: { status: 'skipped' } });
-    return;
+    return 'skipped';
   }
 
   // Drop all partner modules (extras are never auto-sent).
@@ -85,10 +90,9 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
 
   await recalcBoxTotals(tx, boxId);
   const remaining = await tx.monthlyBoxItem.count({ where: { boxId, included: true } });
-  await tx.monthlyBox.update({
-    where: { id: boxId },
-    data: { status: remaining === 0 ? 'skipped' : 'ready' },
-  });
+  const status = remaining === 0 ? 'skipped' : 'ready';
+  await tx.monthlyBox.update({ where: { id: boxId }, data: { status } });
+  return status;
 };
 
 export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
@@ -101,16 +105,20 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
 
   for (const { id, garageId } of due) {
     try {
-      await prisma.$transaction(async (tx) => {
+      const notify = await prisma.$transaction(async (tx): Promise<{ userId: string } | null> => {
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
         const box = await tx.monthlyBox.findUnique({
           where: { id },
-          include: { items: true },
+          include: {
+            items: true,
+            membership: { select: { garage: { select: { userId: true } } } },
+          },
         });
-        if (!box) return;
-        if (box.status !== 'open' && box.status !== 'awaiting_payment') return; // re-gate
+        if (!box) return null;
+        if (box.status !== 'open' && box.status !== 'awaiting_payment') return null; // re-gate
 
         const hasItems = box.items.some((i) => i.included);
+        const userId = box.membership.garage.userId;
 
         if (box.status === 'open') {
           // The autoSendOptIn+shippingAddressId precondition is set by the Fase 3
@@ -119,10 +127,10 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
           // this branch is intentionally ahead of its Fase 3 consumer.
           if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
-            return;
+            return null;
           }
-          await resolveBudgetOnly(tx, id);
-          return;
+          const status = await resolveBudgetOnly(tx, id);
+          return status === 'ready' ? { userId } : null;
         }
 
         // awaiting_payment: cancel the pending Order unless it already settled.
@@ -142,8 +150,9 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             });
             if (ord?.status === 'paid') {
               // Pix already settled: leave for the paid path. Its reservation must
-              // stand — do NOT release here.
-              return;
+              // stand — do NOT release here. box.paid already fired at settle;
+              // do not double-notify here.
+              return null;
             }
             // Order is cancelled/failed/expired/refunded via another path.
             // Fall through: release reservations and resolve budget-only so the
@@ -162,8 +171,17 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             });
           }
         }
-        await resolveBudgetOnly(tx, id);
+        const status = await resolveBudgetOnly(tx, id);
+        return status === 'ready' ? { userId } : null;
       });
+
+      if (notify && deps.sender) {
+        try {
+          await sendBoxPush(deps.sender, { userId: notify.userId, boxId: id, kind: 'box.ready' });
+        } catch (err) {
+          deps.log?.error({ err, boxId: id }, '[box-cutoff] box.ready push failed');
+        }
+      }
     } catch (err) {
       deps.log?.error({ err, boxId: id }, '[box-cutoff] failed to resolve box');
     }

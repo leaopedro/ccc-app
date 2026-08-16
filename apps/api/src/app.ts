@@ -226,7 +226,7 @@ export const buildApp = async (
         backfillWorker.stop();
       });
 
-      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log });
+      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log, sender: app.push });
       app.addHook('onClose', () => {
         boxCutoffWorker.stop();
       });

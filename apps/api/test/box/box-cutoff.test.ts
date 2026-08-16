@@ -1,6 +1,7 @@
 import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { DevPushSender } from '../../src/services/push/index.js';
 import { runBoxCutoffTick } from '../../src/workers/box-cutoff.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
@@ -89,7 +90,7 @@ const makeBox = async (
       },
     });
   }
-  return box;
+  return { user, box };
 };
 
 describe('runBoxCutoffTick', () => {
@@ -101,21 +102,21 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('skips an empty open box', async () => {
-    const box = await makeBox({ status: 'open' });
+    const { box } = await makeBox({ status: 'open' });
     await runBoxCutoffTick({});
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(fresh.status).toBe('skipped');
   });
 
   it('skips an open box with items but no opt-in', async () => {
-    const box = await makeBox({ status: 'open', withItem: true, autoSendOptIn: false });
+    const { box } = await makeBox({ status: 'open', withItem: true, autoSendOptIn: false });
     await runBoxCutoffTick({});
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(fresh.status).toBe('skipped');
   });
 
   it('auto-confirms an opted-in open box with an address to ready', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'open',
       withItem: true,
       autoSendOptIn: true,
@@ -128,7 +129,7 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('awaiting_payment with a pending box Order -> cancels order and goes ready budget-only', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'awaiting_payment',
       withItem: true,
       autoSendOptIn: true,
@@ -163,7 +164,7 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('awaiting_payment whose Order already settled is left for the paid path', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'awaiting_payment',
       withItem: true,
       autoSendOptIn: true,
@@ -518,5 +519,45 @@ describe('runBoxCutoffTick', () => {
     expect(freshOrder.status).toBe('cancelled');
     // Released the confirm-time 2 units, re-reserved the 2 survivors: net 2, not 4.
     expect(ledger.reserved).toBe(2);
+  });
+
+  it('sends box.ready when a budget-only box resolves to ready at cutoff', async () => {
+    const { user, box } = await makeBox({
+      status: 'open',
+      autoSendOptIn: true,
+      withItem: true,
+      withAddress: true,
+      budget: 10000,
+    });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
+    });
+    const sender = new DevPushSender();
+
+    await runBoxCutoffTick({ sender });
+
+    const box2 = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(box2.status).toBe('ready');
+    const notif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.ready' },
+    });
+    expect(notif?.dedupeKey).toBe(box.id);
+    expect(sender.captured.length).toBe(1);
+  });
+
+  it('does not send box.ready when a box is skipped at cutoff', async () => {
+    const { user } = await makeBox({ status: 'open', withItem: false });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
+    });
+    const sender = new DevPushSender();
+
+    await runBoxCutoffTick({ sender });
+
+    const count = await prisma.notification.count({
+      where: { userId: user.id, kind: 'box.ready' },
+    });
+    expect(count).toBe(0);
+    expect(sender.captured.length).toBe(0);
   });
 });

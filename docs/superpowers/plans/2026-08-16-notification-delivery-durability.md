@@ -136,6 +136,8 @@ describe('Notification delivery-state columns', () => {
 Run: `pnpm --filter @ccc/api test -- notification-columns.test.ts`
 Expected: PASS (global-setup runs `prisma migrate deploy`, applying the new migration).
 
+Note on the backfill: it is NOT integration-tested. Testcontainers starts an empty DB and runs `migrate deploy` from scratch, so there are never pre-existing `sentAt`-null rows for the `UPDATE` to touch — it is a no-op in CI by construction. The backfill exists to protect a real deploy against an existing prod table; accept it as an untested-but-necessary line (keep the explanatory comment so it survives refactors). The equivalent runtime guarantee — the worker never touches already-`sentAt` rows — is covered by the Task 2 "no-op when already sent" test.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -151,14 +153,16 @@ git commit -m "feat(db): notification delivery-state columns + backfill"
 
 - Modify: `apps/api/src/services/push/transactional.ts`
 - Modify: `apps/api/src/services/push/dev.ts` (add `markError` for tests)
-- Test: `apps/api/test/push/transactional.test.ts` (append), `apps/api/test/push/deliver.test.ts` (Create)
+- Test: `apps/api/test/push/transactional.test.ts` (append + update one existing test), `apps/api/test/push/deliver.test.ts` (Create), `apps/api/test/stripe-webhook-push.test.ts` (update one existing assertion)
+
+**Behavior change to reconcile:** zero device tokens is now TERMINAL (`sentAt` is set), where the old code left `sentAt` null. Two existing tests assert the old behavior and MUST be updated (Step 5b). This is a shared-service test update, not a billing-code edit.
 
 **Interfaces:**
 
 - Consumes: Task 1 columns.
 - Produces:
   - `enqueueNotification(input: SendTransactionalPushInput, client?: Prisma.TransactionClient | typeof prisma): Promise<{ deduped: true } | { deduped: false; id: string }>`
-  - `deliverNotification(notificationId: string, deps: { sender: PushSender; now?: Date }): Promise<{ sent: number; invalidatedTokens: number; delivered: boolean }>` (worker passes `now` so `sentAt`/`lastAttemptAt` are deterministic and consistent with the worker's retry-window filter)
+  - `deliverNotification(notificationId: string, deps: { sender: PushSender; now?: Date }): Promise<{ sent: number; invalidatedTokens: number; delivered: boolean; attemptCount: number }>` (worker passes `now` so `sentAt`/`lastAttemptAt` are deterministic and consistent with the worker's retry-window filter; performs an optimistic compare-and-swap claim on `attemptCount` before sending so concurrent callers never double-deliver; returns the post-claim `attemptCount`)
   - `sendTransactionalPush(input, deps)` — unchanged signature/return.
   - `DevPushSender.markError(token: string)`.
 
@@ -293,6 +297,18 @@ describe('deliverNotification', () => {
     const r = await deliverNotification(id, { sender });
     expect(r.delivered).toBe(true);
   });
+
+  it('delivers only once under concurrent calls (claim wins once)', async () => {
+    const { id } = await seed(['ExponentPushToken[ok33333333]']);
+    const sender = new DevPushSender();
+    // Two concurrent deliveries of the same pending row: the compare-and-swap
+    // claim lets exactly one send; the other bails.
+    await Promise.all([deliverNotification(id, { sender }), deliverNotification(id, { sender })]);
+    expect(sender.captured.length).toBe(1);
+    const n = await prisma.notification.findUniqueOrThrow({ where: { id } });
+    expect(n.sentAt).not.toBeNull();
+    expect(n.attemptCount).toBe(1);
+  });
 });
 ```
 
@@ -371,12 +387,42 @@ export const enqueueNotification = async (
 export const deliverNotification = async (
   notificationId: string,
   deps: { sender: PushSender; now?: Date },
-): Promise<{ sent: number; invalidatedTokens: number; delivered: boolean }> => {
+): Promise<{
+  sent: number;
+  invalidatedTokens: number;
+  delivered: boolean;
+  attemptCount: number;
+}> => {
   const now = deps.now ?? new Date();
   const notification = await prisma.notification.findUnique({ where: { id: notificationId } });
   if (!notification || notification.sentAt) {
-    return { sent: 0, invalidatedTokens: 0, delivered: true };
+    return {
+      sent: 0,
+      invalidatedTokens: 0,
+      delivered: true,
+      attemptCount: notification?.attemptCount ?? 0,
+    };
   }
+
+  // Optimistic claim (compare-and-swap on attemptCount): if two overlapping
+  // worker ticks — or a worker tick and an inline sendTransactionalPush — race
+  // the same pending row, exactly one claim wins (the DB serialises the
+  // updateMany on the row); the loser bails without sending. This is what
+  // prevents duplicate Expo pushes. attemptCount is incremented HERE (once per
+  // real attempt), so the failure branch below no longer increments it.
+  const claim = await prisma.notification.updateMany({
+    where: { id: notificationId, sentAt: null, attemptCount: notification.attemptCount },
+    data: { attemptCount: { increment: 1 }, lastAttemptAt: now },
+  });
+  if (claim.count === 0) {
+    return {
+      sent: 0,
+      invalidatedTokens: 0,
+      delivered: true,
+      attemptCount: notification.attemptCount,
+    };
+  }
+  const attemptCount = notification.attemptCount + 1;
 
   const tokens = await prisma.deviceToken.findMany({
     where: { userId: notification.userId },
@@ -387,7 +433,7 @@ export const deliverNotification = async (
       where: { id: notification.id },
       data: { sentAt: now },
     });
-    return { sent: 0, invalidatedTokens: 0, delivered: true };
+    return { sent: 0, invalidatedTokens: 0, delivered: true, attemptCount };
   }
 
   const pushData = buildPushDataFromRow(notification);
@@ -423,18 +469,14 @@ export const deliverNotification = async (
       where: { id: notification.id },
       data: { sentAt: now },
     });
-    return { sent, invalidatedTokens: invalid.length, delivered: true };
+    return { sent, invalidatedTokens: invalid.length, delivered: true, attemptCount };
   }
 
   await prisma.notification.update({
     where: { id: notification.id },
-    data: {
-      attemptCount: { increment: 1 },
-      lastAttemptAt: now,
-      failureCode: 'send_error',
-    },
+    data: { failureCode: 'send_error' },
   });
-  return { sent, invalidatedTokens: invalid.length, delivered: false };
+  return { sent, invalidatedTokens: invalid.length, delivered: false, attemptCount };
 };
 
 export const sendTransactionalPush = async (
@@ -473,15 +515,22 @@ it('does not mark sentAt when every token errors (retryable)', async () => {
 });
 ```
 
+- [ ] **Step 5b: Update the two existing tests that assert the old zero-token behavior**
+
+These currently assert `sentAt` stays null with zero tokens; the new terminal behavior sets it. Update both:
+
+- `apps/api/test/push/transactional.test.ts` — in the test "skips delivery when user has zero tokens but still records the row", change `expect(rows[0]?.sentAt).toBeNull();` to `expect(rows[0]?.sentAt).not.toBeNull();`.
+- `apps/api/test/stripe-webhook-push.test.ts` — in the test "does not block ticket issuance if user has no device tokens", change `expect(notif.sentAt).toBeNull();` to `expect(notif.sentAt).not.toBeNull();` and update the adjacent comment (`// Notification row IS written even with no tokens; delivery is terminal (no tokens to push), so sentAt is set.`).
+
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pnpm --filter @ccc/api test -- deliver.test.ts transactional.test.ts`
+Run: `pnpm --filter @ccc/api test -- deliver.test.ts transactional.test.ts stripe-webhook-push.test.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/api/src/services/push/transactional.ts apps/api/src/services/push/dev.ts apps/api/test/push/deliver.test.ts apps/api/test/push/transactional.test.ts
+git add apps/api/src/services/push/transactional.ts apps/api/src/services/push/dev.ts apps/api/test/push/deliver.test.ts apps/api/test/push/transactional.test.ts apps/api/test/stripe-webhook-push.test.ts
 git commit -m "feat(push): split enqueue/deliver, retry-safe sentAt"
 ```
 
@@ -573,6 +622,43 @@ describe('runNotificationDeliveryTick', () => {
     const n = await prisma.notification.findUniqueOrThrow({ where: { id } });
     expect(n.attemptCount).toBe(1); // second tick skipped it
   });
+
+  it('never delivers non-owned kinds (broadcast, badge_awarded)', async () => {
+    const { user } = await createUser({ verified: true });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[wign111111]', platform: 'ios' },
+    });
+    // Rows other writers create with a null sentAt that must NOT be pushed here.
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        kind: 'broadcast',
+        dedupeKey: 'bc_1',
+        title: 't',
+        body: 'b',
+        data: {},
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        kind: 'badge_awarded',
+        dedupeKey: 'bg_1',
+        title: 't',
+        body: 'b',
+        data: {},
+      },
+    });
+    const sender = new DevPushSender();
+
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+
+    expect(sender.captured.length).toBe(0);
+    const rows = await prisma.notification.findMany({
+      where: { userId: user.id, kind: { in: ['broadcast', 'badge_awarded'] } },
+    });
+    expect(rows.every((r) => r.sentAt === null)).toBe(true); // untouched
+  });
 });
 ```
 
@@ -593,6 +679,23 @@ import cron from 'node-cron';
 import type { PushSender } from '../services/push/index.js';
 import { deliverNotification } from '../services/push/transactional.js';
 
+// Kinds this worker OWNS. CRITICAL: the Notification table is not a
+// dedicated outbox — other writers create rows with a null sentAt that must
+// NOT be push-delivered here: `broadcast` (delivered via its own
+// BroadcastDelivery worker) and `badge_awarded` (inbox-only, push
+// deliberately deferred, see services/garage/awarder.ts). A kind-agnostic
+// `sentAt IS NULL` scan would wrongly push both. Only these kinds flow
+// through enqueueNotification/sendTransactionalPush and want worker delivery.
+const DELIVERABLE_KINDS = [
+  'box.paid',
+  'box.ready',
+  'box.shipped',
+  'box.delivered',
+  'ticket.confirmed',
+  'event.reminder_24h',
+  'event.reminder_1h',
+] as const;
+
 const MAX_DELIVERY_ATTEMPTS = 5;
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -604,6 +707,7 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
 
   const pending = await prisma.notification.findMany({
     where: {
+      kind: { in: [...DELIVERABLE_KINDS] },
       sentAt: null,
       attemptCount: { lt: MAX_DELIVERY_ATTEMPTS },
       OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lte: cutoff } }],
@@ -615,7 +719,15 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
 
   for (const n of pending) {
     try {
-      await deliverNotification(n.id, { sender: deps.sender, now });
+      const r = await deliverNotification(n.id, { sender: deps.sender, now });
+      if (!r.delivered && r.attemptCount >= MAX_DELIVERY_ATTEMPTS) {
+        // Exhausted retries: the inbox row survives, but the push is abandoned.
+        // Surface it — the whole point of this project is "no silent loss".
+        deps.log?.error(
+          { notificationId: n.id, attemptCount: r.attemptCount },
+          '[notification-delivery] giving up after max attempts',
+        );
+      }
     } catch (err) {
       deps.log?.error({ err, notificationId: n.id }, '[notification-delivery] deliver failed');
     }
@@ -649,7 +761,14 @@ In `apps/api/src/app.ts`, add the import near the other worker imports:
 import { startNotificationDeliveryWorker } from './workers/notification-delivery.js';
 ```
 
-In the worker-start section (near `startEventRemindersWorker`, line ~180), start it and stop it on close, mirroring the event-reminders registration:
+CRITICAL placement: register this INSIDE the existing top-level gate
+`if (env.WORKER_ENABLED && env.NODE_ENV === 'production') { ... }` (the same
+block that holds `startEventRemindersWorker`), NOT inside the nested
+`if (env.GROWTH_PREMIUM_BILLING_ENABLED)` sub-block (this worker serves all
+kinds, not just box). Placing it outside the outer gate would spin a live
+1/min cron in every `buildApp`/`makeApp` test (NODE_ENV is not `production`
+in tests), hitting the test Postgres and racing assertions in unrelated
+suites. Add it right after the `startEventRemindersWorker` block:
 
 ```ts
 const notificationDeliveryWorker = startNotificationDeliveryWorker({
@@ -661,7 +780,7 @@ app.addHook('onClose', () => {
 });
 ```
 
-(Match the existing stop/onClose idiom used by the neighbouring workers in that block.)
+(Match the existing stop/onClose idiom used by `startEventRemindersWorker`.)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -874,6 +993,8 @@ it('does not enqueue box.ready when a box is skipped', async () => {
 
 Also revert the Fase 5 fix-wave assertion in the "awaiting_payment already-paid" test: it should call `runBoxCutoffTick({})` (no sender) and assert `notification.count({ where: { kind: 'box.ready' } })` is 0 (device-token/sender setup no longer needed).
 
+MUST ALSO: remove the now-unused `import { DevPushSender } from '../../src/services/push/index.js';` from `box-cutoff.test.ts` — no test in the file uses a sender anymore, and `@typescript-eslint/no-unused-vars` is an error (the plan's final `lint` step would fail otherwise).
+
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `pnpm --filter @ccc/api test -- box-cutoff.test.ts`
@@ -885,27 +1006,71 @@ In `apps/api/src/workers/box-cutoff.ts`:
 
 - Remove `import type { PushSender }` and the `sendBoxPush` import; add `import { enqueueBoxNotification } from '../services/box/notifications.js';`.
 - Change `type Deps = { log?: FastifyBaseLogger };` (drop `sender`).
-- Inside the per-box `$transaction`, replace the `notify` return plumbing: when `resolveBudgetOnly(tx, id)` returns `'ready'`, enqueue in the same tx, then the transaction can return `void`:
+- Replace the whole per-box transaction (the Fase 5 version returns `{ userId } | null` and sends post-commit). The new version enqueues in-tx and the transaction returns `void`; the post-commit `if (notify && deps.sender) { ... sendBoxPush ... }` block is deleted. Keep the outer `for (const { id, garageId } of due)` loop and its `try/catch`. The transaction body becomes:
 
 ```ts
-if (box.status === 'open') {
-  if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
-    await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
+await prisma.$transaction(async (tx) => {
+  await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
+  const box = await tx.monthlyBox.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      membership: { select: { garage: { select: { userId: true } } } },
+    },
+  });
+  if (!box) return;
+  if (box.status !== 'open' && box.status !== 'awaiting_payment') return;
+
+  const hasItems = box.items.some((i) => i.included);
+  const userId = box.membership.garage.userId;
+
+  if (box.status === 'open') {
+    if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
+      await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
+      return;
+    }
+    const status = await resolveBudgetOnly(tx, id);
+    if (status === 'ready') {
+      await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
+    }
     return;
   }
+
+  // awaiting_payment: cancel the pending Order unless it already settled.
+  if (box.orderId) {
+    const cancelled = await tx.order.updateMany({
+      where: { id: box.orderId, status: 'pending' },
+      data: { status: 'cancelled', fulfillmentStatus: 'cancelled' },
+    });
+    if (cancelled.count === 0) {
+      const ord = await tx.order.findUnique({
+        where: { id: box.orderId },
+        select: { status: true },
+      });
+      if (ord?.status === 'paid') {
+        // Pix already settled: box.paid fired in settle; leave for the paid
+        // path and do not double-resolve/notify here.
+        return;
+      }
+    }
+    await tx.monthlyBox.update({ where: { id }, data: { orderId: null } });
+    for (const line of box.items.filter((i) => i.included)) {
+      await releaseCycleStock(tx, {
+        catalogItemId: line.catalogItemId,
+        cycleKey: box.cycleKey,
+        quantity: line.quantity,
+      });
+    }
+  }
+
   const status = await resolveBudgetOnly(tx, id);
   if (status === 'ready') {
-    await enqueueBoxNotification(tx, {
-      userId: box.membership.garage.userId,
-      boxId: id,
-      kind: 'box.ready',
-    });
+    await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
   }
-  return;
-}
+});
 ```
 
-Apply the same `status === 'ready' -> enqueueBoxNotification` after the awaiting_payment fallthrough `resolveBudgetOnly` call. Remove the post-commit `if (notify && deps.sender) { ... sendBoxPush ... }` block entirely. `box.membership.garage.userId` is already selected in the tx (Fase 5).
+(Preserve any additional explanatory comments from the current awaiting_payment block that still apply. `box.membership.garage.userId` is already selected — Fase 5 added it.)
 
 - [ ] **Step 4: Revert app.ts wiring**
 
@@ -946,6 +1111,8 @@ git commit -m "feat(box): box.ready enqueue in cutoff transaction"
 - [ ] **Step 1: Update the tests to the new behavior**
 
 In `apps/api/test/box/box-fulfillment.test.ts`, advance tests should assert a pending notification is enqueued (not a route-sent push). After advancing to `shipped`/`delivered`, assert `prisma.notification.findFirst({ where: { kind: 'box.shipped' | 'box.delivered' } })` exists with `dedupeKey === boxId` and `sentAt === null`; after `packed`, assert no box notification. The service `ok` result is `{ kind: 'ok', fulfillmentStatus: to }` (no `userId`/`boxId`). Drive via the route (`app.inject`) as the file already does.
+
+MUST ALSO: delete the existing Fase 5 test `it('advanceBoxFulfillment ok result includes userId and boxId', ...)` in this file — Task 6 reverts those fields off the `ok` result, so that `toMatchObject({ ..., userId, boxId })` assertion would fail. Remove the whole `it(...)` block.
 
 In `apps/api/test/box/box-notifications.test.ts`, rewrite the two `sendBoxPush` tests to `enqueueBoxNotification`. Since it needs a tx client, call it via `prisma.$transaction`:
 
@@ -1049,5 +1216,12 @@ git commit -m "feat(box): box.shipped/delivered enqueue in advance transaction; 
 - [ ] `pnpm --filter @ccc/api test` verde (suíte completa; foco em push, box, broadcasts, webhooks).
 - [ ] `pnpm --filter @ccc/db db:generate` verde; `pnpm -w typecheck` verde.
 - [ ] `pnpm --filter @ccc/api lint` e `pnpm --filter @ccc/db lint` sem erros.
+- [ ] Migration sem drift: `pnpm --filter @ccc/db exec prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code` retorna 0 (schema e migrations em sincronia).
+- [ ] Worker registrado DENTRO do gate `WORKER_ENABLED && NODE_ENV === 'production'` (não dispara cron em testes).
 - [ ] Nenhuma referência restante a `sendBoxPush` (`grep -rn sendBoxPush apps/api/src`).
-- [ ] Nenhum arquivo de billing editado (`stripe-webhook.ts`, `settle.ts` ramos ticket/product intactos).
+- [ ] Worker só entrega os kinds próprios (`grep -n DELIVERABLE_KINDS`); `broadcast` e `badge_awarded` nunca entram na query.
+- [ ] Nenhum arquivo de billing (código) editado: `stripe-webhook.ts` e os ramos ticket/product de `settle.ts` intactos (só o teste `stripe-webhook-push.test.ts` teve uma asserção ajustada).
+
+## Nota de atomicidade (achado de review, sem tarefa própria)
+
+A durabilidade in-tx do box (#1) é garantida estruturalmente: `enqueueBoxNotification` roda dentro da mesma `$transaction` da transição de estado, então um rollback descarta a linha junto. Não há teste dedicado de "rollback ⇒ sem linha" porque, sendo o enqueue a última operação de cada transação, não há caminho de produção que aborte depois dele sem injeção de falha artificial. Confia-se na semântica transacional do Postgres; os testes de negativo existentes cobrem "não enfileira no caminho que aborta antes".

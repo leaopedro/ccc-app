@@ -128,10 +128,11 @@ describe('Stripe webhook -> ticket.confirmed push', () => {
 
     const ticket = await prisma.ticket.findFirstOrThrow({ where: { orderId: order.id } });
     expect(ticket.status).toBe('valid');
-    // Notification row IS written even with no tokens; sentAt remains null.
+    // Notification row IS written even with no tokens; delivery is terminal
+    // (no tokens to push), so sentAt is set.
     const notif = await prisma.notification.findFirstOrThrow({
       where: { userId: user.id, kind: 'ticket.confirmed' },
     });
-    expect(notif.sentAt).toBeNull();
+    expect(notif.sentAt).not.toBeNull();
   });
 });

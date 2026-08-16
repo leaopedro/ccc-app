@@ -24,6 +24,10 @@ export const pushKindSchema = z.enum([
   'event.reminder_24h',
   'event.reminder_1h',
   'broadcast',
+  'box.paid',
+  'box.ready',
+  'box.shipped',
+  'box.delivered',
 ]);
 export type PushKind = z.infer<typeof pushKindSchema>;
 

@@ -21,7 +21,7 @@ export type BoxAdvanceInput = {
   actorId: string;
 };
 export type BoxAdvanceResult =
-  | { kind: 'ok'; fulfillmentStatus: BoxFulfillmentStatus }
+  | { kind: 'ok'; fulfillmentStatus: BoxFulfillmentStatus; userId: string; boxId: string }
   | { kind: 'not_found' }
   | { kind: 'not_ready' }
   | { kind: 'order_not_paid' }
@@ -40,6 +40,7 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
       fulfillmentStatus: true,
       orderId: true,
       order: { select: { status: true } },
+      membership: { select: { garage: { select: { userId: true } } } },
     },
   });
   if (!box) return { kind: 'not_found' };
@@ -104,7 +105,12 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
       to: input.to,
     };
   }
-  return { kind: 'ok', fulfillmentStatus: input.to };
+  return {
+    kind: 'ok',
+    fulfillmentStatus: input.to,
+    userId: box.membership.garage.userId,
+    boxId: box.id,
+  };
 };
 
 const EMPTY_COUNTS = (): AdminBoxMonthlyListResponse['counts'] => ({

@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
+import { advanceBoxFulfillment } from '../../src/services/box/fulfillment.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 
 const env = loadEnv();
@@ -238,6 +239,41 @@ describe('POST /admin/box/monthly/:id/fulfillment', () => {
       payload: { to: 'packed' },
     });
     expect(anonRes.statusCode).toBe(401);
+  });
+
+  it('sends box.shipped / box.delivered push on advance, but not on packed', async () => {
+    const { box, user } = await seedBox({ withOrder: true, fulfillmentStatus: 'unfulfilled' });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
+    });
+    const { header } = await orgAuth();
+
+    expect((await advance(app, header, box.id, 'packed')).statusCode).toBe(200);
+    const packedNotifCount = await prisma.notification.count({ where: { userId: user.id } });
+    expect(packedNotifCount).toBe(0);
+
+    expect((await advance(app, header, box.id, 'shipped')).statusCode).toBe(200);
+    const shippedNotif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.shipped' },
+    });
+    expect(shippedNotif).toMatchObject({ dedupeKey: box.id });
+
+    expect((await advance(app, header, box.id, 'delivered')).statusCode).toBe(200);
+    const deliveredNotif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.delivered' },
+    });
+    expect(deliveredNotif).toMatchObject({ dedupeKey: box.id });
+  });
+
+  it('advanceBoxFulfillment ok result includes userId and boxId', async () => {
+    const { box, user } = await seedBox({ fulfillmentStatus: 'unfulfilled' });
+    const res = await advanceBoxFulfillment({ boxId: box.id, to: 'packed', actorId: user.id });
+    expect(res).toMatchObject({
+      kind: 'ok',
+      fulfillmentStatus: 'packed',
+      userId: user.id,
+      boxId: box.id,
+    });
   });
 });
 

@@ -16,7 +16,7 @@ type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
-  | { kind: 'box' };
+  | { kind: 'box'; paidBox?: { userId: string; boxId: string } };
 
 export const settlePaidOrder = async (
   orderId: string,
@@ -84,7 +84,11 @@ export const settlePaidOrder = async (
     }
     const box = await prisma.monthlyBox.findFirst({
       where: { orderId },
-      select: { id: true, garageId: true },
+      select: {
+        id: true,
+        garageId: true,
+        membership: { select: { garage: { select: { userId: true } } } },
+      },
     });
     if (!box) throw new OrderNotPendingError(orderId, 'cancelled');
 
@@ -108,7 +112,10 @@ export const settlePaidOrder = async (
         data: { status: 'ready' },
       });
     });
-    return { kind: 'box' };
+    return {
+      kind: 'box',
+      paidBox: { userId: box.membership.garage.userId, boxId: box.id },
+    };
   }
 
   const issued = await issueTicketForPaidOrder(orderId, providerRef, env, intentMetadata);

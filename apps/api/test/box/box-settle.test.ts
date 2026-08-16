@@ -108,4 +108,10 @@ describe('settlePaidOrder — box', () => {
     const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(freshOrder.status).toBe('cancelled');
   });
+
+  it('returns paidBox with owner userId and boxId on box settle', async () => {
+    const { user, order, box } = await seedAwaitingBox(2000);
+    const result = await settlePaidOrder(order.id, 'bill_paid_1', env);
+    expect(result).toEqual({ kind: 'box', paidBox: { userId: user.id, boxId: box.id } });
+  });
 });

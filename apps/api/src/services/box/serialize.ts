@@ -1,4 +1,4 @@
-import type { BoxView } from '@ccc/shared/box';
+import type { BoxFulfillmentStatus, BoxView } from '@ccc/shared/box';
 import type { Prisma } from '@prisma/client';
 
 import type { Uploads } from '../uploads/types.js';
@@ -13,6 +13,7 @@ export type MonthlyBoxWithLines = Prisma.MonthlyBoxGetPayload<{
 export const serializeBox = (box: MonthlyBoxWithLines, uploads: Uploads): BoxView => ({
   id: box.id,
   status: box.status,
+  fulfillmentStatus: box.fulfillmentStatus as BoxFulfillmentStatus,
   cycleKey: box.cycleKey,
   cutoffAt: box.cutoffAt.toISOString(),
   budgetCents: box.budgetCentsSnapshot,

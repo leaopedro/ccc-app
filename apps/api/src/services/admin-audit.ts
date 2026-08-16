@@ -21,6 +21,7 @@ export type RecordAuditInput = {
     | 'variant'
     | 'product_type'
     | 'order'
+    | 'monthly_box'
     | 'pickup_voucher'
     | 'support_ticket'
     | 'feed_post'

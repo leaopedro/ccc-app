@@ -13,6 +13,7 @@ import { presignRequestSchema, presignResponseSchema } from '@ccc/shared/uploads
 import { revalidatePath } from 'next/cache';
 
 import {
+  advanceAdminBoxFulfillment,
   createBoxCatalogItem,
   createBoxPartner,
   createBoxPartnerModule,
@@ -298,5 +299,40 @@ export const updateBoxSettingsAction = async (
     return { error: 'Erro ao salvar configuracoes.' };
   }
   revalidatePath(SETTINGS_PATH);
+  return { error: null };
+};
+
+// --- Monthly fulfillment console (Fase 4b) ---
+
+const CAIXAS_PATH = '/box/caixas';
+
+const ADVANCE_TARGETS = ['packed', 'shipped', 'delivered'] as const;
+type AdvanceTarget = (typeof ADVANCE_TARGETS)[number];
+
+const isAdvanceTarget = (v: unknown): v is AdvanceTarget =>
+  typeof v === 'string' && (ADVANCE_TARGETS as readonly string[]).includes(v);
+
+export const advanceBoxFulfillmentAction = async (
+  boxId: string,
+  _prev: BoxFormState,
+  fd: FormData,
+): Promise<BoxFormState> => {
+  const to = fd.get('to');
+  if (!isAdvanceTarget(to)) return { error: 'Transição inválida.' };
+  try {
+    await advanceAdminBoxFulfillment(boxId, to);
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.bodyCode === 'box_not_ready') return { error: 'Caixa não está confirmada.' };
+      if (e.bodyCode === 'order_not_paid')
+        return { error: 'Pagamento reembolsado; a caixa não pode ser processada.' };
+      if (e.bodyCode === 'invalid_transition')
+        return { error: 'Transição inválida para o status atual.' };
+      if (e.status === 404) return { error: 'Caixa não encontrada.' };
+      return { error: e.message };
+    }
+    return { error: 'Erro ao avançar fulfillment.' };
+  }
+  revalidatePath(CAIXAS_PATH);
   return { error: null };
 };

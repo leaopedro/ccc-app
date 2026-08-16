@@ -149,6 +149,8 @@ describe('AuthedNav — box sub-nav', () => {
     expect(html).toContain('data-testid="section-subnav"');
     expect(html).toContain('href="/box/catalogo"');
     expect(html).toContain('href="/box/parceiros"');
+    expect(html).toContain('href="/box/caixas"');
+    expect(html).toContain('Caixas');
     expect(html).toContain('href="/box/config"');
   });
 

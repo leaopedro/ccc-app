@@ -31,6 +31,7 @@ const USERS_SUB_LINKS = [
 const BOX_SUB_LINKS = [
   { href: '/box/catalogo', label: 'Catálogo' },
   { href: '/box/parceiros', label: 'Parceiros' },
+  { href: '/box/caixas', label: 'Caixas' },
   { href: '/box/config', label: 'Configuração' },
 ] as const;
 

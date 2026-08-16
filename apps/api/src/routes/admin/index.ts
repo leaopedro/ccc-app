@@ -17,6 +17,7 @@ import { adminGeneralSettingsRoutes } from './general-settings.js';
 import { adminGroupRoutes } from './groups.js';
 import { adminMfaRoutes } from './mfa.js';
 import { adminBoxCatalogRoutes } from './box-catalog-admin.js';
+import { adminBoxFulfillmentRoutes } from './box-fulfillment-admin.js';
 import { adminBoxPartnersRoutes } from './box-partners-admin.js';
 import { adminBoxSettingsRoutes } from './box-settings-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
@@ -78,6 +79,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminBoxCatalogRoutes);
     await scope.register(adminBoxPartnersRoutes);
     await scope.register(adminBoxSettingsRoutes);
+    await scope.register(adminBoxFulfillmentRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

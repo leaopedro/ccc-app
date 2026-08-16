@@ -7,6 +7,7 @@ import {
   cycleMonthYearLabel,
   canUnskip,
   boxStatusLabel,
+  boxTimelineSteps,
 } from './box-state';
 
 describe('homeVariant', () => {
@@ -107,5 +108,42 @@ describe('boxStatusLabel', () => {
     expect(boxStatusLabel('ready')).toBe('Confirmada');
     expect(boxStatusLabel('skipped')).toBe('Pulada');
     expect(boxStatusLabel('cancelled')).toBe('Cancelada');
+  });
+});
+
+describe('boxTimelineSteps', () => {
+  it('labels the three steps in PT-BR with accents', () => {
+    const [preparando, enviado, entregue] = boxTimelineSteps('unfulfilled');
+    expect(preparando.label).toBe('Preparando');
+    expect(enviado.label).toBe('Enviado');
+    expect(entregue.label).toBe('Entregue');
+  });
+
+  it('maps unfulfilled to current/pending/pending', () => {
+    expect(boxTimelineSteps('unfulfilled').map((s) => s.state)).toEqual([
+      'current',
+      'pending',
+      'pending',
+    ]);
+  });
+
+  it('maps packed to done/current/pending', () => {
+    expect(boxTimelineSteps('packed').map((s) => s.state)).toEqual(['done', 'current', 'pending']);
+  });
+
+  it('maps shipped to done/done/current', () => {
+    expect(boxTimelineSteps('shipped').map((s) => s.state)).toEqual(['done', 'done', 'current']);
+  });
+
+  it('maps delivered to all done', () => {
+    expect(boxTimelineSteps('delivered').map((s) => s.state)).toEqual(['done', 'done', 'done']);
+  });
+
+  it('maps cancelled defensively to the unfulfilled shape', () => {
+    expect(boxTimelineSteps('cancelled').map((s) => s.state)).toEqual([
+      'current',
+      'pending',
+      'pending',
+    ]);
   });
 });

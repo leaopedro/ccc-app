@@ -100,59 +100,74 @@ export const deliverNotification = async (
   }
   const attemptCount = notification.attemptCount + 1;
 
-  const tokens = await prisma.deviceToken.findMany({
-    where: { userId: notification.userId },
-    select: { expoPushToken: true },
-  });
-  if (tokens.length === 0) {
+  try {
+    const tokens = await prisma.deviceToken.findMany({
+      where: { userId: notification.userId },
+      select: { expoPushToken: true },
+    });
+    if (tokens.length === 0) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        // Terminal (nothing to deliver): clear any stale failureCode.
+        data: { sentAt: now, failureCode: null },
+      });
+      return { sent: 0, invalidatedTokens: 0, delivered: true, attemptCount };
+    }
+
+    const pushData = buildPushDataFromRow(notification);
+    const result = await deps.sender.send(
+      tokens.map((t) => {
+        const message: PushMessage = {
+          to: t.expoPushToken,
+          title: notification.title,
+          body: notification.body,
+          data: pushData,
+        };
+        return message;
+      }),
+    );
+
+    let sent = 0;
+    const invalid: string[] = [];
+    let hasError = false;
+    for (const [token, outcome] of result.outcomesByToken) {
+      if (outcome.kind === 'ok') sent += 1;
+      else if (outcome.kind === 'invalid-token') invalid.push(token);
+      else hasError = true;
+    }
+
+    if (invalid.length > 0) {
+      await prisma.deviceToken.deleteMany({
+        where: { userId: notification.userId, expoPushToken: { in: invalid } },
+      });
+    }
+
+    if (sent > 0 || !hasError) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        // Terminal success: clear a failureCode left by an earlier failed attempt
+        // so ops queries don't report a delivered notification as failed.
+        data: { sentAt: now, failureCode: null },
+      });
+      return { sent, invalidatedTokens: invalid.length, delivered: true, attemptCount };
+    }
+
     await prisma.notification.update({
       where: { id: notification.id },
-      data: { sentAt: now },
+      data: { failureCode: 'send_error' },
     });
-    return { sent: 0, invalidatedTokens: 0, delivered: true, attemptCount };
+    return { sent, invalidatedTokens: invalid.length, delivered: false, attemptCount };
+  } catch (err) {
+    // A thrown sender/DB error still consumed this attempt (attemptCount was
+    // incremented by the claim). Persist a terminal failure marker (best-effort)
+    // so the row is not silently exhausted with no record, then rethrow so the
+    // worker logs the error for this attempt. On the retry cap the query stops
+    // re-selecting the row; the marker records why.
+    await prisma.notification
+      .update({ where: { id: notification.id }, data: { failureCode: 'send_exception' } })
+      .catch(() => undefined);
+    throw err;
   }
-
-  const pushData = buildPushDataFromRow(notification);
-  const result = await deps.sender.send(
-    tokens.map((t) => {
-      const message: PushMessage = {
-        to: t.expoPushToken,
-        title: notification.title,
-        body: notification.body,
-        data: pushData,
-      };
-      return message;
-    }),
-  );
-
-  let sent = 0;
-  const invalid: string[] = [];
-  let hasError = false;
-  for (const [token, outcome] of result.outcomesByToken) {
-    if (outcome.kind === 'ok') sent += 1;
-    else if (outcome.kind === 'invalid-token') invalid.push(token);
-    else hasError = true;
-  }
-
-  if (invalid.length > 0) {
-    await prisma.deviceToken.deleteMany({
-      where: { userId: notification.userId, expoPushToken: { in: invalid } },
-    });
-  }
-
-  if (sent > 0 || !hasError) {
-    await prisma.notification.update({
-      where: { id: notification.id },
-      data: { sentAt: now },
-    });
-    return { sent, invalidatedTokens: invalid.length, delivered: true, attemptCount };
-  }
-
-  await prisma.notification.update({
-    where: { id: notification.id },
-    data: { failureCode: 'send_error' },
-  });
-  return { sent, invalidatedTokens: invalid.length, delivered: false, attemptCount };
 };
 
 export const sendTransactionalPush = async (

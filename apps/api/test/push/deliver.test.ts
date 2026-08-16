@@ -95,4 +95,33 @@ describe('deliverNotification', () => {
     expect(n.sentAt).not.toBeNull();
     expect(n.attemptCount).toBe(1);
   });
+
+  it('persists a failure marker and rethrows when the sender throws', async () => {
+    const { id } = await seed(['ExponentPushToken[thr11111111]']);
+    const throwingSender = {
+      send: () => Promise.reject(new Error('sender boom')),
+    };
+    await expect(deliverNotification(id, { sender: throwingSender })).rejects.toThrow(
+      'sender boom',
+    );
+    const n = await prisma.notification.findUniqueOrThrow({ where: { id } });
+    expect(n.sentAt).toBeNull();
+    expect(n.attemptCount).toBe(1); // attempt consumed by the claim, not silently lost
+    expect(n.failureCode).toBe('send_exception');
+  });
+
+  it('clears a stale failureCode when a later attempt succeeds', async () => {
+    const { id } = await seed(['ExponentPushToken[recv111111]']);
+    const failing = new DevPushSender();
+    failing.markError('ExponentPushToken[recv111111]');
+    await deliverNotification(id, { sender: failing });
+    let n = await prisma.notification.findUniqueOrThrow({ where: { id } });
+    expect(n.failureCode).toBe('send_error');
+
+    // A subsequent successful attempt must not leave the row looking failed.
+    await deliverNotification(id, { sender: new DevPushSender() });
+    n = await prisma.notification.findUniqueOrThrow({ where: { id } });
+    expect(n.sentAt).not.toBeNull();
+    expect(n.failureCode).toBeNull();
+  });
 });

@@ -302,9 +302,53 @@ seguranca de qualquer jeito (nunca liquida Order cancelado). Sinal
 `transparent.lost` disponivel pra reconciliacao futura de cobranca expirada.
 Fast-follow: copy de `mapPayError` pros casos raros `not_found`/`not_eligible`.
 
-#### Fase 4b — Fulfillment (PENDENTE)
+#### Fase 4b — Fulfillment (CONCLUIDA)
 
-Status/rastreio/timeline (tela 09) + rotas admin de box.
+Organizador avanca a caixa confirmada por Preparando -> Enviado -> Entregue;
+o membro ve a timeline na tela 09; o admin tem console por ciclo com picking
+list. Entregue em `feat/box-builder-fase-4b-fulfillment`, mergeada em `main`
+pelo PR #27.
+Spec: `docs/superpowers/specs/2026-08-14-box-builder-fase-4b-fulfillment-design.md`.
+Planos: `docs/superpowers/plans/2026-08-14-box-builder-fase-4b-{api,mobile,admin}.md`.
+Executada via subagent-driven-development (tres planos, review por task +
+review de branch: READY TO MERGE).
+
+Escopo entregue:
+
+- Shared: enum `boxFulfillmentStatusSchema` (5 valores) + `BoxView.fulfillmentStatus`
+  (obrigatorio); schemas admin advance/list/picking. Ship-only, 3 marcos
+  (`unfulfilled -> packed -> shipped -> delivered`, `cancelled` terminal).
+- API (`services/box/fulfillment.ts`): `advanceBoxFulfillment` forward-only,
+  race-safe via `updateMany(where fulfillmentStatus = predecessor)`, sincroniza
+  `Order.fulfillmentStatus` na mesma transacao; nunca toca `Order.status`.
+  Guarda: box `ready` E, se ha Order, ele precisa continuar `paid` (refund
+  webhook pode virar `refunded` com o box ainda `ready` -> `order_not_paid`).
+  Cada avanco grava `AdminAudit` (`box.fulfillment.advance`, ator + from/to).
+  Tres rotas organizer/admin: advance, monthly list+counts, picking.
+- Mobile: helper puro `boxTimelineSteps` + `FulfillmentTimeline` na tela `ready`
+  (ReadyBody e PostCutoffBody); copy Preparando/Enviado/Entregue; CTA
+  "Acompanhar entrega" removido (sem rastreio, timeline inline).
+- Admin: pagina `/box/caixas` espelhando `loja/pedidos` (seletor de ciclo,
+  contadores, tabela com avanco por linha, picking list); entrada de nav.
+  Achado de review corrigido: `ApiError` so expunha `body.error`; adicionado
+  `ApiError.bodyCode` (aditivo) pro mapa de erro do advance funcionar.
+
+Correcoes pos-review (PR #27):
+
+- Guarda de Order `paid` no advance + trilha de auditoria (dois achados da
+  review adversarial: caixa reembolsada podia ser enviada; mutacao sem audit).
+- Merge do `main` (24 commits) trouxe uma quebra pre-existente do teste do
+  shared (`feedPostResponseSchema.isOwn` obrigatorio sem fixture atualizada);
+  corrigida a fixture pra destravar o CI.
+
+Follow-ups adiados (nao bloqueiam):
+
+- Auditar as outras rotas box-admin (catalogo/parceiros/config) num passe
+  dedicado de governanca; hoje so o advance audita.
+- `counts` no list poderia guardar contra valor de enum fora dos 5 do box
+  (inalcancavel no fluxo ship-only atual).
+- Uniao `'packed'|'shipped'|'delivered'` escrita a mao em 4 lugares no admin;
+  poderia importar `BoxAdvanceTarget` do shared.
 
 #### Fase 4c — Refund (PENDENTE)
 

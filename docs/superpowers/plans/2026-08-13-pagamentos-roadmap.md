@@ -13,12 +13,77 @@ Specs: [Fase 0](../specs/2026-08-12-billing-fixes-design.md) ·
 
 ---
 
+## Sequência de produção
+
+Ordem acordada com o fundador em 2026-08-16. Um passo por vez, e cada passo
+destrava o seguinte. As seções abaixo desta continuam sendo o inventário
+completo; esta é a ordem de execução.
+
+### Web, receber dinheiro de verdade
+
+- [ ] 1. **DEV** Subir `b7ae50c` e abrir PR. Preços 49,90 / 109,90 / 249,90 no
+     seed, orçamento da caixa em preço menos 10%, detailing em 74,90.
+- [ ] 2. **PEDRO** Terminar a configuração da conta Stripe do CNPJ. O agente de
+     navegador faz produtos, preços, webhooks, portal e métodos. Pedro entra com
+     CPF, dados do sócio, conta bancária e documento na ativação.
+- [ ] 3. **DEV** Verificar se `/premium/catalogo` cria linha de cadência anual em
+     `PremiumPlanPrice`. Sem ela, uma fatura anual do Fundador cai em
+     `unknown-plan-price` no webhook: dinheiro dentro, assinatura não criada.
+     Pode virar código.
+- [ ] 4. **DEV** Purgar do banco as linhas de modo teste. O script existe e exige
+     `createdBefore` explícito. Falta a data de corte, que é decisão de Pedro.
+- [ ] 5. **PEDRO** Cadastrar os `price_` no `/premium/catalogo`. Antes do passo 6,
+     nunca depois: catálogo vazio com chave live significa cobrança aceita e
+     membership inexistente.
+- [ ] 6. **PEDRO** Variáveis no Railway, com `GROWTH_PREMIUM_BILLING_ENABLED=false`.
+     O avulso **não** é gateado por flag nenhuma: no instante em que a `sk_live`
+     entra, cartão e Pix estão valendo.
+- [ ] 7. **PEDRO** AbacatePay de produção. A URL do webhook precisa do
+     `?webhookSecret=` na query string, senão toda entrega devolve 401 e o Pix
+     não funciona.
+- [ ] 8. **DEV** Trocar o `pk_test` da conta antiga no `eas.json`, e estender os
+     alertas do Sentry aos três endpoints de webhook, hoje limitados a um.
+- [ ] 9. **DEV** `legal.ts`: assinatura deixa de ser gerida pela RevenueCat e passa
+     à Stripe, nas duas ocorrências, e subir a versão da política. Hoje o
+     documento publicado descreve um subprocessador que não processa mais.
+- [ ] 10. **PEDRO + DEV** Smoke do avulso, cartão e Pix, valor baixo, refund no
+      fim. Imediatamente após o passo 6, não na semana seguinte.
+- [ ] 11. **PEDRO** Flag `GROWTH_PREMIUM_BILLING_ENABLED` para `true`.
+- [ ] 12. **PEDRO + DEV** Smoke da assinatura, imediatamente, antes de anunciar.
+
+### Travas de decisão, antes da primeira cobrança
+
+Não são código e não dependem do DEV. Detalhadas na seção de bloqueadores
+jurídicos mais abaixo.
+
+- Nota fiscal: emitir desde a primeira venda, ou aceitar a exposição com prazo.
+- Rótulo de versão da política no site. O conteúdo já bate, a etiqueta não.
+
+### iOS, depois da web
+
+- [ ] 1. **DEV** Copy do Premium e a folha "O que é Premium?", que ainda anuncia
+     benefício não implementado.
+- [ ] 2. **PEDRO** Habilitar `merchant.com.casacarclub.app` nos App IDs.
+- [ ] 3. **DEV** Apple Pay nativo. Sete itens de código, o maior bloco restante.
+- [ ] 4. **PEDRO** Teste em aparelho físico, cartão real, sandbox.
+- [ ] 5. **PEDRO** Notas de review e submissão.
+
+### Incógnitas técnicas abertas
+
+- Linha anual do Fundador no catálogo do banco. É o passo 3 acima.
+- A Stripe recusa combinar preço anual com add-on mensal na mesma sessão, e a API
+  traduz para 503. Hoje o Detailing só tem cadência mensal, então Fundador anual
+  mais Detailing não fecha. Saídas: criar preço anual do add-on, ou bloquear
+  add-on no checkout anual.
+
+---
+
 ## Fase 0 — correções de billing
 
 Implementada. PR [#21](https://github.com/leaopedro/ccc-app/pull/21). Suíte
 completa verde: 262 arquivos, 2268 testes.
 
-- [ ] **PEDRO** Revisar e mergear o PR #21. Primeira revisão devolveu cinco
+- [x] **PEDRO** Revisar e mergear o PR #21. Primeira revisão devolveu cinco
       achados, todos válidos: quatro defeitos de código e um artefato de diff por
       branch atrasada. Corrigidos em `ee3f8e8` e no merge `c5729dc`, com resposta
       no PR. O mais grave era que evento guardado nunca recuperava, o que
@@ -101,7 +166,7 @@ completa verde: 262 arquivos, 2268 testes.
       RevenueCat" e passa a Stripe, na prosa e na tabela de subprocessadores.
       Subir `PRIVACY_POLICY_VERSION`.
 - [ ] **PEDRO** Decidir se a mudança de subprocessador exige novo consentimento.
-- [ ] **DEV** Alinhar a data de vigência da política: `legal.ts` diz 6 de agosto
+- [x] **DEV** Alinhar a data de vigência da política: `legal.ts` diz 6 de agosto
       de 2026, `apps/admin/app/(public)/privacidade/page.tsx` diz 14 de maio.
 - [ ] **DEV** Marcar ou arquivar pedidos pré-cutover. Não existe campo
       `livemode`, e `routes/admin/finance.ts` agrega tudo junto, então o primeiro
@@ -154,28 +219,28 @@ do Spec A.
 
 ### Regra 1.2 — conteúdo gerado por usuário
 
-- [ ] **DEV** Denúncia de conteúdo pelo usuário. O modelo `Report` existe e
+- [x] **DEV** Denúncia de conteúdo pelo usuário. O modelo `Report` existe e
       nenhuma chamada `.create()` existe no repositório: a tabela é vazia por
       construção.
-- [ ] **DEV** Bloquear usuário. `FeedBan` é aplicado pelo admin e tem escopo de
+- [x] **DEV** Bloquear usuário. `FeedBan` é aplicado pelo admin e tem escopo de
       evento; não existe bloqueio entre pessoas.
-- [ ] **DEV** Documento de termos, rota, aceite versionado no `User`, e o link do
+- [x] **DEV** Documento de termos, rota, aceite versionado no `User`, e o link do
       signup navegando. Hoje "Termos" é `<Text>` puro sem `onPress`.
 
 ### Regras 5.1.1 e 5.1.2
 
-- [ ] **DEV** Suprimir ou traduzir as strings de câmera, microfone e Face ID.
+- [x] **DEV** Suprimir ou traduzir as strings de câmera, microfone e Face ID.
       Vêm por autolink e o app não tem nenhuma das três funcionalidades.
-- [ ] **DEV** Preencher `NSPrivacyCollectedDataTypes` no
+- [x] **DEV** Preencher `NSPrivacyCollectedDataTypes` no
       `PrivacyInfo.xcprivacy`, hoje array vazio, enquanto o app coleta email,
       telefone, CPF, fotos e documento de identidade.
 
 ### Regra 2.1
 
-- [ ] **DEV** Seed de conta de demonstração com email já verificado, assinatura
+- [x] **DEV** Seed de conta de demonstração com email já verificado, assinatura
       ativa e evento com ingresso. Revisor que se cadastra sozinho trava no muro
       de verificação de email.
-- [ ] **PEDRO** Publicar privacidade e termos em URL HTTPS pública em
+- [x] **PEDRO** Publicar privacidade e termos em URL HTTPS pública em
       `casacar.club`. App Store Connect exige.
 - [ ] **DEV** Garantir que nenhuma aba primária caia em placeholder "em breve" no
       build submetido.

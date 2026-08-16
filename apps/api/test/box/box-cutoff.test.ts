@@ -1,7 +1,6 @@
 import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { DevPushSender } from '../../src/services/push/index.js';
 import { runBoxCutoffTick } from '../../src/workers/box-cutoff.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
@@ -196,21 +195,19 @@ describe('runBoxCutoffTick', () => {
         platform: 'ios',
       },
     });
-    const sender = new DevPushSender();
 
-    await runBoxCutoffTick({ sender });
+    await runBoxCutoffTick({});
 
     const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(freshOrder.status).toBe('paid');
     expect(fresh.status).toBe('awaiting_payment');
-    // No double-notify: the cutoff tick must not send box.ready while the
+    // No double-notify: the cutoff tick must not enqueue box.ready while the
     // Order-settled path is left for the webhook/paid flow to handle.
     const notifCount = await prisma.notification.count({
       where: { userId: garage.userId, kind: 'box.ready' },
     });
     expect(notifCount).toBe(0);
-    expect(sender.captured.length).toBe(0);
   });
 
   it('awaiting_payment with shippingCents>0 is skipped and order cancelled (Fix B)', async () => {
@@ -536,7 +533,7 @@ describe('runBoxCutoffTick', () => {
     expect(ledger.reserved).toBe(2);
   });
 
-  it('sends box.ready when a budget-only box resolves to ready at cutoff', async () => {
+  it('enqueues a pending box.ready when a budget-only box resolves to ready', async () => {
     const { user, box } = await makeBox({
       status: 'open',
       autoSendOptIn: true,
@@ -544,35 +541,22 @@ describe('runBoxCutoffTick', () => {
       withAddress: true,
       budget: 10000,
     });
-    await prisma.deviceToken.create({
-      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
-    });
-    const sender = new DevPushSender();
-
-    await runBoxCutoffTick({ sender });
-
+    await runBoxCutoffTick({});
     const box2 = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(box2.status).toBe('ready');
-    const notif = await prisma.notification.findFirst({
+    const n = await prisma.notification.findFirstOrThrow({
       where: { userId: user.id, kind: 'box.ready' },
     });
-    expect(notif?.dedupeKey).toBe(box.id);
-    expect(sender.captured.length).toBe(1);
+    expect(n.dedupeKey).toBe(box.id);
+    expect(n.sentAt).toBeNull();
   });
 
-  it('does not send box.ready when a box is skipped at cutoff', async () => {
+  it('does not enqueue box.ready when a box is skipped', async () => {
     const { user } = await makeBox({ status: 'open', withItem: false });
-    await prisma.deviceToken.create({
-      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
-    });
-    const sender = new DevPushSender();
-
-    await runBoxCutoffTick({ sender });
-
+    await runBoxCutoffTick({});
     const count = await prisma.notification.count({
       where: { userId: user.id, kind: 'box.ready' },
     });
     expect(count).toBe(0);
-    expect(sender.captured.length).toBe(0);
   });
 });

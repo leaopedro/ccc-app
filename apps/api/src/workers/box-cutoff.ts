@@ -3,12 +3,11 @@ import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { sendBoxPush } from '../services/box/notifications.js';
+import { enqueueBoxNotification } from '../services/box/notifications.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
-import type { PushSender } from '../services/push/index.js';
 
-type Deps = { log?: FastifyBaseLogger; sender?: PushSender };
+type Deps = { log?: FastifyBaseLogger };
 
 /** Trim a box to budget-only in-tx: drop all partners, LIFO-trim catalog, reserve stock. */
 const resolveBudgetOnly = async (
@@ -105,7 +104,7 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
 
   for (const { id, garageId } of due) {
     try {
-      const notify = await prisma.$transaction(async (tx): Promise<{ userId: string } | null> => {
+      await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
         const box = await tx.monthlyBox.findUnique({
           where: { id },
@@ -114,8 +113,8 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             membership: { select: { garage: { select: { userId: true } } } },
           },
         });
-        if (!box) return null;
-        if (box.status !== 'open' && box.status !== 'awaiting_payment') return null; // re-gate
+        if (!box) return;
+        if (box.status !== 'open' && box.status !== 'awaiting_payment') return; // re-gate
 
         const hasItems = box.items.some((i) => i.included);
         const userId = box.membership.garage.userId;
@@ -127,10 +126,13 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
           // this branch is intentionally ahead of its Fase 3 consumer.
           if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
-            return null;
+            return;
           }
           const status = await resolveBudgetOnly(tx, id);
-          return status === 'ready' ? { userId } : null;
+          if (status === 'ready') {
+            await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
+          }
+          return;
         }
 
         // awaiting_payment: cancel the pending Order unless it already settled.
@@ -149,10 +151,9 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
               select: { status: true },
             });
             if (ord?.status === 'paid') {
-              // Pix already settled: leave for the paid path. Its reservation must
-              // stand — do NOT release here. box.paid already fired at settle;
-              // do not double-notify here.
-              return null;
+              // Pix already settled: box.paid fired in settle; leave for the paid
+              // path and do not double-resolve/notify here.
+              return;
             }
             // Order is cancelled/failed/expired/refunded via another path.
             // Fall through: release reservations and resolve budget-only so the
@@ -171,17 +172,12 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             });
           }
         }
-        const status = await resolveBudgetOnly(tx, id);
-        return status === 'ready' ? { userId } : null;
-      });
 
-      if (notify && deps.sender) {
-        try {
-          await sendBoxPush(deps.sender, { userId: notify.userId, boxId: id, kind: 'box.ready' });
-        } catch (err) {
-          deps.log?.error({ err, boxId: id }, '[box-cutoff] box.ready push failed');
+        const status = await resolveBudgetOnly(tx, id);
+        if (status === 'ready') {
+          await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
         }
-      }
+      });
     } catch (err) {
       deps.log?.error({ err, boxId: id }, '[box-cutoff] failed to resolve box');
     }

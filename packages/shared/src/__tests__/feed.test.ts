@@ -84,6 +84,7 @@ describe('feed post response', () => {
       },
       body: 'hello',
       status: 'visible',
+      isOwn: false,
       photos: [],
       reactions: { likes: 0, mine: false },
       commentCount: 0,

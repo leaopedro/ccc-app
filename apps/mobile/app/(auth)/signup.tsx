@@ -314,7 +314,13 @@ export default function SignupScreen() {
               </Pressable>
               <Text variant="bodySm" tone="secondary" className="flex-1">
                 {authCopy.signup.termsAccept}
-                <Text variant="bodySm" tone="brand" weight="semibold">
+                <Text
+                  variant="bodySm"
+                  tone="brand"
+                  weight="semibold"
+                  onPress={() => router.push('/(auth)/termos' as never)}
+                  accessibilityRole="link"
+                >
                   {authCopy.signup.termsLink}
                 </Text>
                 {authCopy.signup.termsAnd}

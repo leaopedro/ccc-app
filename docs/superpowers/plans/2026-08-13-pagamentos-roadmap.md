@@ -33,16 +33,44 @@ completa verde: 262 arquivos, 2268 testes.
 
 ### Bloqueadores jurídicos, antes da primeira cobrança real
 
-- [ ] **PEDRO** Resolver a divergência de entidade: a Stripe recebe como pessoa
-      física, os documentos legais do app vão nomear o CNPJ. Quem recebe e quem
-      responde ao consumidor passam a ser entidades diferentes, e a nota fiscal
-      sairia por um CNPJ que não recebeu. Decisão registrada: seguir assim por
-      ora.
-- [ ] **PEDRO** Preencher `packages/shared/src/legal.ts:17-19`. Está no ar hoje
-      com `CNPJ: a ser publicado antes do lançamento em produção` e o mesmo para
-      endereço. Precisa da razão social real do CNPJ.
-- [ ] **DEV** Rascunhar termos de uso e política de reembolso, com o prazo de
-      arrependimento de sete dias. Pedro revisa antes de publicar.
+- [ ] **PEDRO** Migrar a conta Stripe para o CNPJ **antes de produção**. Decidido
+      em 2026-08-14. Isso resolve a divergência de merchant of record: quem recebe
+      passa a ser a mesma entidade que os documentos legais nomeiam
+      (LIONS HUB ENGENHARIA DE SOFTWARE LTDA, 40.142.944/0001-18) e a nota fiscal
+      sai por quem recebeu.
+
+      **Consequências que mudam o Spec A**, porque trocar de conta é mais amplo que
+      trocar de modo:
+
+      - Chaves, secrets de webhook e endpoints são todos novos.
+      - **Todo `price_...` muda**, então o catálogo em `/premium/catalogo` é
+        recadastrado do zero e as duas variáveis de preço gold no Railway também.
+      - **Todo `cus_`, `sub_` e `pi_` guardado no banco fica inválido**, não só os
+        de test mode. É exatamente o caso `resource_missing` que virou 409
+        `StaleBillingReference`, e é o que o script de purga limpa. O
+        discriminador por instante de corte continua correto, e passa a cobrir
+        mais linhas do que cobriria numa simples virada test → live.
+      - O descritor de fatura `CASA CAR CLUB` precisa ser configurado na conta
+        nova.
+
+      **Risco que aumenta, e é o que mais importa.** O Spec A manda ler a versão de
+      API do endpoint de test existente e fixar os endpoints live na mesma. Numa
+      conta **nova** não existe endpoint antigo para copiar: os endpoints nascem na
+      versão corrente da Stripe, que é mais nova que a `2026-04-22.dahlia` que o
+      normalizador lê. Ou seja, o descasamento de forma de invoice deixa de ser
+      possibilidade e vira o caso provável. Fixe explicitamente a versão de cada
+      endpoint novo em `2026-04-22.dahlia` na criação. A sentinela
+      `UNRECOGNIZED_SHAPE` existe como rede, não como substituto: ela responde 503
+      e alerta, e o evento só aplica depois que a versão for corrigida.
+
+- [x] **PEDRO** Preencher a identificação da entidade nos documentos legais. Feito
+      em 2026-08-14 com os dados da política publicada.
+- [ ] **PEDRO** Alinhar o rótulo de versão da política no site. O conteúdo lá já
+      tem a correção de CPF, mas o rótulo ainda diz `privacy-2026-08-06`, enquanto
+      o repositório vai para `privacy-2026-08-14`.
+- [x] **DEV** Termos de uso e política de reembolso publicados, com o prazo de
+      arrependimento de sete dias. Vivem em `packages/shared/src/terms.ts`, com
+      aceite versionado em `User.termsVersion`.
 - [ ] **PEDRO** Decidir nota fiscal: emitir desde a primeira venda via
       integração, ou aceitar a exposição com dono e prazo datados. Zero
       ocorrências no repositório hoje. Stripe Tax é cálculo, não emissão.
@@ -51,9 +79,18 @@ completa verde: 262 arquivos, 2268 testes.
 - [ ] **PEDRO** Parcelamento no cartão: hoje está desligado, sem
       `payment_method_options`. No Brasil, ticket acima de uns R$200 sem
       parcelamento converte pior. Decidir e registrar.
-- [ ] **PEDRO** CPF no Pix: o campo `taxId` existe no tipo e nenhum chamador
-      preenche, enquanto `legal.ts` promete que não coletamos CPF no Pix e o CPF
-      é coletado no perfil. Decidir e reconciliar a frase.
+- [x] **PEDRO** CPF: decidido em 2026-08-14 que a política é que estava errada. O
+      CPF é coletado no perfil, criptografado, e usado no gate de assinatura; o
+      manifesto de privacidade do iOS estava certo. A frase foi reescrita e a
+      versão subiu para `privacy-2026-08-14`. **Correção:** eu afirmei antes que
+      nada lê essa constante, e estava errado — meu grep não cobriu o `apps/admin`.
+      O `cookie-banner.tsx` compara a versão guardada com ela, então o bump faz o
+      banner de cookies reaparecer para quem usa o admin. Mobile e API não leem.
+- [ ] **PEDRO** Decidir, com apoio jurídico, se a correção da política exige novo
+      consentimento dos usuários existentes.
+- [ ] **PEDRO** CPF no Pix: o campo `taxId` existe no tipo e nenhum chamador o
+      preenche. Decidir se o Pix passa a enviar CPF, o que conversa com a
+      obrigação de nota fiscal.
 
 ### Código
 
@@ -145,11 +182,13 @@ do Spec A.
 
 ### Regra 2.3.1 — benefício anunciado e não implementado
 
-- [ ] **PEDRO** Decidir, item por item: implementar ou remover da copy. Não
-      existe ordenação premium no feed, nem condicional de rodapé na página
-      pública, nem contador de convidados, nem desconto de parceiro, nem
-      verificação de membership na porta, e `GarageSpotSource.premium_membership`
-      nunca é usado.
+- [x] **DEV** Removidos da folha do Premium em 2026-08-14, decisão do Pedro:
+      "Garagem em destaque" e "Página pública premium", nas versões PT e EN.
+      Nenhum dos dois existe no código. Reintroduzir só junto da implementação.
+- [ ] **PEDRO** Os demais seguem abertos, e são benefícios de plano no seed, não
+      copy do app: contador de convidados, desconto de parceiro, verificação de
+      membership na porta, e `GarageSpotSource.premium_membership`, que está no
+      enum e nunca é usado.
 
 ### Configuração de build
 
@@ -166,9 +205,26 @@ do Spec A.
 
 ### Reposicionamento do produto, antes do código
 
-- [ ] **PEDRO** Valor de orçamento da caixa por tier, para `monthlyBoxBudgetCents`.
-- [ ] **PEDRO** Nome do fornecedor e valor de repasse por módulo de add-on, para
-      `vendorName` e `payoutAmountCents`.
+- [x] **PEDRO** Valor da caixa por tier, informado em 2026-08-14 e declarado
+      aproximado: bronze R$ 49,90, silver R$ 109,90, gold R$ 249,90. Semeado para
+      dev e preview em `packages/db/prisma/seed.ts`, só no `create`, para uma
+      reexecução não sobrescrever ajuste feito no admin.
+- [ ] **PEDRO** Setar os mesmos valores em produção, em `/premium/catalogo`. O
+      campo já existe no formulário do admin, então muda sem deploy — que é o
+      certo para número que o próprio Pedro classificou como aproximado.
+- [x] **PEDRO** Fornecedor do add-on de detailing: **Vortex Detailing**, Curitiba,
+      informado em 2026-08-14 e semeado em `vendorName`.
+- [x] **PEDRO** Oficina não é comercializada. O módulo passa a `active: false` no
+      seed. Verificado que nenhuma tela do app expõe add-on e que nenhum benefício
+      de plano menciona oficina, então ninguém comprava pela interface; o risco
+      real era `me-premium.ts` aceitar `addonKeys` do cliente conferindo só contra
+      módulos ativos.
+- [ ] **PEDRO** Valor de repasse do detailing, para `payoutAmountCents`. Segue em
+      zero, o que faz a margem exibida no admin igualar o valor cobrado.
+- [ ] **PEDRO** "Mercado Livre majoritariamente" foi a resposta sobre fornecedores.
+      Se isso descreve onde os itens da **caixa** são comprados, é procurement e
+      não tem campo no modelo — os campos de fornecedor descrevem quem presta o
+      serviço do add-on. Confirmar se há algo a registrar.
 - [ ] **DEV** Reescrever a folha "O que é Premium?" (`src/copy/garage.ts:99-106`
       e a versão em inglês em `:210-219`) para liderar com box, clube e serviços.
       Hoje os quatro benefícios listados são digitais, e é essa folha que o

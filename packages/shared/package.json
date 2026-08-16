@@ -142,6 +142,10 @@
       "types": "./src/notifications.ts",
       "default": "./dist/notifications.js"
     },
+    "./reports": {
+      "types": "./src/reports.ts",
+      "default": "./dist/reports.js"
+    },
     "./store": {
       "types": "./src/store.ts",
       "default": "./dist/store.js"
@@ -149,6 +153,10 @@
     "./support": {
       "types": "./src/support.ts",
       "default": "./dist/support.js"
+    },
+    "./terms": {
+      "types": "./src/terms.ts",
+      "default": "./dist/terms.js"
     },
     "./tickets": {
       "types": "./src/tickets.ts",

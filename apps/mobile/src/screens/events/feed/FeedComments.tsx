@@ -14,7 +14,7 @@ import {
 
 import { CarPickerPopover } from './CarPickerPopover';
 
-import { createFeedComment, listFeedComments } from '~/api/feed';
+import { createFeedComment, listFeedComments, reportFeedComment } from '~/api/feed';
 import { useAuth } from '~/auth/context';
 import { feedCopy } from '~/copy/feed';
 import { theme } from '~/theme';
@@ -96,6 +96,29 @@ export function FeedComments({ eventId, postId, commentCount, myCars, canPost }:
 
   if (commentCount === 0 && !expanded && !(canPost && isAuthed && hasCar)) return null;
 
+  const handleReportComment = (comment: FeedCommentResponse) => {
+    Alert.alert(feedCopy.post.report.title, feedCopy.post.report.prompt, [
+      { text: feedCopy.post.report.cancel, style: 'cancel' },
+      {
+        text: feedCopy.post.report.submit,
+        onPress: () => {
+          void (async () => {
+            try {
+              await reportFeedComment(
+                eventId,
+                comment.id,
+                `Denúncia via app — comentário ${comment.id}`,
+              );
+              Alert.alert(feedCopy.post.report.done);
+            } catch {
+              Alert.alert(feedCopy.post.report.error);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <Pressable
@@ -124,6 +147,22 @@ export function FeedComments({ eventId, postId, commentCount, myCars, canPost }:
                 {c.car ? <PremiumBadge isPremiumActive={c.car.isPremiumActive} /> : null}
               </View>
               <Text style={styles.commentBody}>{c.body}</Text>
+              {/* Guideline 1.2 applies to comments too, and a comment thread is
+                  the classic harassment surface. Own comments are excluded the
+                  same way posts are: reporting yourself is noise. Authorship is
+                  server-computed (isOwn) rather than inferred from car identity,
+                  which was wrong for every comment without a car. */}
+              {isAuthed && !c.isOwn ? (
+                <Pressable
+                  onPress={() => handleReportComment(c)}
+                  accessibilityRole="button"
+                  accessibilityLabel={feedCopy.post.menu.report}
+                  hitSlop={8}
+                  style={styles.commentReportBtn}
+                >
+                  <Text style={styles.commentReportText}>{feedCopy.post.menu.report}</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
           {canPost && isAuthed && hasCar ? (
@@ -203,6 +242,14 @@ const styles = StyleSheet.create({
     color: theme.colors.fg,
     fontSize: theme.font.size.sm,
     fontWeight: '600',
+  },
+  commentReportBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  commentReportText: {
+    color: theme.colors.muted,
+    fontSize: 12,
   },
   commentBody: { color: theme.colors.fg, fontSize: theme.font.size.sm },
   inputRow: {

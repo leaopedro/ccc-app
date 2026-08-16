@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@ccc/shared/terms';
 import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -162,6 +163,7 @@ describe('write-path hooks — badges land atomically', () => {
         password: 'correct-horse-battery-staple',
         name: 'Fundador',
         ageAttestation: true,
+        termsVersion: TERMS_VERSION,
       },
     });
     expect(res.statusCode).toBe(201);

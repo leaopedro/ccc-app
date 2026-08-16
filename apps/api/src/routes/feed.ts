@@ -9,12 +9,15 @@ import {
   feedPostResponseSchema,
   feedReactionInputSchema,
 } from '@ccc/shared/feed';
+import { reportCreateRequestSchema } from '@ccc/shared/reports';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
+import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
+import { blockedUserIdsFor, isBlockedBetween } from '../services/feed/blocks.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
 import rateLimit from '@fastify/rate-limit';
@@ -119,7 +122,21 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     if (access === 'forbidden')
       return reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
 
-    const where = { eventId, status: 'visible' as const };
+    // Symmetric block filter: hide people this reader blocked AND people who
+    // blocked them (App Store guideline 1.2). Empty for anonymous readers.
+    const blockedIds = await blockedUserIdsFor(userId);
+    const where = {
+      eventId,
+      status: 'visible' as const,
+      // OR with `authorUserId: null` is load-bearing: SQL `NULL NOT IN (...)`
+      // evaluates to NULL, so a bare notIn silently drops every post whose
+      // author deleted their account (the FK is onDelete: SetNull). Without
+      // this, anyone holding a single block loses all tombstoned-author posts
+      // in every event, and `total` is wrong the same way.
+      ...(blockedIds.length > 0
+        ? { OR: [{ authorUserId: null }, { authorUserId: { notIn: blockedIds } }] }
+        : {}),
+    };
     const [total, posts] = await Promise.all([
       prisma.feedPost.count({ where }),
       prisma.feedPost.findMany({
@@ -148,6 +165,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
           feedPostResponseSchema.parse({
             id: p.id,
             eventId: p.eventId,
+            isOwn: userId !== null && p.authorUserId === userId,
             car: serializeCarProfile(p.car, buildUrl),
             body: p.body,
             status: p.status,
@@ -202,7 +220,15 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       if (access !== 'ok')
         return reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
 
-      const where = { postId, status: 'visible' as const };
+      const blockedIds = await blockedUserIdsFor(userId);
+      const where = {
+        postId,
+        status: 'visible' as const,
+        // Same NULL semantics as the post list above.
+        ...(blockedIds.length > 0
+          ? { OR: [{ authorUserId: null }, { authorUserId: { notIn: blockedIds } }] }
+          : {}),
+      };
       const [total, comments] = await Promise.all([
         prisma.feedComment.count({ where }),
         prisma.feedComment.findMany({
@@ -212,6 +238,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             postId: true,
             body: true,
             status: true,
+            authorUserId: true,
             createdAt: true,
             updatedAt: true,
             car: { select: CAR_SELECT },
@@ -229,6 +256,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             feedCommentResponseSchema.parse({
               id: c.id,
               postId: c.postId,
+              isOwn: userId !== null && c.authorUserId === userId,
               car: serializeCarProfile(c.car, buildUrl),
               body: c.body,
               status: c.status,
@@ -349,6 +377,8 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedPostResponseSchema.parse({
           id: post.id,
           eventId: post.eventId,
+          // Create: the author is the caller by construction.
+          isOwn: true,
           car: serializeCarProfile(post.car, buildUrl),
           body: post.body,
           status: post.status,
@@ -448,6 +478,9 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedPostResponseSchema.parse({
           id: updated.id,
           eventId: updated.eventId,
+          // Patch: only the author or a moderator reaches here; the moderator
+          // case is corrected below.
+          isOwn: updated.authorUserId === sub,
           car: serializeCarProfile(updated.car, buildUrl),
           body: updated.body,
           status: updated.status,
@@ -520,7 +553,7 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
       const post = await prisma.feedPost.findFirst({
         where: { id: postId, eventId, status: 'visible' },
-        select: { id: true },
+        select: { id: true, authorUserId: true },
       });
       if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
 
@@ -529,6 +562,12 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(403).send({ error: 'Forbidden', message: 'Banned from posting' });
       if (access === 'forbidden')
         return reply.status(403).send({ error: 'Forbidden', message: 'Posting access denied' });
+
+      // A block has to stop writing, not just reading. Hiding the thread from the
+      // victim while everyone else still sees the comment is not a block.
+      if (await isBlockedBetween(sub, post.authorUserId)) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Blocked' });
+      }
 
       const { carId, body } = feedCommentCreateInputSchema.parse(request.body);
 
@@ -562,6 +601,8 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         feedCommentResponseSchema.parse({
           id: comment.id,
           postId: comment.postId,
+          // Create: the author is the caller by construction.
+          isOwn: true,
           car: serializeCarProfile(comment.car, buildUrl),
           body: comment.body,
           status: comment.status,
@@ -595,6 +636,172 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(204).send();
     });
 
+    /**
+     * Gate shared by report and block-author.
+     *
+     * These three routes shipped with NO authorization beyond authentication:
+     * every neighbour in this scope runs `feedEnabled` plus
+     * checkFeedPostAccess/checkFeedReadAccess plus isFeedBanned, and the new
+     * ones ran only an existence check. Adversarial review proved the
+     * consequence with probes: an outsider with no ticket could report on a
+     * members-only feed, a user banned from the feed could report, and three
+     * throwaway accounts could push any post past the auto-hide threshold.
+     *
+     * Email verification is required on top, because signup returns a working
+     * access token with `emailVerifiedAt` null and each new email opens its own
+     * rate-limit bucket — so unverified accounts are free and unlimited, which
+     * is exactly the wrong cost model for something that hides other people's
+     * content.
+     */
+    const gateFeedModerationAction = async (
+      eventId: string,
+      userId: string,
+      role: 'user' | 'organizer' | 'admin' | 'staff',
+      reply: {
+        status: (n: number) => { send: (b: unknown) => unknown };
+      },
+    ): Promise<boolean> => {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { feedEnabled: true },
+      });
+      if (!event) {
+        reply.status(404).send({ error: 'NotFound', message: 'Event not found' });
+        return true;
+      }
+      if (!event.feedEnabled) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Feed disabled' });
+        return true;
+      }
+
+      const actor = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { emailVerifiedAt: true },
+      });
+      if (!actor?.emailVerifiedAt) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Verify your email first' });
+        return true;
+      }
+
+      const access = await checkFeedReadAccess(eventId, userId, role);
+      if (access === 'banned') {
+        reply.status(403).send({ error: 'Forbidden', message: 'Banned from feed' });
+        return true;
+      }
+      if (access === 'forbidden') {
+        reply.status(403).send({ error: 'Forbidden', message: 'Access denied' });
+        return true;
+      }
+      if (await isFeedBanned(eventId, userId)) {
+        reply.status(403).send({ error: 'Forbidden', message: 'Banned from feed' });
+        return true;
+      }
+
+      return false;
+    };
+
+    // ---- PUT /events/:eventId/feed/:postId/block-author ----
+    // Blocking is by POST, not by user id, on purpose: the feed payload does not
+    // expose authorUserId and adding it would put a new user identifier into a
+    // contract shared with admin and web. The server resolves the author here
+    // instead. PUT because blocking twice is a no-op, not an error.
+    scoped.put('/events/:eventId/feed/:postId/block-author', {}, async (request, reply) => {
+      const { sub, role } = requireUser(request);
+      const { eventId, postId } = postIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
+
+      const post = await prisma.feedPost.findFirst({
+        where: { id: postId, eventId },
+        select: { authorUserId: true },
+      });
+      if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+      if (!post.authorUserId) {
+        // Author deleted their account (onDelete: SetNull). Nothing to block.
+        return reply.status(409).send({ error: 'Conflict', message: 'post has no author' });
+      }
+      if (post.authorUserId === sub) {
+        return reply
+          .status(422)
+          .send({ error: 'UnprocessableEntity', message: 'cannot block yourself' });
+      }
+
+      try {
+        await prisma.userBlock.create({ data: { blockerId: sub, blockedId: post.authorUserId } });
+      } catch (err) {
+        if (!isUniqueConstraintError(err)) throw err;
+      }
+
+      return reply.status(204).send();
+    });
+
+    // ---- POST /events/:eventId/feed/:postId/report ----
+    // App Store guideline 1.2 requires users to be able to report objectionable
+    // content. The Report model already existed; nothing ever created a row.
+    scoped.post('/events/:eventId/feed/:postId/report', {}, async (request, reply) => {
+      const { sub, role } = requireUser(request);
+      const { eventId, postId } = postIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
+
+      const parsed = reportCreateRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(422).send({
+          error: 'UnprocessableEntity',
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        });
+      }
+
+      const post = await prisma.feedPost.findFirst({
+        where: { id: postId, eventId },
+        select: { id: true },
+      });
+      if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+
+      const result = await fileReport({
+        target: { kind: 'post', postId },
+        reporterUserId: sub,
+        reason: parsed.data.reason,
+      });
+
+      return reply
+        .status(result.created ? 201 : 200)
+        .send({ reported: true, autoHidden: result.autoHidden });
+    });
+
+    // ---- POST /events/:eventId/feed/comments/:commentId/report ----
+    scoped.post('/events/:eventId/feed/comments/:commentId/report', {}, async (request, reply) => {
+      const { sub, role } = requireUser(request);
+      const { eventId, commentId } = commentIdParam.parse(request.params);
+
+      if (await gateFeedModerationAction(eventId, sub, role, reply)) return reply;
+
+      const parsed = reportCreateRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(422).send({
+          error: 'UnprocessableEntity',
+          issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+        });
+      }
+
+      const comment = await prisma.feedComment.findFirst({
+        where: { id: commentId, post: { eventId } },
+        select: { id: true },
+      });
+      if (!comment)
+        return reply.status(404).send({ error: 'NotFound', message: 'Comment not found' });
+
+      const result = await fileReport({
+        target: { kind: 'comment', commentId },
+        reporterUserId: sub,
+        reason: parsed.data.reason,
+      });
+
+      return reply
+        .status(result.created ? 201 : 200)
+        .send({ reported: true, autoHidden: result.autoHidden });
+    });
+
     // ---- POST /events/:eventId/feed/:postId/reactions ----
     scoped.post('/events/:eventId/feed/:postId/reactions', {}, async (request, reply) => {
       const { sub, role } = requireUser(request);
@@ -620,6 +827,12 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
         select: { id: true, authorUserId: true },
       });
       if (!post) return reply.status(404).send({ error: 'NotFound', message: 'Post not found' });
+
+      // Same reasoning as the comment path: a block must stop the interaction,
+      // not merely hide it from the person who asked for the block.
+      if (await isBlockedBetween(sub, post.authorUserId)) {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Blocked' });
+      }
 
       const where = { postId_userId: { postId, userId: sub } };
 

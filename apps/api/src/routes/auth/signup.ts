@@ -39,6 +39,11 @@ export const signupRoute: FastifyPluginAsync = async (app) => {
           name: input.name,
           passwordHash,
           ageAttestedAt: new Date(),
+          // Record what the client actually sent, not what the server assumes.
+          // Stamping TERMS_VERSION unconditionally recorded a consent the API had
+          // never received.
+          termsVersion: input.termsVersion,
+          termsAcceptedAt: new Date(),
           // Permissive signup: both optional. Written in the same tx as the
           // User + Garage create so a half-filled profile never lands.
           ...(input.cpf ? { cpf: encryptField(input.cpf, app.env.FIELD_ENCRYPTION_KEY) } : {}),

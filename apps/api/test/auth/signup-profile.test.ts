@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@ccc/shared/terms';
 import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -26,6 +27,7 @@ describe('POST /auth/signup with optional profile fields', () => {
     email: 'ana@ccc.test',
     password: 'correct-horse-battery-staple',
     ageAttestation: true as const,
+    termsVersion: TERMS_VERSION,
   };
 
   it('creates the account with only name, email and password', async () => {

@@ -25,6 +25,7 @@ import { eventRoutes } from './routes/events.js';
 import { feedRoutes } from './routes/feed.js';
 import { garageRoutes } from './routes/garage.js';
 import { healthRoutes } from './routes/health.js';
+import { meBlocksRoutes } from './routes/me-blocks.js';
 import { meAccountDeleteRoutes } from './routes/me-account-delete.js';
 import { meConsentRoutes } from './routes/me-consents.js';
 import { meDataExportRoutes } from './routes/me-data-export.js';
@@ -150,6 +151,7 @@ export const buildApp = async (
   await app.register(badgesCatalogRoute);
   await app.register(eventRoutes);
   await app.register(feedRoutes);
+  await app.register(meBlocksRoutes);
   await app.register(storeRoutes);
   await app.register(cartRoutes);
   await app.register(orderRoutes);

@@ -96,11 +96,15 @@ const ptBR = {
     premiumTierLabel: (tier: 'gold' | 'silver' | 'bronze') => `${tier.toUpperCase()} TIER`,
     premiumNearExpiry: (n: number) =>
       `Expira em ${n} ${n === 1 ? 'dia' : 'dias'} · Renove para manter sua capa.`,
+    // "Garagem em destaque" e "Página pública premium" foram removidos em
+    // 2026-08-14: nenhum dos dois existe no código. A ordenação do feed é só
+    // createdAt desc, sem termo de premium, e a página pública não tem rodapé
+    // promocional para esconder. Prometer benefício não implementado é exposição
+    // na regra 2.3.1 da App Store, e o spec de Apple Pay depende desta lista ser
+    // verdadeira. Reintroduzir só junto da implementação.
     premiumBenefits: [
       { title: 'Capas personalizadas', sub: 'Escolha entre 9 cenários ou envie a sua.' },
       { title: 'Selo Premium', sub: 'Aparece nos seus carros em todo o app.' },
-      { title: 'Garagem em destaque', sub: 'Suas publicações ganham mais visibilidade no feed.' },
-      { title: 'Página pública premium', sub: 'Sem rodapé promocional em /g/<slug>.' },
     ],
     premiumFooter:
       'Premium nunca limita o uso da sua garagem. Carros, ingressos e check-in continuam grátis.',
@@ -212,11 +216,11 @@ const en = {
     premiumTierLabel: (tier: 'gold' | 'silver' | 'bronze') => `${tier.toUpperCase()} TIER`,
     premiumNearExpiry: (n: number) =>
       `Expires in ${n} ${n === 1 ? 'day' : 'days'} · Renew to keep your cover.`,
+    // Same removal as the PT list above. This is the one an English-speaking
+    // reviewer reads.
     premiumBenefits: [
       { title: 'Custom covers', sub: 'Pick from 9 scenes or upload your own.' },
       { title: 'Premium badge', sub: 'Appears on your cars across the app.' },
-      { title: 'Featured garage', sub: 'Your posts get more visibility in the feed.' },
-      { title: 'Premium public page', sub: 'No promotional footer at /g/<slug>.' },
     ],
     premiumFooter:
       'Premium never limits your garage usage. Cars, tickets and check-in remain free.',

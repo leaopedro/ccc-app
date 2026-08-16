@@ -73,7 +73,12 @@ const Gate = () => {
     pathname.startsWith('/forgot') ||
     pathname.startsWith('/reset-password') ||
     pathname === '/verify' ||
-    pathname === '/verify-email-pending';
+    pathname === '/verify-email-pending' ||
+    // Legal documents are reachable from the signup form, so they must not
+    // bounce an anonymous user to /login. This bit them before /termos existed:
+    // the privacy link on the signup screen had the same problem.
+    pathname === '/termos' ||
+    pathname === '/privacidade';
 
   if (auth.status === 'loading') {
     return <View style={{ flex: 1, backgroundColor: theme.colors.bg }} />;

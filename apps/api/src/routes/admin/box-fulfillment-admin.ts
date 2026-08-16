@@ -13,7 +13,6 @@ import {
   getAdminBoxPicking,
   listAdminBoxes,
 } from '../../services/box/fulfillment.js';
-import { sendBoxPush } from '../../services/box/notifications.js';
 
 const paramsSchema = z.object({ id: z.string().min(1) });
 
@@ -37,17 +36,6 @@ export const adminBoxFulfillmentRoutes: FastifyPluginAsync = async (app) => {
     const result = await advanceBoxFulfillment({ boxId: id, to: body.to, actorId: sub });
     switch (result.kind) {
       case 'ok':
-        if (body.to === 'shipped' || body.to === 'delivered') {
-          try {
-            await sendBoxPush(app.push, {
-              userId: result.userId,
-              boxId: result.boxId,
-              kind: `box.${body.to}`,
-            });
-          } catch (err) {
-            request.log.warn({ err, boxId: id }, 'admin box advance: push failed');
-          }
-        }
         return reply.send({ id, fulfillmentStatus: result.fulfillmentStatus });
       case 'not_found':
         return reply.code(404).send({ error: 'NotFound', code: 'box_not_found' });

@@ -8,6 +8,8 @@ import type { BoxFulfillmentStatus } from '@ccc/shared/box';
 
 import { recordAudit } from '../admin-audit.js';
 
+import { enqueueBoxNotification } from './notifications.js';
+
 // Forward-only. delivered/cancelled are terminal. Predecessor of each target.
 const PREDECESSOR: Record<'packed' | 'shipped' | 'delivered', BoxFulfillmentStatus> = {
   packed: 'unfulfilled',
@@ -21,7 +23,7 @@ export type BoxAdvanceInput = {
   actorId: string;
 };
 export type BoxAdvanceResult =
-  | { kind: 'ok'; fulfillmentStatus: BoxFulfillmentStatus; userId: string; boxId: string }
+  | { kind: 'ok'; fulfillmentStatus: BoxFulfillmentStatus }
   | { kind: 'not_found' }
   | { kind: 'not_ready' }
   | { kind: 'order_not_paid' }
@@ -87,6 +89,13 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
         },
         tx,
       );
+      if (input.to === 'shipped' || input.to === 'delivered') {
+        await enqueueBoxNotification(tx, {
+          userId: box.membership.garage.userId,
+          boxId: box.id,
+          kind: `box.${input.to}`,
+        });
+      }
       return 'ok';
     });
   } catch (e) {
@@ -105,12 +114,7 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
       to: input.to,
     };
   }
-  return {
-    kind: 'ok',
-    fulfillmentStatus: input.to,
-    userId: box.membership.garage.userId,
-    boxId: box.id,
-  };
+  return { kind: 'ok', fulfillmentStatus: input.to };
 };
 
 const EMPTY_COUNTS = (): AdminBoxMonthlyListResponse['counts'] => ({

@@ -355,9 +355,60 @@ Follow-ups adiados (nao bloqueiam):
 Refund do Pix (AbacatePay nao tem refund API hoje) + tratamento de pagamento
 tardio alem do expiry. Hoje o sinal e `flagManualRefund` (Sentry), refund manual.
 
-### Fase 5 — Notificacoes (PENDENTE)
+### Fase 5 — Notificacoes (CONCLUIDA - PR #29 aguardando merge)
 
-Expo Push nos marcos do ciclo.
+Push transacional ao membro nos marcos do ciclo, mais o endurecimento do
+subsistema de push em outbox de entrega. Entregue em
+`feat/box-builder-fase-5-notifications` (PR #29).
+Specs: `docs/superpowers/specs/2026-08-15-box-builder-fase-5-notifications-design.md`
+e `docs/superpowers/specs/2026-08-16-notification-delivery-durability-design.md`.
+Planos: `docs/superpowers/plans/2026-08-15-box-builder-fase-5-notifications.md`
+e `docs/superpowers/plans/2026-08-16-notification-delivery-durability.md`.
+Executada via subagent-driven-development (dois planos, review por task +
+review de branch no opus: READY TO MERGE).
+
+Escopo entregue (marcos):
+
+- Quatro kinds: `box.paid` (settle Pix), `box.ready` (cutoff budget-only),
+  `box.shipped` / `box.delivered` (advance no admin). `packed` NAO notifica.
+- Reusa a infra transacional; dedupe por `(userId, kind, boxId)`; destino
+  `internal_path -> /caixa` (mobile ja resolve, zero mudanca mobile).
+- Shared: quatro kinds em `pushKindSchema`.
+
+Endurecimento em outbox (achados de review, mesmo PR):
+
+- `Notification` vira outbox: migration aditiva `attemptCount`/`lastAttemptAt`/
+  `failureCode` + backfill de `sentAt` no historico + indice.
+- `transactional.ts` split em `enqueueNotification` (tx-aware) +
+  `deliverNotification` (claim CAS por `attemptCount`, `sentAt` so no sucesso,
+  retry seguro). `sendTransactionalPush` mantido (compat pros 6 callers).
+- Worker `notification-delivery` (cron 1/min, cap 5, guard de nao-overlap),
+  com whitelist de kinds: entrega SO os proprios; `broadcast` (caminho proprio)
+  e `badge_awarded` (inbox-only) nunca sao entregues.
+- Box enqueue-in-transacao nos 3 sites (settle/cutoff/advance) -> a linha de
+  inbox e duravel com a transicao de estado; envios post-commit removidos;
+  `sendBoxPush` removido.
+- Nenhum arquivo de billing (codigo) editado.
+
+Fixes de review recebido (PR #29):
+
+- F1: guard de nao-overlap no worker + doc do residual at-least-once (envio
+  que ultrapassa a janela de 60s pode duplicar; Expo sem idempotency key).
+- F2: erro lancado no envio/DB grava marker `send_exception` antes de
+  re-lancar (atentativa nao some sem registro).
+- F3: sucesso terminal limpa `failureCode` (nao reporta entregue como falho).
+
+Follow-ups adiados (nao bloqueiam):
+
+- I1: `broadcast`/`badge_awarded` escrevem linhas `sentAt`-null que o worker
+  descarta por kind a cada tick; em volume alto de broadcast o particionamento
+  `sentAt IS NULL` cresce e desacelera a varredura. Corrigir com indice parcial
+  ou setando `sentAt` na criacao dessas linhas (metade badge conflita com a
+  decisao Phase 2D inbox-only). So performance, correcao ja garantida pela
+  whitelist.
+- Lease duravel + SKIP LOCKED so se rodar multiplas instancias de API.
+- #1 dos tickets de billing (durabilidade in-tx no `settlePaidOrder`): residual
+  documentado, nao corrigido (evita cirurgia no nucleo de pagamento).
 
 ## Integracao com o PR de assinaturas (PR #5)
 

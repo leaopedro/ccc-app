@@ -239,6 +239,30 @@ describe('POST /admin/box/monthly/:id/fulfillment', () => {
     });
     expect(anonRes.statusCode).toBe(401);
   });
+
+  it('enqueues a pending box.shipped / box.delivered notification on advance, but not on packed', async () => {
+    const { box, user } = await seedBox({ withOrder: true, fulfillmentStatus: 'unfulfilled' });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
+    });
+    const { header } = await orgAuth();
+
+    expect((await advance(app, header, box.id, 'packed')).statusCode).toBe(200);
+    const packedNotifCount = await prisma.notification.count({ where: { userId: user.id } });
+    expect(packedNotifCount).toBe(0);
+
+    expect((await advance(app, header, box.id, 'shipped')).statusCode).toBe(200);
+    const shippedNotif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.shipped' },
+    });
+    expect(shippedNotif).toMatchObject({ dedupeKey: box.id, sentAt: null });
+
+    expect((await advance(app, header, box.id, 'delivered')).statusCode).toBe(200);
+    const deliveredNotif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.delivered' },
+    });
+    expect(deliveredNotif).toMatchObject({ dedupeKey: box.id, sentAt: null });
+  });
 });
 
 describe('GET /admin/box/monthly', () => {

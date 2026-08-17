@@ -63,6 +63,7 @@ import { startBroadcastWorker } from './workers/broadcasts.js';
 import { startDataExportWorker } from './workers/data-export.js';
 import { startEventRemindersWorker } from './workers/event-reminders.js';
 import { startBoxCutoffWorker } from './workers/box-cutoff.js';
+import { startNotificationDeliveryWorker } from './workers/notification-delivery.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
 import { startRetentionWorker } from './workers/retention.js';
 
@@ -180,6 +181,14 @@ export const buildApp = async (
     const worker = startEventRemindersWorker({ sender: app.push, log: app.log });
     app.addHook('onClose', () => {
       worker.stop();
+    });
+
+    const notificationDeliveryWorker = startNotificationDeliveryWorker({
+      sender: app.push,
+      log: app.log,
+    });
+    app.addHook('onClose', () => {
+      notificationDeliveryWorker.stop();
     });
 
     const deletionWorker = startDeletionWorker({

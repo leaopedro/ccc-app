@@ -3,13 +3,17 @@ import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
+import { enqueueBoxNotification } from '../services/box/notifications.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
 
 type Deps = { log?: FastifyBaseLogger };
 
 /** Trim a box to budget-only in-tx: drop all partners, LIFO-trim catalog, reserve stock. */
-const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): Promise<void> => {
+const resolveBudgetOnly = async (
+  tx: Prisma.TransactionClient,
+  boxId: string,
+): Promise<'ready' | 'skipped'> => {
   const box = await tx.monthlyBox.findUniqueOrThrow({
     where: { id: boxId },
     include: { items: true, partnerItems: true },
@@ -22,7 +26,7 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
   // region auto-send box arrives here with shippingCents > 0 and is skipped.
   if (box.shippingCents > 0) {
     await tx.monthlyBox.update({ where: { id: boxId }, data: { status: 'skipped' } });
-    return;
+    return 'skipped';
   }
 
   // Drop all partner modules (extras are never auto-sent).
@@ -85,10 +89,9 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
 
   await recalcBoxTotals(tx, boxId);
   const remaining = await tx.monthlyBoxItem.count({ where: { boxId, included: true } });
-  await tx.monthlyBox.update({
-    where: { id: boxId },
-    data: { status: remaining === 0 ? 'skipped' : 'ready' },
-  });
+  const status = remaining === 0 ? 'skipped' : 'ready';
+  await tx.monthlyBox.update({ where: { id: boxId }, data: { status } });
+  return status;
 };
 
 export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
@@ -105,12 +108,16 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
         const box = await tx.monthlyBox.findUnique({
           where: { id },
-          include: { items: true },
+          include: {
+            items: true,
+            membership: { select: { garage: { select: { userId: true } } } },
+          },
         });
         if (!box) return;
         if (box.status !== 'open' && box.status !== 'awaiting_payment') return; // re-gate
 
         const hasItems = box.items.some((i) => i.included);
+        const userId = box.membership.garage.userId;
 
         if (box.status === 'open') {
           // The autoSendOptIn+shippingAddressId precondition is set by the Fase 3
@@ -121,7 +128,10 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
             return;
           }
-          await resolveBudgetOnly(tx, id);
+          const status = await resolveBudgetOnly(tx, id);
+          if (status === 'ready') {
+            await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
+          }
           return;
         }
 
@@ -141,8 +151,8 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
               select: { status: true },
             });
             if (ord?.status === 'paid') {
-              // Pix already settled: leave for the paid path. Its reservation must
-              // stand — do NOT release here.
+              // Pix already settled: box.paid fired in settle; leave for the paid
+              // path and do not double-resolve/notify here.
               return;
             }
             // Order is cancelled/failed/expired/refunded via another path.
@@ -162,7 +172,11 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             });
           }
         }
-        await resolveBudgetOnly(tx, id);
+
+        const status = await resolveBudgetOnly(tx, id);
+        if (status === 'ready') {
+          await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
+        }
       });
     } catch (err) {
       deps.log?.error({ err, boxId: id }, '[box-cutoff] failed to resolve box');

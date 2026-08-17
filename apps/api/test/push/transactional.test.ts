@@ -75,7 +75,7 @@ describe('sendTransactionalPush', () => {
     expect(result).toEqual({ deduped: false, sent: 0, invalidatedTokens: 0 });
     const rows = await prisma.notification.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.sentAt).toBeNull();
+    expect(rows[0]?.sentAt).not.toBeNull();
   });
 
   it('deletes invalid tokens reported by the sender', async () => {
@@ -126,5 +126,24 @@ describe('sendTransactionalPush', () => {
       destination: { kind: 'tickets' },
       notificationId: row.id,
     });
+  });
+
+  it('does not mark sentAt when every token errors (retryable)', async () => {
+    const { user } = await createUser({ verified: true });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[erra1111111]', platform: 'ios' },
+    });
+    const sender = new DevPushSender();
+    sender.markError('ExponentPushToken[erra1111111]');
+    const r = await sendTransactionalPush(
+      { userId: user.id, kind: 'broadcast', dedupeKey: 'd1', title: 't', body: 'b' },
+      { sender },
+    );
+    expect(r.sent).toBe(0);
+    const n = await prisma.notification.findFirstOrThrow({
+      where: { userId: user.id, kind: 'broadcast' },
+    });
+    expect(n.sentAt).toBeNull();
+    expect(n.attemptCount).toBe(1);
   });
 });

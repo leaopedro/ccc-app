@@ -176,4 +176,75 @@ describe('POST /abacatepay/webhook — box double-payment hardening', () => {
 
     Sentry.captureMessage.mockClear();
   });
+
+  it('sends box.paid push when a pending box order settles', async () => {
+    const { user } = await createUser({ verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_1',
+        providerSubRef: `sub_${user.id}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    await prisma.deviceToken.create({
+      data: { userId: user.id, expoPushToken: 'ExponentPushToken[abc1234567]', platform: 'ios' },
+    });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'box',
+        amountCents: 2000,
+        baseAmountCents: 2000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        shippingCents: 0,
+      },
+    });
+    const box = await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey: '2026-08-01',
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: new Date('2026-08-26T00:00:00.000Z'),
+        budgetCentsSnapshot: 10000,
+        status: 'awaiting_payment',
+        orderId: order.id,
+        chargeCents: 2000,
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: webhookUrl,
+      headers: { 'content-type': 'application/json', 'x-webhook-signature': 'valid-sig' },
+      payload: makeV2TransparentCompletedPayload('bill_box_1', 'evt_box_1', { orderId: order.id }),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const notif = await prisma.notification.findFirst({
+      where: { userId: user.id, kind: 'box.paid' },
+    });
+    expect(notif?.dedupeKey).toBe(box.id);
+    expect(notif?.title).toBe('Pagamento confirmado');
+    expect(notif?.destination).toEqual({ kind: 'internal_path', path: '/caixa' });
+    expect(notif?.sentAt).toBeNull();
+  });
 });

@@ -89,7 +89,7 @@ const makeBox = async (
       },
     });
   }
-  return box;
+  return { user, box };
 };
 
 describe('runBoxCutoffTick', () => {
@@ -101,21 +101,21 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('skips an empty open box', async () => {
-    const box = await makeBox({ status: 'open' });
+    const { box } = await makeBox({ status: 'open' });
     await runBoxCutoffTick({});
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(fresh.status).toBe('skipped');
   });
 
   it('skips an open box with items but no opt-in', async () => {
-    const box = await makeBox({ status: 'open', withItem: true, autoSendOptIn: false });
+    const { box } = await makeBox({ status: 'open', withItem: true, autoSendOptIn: false });
     await runBoxCutoffTick({});
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(fresh.status).toBe('skipped');
   });
 
   it('auto-confirms an opted-in open box with an address to ready', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'open',
       withItem: true,
       autoSendOptIn: true,
@@ -128,7 +128,7 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('awaiting_payment with a pending box Order -> cancels order and goes ready budget-only', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'awaiting_payment',
       withItem: true,
       autoSendOptIn: true,
@@ -163,7 +163,7 @@ describe('runBoxCutoffTick', () => {
   });
 
   it('awaiting_payment whose Order already settled is left for the paid path', async () => {
-    const box = await makeBox({
+    const { box } = await makeBox({
       status: 'awaiting_payment',
       withItem: true,
       autoSendOptIn: true,
@@ -188,6 +188,13 @@ describe('runBoxCutoffTick', () => {
     await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
     // Simulate the Pix settling first: mark the Order paid directly in the DB.
     await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
+    await prisma.deviceToken.create({
+      data: {
+        userId: garage.userId,
+        expoPushToken: 'ExponentPushToken[abc1234567]',
+        platform: 'ios',
+      },
+    });
 
     await runBoxCutoffTick({});
 
@@ -195,6 +202,12 @@ describe('runBoxCutoffTick', () => {
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
     expect(freshOrder.status).toBe('paid');
     expect(fresh.status).toBe('awaiting_payment');
+    // No double-notify: the cutoff tick must not enqueue box.ready while the
+    // Order-settled path is left for the webhook/paid flow to handle.
+    const notifCount = await prisma.notification.count({
+      where: { userId: garage.userId, kind: 'box.ready' },
+    });
+    expect(notifCount).toBe(0);
   });
 
   it('awaiting_payment with shippingCents>0 is skipped and order cancelled (Fix B)', async () => {
@@ -518,5 +531,32 @@ describe('runBoxCutoffTick', () => {
     expect(freshOrder.status).toBe('cancelled');
     // Released the confirm-time 2 units, re-reserved the 2 survivors: net 2, not 4.
     expect(ledger.reserved).toBe(2);
+  });
+
+  it('enqueues a pending box.ready when a budget-only box resolves to ready', async () => {
+    const { user, box } = await makeBox({
+      status: 'open',
+      autoSendOptIn: true,
+      withItem: true,
+      withAddress: true,
+      budget: 10000,
+    });
+    await runBoxCutoffTick({});
+    const box2 = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(box2.status).toBe('ready');
+    const n = await prisma.notification.findFirstOrThrow({
+      where: { userId: user.id, kind: 'box.ready' },
+    });
+    expect(n.dedupeKey).toBe(box.id);
+    expect(n.sentAt).toBeNull();
+  });
+
+  it('does not enqueue box.ready when a box is skipped', async () => {
+    const { user } = await makeBox({ status: 'open', withItem: false });
+    await runBoxCutoffTick({});
+    const count = await prisma.notification.count({
+      where: { userId: user.id, kind: 'box.ready' },
+    });
+    expect(count).toBe(0);
   });
 });

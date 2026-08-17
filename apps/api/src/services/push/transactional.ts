@@ -23,25 +23,23 @@ export type SendTransactionalPushResult = {
   invalidatedTokens: number;
 };
 
-const buildPushData = (
-  notificationId: string,
-  input: SendTransactionalPushInput,
-): Record<string, unknown> => ({
-  ...(input.data ?? {}),
-  // Push always lands on the notifications screen first. The mobile app then
-  // resolves the destination after the user opens the inbox item.
+const buildPushDataFromRow = (n: {
+  id: string;
+  data: Prisma.JsonValue;
+  destination: Prisma.JsonValue | null;
+}): Record<string, unknown> => ({
+  ...((n.data as Record<string, unknown> | null) ?? {}),
   route: 'notifications',
-  notificationId,
-  ...(input.destination ? { destination: input.destination } : {}),
+  notificationId: n.id,
+  ...(n.destination ? { destination: n.destination } : {}),
 });
 
-export const sendTransactionalPush = async (
+export const enqueueNotification = async (
   input: SendTransactionalPushInput,
-  deps: { sender: PushSender },
-): Promise<SendTransactionalPushResult> => {
-  let notification;
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<{ deduped: true } | { deduped: false; id: string }> => {
   try {
-    notification = await prisma.notification.create({
+    const n = await client.notification.create({
       data: {
         userId: input.userId,
         kind: input.kind,
@@ -53,52 +51,134 @@ export const sendTransactionalPush = async (
           ? (input.destination as Prisma.InputJsonValue)
           : Prisma.JsonNull,
       },
+      select: { id: true },
     });
+    return { deduped: false, id: n.id };
   } catch (err) {
-    if (isUniqueConstraintError(err)) {
-      return { deduped: true, sent: 0, invalidatedTokens: 0 };
-    }
+    if (isUniqueConstraintError(err)) return { deduped: true };
     throw err;
   }
+};
 
-  const tokens = await prisma.deviceToken.findMany({
-    where: { userId: input.userId },
-    select: { expoPushToken: true },
+export const deliverNotification = async (
+  notificationId: string,
+  deps: { sender: PushSender; now?: Date },
+): Promise<{
+  sent: number;
+  invalidatedTokens: number;
+  delivered: boolean;
+  attemptCount: number;
+}> => {
+  const now = deps.now ?? new Date();
+  const notification = await prisma.notification.findUnique({ where: { id: notificationId } });
+  if (!notification || notification.sentAt) {
+    return {
+      sent: 0,
+      invalidatedTokens: 0,
+      delivered: true,
+      attemptCount: notification?.attemptCount ?? 0,
+    };
+  }
+
+  // Optimistic claim (compare-and-swap on attemptCount): if two callers observe
+  // the same attemptCount and race the same pending row, exactly one claim wins
+  // (the DB serialises the updateMany on the row); the loser bails without
+  // sending. This prevents concurrent-instant double-sends. It does NOT cover a
+  // send that outlives the retry window: once lastAttemptAt ages past the
+  // window the row is re-claimable, so a >window send can be re-sent
+  // (at-least-once; Expo has no idempotency key). The worker's non-overlap
+  // guard closes the common worker-vs-worker case. attemptCount is incremented
+  // HERE (once per real attempt), so the failure branch below no longer does.
+  const claim = await prisma.notification.updateMany({
+    where: { id: notificationId, sentAt: null, attemptCount: notification.attemptCount },
+    data: { attemptCount: { increment: 1 }, lastAttemptAt: now },
   });
-  if (tokens.length === 0) {
-    return { deduped: false, sent: 0, invalidatedTokens: 0 };
+  if (claim.count === 0) {
+    return {
+      sent: 0,
+      invalidatedTokens: 0,
+      delivered: true,
+      attemptCount: notification.attemptCount,
+    };
   }
+  const attemptCount = notification.attemptCount + 1;
 
-  const pushData = buildPushData(notification.id, input);
-  const result = await deps.sender.send(
-    tokens.map((t) => {
-      const message: PushMessage = {
-        to: t.expoPushToken,
-        title: input.title,
-        body: input.body,
-        data: pushData,
-      };
-      return message;
-    }),
-  );
-
-  let sent = 0;
-  const invalid: string[] = [];
-  for (const [token, outcome] of result.outcomesByToken) {
-    if (outcome.kind === 'ok') sent += 1;
-    else if (outcome.kind === 'invalid-token') invalid.push(token);
-  }
-
-  if (invalid.length > 0) {
-    await prisma.deviceToken.deleteMany({
-      where: { userId: input.userId, expoPushToken: { in: invalid } },
+  try {
+    const tokens = await prisma.deviceToken.findMany({
+      where: { userId: notification.userId },
+      select: { expoPushToken: true },
     });
+    if (tokens.length === 0) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        // Terminal (nothing to deliver): clear any stale failureCode.
+        data: { sentAt: now, failureCode: null },
+      });
+      return { sent: 0, invalidatedTokens: 0, delivered: true, attemptCount };
+    }
+
+    const pushData = buildPushDataFromRow(notification);
+    const result = await deps.sender.send(
+      tokens.map((t) => {
+        const message: PushMessage = {
+          to: t.expoPushToken,
+          title: notification.title,
+          body: notification.body,
+          data: pushData,
+        };
+        return message;
+      }),
+    );
+
+    let sent = 0;
+    const invalid: string[] = [];
+    let hasError = false;
+    for (const [token, outcome] of result.outcomesByToken) {
+      if (outcome.kind === 'ok') sent += 1;
+      else if (outcome.kind === 'invalid-token') invalid.push(token);
+      else hasError = true;
+    }
+
+    if (invalid.length > 0) {
+      await prisma.deviceToken.deleteMany({
+        where: { userId: notification.userId, expoPushToken: { in: invalid } },
+      });
+    }
+
+    if (sent > 0 || !hasError) {
+      await prisma.notification.update({
+        where: { id: notification.id },
+        // Terminal success: clear a failureCode left by an earlier failed attempt
+        // so ops queries don't report a delivered notification as failed.
+        data: { sentAt: now, failureCode: null },
+      });
+      return { sent, invalidatedTokens: invalid.length, delivered: true, attemptCount };
+    }
+
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: { failureCode: 'send_error' },
+    });
+    return { sent, invalidatedTokens: invalid.length, delivered: false, attemptCount };
+  } catch (err) {
+    // A thrown sender/DB error still consumed this attempt (attemptCount was
+    // incremented by the claim). Persist a terminal failure marker (best-effort)
+    // so the row is not silently exhausted with no record, then rethrow so the
+    // worker logs the error for this attempt. On the retry cap the query stops
+    // re-selecting the row; the marker records why.
+    await prisma.notification
+      .update({ where: { id: notification.id }, data: { failureCode: 'send_exception' } })
+      .catch(() => undefined);
+    throw err;
   }
+};
 
-  await prisma.notification.update({
-    where: { id: notification.id },
-    data: { sentAt: new Date() },
-  });
-
-  return { deduped: false, sent, invalidatedTokens: invalid.length };
+export const sendTransactionalPush = async (
+  input: SendTransactionalPushInput,
+  deps: { sender: PushSender },
+): Promise<SendTransactionalPushResult> => {
+  const enq = await enqueueNotification(input);
+  if (enq.deduped) return { deduped: true, sent: 0, invalidatedTokens: 0 };
+  const d = await deliverNotification(enq.id, deps);
+  return { deduped: false, sent: d.sent, invalidatedTokens: d.invalidatedTokens };
 };

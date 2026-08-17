@@ -8,6 +8,8 @@ import type { BoxFulfillmentStatus } from '@ccc/shared/box';
 
 import { recordAudit } from '../admin-audit.js';
 
+import { enqueueBoxNotification } from './notifications.js';
+
 // Forward-only. delivered/cancelled are terminal. Predecessor of each target.
 const PREDECESSOR: Record<'packed' | 'shipped' | 'delivered', BoxFulfillmentStatus> = {
   packed: 'unfulfilled',
@@ -40,6 +42,7 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
       fulfillmentStatus: true,
       orderId: true,
       order: { select: { status: true } },
+      membership: { select: { garage: { select: { userId: true } } } },
     },
   });
   if (!box) return { kind: 'not_found' };
@@ -86,6 +89,13 @@ export const advanceBoxFulfillment = async (input: BoxAdvanceInput): Promise<Box
         },
         tx,
       );
+      if (input.to === 'shipped' || input.to === 'delivered') {
+        await enqueueBoxNotification(tx, {
+          userId: box.membership.garage.userId,
+          boxId: box.id,
+          kind: `box.${input.to}`,
+        });
+      }
       return 'ok';
     });
   } catch (e) {

@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 
+import { enqueueBoxNotification } from '../box/notifications.js';
 import { assignEventPickupTicket } from '../store/event-pickup.js';
 import {
   issueTicketForPaidOrder,
@@ -84,7 +85,11 @@ export const settlePaidOrder = async (
     }
     const box = await prisma.monthlyBox.findFirst({
       where: { orderId },
-      select: { id: true, garageId: true },
+      select: {
+        id: true,
+        garageId: true,
+        membership: { select: { garage: { select: { userId: true } } } },
+      },
     });
     if (!box) throw new OrderNotPendingError(orderId, 'cancelled');
 
@@ -106,6 +111,11 @@ export const settlePaidOrder = async (
       await tx.monthlyBox.updateMany({
         where: { id: box.id, status: 'awaiting_payment' },
         data: { status: 'ready' },
+      });
+      await enqueueBoxNotification(tx, {
+        userId: box.membership.garage.userId,
+        boxId: box.id,
+        kind: 'box.paid',
       });
     });
     return { kind: 'box' };

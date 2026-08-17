@@ -1,4 +1,5 @@
 import { BOX_SETTINGS_SINGLETON_ID } from '@ccc/shared/admin-box';
+import { meetsMinTier } from '@ccc/shared/box';
 import { prisma } from '@ccc/db';
 
 import { isFreeShippingCep } from './charge.js';
@@ -9,7 +10,8 @@ export type ConfirmResult =
   | { kind: 'ok'; boxId: string }
   | { kind: 'not_found' }
   | { kind: 'not_open' }
-  | { kind: 'bad_address' };
+  | { kind: 'bad_address' }
+  | { kind: 'empty' };
 
 type CepRange = { from: string; to: string };
 
@@ -60,9 +62,21 @@ export const confirmBox = async (args: {
       },
     });
 
+    const member = await tx.premiumMembership.findUniqueOrThrow({
+      where: { id: args.membershipId },
+      select: { tier: true },
+    });
+
     // Reserve stock per included catalog line; drop sold-out lines.
     for (const line of box.items.filter((i) => i.included)) {
       const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
+      if (!meetsMinTier(member.tier, item.minTier)) {
+        await tx.monthlyBoxItem.update({
+          where: { id: line.id },
+          data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
+        });
+        continue;
+      }
       const ok = await reserveCycleStock(tx, {
         catalogItemId: line.catalogItemId,
         cycleKey: box.cycleKey,
@@ -78,6 +92,16 @@ export const confirmBox = async (args: {
     }
 
     await recalcBoxTotals(tx, box.id);
+
+    const [remainingItems, remainingPartners] = await Promise.all([
+      tx.monthlyBoxItem.count({ where: { boxId: box.id, included: true } }),
+      tx.monthlyBoxPartnerItem.count({ where: { boxId: box.id, included: true } }),
+    ]);
+    if (remainingItems === 0 && remainingPartners === 0) {
+      await tx.monthlyBox.update({ where: { id: box.id }, data: { status: 'skipped' } });
+      return { kind: 'empty' };
+    }
+
     const priced = await tx.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
 
     if (priced.chargeCents === 0) {

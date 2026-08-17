@@ -1,5 +1,11 @@
 import { prisma } from '@ccc/db';
-import { boxConfirmSchema, boxPreferencesSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
+import {
+  boxConfirmSchema,
+  boxPreferencesSchema,
+  boxSelectionUpdateSchema,
+  meetsMinTier,
+} from '@ccc/shared/box';
+import type { GaragePremiumTier } from '@ccc/shared/garage';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -20,7 +26,9 @@ const BOX_INCLUDE = {
 const ELIGIBLE_STATUSES = ['active', 'trialing'] as const;
 
 /** user -> garage -> latest eligible membership. Null when none qualifies. */
-export const loadEligibleMembership = async (userId: string): Promise<{ id: string } | null> => {
+export const loadEligibleMembership = async (
+  userId: string,
+): Promise<{ id: string; tier: GaragePremiumTier } | null> => {
   const garage = await prisma.garage.findUnique({
     where: { userId },
     select: { id: true },
@@ -29,7 +37,7 @@ export const loadEligibleMembership = async (userId: string): Promise<{ id: stri
   const membership = await prisma.premiumMembership.findFirst({
     where: { garageId: garage.id, status: { in: [...ELIGIBLE_STATUSES] } },
     orderBy: { currentPeriodEnd: 'desc' },
-    select: { id: true },
+    select: { id: true, tier: true },
   });
   return membership;
 };
@@ -52,7 +60,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
       select: { cycleKey: true },
     });
     if (!box) return reply.status(404).send({ error: 'box_not_open' });
-    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey));
+    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey, membership.tier));
   });
 
   app.get('/me/box', { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -121,6 +129,29 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
           throw new BoxLockedError();
         }
 
+        // Re-read the tier under the Garage lock: `membership.tier` was read
+        // before the transaction, and a concurrent downgrade could have
+        // committed while this request waited for the lock.
+        const member = await tx.premiumMembership.findUniqueOrThrow({
+          where: { id: membership.id },
+          select: { tier: true },
+        });
+
+        // Sweep selections the member can no longer see/edit (downgrade or a
+        // post-hoc minTier). They cannot be removed from the client, so drop
+        // them here so the builder totals stay honest.
+        const existing = await tx.monthlyBoxItem.findMany({
+          where: { boxId: boxRef.id, included: true },
+        });
+        for (const line of existing) {
+          const item = await tx.boxCatalogItem.findUnique({ where: { id: line.catalogItemId } });
+          if (item && !meetsMinTier(member.tier, item.minTier)) {
+            await tx.monthlyBoxItem.deleteMany({
+              where: { boxId: boxRef.id, catalogItemId: line.catalogItemId },
+            });
+          }
+        }
+
         // Catalog items: diff-merge by catalogItemId, quantity 0 removes.
         for (const line of input.items) {
           if (line.quantity === 0) {
@@ -131,6 +162,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
           }
           const item = await tx.boxCatalogItem.findUnique({ where: { id: line.catalogItemId } });
           if (!item || !item.active) continue; // ignore unknown/archived items silently
+          if (!meetsMinTier(member.tier, item.minTier)) continue; // gated: silently ignore
           // Enforce per-cycle quantity cap when set.
           if (item.maxPerCycle != null && line.quantity > item.maxPerCycle) {
             throw new MaxExceededError(line.catalogItemId, item.maxPerCycle);
@@ -269,6 +301,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
     if (result.kind === 'not_open') return reply.status(409).send({ error: 'box_locked' });
     if (result.kind === 'bad_address') return reply.status(400).send({ error: 'bad_address' });
+    if (result.kind === 'empty') return reply.status(422).send({ error: 'box_empty' });
 
     const fresh = await prisma.monthlyBox.findUniqueOrThrow({
       where: { id: result.boxId },

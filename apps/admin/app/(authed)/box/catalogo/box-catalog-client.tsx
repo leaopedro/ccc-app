@@ -82,6 +82,22 @@ const CreateForm = () => {
           className={`${inputCls} w-20`}
         />
       </label>
+      <label className={labelCls}>
+        Nível mínimo
+        <select name="minTier" defaultValue="" className={inputCls}>
+          <option value="">Todos</option>
+          <option value="bronze">Bronze</option>
+          <option value="silver">Silver</option>
+          <option value="gold">Gold</option>
+        </select>
+      </label>
+      <label className={labelCls}>
+        Para níveis abaixo
+        <select name="restrictedDisplay" defaultValue="locked" className={inputCls}>
+          <option value="locked">Bloquear</option>
+          <option value="hidden">Ocultar</option>
+        </select>
+      </label>
       <Submit label="Criar item" />
       <Err state={state} />
     </form>
@@ -98,6 +114,11 @@ const ItemRow = ({ item }: { item: AdminBoxCatalogList['items'][number] }) => {
     <article className="flex flex-col gap-3 rounded border border-[color:var(--color-border)] p-4">
       <form action={action} className="flex flex-wrap items-end gap-3">
         <span className="text-xs text-[color:var(--color-muted)]">{item.slug}</span>
+        {item.minTier ? (
+          <span className="rounded bg-[color:var(--color-accent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase">
+            {item.minTier}+
+          </span>
+        ) : null}
         <label className={labelCls}>
           Titulo
           <input name="title" defaultValue={item.title} maxLength={140} className={inputCls} />
@@ -158,6 +179,26 @@ const ItemRow = ({ item }: { item: AdminBoxCatalogList['items'][number] }) => {
             defaultValue={item.sortOrder}
             className={`${inputCls} w-20`}
           />
+        </label>
+        <label className={labelCls}>
+          Nível mínimo
+          <select name="minTier" defaultValue={item.minTier ?? ''} className={inputCls}>
+            <option value="">Todos</option>
+            <option value="bronze">Bronze</option>
+            <option value="silver">Silver</option>
+            <option value="gold">Gold</option>
+          </select>
+        </label>
+        <label className={labelCls}>
+          Para níveis abaixo
+          <select
+            name="restrictedDisplay"
+            defaultValue={item.restrictedDisplay}
+            className={inputCls}
+          >
+            <option value="locked">Bloquear</option>
+            <option value="hidden">Ocultar</option>
+          </select>
         </label>
         <Submit label="Salvar" />
         <Err state={state} />

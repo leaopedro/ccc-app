@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { garagePremiumTierSchema, type GaragePremiumTier } from './garage.js';
+
 const qty = z.number().int().min(0).max(1000);
 
 export const boxStatusSchema = z.enum([
@@ -89,6 +91,8 @@ export const boxCatalogItemSchema = z.object({
   priceCents: z.number().int(),
   maxPerCycle: z.number().int().nullable(),
   soldOut: z.boolean(),
+  locked: z.boolean(),
+  minTier: garagePremiumTierSchema.nullable(),
 });
 
 export const boxCatalogModuleSchema = z.object({
@@ -131,3 +135,15 @@ export const boxPreferencesSchema = z.object({
   shippingAddressId: z.string().min(1).optional(),
 });
 export type BoxPreferences = z.infer<typeof boxPreferencesSchema>;
+
+export const TIER_RANK: Record<GaragePremiumTier, number> = {
+  bronze: 0,
+  silver: 1,
+  gold: 2,
+};
+
+/** true when userTier satisfies minTier. A null minTier is always satisfied. */
+export const meetsMinTier = (
+  userTier: GaragePremiumTier,
+  minTier: GaragePremiumTier | null,
+): boolean => minTier === null || TIER_RANK[userTier] >= TIER_RANK[minTier];

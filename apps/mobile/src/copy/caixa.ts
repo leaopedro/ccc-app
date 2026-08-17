@@ -104,6 +104,7 @@ export const caixaCopy = {
     add: 'Adicionar',
     soldOut: 'ESGOTADO',
     soldOutButton: 'Sem estoque',
+    lockedTierPrefix: 'Exclusivo',
     overflowBanner: (value: string) =>
       `Você passou do budget. O excedente de ${value} é cobrado à parte antes do fechamento.`,
     extraTag: 'EXTRA',

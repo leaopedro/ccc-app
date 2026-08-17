@@ -6,13 +6,14 @@
 
 import type { BoxCatalog } from '@ccc/shared/box';
 import { Text } from '@ccc/ui';
-import { Plus } from 'lucide-react-native';
+import { Lock, Plus } from 'lucide-react-native';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { caixaCopy } from '~/copy/caixa';
 import { QuantityStepper } from '~/screens/buy/per-ticket-wizard/QuantityStepper';
 import { theme } from '~/theme';
 
+import { lockedBadgeLabel } from './catalog-card-locked';
 import { formatBRL } from './format';
 
 const SURFACE = '#0F0E0B';
@@ -39,6 +40,7 @@ export function CatalogItemCard({ item, qty, isOverflow, onChange }: CatalogItem
         inBox && styles.cardActive,
         inBox && isOverflow && styles.cardExtra,
         item.soldOut && styles.cardSoldOut,
+        item.locked && styles.cardSoldOut,
       ]}
     >
       <View>
@@ -66,7 +68,14 @@ export function CatalogItemCard({ item, qty, isOverflow, onChange }: CatalogItem
         {formatBRL(item.priceCents)}
       </Text>
 
-      {item.soldOut ? (
+      {item.locked ? (
+        <View style={styles.lockedRow}>
+          <Lock color={theme.colors.fg} size={14} strokeWidth={2} />
+          <Text variant="caption" tone="muted">
+            {lockedBadgeLabel(item.minTier)}
+          </Text>
+        </View>
+      ) : item.soldOut ? (
         <Pressable
           disabled
           style={[styles.addButton, styles.addDisabled]}
@@ -141,4 +150,11 @@ const styles = StyleSheet.create({
     borderColor: BORDER_ACTIVE,
   },
   addDisabled: { opacity: 0.5 },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    height: 32,
+  },
 });

@@ -1,3 +1,4 @@
+import { meetsMinTier } from '@ccc/shared/box';
 import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
@@ -37,10 +38,28 @@ const resolveBudgetOnly = async (
     });
   }
 
-  // LIFO order: newest addedAt first.
-  const items = [...box.items.filter((i) => i.included)].sort(
-    (a, b) => b.addedAt.getTime() - a.addedAt.getTime(),
-  );
+  const member = await tx.premiumMembership.findUniqueOrThrow({
+    where: { id: box.membershipId },
+    select: { tier: true },
+  });
+
+  // Drop tier-restricted lines BEFORE the LIFO budget trim, so a restricted
+  // line never consumes budget that would otherwise protect a newer eligible
+  // line from being trimmed.
+  for (const line of box.items.filter((i) => i.included)) {
+    const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
+    if (!meetsMinTier(member.tier, item.minTier)) {
+      await tx.monthlyBoxItem.update({
+        where: { id: line.id },
+        data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
+      });
+    }
+  }
+
+  // LIFO order: newest addedAt first. Re-read so tier-dropped lines above are
+  // excluded from the trim set (the in-memory `box.items` is now stale).
+  const eligible = await tx.monthlyBoxItem.findMany({ where: { boxId, included: true } });
+  const items = [...eligible].sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
   let total = items.reduce((s, i) => s + i.subtotalCents, 0);
   for (const line of items) {
     if (total <= box.budgetCentsSnapshot) break;
@@ -122,8 +141,8 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         if (box.status === 'open') {
           // The autoSendOptIn+shippingAddressId precondition is set by the Fase 3
           // mobile builder (member toggles auto-send and picks an address while the
-          // box is still open). No Fase 2 endpoint sets these while open by design;
-          // this branch is intentionally ahead of its Fase 3 consumer.
+          // box is still open) and by PUT /me/box/preferences, which also sets both
+          // fields on an open box. This branch is a live path, not dead code.
           if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
             return;

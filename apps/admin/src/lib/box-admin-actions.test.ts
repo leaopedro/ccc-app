@@ -60,6 +60,41 @@ describe('box-admin-actions catalog', () => {
     expect(result.error).not.toBeNull();
     expect(createBoxCatalogItem).not.toHaveBeenCalled();
   });
+
+  it('parses minTier and restrictedDisplay from form data', async () => {
+    const fd = new FormData();
+    fd.set('slug', 'cafe-500g');
+    fd.set('title', 'Cafe 500g');
+    fd.set('description', 'Cafe especial');
+    fd.set('priceCents', '4500');
+    fd.set('category', 'bebidas');
+    fd.set('active', 'on');
+    fd.set('sortOrder', '2');
+    fd.set('minTier', 'silver');
+    fd.set('restrictedDisplay', 'hidden');
+
+    const result = await createBoxCatalogItemAction({ error: null }, fd);
+    expect(result).toEqual({ error: null });
+    expect(createBoxCatalogItem).toHaveBeenCalledWith(
+      expect.objectContaining({ minTier: 'silver', restrictedDisplay: 'hidden' }),
+    );
+  });
+
+  it('parses an empty minTier as null', async () => {
+    const fd = new FormData();
+    fd.set('slug', 'cafe-500g');
+    fd.set('title', 'Cafe 500g');
+    fd.set('description', 'Cafe especial');
+    fd.set('priceCents', '4500');
+    fd.set('category', 'bebidas');
+    fd.set('active', 'on');
+    fd.set('sortOrder', '2');
+    fd.set('minTier', '');
+
+    const result = await createBoxCatalogItemAction({ error: null }, fd);
+    expect(result).toEqual({ error: null });
+    expect(createBoxCatalogItem).toHaveBeenCalledWith(expect.objectContaining({ minTier: null }));
+  });
 });
 
 describe('box-admin-actions partners', () => {

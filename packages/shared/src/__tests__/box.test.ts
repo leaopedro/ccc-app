@@ -6,6 +6,7 @@ import {
   boxSelectionUpdateSchema,
   boxViewSchema,
   boxCheckoutResponseSchema,
+  meetsMinTier,
 } from '../box.js';
 
 describe('box shared schemas', () => {
@@ -132,5 +133,19 @@ describe('box shared schemas', () => {
       partnerItems: [],
     };
     expect(() => boxViewSchema.parse(missing)).toThrow();
+  });
+});
+
+describe('meetsMinTier', () => {
+  it('null minTier is always satisfied', () => {
+    expect(meetsMinTier('bronze', null)).toBe(true);
+    expect(meetsMinTier('gold', null)).toBe(true);
+  });
+  it('enforces hierarchy bronze < silver < gold', () => {
+    expect(meetsMinTier('bronze', 'silver')).toBe(false);
+    expect(meetsMinTier('silver', 'silver')).toBe(true);
+    expect(meetsMinTier('gold', 'silver')).toBe(true);
+    expect(meetsMinTier('silver', 'gold')).toBe(false);
+    expect(meetsMinTier('bronze', 'bronze')).toBe(true);
   });
 });

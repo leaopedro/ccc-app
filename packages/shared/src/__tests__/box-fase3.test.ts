@@ -39,6 +39,8 @@ describe('box fase 3 schemas', () => {
           priceCents: 1000,
           maxPerCycle: null,
           soldOut: false,
+          locked: false,
+          minTier: null,
         },
       ],
       partners: [

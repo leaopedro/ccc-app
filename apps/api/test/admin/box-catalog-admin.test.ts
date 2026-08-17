@@ -84,6 +84,47 @@ describe('admin box catalog', () => {
     expect(adminBoxCatalogItemSchema.parse(del.json()).active).toBe(false);
   });
 
+  it('persists and serializes minTier and restrictedDisplay', async () => {
+    const header = await auth('organizer');
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/admin/box/catalog-items',
+      headers: { authorization: header },
+      payload: {
+        slug: 'gold-item',
+        title: 'Gold',
+        description: 'x',
+        priceCents: 5000,
+        category: 'premium',
+        minTier: 'gold',
+        restrictedDisplay: 'hidden',
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const created = adminBoxCatalogItemSchema.parse(create.json());
+    expect(created.minTier).toBe('gold');
+    expect(created.restrictedDisplay).toBe('hidden');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/admin/box/catalog-items/${created.id}`,
+      headers: { authorization: header },
+      payload: { minTier: null },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(adminBoxCatalogItemSchema.parse(patch.json()).minTier).toBe(null);
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/admin/box/catalog-items',
+      headers: { authorization: header },
+    });
+    expect(list.statusCode).toBe(200);
+    const parsedList = adminBoxCatalogListSchema.parse(list.json());
+    expect(parsedList.items.find((i) => i.id === created.id)?.restrictedDisplay).toBe('hidden');
+  });
+
   it('rejects duplicate slug with 409', async () => {
     const header = await auth('organizer');
     await prisma.boxCatalogItem.create({

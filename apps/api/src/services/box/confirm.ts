@@ -1,4 +1,5 @@
 import { BOX_SETTINGS_SINGLETON_ID } from '@ccc/shared/admin-box';
+import { meetsMinTier } from '@ccc/shared/box';
 import { prisma } from '@ccc/db';
 
 import { isFreeShippingCep } from './charge.js';
@@ -60,9 +61,21 @@ export const confirmBox = async (args: {
       },
     });
 
+    const member = await tx.premiumMembership.findUniqueOrThrow({
+      where: { id: args.membershipId },
+      select: { tier: true },
+    });
+
     // Reserve stock per included catalog line; drop sold-out lines.
     for (const line of box.items.filter((i) => i.included)) {
       const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
+      if (!meetsMinTier(member.tier, item.minTier)) {
+        await tx.monthlyBoxItem.update({
+          where: { id: line.id },
+          data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
+        });
+        continue;
+      }
       const ok = await reserveCycleStock(tx, {
         catalogItemId: line.catalogItemId,
         cycleKey: box.cycleKey,

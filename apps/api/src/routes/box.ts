@@ -1,5 +1,10 @@
 import { prisma } from '@ccc/db';
-import { boxConfirmSchema, boxPreferencesSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
+import {
+  boxConfirmSchema,
+  boxPreferencesSchema,
+  boxSelectionUpdateSchema,
+  meetsMinTier,
+} from '@ccc/shared/box';
 import type { GaragePremiumTier } from '@ccc/shared/garage';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
@@ -134,6 +139,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
           }
           const item = await tx.boxCatalogItem.findUnique({ where: { id: line.catalogItemId } });
           if (!item || !item.active) continue; // ignore unknown/archived items silently
+          if (!meetsMinTier(membership.tier, item.minTier)) continue; // gated: silently ignore
           // Enforce per-cycle quantity cap when set.
           if (item.maxPerCycle != null && line.quantity > item.maxPerCycle) {
             throw new MaxExceededError(line.catalogItemId, item.maxPerCycle);

@@ -503,18 +503,24 @@ const seedBadgeCatalog = async (): Promise<void> => {
 
 // Premium plans catalog. tier links to the existing GaragePremiumTier enum.
 // PT-BR display names: silver == Prata, gold == Ouro (enum stays bronze/silver/gold).
-// monthlyBoxBudgetCents é o valor da caixa mensal por tier. Estes números são
-// só para dev e preview: em produção o campo é editado em /premium/catalogo no
-// admin, que é onde ele deve mudar, já que muda sem deploy. Valores informados
-// pelo fundador em 2026-08-14 e declarados aproximados.
+// monthlyCents é o preço da assinatura. Corrigido em 2026-08-14: os valores
+// anteriores, 490/890/1490, vinham do commit original do catálogo e eram dez
+// vezes o preço real.
+//
+// monthlyBoxBudgetCents é o orçamento da caixa mensal por tier, em valor de
+// varejo. A regra informada pelo fundador é o preço do plano menos 10%, menos
+// frete quando aplicável, e a margem real vem de comprar o produto abaixo desse
+// varejo. Estes números são só para dev e preview: em produção o campo é editado
+// em /premium/catalogo no admin, que é onde ele deve mudar, já que muda sem
+// deploy.
 const PREMIUM_PLANS = [
   {
     tier: 'bronze' as const,
     slug: 'ingresso',
     name: 'Ingresso',
     sortOrder: 0,
-    monthlyCents: 49000,
-    monthlyBoxBudgetCents: 4990,
+    monthlyCents: 4990,
+    monthlyBoxBudgetCents: 4490,
     benefits: [
       'Acesso ao clube em horário comercial',
       'Eventos abertos da comunidade',
@@ -526,8 +532,8 @@ const PREMIUM_PLANS = [
     slug: 'estrada',
     name: 'Estrada',
     sortOrder: 1,
-    monthlyCents: 89000,
-    monthlyBoxBudgetCents: 10990,
+    monthlyCents: 10990,
+    monthlyBoxBudgetCents: 9890,
     benefits: [
       'Tudo do Bronze',
       'Prioridade em eventos exclusivos',
@@ -540,8 +546,8 @@ const PREMIUM_PLANS = [
     slug: 'fundador',
     name: 'Fundador',
     sortOrder: 2,
-    monthlyCents: 149000,
-    monthlyBoxBudgetCents: 24990,
+    monthlyCents: 24990,
+    monthlyBoxBudgetCents: 22490,
     benefits: [
       'Tudo da Prata',
       'Acesso ao clube 24 horas',
@@ -557,7 +563,9 @@ const PREMIUM_ADDON_MODULES = [
     key: 'detailing',
     name: 'Detailing',
     description: '3 acessos/mês para lavagem & detailing',
-    monthlyDeltaCents: 15000,
+    // Preço informado pelo fundador em 2026-08-14. Antes era 15000, número do
+    // commit original do catálogo.
+    monthlyDeltaCents: 7490,
     // Repasse real ainda nao definido pelo operador. Zero deliberadamente: o seed
     // nao inventa dado financeiro. Ate ser preenchido, a margem exibida no admin
     // iguala o valor cobrado.

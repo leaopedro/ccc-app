@@ -57,6 +57,14 @@ const num = (fd: FormData, key: string): number | undefined => {
   return Number(v);
 };
 const bool = (fd: FormData, key: string): boolean => fd.get(key) === 'on';
+const tier = (fd: FormData, key: string): 'bronze' | 'silver' | 'gold' | null => {
+  const v = fd.get(key);
+  return v === 'bronze' || v === 'silver' || v === 'gold' ? v : null;
+};
+const display = (fd: FormData, key: string): 'locked' | 'hidden' | undefined => {
+  const v = fd.get(key);
+  return v === 'locked' || v === 'hidden' ? v : undefined;
+};
 
 export const createBoxCatalogItemAction = async (
   _prev: BoxFormState,
@@ -73,6 +81,8 @@ export const createBoxCatalogItemAction = async (
     maxPerCycle: num(fd, 'maxPerCycle') ?? null,
     active: bool(fd, 'active'),
     sortOrder: num(fd, 'sortOrder'),
+    minTier: tier(fd, 'minTier'),
+    restrictedDisplay: display(fd, 'restrictedDisplay'),
   });
   if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
   try {
@@ -103,6 +113,8 @@ export const updateBoxCatalogItemAction = async (
     maxPerCycle: num(fd, 'maxPerCycle') ?? null,
     active: bool(fd, 'active'),
     sortOrder: num(fd, 'sortOrder'),
+    minTier: tier(fd, 'minTier'),
+    restrictedDisplay: display(fd, 'restrictedDisplay'),
   });
   if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
   try {

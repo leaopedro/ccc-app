@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 import { boxConfirmSchema, boxPreferencesSchema, boxSelectionUpdateSchema } from '@ccc/shared/box';
+import type { GaragePremiumTier } from '@ccc/shared/garage';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -20,7 +21,9 @@ const BOX_INCLUDE = {
 const ELIGIBLE_STATUSES = ['active', 'trialing'] as const;
 
 /** user -> garage -> latest eligible membership. Null when none qualifies. */
-export const loadEligibleMembership = async (userId: string): Promise<{ id: string } | null> => {
+export const loadEligibleMembership = async (
+  userId: string,
+): Promise<{ id: string; tier: GaragePremiumTier } | null> => {
   const garage = await prisma.garage.findUnique({
     where: { userId },
     select: { id: true },
@@ -29,7 +32,7 @@ export const loadEligibleMembership = async (userId: string): Promise<{ id: stri
   const membership = await prisma.premiumMembership.findFirst({
     where: { garageId: garage.id, status: { in: [...ELIGIBLE_STATUSES] } },
     orderBy: { currentPeriodEnd: 'desc' },
-    select: { id: true },
+    select: { id: true, tier: true },
   });
   return membership;
 };
@@ -52,7 +55,7 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
       select: { cycleKey: true },
     });
     if (!box) return reply.status(404).send({ error: 'box_not_open' });
-    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey));
+    return reply.send(await buildBoxCatalog(app.uploads, box.cycleKey, membership.tier));
   });
 
   app.get('/me/box', { preHandler: [app.authenticate] }, async (request, reply) => {

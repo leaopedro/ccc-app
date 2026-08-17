@@ -197,3 +197,127 @@ describe('GET /me/box/catalog', () => {
     expect(p!.modules).toHaveLength(1);
   });
 });
+
+const TIER_CYCLE_KEY = '2026-09-01';
+
+const setupTierMember = async (tier: 'bronze' | 'gold', emailSuffix: string) => {
+  const { user } = await createUser({ verified: true, email: `tier-${emailSuffix}@jdm.test` });
+  const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+  const membership = await prisma.premiumMembership.create({
+    data: {
+      garageId: garage.id,
+      provider: 'stripe',
+      providerCustomerRef: `cus_tier_${emailSuffix}`,
+      providerSubRef: `sub_tier_${emailSuffix}`,
+      tier,
+      cadence: 'monthly',
+      status: 'active',
+      currentPeriodStart: new Date('2026-09-01T00:00:00.000Z'),
+      currentPeriodEnd: new Date('2026-09-30T00:00:00.000Z'),
+      baseAmountCents: 5000,
+      devFeePercent: 10,
+      devFeeAmountCents: 500,
+      grossAmountCents: 5500,
+      currency: 'BRL',
+    },
+  });
+  await prisma.monthlyBox.create({
+    data: {
+      membershipId: membership.id,
+      garageId: garage.id,
+      cycleKey: TIER_CYCLE_KEY,
+      cycleStart: new Date('2026-09-01T00:00:00.000Z'),
+      cycleEnd: new Date('2026-09-30T00:00:00.000Z'),
+      cutoffAt: new Date('2026-09-26T00:00:00.000Z'),
+      budgetCentsSnapshot: 15000,
+    },
+  });
+
+  await prisma.boxCatalogItem.create({
+    data: {
+      slug: `ungated-${emailSuffix}`,
+      title: 'Ungated',
+      description: 'No tier restriction',
+      category: 'Geral',
+      priceCents: 1000,
+      active: true,
+      sortOrder: 1,
+    },
+  });
+  await prisma.boxCatalogItem.create({
+    data: {
+      slug: `locked-silver-${emailSuffix}`,
+      title: 'LockedSilver',
+      description: 'Silver-gated, visible but locked',
+      category: 'Geral',
+      priceCents: 2000,
+      active: true,
+      sortOrder: 2,
+      minTier: 'silver',
+      restrictedDisplay: 'locked',
+    },
+  });
+  await prisma.boxCatalogItem.create({
+    data: {
+      slug: `hidden-silver-${emailSuffix}`,
+      title: 'HiddenSilver',
+      description: 'Silver-gated, hidden entirely',
+      category: 'secretos',
+      priceCents: 3000,
+      active: true,
+      sortOrder: 3,
+      minTier: 'silver',
+      restrictedDisplay: 'hidden',
+    },
+  });
+
+  return { user };
+};
+
+describe('tier gating', () => {
+  let app: FastifyInstance;
+  beforeEach(async () => {
+    await resetDatabase();
+    app = await makeApp();
+  });
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it('bronze member: ungated visible, silver-locked visible+locked, silver-hidden absent, category dropped', async () => {
+    const { user } = await setupTierMember('bronze', 'bronze');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/box/catalog',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(res.statusCode).toBe(200);
+    const catalog = boxCatalogSchema.parse(res.json());
+
+    const ungated = catalog.items.find((i) => i.title === 'Ungated');
+    expect(ungated).toMatchObject({ locked: false, minTier: null });
+
+    const locked = catalog.items.find((i) => i.title === 'LockedSilver');
+    expect(locked).toMatchObject({ locked: true, minTier: 'silver' });
+
+    expect(catalog.items.find((i) => i.title === 'HiddenSilver')).toBeUndefined();
+    expect(catalog.categories).not.toContain('secretos');
+  });
+
+  it('gold member: every item present, all unlocked', async () => {
+    const { user } = await setupTierMember('gold', 'gold');
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/box/catalog',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(res.statusCode).toBe(200);
+    const catalog = boxCatalogSchema.parse(res.json());
+
+    expect(catalog.items.find((i) => i.title === 'Ungated')).toMatchObject({ locked: false });
+    expect(catalog.items.find((i) => i.title === 'LockedSilver')).toMatchObject({ locked: false });
+    expect(catalog.items.find((i) => i.title === 'HiddenSilver')).toMatchObject({ locked: false });
+    expect(catalog.categories).toContain('secretos');
+  });
+});

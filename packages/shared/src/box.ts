@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { GaragePremiumTier } from './garage.js';
+import { garagePremiumTierSchema, type GaragePremiumTier } from './garage.js';
 
 const qty = z.number().int().min(0).max(1000);
 
@@ -91,6 +91,8 @@ export const boxCatalogItemSchema = z.object({
   priceCents: z.number().int(),
   maxPerCycle: z.number().int().nullable(),
   soldOut: z.boolean(),
+  locked: z.boolean(),
+  minTier: garagePremiumTierSchema.nullable(),
 });
 
 export const boxCatalogModuleSchema = z.object({

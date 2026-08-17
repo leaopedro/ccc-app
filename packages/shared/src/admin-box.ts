@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { boxFulfillmentStatusSchema, boxStatusSchema } from './box.js';
+import { garagePremiumTierSchema } from './garage.js';
 import { orderStatusSchema } from './orders.js';
 
 const slug = z
@@ -44,6 +45,8 @@ export const adminBoxCatalogItemCreateSchema = z.object({
   maxPerCycle: z.number().int().positive().max(1000).nullable().optional(),
   active: z.boolean().optional(),
   sortOrder: sortOrder.optional(),
+  minTier: garagePremiumTierSchema.nullable().optional(),
+  restrictedDisplay: z.enum(['locked', 'hidden']).optional(),
 });
 export type AdminBoxCatalogItemCreate = z.infer<typeof adminBoxCatalogItemCreateSchema>;
 
@@ -57,6 +60,8 @@ export const adminBoxCatalogItemUpdateSchema = z.object({
   maxPerCycle: z.number().int().positive().max(1000).nullable().optional(),
   active: z.boolean().optional(),
   sortOrder: sortOrder.optional(),
+  minTier: garagePremiumTierSchema.nullable().optional(),
+  restrictedDisplay: z.enum(['locked', 'hidden']).optional(),
 });
 export type AdminBoxCatalogItemUpdate = z.infer<typeof adminBoxCatalogItemUpdateSchema>;
 

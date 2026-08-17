@@ -136,3 +136,29 @@ describe('admin-box fulfillment schemas', () => {
     expect(parsed.items).toHaveLength(1);
   });
 });
+
+describe('adminBoxCatalogItemCreateSchema tier fields', () => {
+  const base = {
+    slug: 'adesivo',
+    title: 'Adesivo',
+    description: 'x',
+    priceCents: 1000,
+    category: 'acessorios',
+  };
+  it('accepts minTier + restrictedDisplay', () => {
+    const r = adminBoxCatalogItemCreateSchema.parse({
+      ...base,
+      minTier: 'silver',
+      restrictedDisplay: 'hidden',
+    });
+    expect(r.minTier).toBe('silver');
+    expect(r.restrictedDisplay).toBe('hidden');
+  });
+  it('accepts null minTier and omitted display', () => {
+    const r = adminBoxCatalogItemCreateSchema.parse({ ...base, minTier: null });
+    expect(r.minTier).toBe(null);
+  });
+  it('rejects an unknown tier', () => {
+    expect(() => adminBoxCatalogItemCreateSchema.parse({ ...base, minTier: 'platinum' })).toThrow();
+  });
+});

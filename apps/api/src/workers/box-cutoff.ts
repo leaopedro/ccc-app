@@ -34,10 +34,28 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
     });
   }
 
-  // LIFO order: newest addedAt first.
-  const items = [...box.items.filter((i) => i.included)].sort(
-    (a, b) => b.addedAt.getTime() - a.addedAt.getTime(),
-  );
+  const member = await tx.premiumMembership.findUniqueOrThrow({
+    where: { id: box.membershipId },
+    select: { tier: true },
+  });
+
+  // Drop tier-restricted lines BEFORE the LIFO budget trim, so a restricted
+  // line never consumes budget that would otherwise protect a newer eligible
+  // line from being trimmed.
+  for (const line of box.items.filter((i) => i.included)) {
+    const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
+    if (!meetsMinTier(member.tier, item.minTier)) {
+      await tx.monthlyBoxItem.update({
+        where: { id: line.id },
+        data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
+      });
+    }
+  }
+
+  // LIFO order: newest addedAt first. Re-read so tier-dropped lines above are
+  // excluded from the trim set (the in-memory `box.items` is now stale).
+  const eligible = await tx.monthlyBoxItem.findMany({ where: { boxId, included: true } });
+  const items = [...eligible].sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
   let total = items.reduce((s, i) => s + i.subtotalCents, 0);
   for (const line of items) {
     if (total <= box.budgetCentsSnapshot) break;
@@ -66,22 +84,10 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
     }
   }
 
-  const member = await tx.premiumMembership.findUniqueOrThrow({
-    where: { id: box.membershipId },
-    select: { tier: true },
-  });
-
   // Reserve stock for surviving lines; drop sold-out.
   const survivors = await tx.monthlyBoxItem.findMany({ where: { boxId, included: true } });
   for (const line of survivors) {
     const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
-    if (!meetsMinTier(member.tier, item.minTier)) {
-      await tx.monthlyBoxItem.update({
-        where: { id: line.id },
-        data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
-      });
-      continue;
-    }
     const ok = await reserveCycleStock(tx, {
       catalogItemId: line.catalogItemId,
       cycleKey: box.cycleKey,

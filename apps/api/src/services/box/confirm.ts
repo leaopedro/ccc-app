@@ -10,7 +10,8 @@ export type ConfirmResult =
   | { kind: 'ok'; boxId: string }
   | { kind: 'not_found' }
   | { kind: 'not_open' }
-  | { kind: 'bad_address' };
+  | { kind: 'bad_address' }
+  | { kind: 'empty' };
 
 type CepRange = { from: string; to: string };
 
@@ -91,6 +92,16 @@ export const confirmBox = async (args: {
     }
 
     await recalcBoxTotals(tx, box.id);
+
+    const [remainingItems, remainingPartners] = await Promise.all([
+      tx.monthlyBoxItem.count({ where: { boxId: box.id, included: true } }),
+      tx.monthlyBoxPartnerItem.count({ where: { boxId: box.id, included: true } }),
+    ]);
+    if (remainingItems === 0 && remainingPartners === 0) {
+      await tx.monthlyBox.update({ where: { id: box.id }, data: { status: 'skipped' } });
+      return { kind: 'empty' };
+    }
+
     const priced = await tx.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
 
     if (priced.chargeCents === 0) {

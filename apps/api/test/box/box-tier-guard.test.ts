@@ -90,7 +90,33 @@ describe('box tier gating write guards', () => {
     expect(line).toBeNull();
   });
 
-  it('confirm drops a persisted below-tier line as tier_restricted', async () => {
+  it('selection-save sweeps a stale below-tier line not referenced by the request', async () => {
+    const { user, box, silverItem } = await setup({ tier: 'bronze' });
+    await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: silverItem.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: silverItem.title,
+        included: true,
+      },
+    });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/me/box/selection',
+      headers: { authorization: bearer(env, user.id) },
+      payload: { items: [], partnerItems: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    const line = await prisma.monthlyBoxItem.findFirst({
+      where: { boxId: box.id, catalogItemId: silverItem.id },
+    });
+    expect(line).toBeNull();
+  });
+
+  it('confirm marks an empty box as skipped and creates no Order', async () => {
     const { user, box, silverItem, membership } = await setup({ tier: 'bronze' });
     const line = await prisma.monthlyBoxItem.create({
       data: {
@@ -120,9 +146,75 @@ describe('box tier gating write guards', () => {
       membershipId: membership.id,
       shippingAddressId: address.id,
     });
-    expect(result.kind).toBe('ok');
+    expect(result.kind).toBe('empty');
     const fresh = await prisma.monthlyBoxItem.findUniqueOrThrow({ where: { id: line.id } });
     expect(fresh.included).toBe(false);
     expect(fresh.dropReason).toBe('tier_restricted');
+    const freshBox = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshBox.status).toBe('skipped');
+    const order = await prisma.order.findFirst({ where: { userId: user.id } });
+    expect(order).toBeNull();
+  });
+
+  it('confirm keeps a mixed box: below-tier line drops, ungated line survives', async () => {
+    const { user, box, silverItem, membership } = await setup({ tier: 'bronze' });
+    const gatedLine = await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: silverItem.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: silverItem.title,
+        included: true,
+      },
+    });
+    const openItem = await prisma.boxCatalogItem.create({
+      data: {
+        slug: 'open-item',
+        title: 'Open Item',
+        description: 'x',
+        priceCents: 2000,
+        category: 'sticker',
+      },
+    });
+    const openLine = await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: openItem.id,
+        quantity: 1,
+        unitPriceCents: 2000,
+        subtotalCents: 2000,
+        titleSnapshot: openItem.title,
+        included: true,
+      },
+    });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'Fulano',
+        line1: 'Rua X',
+        number: '10',
+        district: 'Centro',
+        city: 'Curitiba',
+        stateCode: 'PR',
+        postalCode: '81000-000',
+      },
+    });
+    const result = await confirmBox({
+      userId: user.id,
+      membershipId: membership.id,
+      shippingAddressId: address.id,
+    });
+    expect(result.kind).toBe('ok');
+    const freshGated = await prisma.monthlyBoxItem.findUniqueOrThrow({
+      where: { id: gatedLine.id },
+    });
+    expect(freshGated.included).toBe(false);
+    expect(freshGated.dropReason).toBe('tier_restricted');
+    const freshOpen = await prisma.monthlyBoxItem.findUniqueOrThrow({ where: { id: openLine.id } });
+    expect(freshOpen.included).toBe(true);
+    const freshBox = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshBox.status).not.toBe('skipped');
   });
 });

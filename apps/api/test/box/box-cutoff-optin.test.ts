@@ -239,4 +239,129 @@ describe('box-cutoff autoSendOptIn Q10 gate', () => {
     });
     expect(freshControlBox.status).toBe('ready');
   });
+
+  it('drops the tier-restricted line before the LIFO budget trim, sparing the newer eligible line', async () => {
+    const { user } = await createUser({
+      verified: true,
+      email: `u${Math.random().toString(36).slice(2, 7)}@jdm.test`,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await prisma.premiumMembership.create({
+      data: {
+        garageId: garage.id,
+        provider: 'stripe',
+        providerCustomerRef: 'cus_1',
+        providerSubRef: `sub_${user.id}`,
+        tier: 'bronze',
+        cadence: 'monthly',
+        status: 'active',
+        currentPeriodStart: new Date('2026-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-08-31T00:00:00.000Z'),
+        baseAmountCents: 5000,
+        devFeePercent: 10,
+        devFeeAmountCents: 500,
+        grossAmountCents: 5500,
+        currency: 'BRL',
+      },
+    });
+    const address = await prisma.shippingAddress.create({
+      data: {
+        userId: user.id,
+        recipientName: 'F',
+        line1: 'R',
+        number: '1',
+        district: 'C',
+        city: 'Curitiba',
+        stateCode: 'PR',
+        postalCode: '81000-000',
+      },
+    });
+    const box = await prisma.monthlyBox.create({
+      data: {
+        membershipId: membership.id,
+        garageId: garage.id,
+        cycleKey: '2026-08-01',
+        cycleStart: membership.currentPeriodStart,
+        cycleEnd: membership.currentPeriodEnd,
+        cutoffAt: pastCutoff,
+        budgetCentsSnapshot: 3000,
+        shippingCents: 0,
+        status: 'open' as never,
+        autoSendOptIn: true,
+        shippingAddressId: address.id,
+      },
+    });
+
+    const goldItem = await prisma.boxCatalogItem.create({
+      data: {
+        slug: `gold${Math.random().toString(36).slice(2, 7)}`,
+        title: 'Gold Only',
+        description: 'x',
+        priceCents: 3000,
+        category: 'sticker',
+        minTier: 'gold',
+        stockPerCycle: 10,
+      },
+    });
+    const openItem = await prisma.boxCatalogItem.create({
+      data: {
+        slug: `open${Math.random().toString(36).slice(2, 7)}`,
+        title: 'Ungated',
+        description: 'x',
+        priceCents: 3000,
+        category: 'sticker',
+        stockPerCycle: 10,
+      },
+    });
+
+    // Older, tier-restricted line: added first.
+    const goldLine = await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: goldItem.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: 'Gold Only',
+        addedAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+    });
+    // Newer, eligible line: added later. Under a naive LIFO-first trim (no
+    // tier drop beforehand) this line would be trimmed first, leaving the
+    // gold line alone to be dropped by the reserve loop and the box empty.
+    const openLine = await prisma.monthlyBoxItem.create({
+      data: {
+        boxId: box.id,
+        catalogItemId: openItem.id,
+        quantity: 1,
+        unitPriceCents: 3000,
+        subtotalCents: 3000,
+        titleSnapshot: 'Ungated',
+        addedAt: new Date('2026-08-02T00:00:00.000Z'),
+      },
+    });
+
+    await runBoxCutoffTick({});
+
+    const freshOpenLine = await prisma.monthlyBoxItem.findUniqueOrThrow({
+      where: { id: openLine.id },
+    });
+    expect(freshOpenLine.included).toBe(true);
+
+    const openStock = await prisma.boxCatalogItemCycleStock.findUniqueOrThrow({
+      where: {
+        catalogItemId_cycleKey: { catalogItemId: openItem.id, cycleKey: box.cycleKey },
+      },
+    });
+    expect(openStock.reserved).toBe(1);
+
+    const freshGoldLine = await prisma.monthlyBoxItem.findUniqueOrThrow({
+      where: { id: goldLine.id },
+    });
+    expect(freshGoldLine.included).toBe(false);
+    expect(freshGoldLine.dropReason).toBe('tier_restricted');
+
+    const freshBox = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshBox.status).toBe('ready');
+  });
 });

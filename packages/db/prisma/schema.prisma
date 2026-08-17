@@ -251,6 +251,11 @@ enum GaragePremiumTier {
   gold
 }
 
+enum BoxItemRestrictedDisplay {
+  locked
+  hidden
+}
+
 enum PremiumProvider {
   stripe
   apple_revenuecat
@@ -651,6 +656,8 @@ model BoxCatalogItem {
   maxPerCycle    Int?
   active         Boolean  @default(true)
   sortOrder      Int      @default(0)
+  minTier        GaragePremiumTier?
+  restrictedDisplay BoxItemRestrictedDisplay @default(locked)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

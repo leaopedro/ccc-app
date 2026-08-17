@@ -64,12 +64,27 @@ export const startNotificationDeliveryWorker = (deps: {
   sender: PushSender;
   log: FastifyBaseLogger;
 }): { stop: () => void } => {
+  // Non-overlap guard: node-cron fires every minute and does NOT await the
+  // callback, so a tick whose sends run longer than the interval would overlap
+  // the next tick. Combined with the retry window that would let the next tick
+  // re-claim a row whose send is still in flight and deliver a duplicate. The
+  // guard makes ticks strictly sequential in this process. (A send that itself
+  // outlives the window remains at-least-once — Expo has no idempotency key —
+  // consistent with the "favor delivery over loss" stance.)
+  let running = false;
   const task = cron.schedule('* * * * *', () => {
-    void runNotificationDeliveryTick({ sender: deps.sender, log: deps.log }).catch(
-      (err: unknown) => {
+    if (running) {
+      deps.log.warn('[notification-delivery] previous tick still running, skipping');
+      return;
+    }
+    running = true;
+    void runNotificationDeliveryTick({ sender: deps.sender, log: deps.log })
+      .catch((err: unknown) => {
         deps.log.error({ err }, '[notification-delivery] tick error');
-      },
-    );
+      })
+      .finally(() => {
+        running = false;
+      });
   });
   return {
     stop: () => {

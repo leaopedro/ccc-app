@@ -80,12 +80,15 @@ export const deliverNotification = async (
     };
   }
 
-  // Optimistic claim (compare-and-swap on attemptCount): if two overlapping
-  // worker ticks — or a worker tick and an inline sendTransactionalPush — race
-  // the same pending row, exactly one claim wins (the DB serialises the
-  // updateMany on the row); the loser bails without sending. This is what
-  // prevents duplicate Expo pushes. attemptCount is incremented HERE (once per
-  // real attempt), so the failure branch below no longer increments it.
+  // Optimistic claim (compare-and-swap on attemptCount): if two callers observe
+  // the same attemptCount and race the same pending row, exactly one claim wins
+  // (the DB serialises the updateMany on the row); the loser bails without
+  // sending. This prevents concurrent-instant double-sends. It does NOT cover a
+  // send that outlives the retry window: once lastAttemptAt ages past the
+  // window the row is re-claimable, so a >window send can be re-sent
+  // (at-least-once; Expo has no idempotency key). The worker's non-overlap
+  // guard closes the common worker-vs-worker case. attemptCount is incremented
+  // HERE (once per real attempt), so the failure branch below no longer does.
   const claim = await prisma.notification.updateMany({
     where: { id: notificationId, sentAt: null, attemptCount: notification.attemptCount },
     data: { attemptCount: { increment: 1 }, lastAttemptAt: now },

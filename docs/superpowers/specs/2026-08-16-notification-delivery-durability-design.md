@@ -206,6 +206,18 @@ intactos; enqueue so no caminho de sucesso da transicao.
   re-entregue pelo worker (backfill fechou).
 - Suites existentes (box, push, broadcasts) seguem verdes.
 
+## Residual conhecido (at-least-once)
+
+A entrega e at-least-once, nao exactly-once. O claim CAS previne double-send
+concorrente-instantaneo, mas um envio que ultrapassa a janela de retry (60s)
+pode ser re-reivindicado e re-enviado (o Expo nao tem idempotency key). O
+worker tem um guard de nao-overlap que serializa os ticks no processo,
+fechando o caso comum worker-vs-worker; o residual (envio unico > janela, ou
+multiplas instancias de API) fica aceito pela postura "prioriza entrega sobre
+perda". Fechar totalmente exigiria lease duravel + SKIP LOCKED (so necessario
+com multiplas instancias). Um crash entre o envio e a escrita de `sentAt`
+tambem re-entrega no proximo tick (mesma propriedade).
+
 ## 6. Fora de escopo (explicito)
 
 - #1 dos tickets de billing (cirurgia no `settlePaidOrder`): residual

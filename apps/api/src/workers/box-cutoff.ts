@@ -1,3 +1,4 @@
+import { meetsMinTier } from '@ccc/shared/box';
 import { prisma } from '@ccc/db';
 import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
@@ -65,10 +66,22 @@ const resolveBudgetOnly = async (tx: Prisma.TransactionClient, boxId: string): P
     }
   }
 
+  const member = await tx.premiumMembership.findUniqueOrThrow({
+    where: { id: box.membershipId },
+    select: { tier: true },
+  });
+
   // Reserve stock for surviving lines; drop sold-out.
   const survivors = await tx.monthlyBoxItem.findMany({ where: { boxId, included: true } });
   for (const line of survivors) {
     const item = await tx.boxCatalogItem.findUniqueOrThrow({ where: { id: line.catalogItemId } });
+    if (!meetsMinTier(member.tier, item.minTier)) {
+      await tx.monthlyBoxItem.update({
+        where: { id: line.id },
+        data: { included: false, droppedAt: new Date(), dropReason: 'tier_restricted' },
+      });
+      continue;
+    }
     const ok = await reserveCycleStock(tx, {
       catalogItemId: line.catalogItemId,
       cycleKey: box.cycleKey,
@@ -115,8 +128,8 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         if (box.status === 'open') {
           // The autoSendOptIn+shippingAddressId precondition is set by the Fase 3
           // mobile builder (member toggles auto-send and picks an address while the
-          // box is still open). No Fase 2 endpoint sets these while open by design;
-          // this branch is intentionally ahead of its Fase 3 consumer.
+          // box is still open) and by PUT /me/box/preferences, which also sets both
+          // fields on an open box. This branch is a live path, not dead code.
           if (!hasItems || !box.autoSendOptIn || !box.shippingAddressId) {
             await tx.monthlyBox.update({ where: { id }, data: { status: 'skipped' } });
             return;

@@ -31,6 +31,8 @@ export const adminBoxCatalogItemSchema = z.object({
   maxPerCycle: z.number().int().nullable(),
   active: z.boolean(),
   sortOrder: z.number().int(),
+  minTier: garagePremiumTierSchema.nullable(),
+  restrictedDisplay: z.enum(['locked', 'hidden']),
 });
 export type AdminBoxCatalogItem = z.infer<typeof adminBoxCatalogItemSchema>;
 

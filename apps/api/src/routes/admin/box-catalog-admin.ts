@@ -29,6 +29,8 @@ const serialize = (row: Row, uploads: Uploads) => ({
   maxPerCycle: row.maxPerCycle,
   active: row.active,
   sortOrder: row.sortOrder,
+  minTier: row.minTier,
+  restrictedDisplay: row.restrictedDisplay,
 });
 
 export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
@@ -63,6 +65,8 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
           maxPerCycle: input.maxPerCycle ?? null,
           active: input.active ?? true,
           sortOrder: input.sortOrder ?? 0,
+          minTier: input.minTier ?? null,
+          restrictedDisplay: input.restrictedDisplay ?? 'locked',
         },
       });
       return reply
@@ -99,6 +103,8 @@ export const adminBoxCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (input.maxPerCycle !== undefined) data.maxPerCycle = input.maxPerCycle;
     if (input.active !== undefined) data.active = input.active;
     if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
+    if (input.minTier !== undefined) data.minTier = input.minTier;
+    if (input.restrictedDisplay !== undefined) data.restrictedDisplay = input.restrictedDisplay;
 
     const updated = await prisma.boxCatalogItem.update({ where: { id }, data });
     return reply.send(adminBoxCatalogItemSchema.parse(serialize(updated, app.uploads)));

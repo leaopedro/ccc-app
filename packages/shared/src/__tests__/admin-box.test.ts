@@ -51,6 +51,8 @@ describe('admin-box catalog + partner schemas', () => {
       maxPerCycle: 3,
       active: true,
       sortOrder: 0,
+      minTier: null,
+      restrictedDisplay: 'locked',
     });
     expect(parsed.maxPerCycle).toBe(3);
   });

@@ -71,13 +71,19 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       return { type: 'sourceFile', filePath: srcFile };
     }
   }
+  // Strip only when the `.js` path itself does not resolve. Stripping first also
+  // rewrote genuine relative `.js` imports inside node_modules, and web
+  // sourceExts try `.mjs` before `.js`: `merge-options/index.mjs` importing
+  // `./index.js` resolved back to index.mjs, i.e. itself. That circular
+  // self-import left the default export undefined, so async-storage's web path
+  // threw `Cannot read properties of undefined (reading 'bind')`.
   if (moduleName.startsWith('.') && moduleName.endsWith('.js')) {
+    const inner = (ctx, name, plat) =>
+      defaultResolve ? defaultResolve(ctx, name, plat) : ctx.resolveRequest(ctx, name, plat);
     try {
-      const inner = (ctx, name, plat) =>
-        defaultResolve ? defaultResolve(ctx, name, plat) : ctx.resolveRequest(ctx, name, plat);
-      return inner(context, moduleName.slice(0, -3), platform);
+      return inner(context, moduleName, platform);
     } catch {
-      // fall through to default resolution
+      return inner(context, moduleName.slice(0, -3), platform);
     }
   }
   return defaultResolve

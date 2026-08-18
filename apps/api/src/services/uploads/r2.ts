@@ -68,7 +68,15 @@ export class R2Uploads implements Uploads {
       CacheControl: cacheControl,
       Metadata: { kind: input.kind },
     });
-    const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: this.ttlSeconds });
+    // The presigner hoists x-amz-* headers into the query string by default,
+    // which leaves them out of X-Amz-SignedHeaders. Clients echo back every
+    // header below, and R2 answers a presigned PUT carrying an unsigned x-amz-*
+    // header with 403 SignatureDoesNotMatch (and no CORS header, so browsers
+    // report it as a CORS failure). Keep the metadata header signed instead.
+    const uploadUrl = await getSignedUrl(this.client, command, {
+      expiresIn: this.ttlSeconds,
+      unhoistableHeaders: new Set(['x-amz-meta-kind']),
+    });
     return {
       uploadUrl,
       objectKey,

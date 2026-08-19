@@ -1997,10 +1997,13 @@ model FridgeUnlockEvent {
   @@index([userId])
 }
 
-// Conteúdo institucional da tela de Início. Singleton no padrão de
-// GeneralSettings / BoxSettings: uma linha só, id constante, todas as colunas
-// com default para que o upsert de criação passe apenas o id.
-// Editável direto no banco; o CRUD admin entra em PR seguinte.
+/// Conteúdo institucional da tela de Início. Singleton com id constante e
+/// todas as colunas com default, para que o upsert de criação passe apenas
+/// o id.
+/// O id é declarado sem default de propósito: um create sem id explícito não
+/// compila. GeneralSettings e BoxSettings usam id com default cuid; aqui a
+/// escolha é outra e deliberada.
+/// Editável direto no banco; o CRUD admin entra em PR seguinte.
 model HomeContent {
   id                          String   @id
   heroTitle                   String   @default("DIRIGIR. CONECTAR. PERTENCER.") @db.VarChar(120)

@@ -4,7 +4,7 @@
 
 **Goal:** Transformar `/welcome` na vitrine do clube para usuário não logado, com conteúdo institucional, benefícios, planos e destaques vindos do banco de dados, sem republicar o app.
 
-**Architecture:** Uma tabela singleton (`HomeContent`) mais duas tabelas filhas (`HomeBenefit`, `HomeHighlight`) alimentam um endpoint público único `GET /api/home-content`, que também serializa os planos existentes de `PremiumPlan`. O mobile consome esse payload num só request e renderiza seis seções. O estado logado é isolado em `MemberHome`, com o comportamento atual preservado byte a byte.
+**Architecture:** Uma tabela singleton (`HomeContent`) mais duas tabelas filhas (`HomeBenefit`, `HomeHighlight`) alimentam um endpoint público único `GET /api/home-content`, que também serializa os planos existentes de `PremiumPlan`. Um segundo endpoint público `GET /api/club-stats` devolve os contadores do clube, com cache de cinco minutos. A rota `/welcome` renderiza dois estados isolados: `GuestHome` monta a vitrine do anônimo a partir do conteúdo institucional mais leituras públicas que já existiam (eventos, loja, planos, carros confirmados); `MemberHome` monta a home do membro conforme o handoff, surfando o que o app já tem (próximo evento, ingressos, garagem com XP e badges, assinatura, caixa) com degradação por bloco.
 
 **Tech Stack:** Prisma 6 + Postgres, Zod 3, Fastify 5, Expo Router 6 + React Native, Vitest 3.
 
@@ -22,9 +22,14 @@
 - Não alterar `/api/plans`, `PremiumPlanPrice`, `PremiumPlanBenefit` nem qualquer tela fora da home.
 - Não alterar os tokens de cor existentes em `packages/design` (`brandDeep`, `brandSoft`, `surface`). Só adicionar novos.
 - Não tocar em `apps/mobile/src/screens/assinaturas/tier-visual.ts`. Ele duplica a paleta do handoff; a consolidação é dívida registrada para outro PR.
-- Padrão de componente mobile desta tela: `StyleSheet.create` mais `Text`/`View` do `react-native`, seguindo `src/screens/assinaturas/PlanosScreen.tsx`. Não usar `@ccc/ui` nem classes NativeWind nos componentes **novos**. Isso não vale para `MemberHome.tsx` na Task 9, que é um recorte literal do `welcome.tsx` atual: ele continua usando `@ccc/ui` e NativeWind porque nenhuma linha dele pode mudar nesta entrega.
+- Padrão de componente mobile desta tela: `StyleSheet.create` mais `Text`/`View` do `react-native`, seguindo `src/screens/assinaturas/PlanosScreen.tsx`. Não usar classes NativeWind nos componentes novos. `@ccc/ui` **é** permitido e desejado quando o componente já existe lá: `XPScoreboard`, `BadgeRow` e `PremiumBadge` são reusados na home do membro em vez de reimplementados. O que não se faz é criar primitivo novo dentro de `@ccc/ui` para esta tela.
 - O boilerplate de render de teste (`container`, `root`, `render`, `click`, `beforeEach`/`afterEach` com `IS_REACT_ACT_ENVIRONMENT`) se repete por arquivo de teste de propósito. É a convenção já usada em `src/screens/assinaturas/__tests__/`, e extrair um helper compartilhado é refactor de infraestrutura de teste fora do escopo desta entrega.
 - Ícones vêm de `lucide-react-native`. Nomes Material do handoff são mapeados, não importados.
+- `GET /api/club-stats` é **unauthed** e **tem** cache de cinco minutos em memória. `GET /api/home-content` é unauthed e **não** tem cache. A assimetria é deliberada: contador defasado não muda decisão de ninguém, conteúdo editável precisa aparecer na hora.
+- Regra de erro, diferente nos dois estados. No `GuestHome` a falha do conteúdo institucional é total, porque hero, benefícios, planos e destaques curados vêm todos dele. No `MemberHome` cada bloco falha para dentro de si e esconde só a própria seção, porque são seis fontes independentes.
+- Nenhuma seção da vitrine do anônimo pode aparecer para o membro, e nenhuma seção do membro pode aparecer para o anônimo. Os dois testes de montagem travam isso explicitamente.
+- Seção sem conteúdo renderiza `null`. A tela nunca mostra cabeçalho de seção sem nada abaixo. Zero é conteúdo válido nos contadores e renderiza normalmente.
+- Componentes de seção são puros: recebem dados por prop e não chamam API. Quem busca é `GuestHome`, `MemberHome` ou um hook dedicado.
 - Commits frequentes, um por task no mínimo.
 
 ## Estrutura de arquivos
@@ -1109,7 +1114,382 @@ git commit -m "feat(api): endpoint publico GET /api/home-content"
 
 ---
 
-### Task 4: Fundação mobile — tokens, fontes, copy, API
+### Task 4: API dos contadores do clube
+
+**Files:**
+- Create: `packages/shared/src/club-stats.ts`
+- Create: `packages/shared/src/__tests__/club-stats.test.ts`
+- Modify: `packages/shared/package.json`
+- Modify: `packages/shared/src/index.ts`
+- Create: `apps/api/src/routes/club-stats.ts`
+- Modify: `apps/api/src/app.ts`
+- Create: `apps/api/test/club-stats.route.test.ts`
+
+**Interfaces:**
+- Consumes: nada das tasks anteriores.
+- Produces:
+  - `clubStatsResponseSchema` / `ClubStatsResponse` em `@ccc/shared/club-stats`, com a forma `{ members: number; events: number; cars: number }`.
+  - `CLUB_STATS_CACHE_TTL_MS: number` e `invalidateClubStatsCache(): void` exportados de `apps/api/src/routes/club-stats.ts`.
+  - `clubStatsRoutes: FastifyPluginAsync`.
+  - Rota `GET /api/club-stats`, unauthed.
+
+**Semântica de cada contador, decidida aqui para não ficar ambígua:**
+
+| Campo | Query | Por quê |
+| --- | --- | --- |
+| `members` | `prisma.user.count({ where: { status: <valor ativo do enum UserStatus> } })` | membros do clube, não contas desativadas |
+| `events` | `prisma.event.count({ where: { status: 'published', startsAt: { gte: new Date() } } })` | eventos futuros publicados. "6 EVENTOS" na home comunica agenda, não arquivo |
+| `cars` | `prisma.car.count()` | total de carros cadastrados em garagens |
+
+**Por que esta rota TEM cache e `/api/home-content` não:** são três `COUNT` em tabelas que crescem, na tela mais acessada do app, e um contador defasado por cinco minutos não muda decisão de ninguém. Conteúdo institucional editável é o oposto: precisa aparecer na hora, e é por isso que a outra rota ficou sem cache.
+
+- [ ] **Step 1: Confirmar os nomes reais no schema antes de escrever qualquer query**
+
+Ler `packages/db/prisma/schema.prisma` e anotar:
+
+1. O nome exato do valor "ativo" do enum `UserStatus`. O código abaixo assume `'active'`. Se for outro, usar o real.
+2. Os campos obrigatórios do modelo `Car`, para a fixture do teste. O código abaixo assume `userId`, `make`, `model`, `year`. Se houver mais obrigatórios, incluir.
+3. Os campos obrigatórios do modelo `Event`, para `makeEvent`. O código abaixo assume o conjunto usado em `apps/api/test/events/list.test.ts`.
+
+Ler também `apps/api/test/helpers.ts` e anotar a assinatura real de `createUser` e o que ela devolve.
+
+Registrar no report qualquer divergência entre o que o código abaixo assume e o que o schema tem, e usar sempre o que o schema tem.
+
+- [ ] **Step 2: Escrever o teste do schema compartilhado, que falha**
+
+Criar `packages/shared/src/__tests__/club-stats.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+import { clubStatsResponseSchema } from '../club-stats.js';
+
+const VALID = { members: 128, events: 6, cars: 18 } as const;
+
+describe('clubStatsResponseSchema', () => {
+  it('accepts a valid payload and returns the parsed values', () => {
+    expect(clubStatsResponseSchema.parse(VALID)).toEqual(VALID);
+  });
+
+  it('accepts zeros for a brand new club', () => {
+    expect(clubStatsResponseSchema.parse({ members: 0, events: 0, cars: 0 })).toEqual({
+      members: 0,
+      events: 0,
+      cars: 0,
+    });
+  });
+
+  it('rejects a negative counter', () => {
+    expect(() => clubStatsResponseSchema.parse({ ...VALID, members: -1 })).toThrow();
+  });
+
+  it('rejects a fractional counter', () => {
+    expect(() => clubStatsResponseSchema.parse({ ...VALID, cars: 1.5 })).toThrow();
+  });
+
+  it('rejects a missing counter', () => {
+    const { cars: _cars, ...missing } = VALID;
+    expect(() => clubStatsResponseSchema.parse(missing)).toThrow();
+  });
+
+  it('strips unknown keys', () => {
+    const parsed = clubStatsResponseSchema.parse({ ...VALID, secret: 'nope' });
+    expect(parsed).not.toHaveProperty('secret');
+  });
+});
+```
+
+- [ ] **Step 3: Rodar e confirmar que falha**
+
+```bash
+pnpm --filter @ccc/shared exec vitest run src/__tests__/club-stats.test.ts
+```
+
+Esperado: FAIL, `Cannot find module '../club-stats.js'`.
+
+- [ ] **Step 4: Escrever o schema compartilhado**
+
+Criar `packages/shared/src/club-stats.ts`:
+
+```ts
+// packages/shared/src/club-stats.ts
+// Contadores agregados do clube, exibidos na secao "Status do clube" da tela
+// de Inicio. Backs GET /api/club-stats.
+//
+// Sao contagens do clube, nunca do membro: o mesmo payload serve o anonimo e o
+// membro logado.
+
+import { z } from 'zod';
+
+export const clubStatsResponseSchema = z.object({
+  /** Usuarios com status ativo. */
+  members: z.number().int().nonnegative(),
+  /** Eventos publicados com inicio no futuro. */
+  events: z.number().int().nonnegative(),
+  /** Carros cadastrados em garagens. */
+  cars: z.number().int().nonnegative(),
+});
+
+export type ClubStatsResponse = z.infer<typeof clubStatsResponseSchema>;
+```
+
+- [ ] **Step 5: Publicar o subpath e o barrel**
+
+Em `packages/shared/package.json`, no objeto `exports`, logo depois da entrada `"./check-in"`, adicionar:
+
+```json
+    "./club-stats": {
+      "types": "./src/club-stats.ts",
+      "default": "./dist/club-stats.js"
+    },
+```
+
+Em `packages/shared/src/index.ts`, no fim do arquivo, adicionar:
+
+```ts
+export * from './club-stats.js';
+```
+
+- [ ] **Step 6: Rodar e confirmar que passa, mais build**
+
+```bash
+pnpm --filter @ccc/shared exec vitest run src/__tests__/club-stats.test.ts && pnpm --filter @ccc/shared build && pnpm --filter @ccc/shared typecheck && pnpm --filter @ccc/shared lint
+```
+
+Esperado: 6 testes PASS, e `packages/shared/dist/club-stats.js` existe. Sem o build, o import de `apps/api` não resolve.
+
+- [ ] **Step 7: Escrever o teste de integração da rota, que falha**
+
+Criar `apps/api/test/club-stats.route.test.ts`. Ajustar as fixtures ao que o Step 1 apurou:
+
+```ts
+import { prisma } from '@ccc/db';
+import { clubStatsResponseSchema } from '@ccc/shared/club-stats';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { invalidateClubStatsCache } from '../src/routes/club-stats.js';
+
+import { createUser, makeApp, resetDatabase } from './helpers.js';
+
+const GET = { method: 'GET' as const, url: '/api/club-stats' };
+
+// Datas fixas de proposito. A contagem de eventos depende de "futuro", entao
+// uma fixture com Date.now() ficaria fragil na virada do dia.
+const PAST = new Date('2026-01-10T20:00:00.000Z');
+const PAST_END = new Date('2026-01-11T02:00:00.000Z');
+const FUTURE = new Date('2099-01-10T20:00:00.000Z');
+const FUTURE_END = new Date('2099-01-11T02:00:00.000Z');
+
+const makeEvent = (slug: string, startsAt: Date, endsAt: Date, status: 'published' | 'draft') =>
+  prisma.event.create({
+    data: {
+      slug,
+      title: `Evento ${slug}`,
+      description: 'd',
+      startsAt,
+      endsAt,
+      venueName: 'Sede',
+      venueAddress: 'Rua A, 1',
+      city: 'Curitiba',
+      stateCode: 'PR',
+      type: 'meeting',
+      status,
+      capacity: 100,
+      ...(status === 'published' ? { publishedAt: PAST } : {}),
+    },
+  });
+
+describe('GET /api/club-stats', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    invalidateClubStatsCache();
+    app = await makeApp();
+  });
+
+  afterEach(async () => {
+    invalidateClubStatsCache();
+    await app.close();
+  });
+
+  it('responds 200 without auth and satisfies the shared schema', async () => {
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    expect(() => clubStatsResponseSchema.parse(res.json())).not.toThrow();
+  });
+
+  it('returns zeros on an empty database', async () => {
+    const res = await app.inject(GET);
+    expect(clubStatsResponseSchema.parse(res.json())).toEqual({
+      members: 0,
+      events: 0,
+      cars: 0,
+    });
+  });
+
+  it('counts only future published events', async () => {
+    await makeEvent('futuro-publicado', FUTURE, FUTURE_END, 'published');
+    await makeEvent('passado-publicado', PAST, PAST_END, 'published');
+    await makeEvent('futuro-rascunho', FUTURE, FUTURE_END, 'draft');
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.events).toBe(1);
+  });
+
+  it('counts active members and cars', async () => {
+    const { user } = await createUser({ verified: true });
+    await prisma.car.create({
+      data: { userId: user.id, make: 'Nissan', model: 'Skyline', year: 1999 },
+    });
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.members).toBe(1);
+    expect(body.cars).toBe(1);
+  });
+
+  it('serves the cached payload on a second call within the TTL', async () => {
+    const first = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(first.cars).toBe(0);
+
+    const { user } = await createUser({ verified: true });
+    await prisma.car.create({
+      data: { userId: user.id, make: 'Honda', model: 'NSX', year: 1992 },
+    });
+
+    // Dentro do TTL, o cache ainda serve a contagem antiga. Isso e o
+    // comportamento pretendido, nao um bug.
+    const second = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(second.cars).toBe(0);
+
+    // Invalidado, a proxima leitura ve o carro novo. Isso prova que o valor
+    // antigo veio do cache e nao de uma query errada.
+    invalidateClubStatsCache();
+    const third = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(third.cars).toBe(1);
+  });
+});
+```
+
+- [ ] **Step 8: Rodar e confirmar que falha**
+
+```bash
+pnpm --filter @ccc/api exec vitest run test/club-stats.route.test.ts
+```
+
+Esperado: FAIL. O import de `../src/routes/club-stats.js` não resolve.
+
+- [ ] **Step 9: Escrever a rota**
+
+Criar `apps/api/src/routes/club-stats.ts`. Trocar `'active'` pelo valor real do enum apurado no Step 1:
+
+```ts
+/**
+ * club-stats route — contadores agregados do clube.
+ *
+ *   GET /api/club-stats — { members, events, cars }
+ *
+ * UNAUTHED, como os outros catalogos de leitura (premium-catalog.ts, store.ts).
+ * A secao "Status do clube" da tela de Inicio aparece nos dois estados, logado
+ * e anonimo, entao o mesmo payload serve os dois.
+ *
+ * COM cache em memoria, ao contrario de /api/home-content. Aqui o cache e
+ * correto: sao tres COUNT em tabelas que crescem, chamados na tela mais
+ * acessada do app, e um contador defasado por cinco minutos nao muda decisao
+ * de ninguem. Conteudo institucional editavel e o oposto, e por isso a outra
+ * rota nao tem cache. Mesmo idiom de badges-catalog.ts.
+ */
+
+import { prisma } from '@ccc/db';
+import rateLimit from '@fastify/rate-limit';
+import { clubStatsResponseSchema, type ClubStatsResponse } from '@ccc/shared/club-stats';
+import type { FastifyPluginAsync } from 'fastify';
+
+export const CLUB_STATS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cached: ClubStatsResponse | null = null;
+let cachedAt = 0;
+
+/**
+ * Descarta o cache em memoria. Existe para os testes controlarem o estado
+ * entre casos, e para um futuro handler admin invalidar depois de uma escrita
+ * que mude as contagens. Seguro chamar com o cache vazio.
+ */
+export const invalidateClubStatsCache = (): void => {
+  cached = null;
+  cachedAt = 0;
+};
+
+export const clubStatsRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(rateLimit, {
+    max: 60,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `club-stats:${req.ip}`,
+  });
+
+  app.get('/api/club-stats', async () => {
+    const now = Date.now();
+    if (cached && now - cachedAt <= CLUB_STATS_CACHE_TTL_MS) return cached;
+
+    const [members, events, cars] = await Promise.all([
+      prisma.user.count({ where: { status: 'active' } }),
+      prisma.event.count({ where: { status: 'published', startsAt: { gte: new Date() } } }),
+      prisma.car.count(),
+    ]);
+
+    cached = clubStatsResponseSchema.parse({ members, events, cars });
+    cachedAt = now;
+    return cached;
+  });
+};
+```
+
+- [ ] **Step 10: Registrar o plugin**
+
+Em `apps/api/src/app.ts`, junto ao bloco de imports de rotas, adicionar em ordem alfabética (fica antes de `devUploadRoutes`):
+
+```ts
+import { clubStatsRoutes } from './routes/club-stats.js';
+```
+
+E na sequência de registros, imediatamente depois de `await app.register(homeContentRoutes);`, adicionar:
+
+```ts
+  await app.register(clubStatsRoutes);
+```
+
+- [ ] **Step 11: Rodar e confirmar que passa**
+
+```bash
+pnpm --filter @ccc/api exec vitest run test/club-stats.route.test.ts
+```
+
+Esperado: PASS, 5 testes. Se o Postgres local não estiver de pé, subir com `docker compose up -d postgres` (o serviço se chama `postgres`, não `db`, e mapeia a porta 5433 no host). Não rodar `db:reset`.
+
+- [ ] **Step 12: Typecheck e lint**
+
+```bash
+pnpm --filter @ccc/api typecheck && pnpm --filter @ccc/api lint
+```
+
+Esperado: sem erro. Warnings pré-existentes não contam.
+
+- [ ] **Step 13: Commit**
+
+```bash
+git add packages/shared/src/club-stats.ts packages/shared/src/__tests__/club-stats.test.ts packages/shared/src/index.ts packages/shared/package.json apps/api/src/routes/club-stats.ts apps/api/src/app.ts apps/api/test/club-stats.route.test.ts
+git commit -m "feat(api): endpoint publico GET /api/club-stats"
+```
+
+---
+
+### Task 5: Fundação mobile — tokens, fontes, copy, API
 
 **Files:**
 - Modify: `packages/design/src/tokens.ts`
@@ -1458,9 +1838,156 @@ git add packages/design/src/tokens.ts packages/design/tailwind-preset.cjs apps/m
 git commit -m "feat(mobile): fundacao da tela de inicio, tokens, fontes e api"
 ```
 
+#### Adendo da emenda de escopo
+
+Esta task ganha dois arquivos e duas ampliações. Tudo acima continua valendo.
+
+**Files adicionais:**
+- Create: `apps/mobile/src/api/club-stats.ts`
+- Create: `apps/mobile/src/hooks/useClubStats.ts`
+
+**Interfaces adicionais produzidas:**
+- `getClubStats(): Promise<ClubStatsResponse>` em `~/api/club-stats`.
+- `useClubStats(): { stats: ClubStatsResponse | null; loading: boolean; error: boolean; refresh: () => Promise<void> }` em `~/hooks/useClubStats`.
+
+- [ ] **Step A1: Escrever o cliente de API dos contadores**
+
+Criar `apps/mobile/src/api/club-stats.ts`, no mesmo formato de `src/api/home.ts`:
+
+```ts
+// Contadores agregados do clube, para a secao "Status do clube" da Inicio.
+//
+// PUBLICO, sem token: a secao aparece nos dois estados da home.
+// Endpoint: GET /api/club-stats.
+
+import { clubStatsResponseSchema, type ClubStatsResponse } from '@ccc/shared/club-stats';
+import type { z } from 'zod';
+
+import { request } from '~/api/client';
+
+const clubStatsSchema = clubStatsResponseSchema as z.ZodType<ClubStatsResponse>;
+
+export const getClubStats = (): Promise<ClubStatsResponse> =>
+  request('/api/club-stats', clubStatsSchema);
+```
+
+- [ ] **Step A2: Escrever o hook**
+
+Criar `apps/mobile/src/hooks/useClubStats.ts`:
+
+```ts
+import type { ClubStatsResponse } from '@ccc/shared/club-stats';
+import { useCallback, useEffect, useState } from 'react';
+
+import { getClubStats } from '~/api/club-stats';
+
+type UseClubStatsResult = {
+  stats: ClubStatsResponse | null;
+  loading: boolean;
+  error: boolean;
+  refresh: () => Promise<void>;
+};
+
+// GET /api/club-stats (publico). O backend cacheia por cinco minutos, entao
+// chamar em toda montagem da tela e barato.
+export function useClubStats(): UseClubStatsResult {
+  const [stats, setStats] = useState<ClubStatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      setStats(await getClubStats());
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { stats, loading, error, refresh };
+}
+```
+
+- [ ] **Step A3: Ampliar a copy**
+
+Em `apps/mobile/src/copy/inicio.ts`, acrescentar as chaves abaixo ao objeto `inicioCopy`. Não remover nem renomear nenhuma das que já estão lá. As três chaves originais de `sections` (`benefits`, `plans`, `highlights`) permanecem.
+
+```ts
+  sections: {
+    clubStats: 'STATUS DO CLUBE',
+    store: 'NA LOJA',
+    confirmedCars: 'QUEM JA CONFIRMOU',
+    quickAccess: 'ACESSO RÁPIDO',
+    myTickets: 'MEUS INGRESSOS',
+    myGarage: 'MINHA GARAGEM',
+    subscription: 'SUA ASSINATURA',
+    box: 'CAIXA DO MÊS',
+    nextEvent: 'PRÓXIMO EVENTO',
+  },
+  clubStats: {
+    members: 'MEMBROS',
+    events: 'EVENTOS',
+    garage: 'GARAGEM',
+  },
+  member: {
+    greeting: (firstName: string) => `BEM-VINDO DE VOLTA, ${firstName.toUpperCase()}`,
+    greetingFallback: 'BEM-VINDO DE VOLTA',
+    memberSince: (monthYear: string) => `MEMBRO DESDE ${monthYear.toUpperCase()}`,
+  },
+  quickAccess: {
+    events: 'Eventos',
+    tickets: 'Ingressos',
+    garage: 'Garagem',
+    store: 'Loja',
+  },
+  cards: {
+    seeEvent: 'VER EVENTO',
+    seeAllStore: 'Ver a loja',
+    seeGarage: 'Ver minha garagem',
+    seeSubscription: 'Ver minha assinatura',
+    subscribeUpsell: 'ASSINAR',
+    seeBox: 'Ver a caixa',
+    seeTickets: 'Ver todos',
+  },
+  empty: {
+    noNextEvent: 'Nenhum evento agendado.',
+    noTickets: 'Você ainda não tem ingressos.',
+  },
+```
+
+`member.memberSince` recebe uma string ja formatada como `mar 2026`. A formatação fica na tela, não na copy.
+
+- [ ] **Step A4: Ampliar o mapa de ícones**
+
+Em `apps/mobile/src/screens/inicio/icons.ts`, acrescentar ao objeto `HOME_ICON`:
+
+```ts
+  ticket: Ticket,
+  store: Store,
+  box: Package,
+  crown: Crown,
+```
+
+Importar `Ticket`, `Store`, `Package` e `Crown` de `lucide-react-native` junto dos outros. Antes de importar, confirmar que cada nome existe no pacote instalado. Se algum não existir, escolher o equivalente mais próximo e registrar a substituição no report.
+
+- [ ] **Step A5: Verificar e commitar junto com o resto da task**
+
+```bash
+pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint
+```
+
+Acrescentar os arquivos novos ao `git add` do Step de commit desta task.
+
 ---
 
-### Task 5: Primitivos visuais do handoff
+### Task 6: Primitivos visuais do handoff
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/components/SectionLabel.tsx`
@@ -1743,9 +2270,274 @@ git add apps/mobile/src/screens/inicio/components
 git commit -m "feat(mobile): primitivos visuais do handoff da inicio"
 ```
 
+#### Adendo da emenda de escopo
+
+Esta task ganha três primitivos e a cópia de um asset de marca. Tudo acima continua valendo.
+
+**Files adicionais:**
+- Create: `apps/mobile/src/screens/inicio/components/StatCard.tsx`
+- Create: `apps/mobile/src/screens/inicio/components/QuickActionTile.tsx`
+- Create: `apps/mobile/src/screens/inicio/components/AppHeader.tsx`
+- Create: `packages/design/assets/monogram-ccc-circle-gold.png`
+
+**Interfaces adicionais produzidas:**
+- `StatCard({ icon, label, value }: { icon: string; label: string; value: number | string })`
+- `QuickActionTile({ icon, label, onPress, testID }: { icon: string; label: string; onPress: () => void; testID?: string })`
+- `AppHeader({ right }: { right?: ReactNode })`
+
+`icon` nos dois primeiros é uma chave do mapa de `~/screens/inicio/icons`, resolvida por `homeIcon(key)`. Chave desconhecida cai no ícone padrão.
+
+- [ ] **Step B1: Copiar o asset de marca**
+
+```bash
+cp ".handoffs/design_handoff_inicio/assets/brand/monogram-ccc-circle-gold.png" "packages/design/assets/monogram-ccc-circle-gold.png"
+```
+
+Conferir que `packages/design/package.json` expõe `"./assets/*": "./assets/*"` no mapa de exports. O campo `files` hoje lista `assets/*.webp`; acrescentar `assets/*.png` e registrar no report.
+
+- [ ] **Step B2: Escrever os testes dos três primitivos, que falham**
+
+Acrescentar ao `apps/mobile/src/screens/inicio/components/__tests__/primitives.test.tsx` que esta task já cria, reusando o boilerplate de `render` e `click` que já está no arquivo. Importar `StatCard`, `QuickActionTile` e `AppHeader` no topo, junto dos outros.
+
+```tsx
+describe('StatCard', () => {
+  it('renders label and value', () => {
+    render(<StatCard icon="users" label="MEMBROS" value={128} />);
+    expect(container.textContent).toContain('MEMBROS');
+    expect(container.textContent).toContain('128');
+  });
+
+  it('renders with an unknown icon key without crashing', () => {
+    render(<StatCard icon="chave-que-nao-existe" label="EVENTOS" value={6} />);
+    expect(container.textContent).toContain('EVENTOS');
+  });
+});
+
+describe('QuickActionTile', () => {
+  it('renders the label and fires onPress', () => {
+    const onPress = vi.fn();
+    render(<QuickActionTile icon="car" label="Garagem" onPress={onPress} testID="tile" />);
+    expect(container.textContent).toContain('Garagem');
+    click('tile');
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AppHeader', () => {
+  it('renders the wordmark and the location', () => {
+    render(<AppHeader />);
+    expect(container.textContent).toContain('CASA CAR CLUB');
+    expect(container.textContent).toContain('CURITIBA');
+  });
+
+  it('renders the right slot when provided', () => {
+    render(<AppHeader right={<Text>ENTRAR</Text>} />);
+    expect(container.textContent).toContain('ENTRAR');
+  });
+});
+```
+
+- [ ] **Step B3: Escrever StatCard**
+
+Criar `apps/mobile/src/screens/inicio/components/StatCard.tsx`:
+
+```tsx
+// Stat card do handoff: icone 20px dourado, label de 9px com letter-spacing
+// .22em, numeral grande embaixo.
+//
+// O handoff pede Cormorant Garamond no numeral. Cormorant nao esta no bundle
+// (decisao registrada no spec: so serviria a esta peca), entao o numeral usa
+// Jost 700. Tamanho, cor e layout seguem o handoff.
+
+import { StyleSheet, Text, View } from 'react-native';
+
+import { homeIcon } from '~/screens/inicio/icons';
+import { p } from '~/screens/inicio/palette';
+
+export function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value: number | string;
+}) {
+  const Icon = homeIcon(icon);
+  return (
+    <View style={styles.card}>
+      <Icon color={p.goldDeep} size={20} strokeWidth={1.75} />
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: p.hairline,
+    backgroundColor: p.surface,
+  },
+  label: {
+    marginTop: 8,
+    fontFamily: 'Jost_600SemiBold',
+    fontSize: 9,
+    letterSpacing: 2.2,
+    color: p.muted50,
+    textAlign: 'center',
+  },
+  value: {
+    marginTop: 4,
+    fontFamily: 'Jost_700Bold',
+    fontSize: 26,
+    color: p.cream,
+  },
+});
+```
+
+- [ ] **Step B4: Escrever QuickActionTile**
+
+Criar `apps/mobile/src/screens/inicio/components/QuickActionTile.tsx`:
+
+```tsx
+// Atalho do grid de acesso rapido: icone 24px dourado acima de um rotulo de
+// 13px, alinhado a esquerda, conforme o handoff.
+
+import { Pressable, StyleSheet, Text } from 'react-native';
+
+import { homeIcon } from '~/screens/inicio/icons';
+import { p } from '~/screens/inicio/palette';
+
+export function QuickActionTile({
+  icon,
+  label,
+  onPress,
+  testID,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const Icon = homeIcon(icon);
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={({ pressed }) => [styles.tile, pressed ? styles.pressed : null]}
+    >
+      <Icon color={p.gold} size={24} strokeWidth={1.75} />
+      <Text style={styles.label}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  tile: {
+    flex: 1,
+    minHeight: 96,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: p.hairline,
+    backgroundColor: p.surface,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  pressed: { opacity: 0.9 },
+  label: {
+    fontFamily: 'Jost_500Medium',
+    fontSize: 13,
+    color: p.cream,
+  },
+});
+```
+
+- [ ] **Step B5: Escrever AppHeader**
+
+Criar `apps/mobile/src/screens/inicio/components/AppHeader.tsx`:
+
+```tsx
+// Header do app conforme o handoff: monograma 40x40 mais o bloco de texto
+// CASA CAR CLUB / CURITIBA, e um slot livre a direita.
+//
+// O slot existe porque os dois estados da home querem coisas diferentes ali:
+// o anonimo quer um botao Entrar, o membro quer o sino de notificacoes. A
+// decisao fica fora deste componente.
+
+import type { ReactNode } from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+
+import { p } from '~/screens/inicio/palette';
+
+const WORDMARK = 'CASA CAR CLUB';
+const LOCATION = 'CURITIBA';
+
+export function AppHeader({ right }: { right?: ReactNode }) {
+  return (
+    <View style={styles.row}>
+      <View style={styles.left}>
+        <Image
+          // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+          source={require('@ccc/design/assets/monogram-ccc-circle-gold.png')}
+          accessibilityLabel={WORDMARK}
+          style={styles.monogram}
+        />
+        <View>
+          <Text style={styles.wordmark}>{WORDMARK}</Text>
+          <Text style={styles.location}>{LOCATION}</Text>
+        </View>
+      </View>
+      {right ?? null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 6,
+    paddingBottom: 18,
+  },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  monogram: { width: 40, height: 40, resizeMode: 'contain' },
+  wordmark: {
+    fontFamily: 'Jost_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.9,
+    color: p.cream,
+  },
+  location: {
+    marginTop: 3,
+    fontFamily: 'Jost_500Medium',
+    fontSize: 9,
+    letterSpacing: 3.1,
+    color: p.goldDeep,
+  },
+});
+```
+
+- [ ] **Step B6: Rodar e commitar junto com o resto da task**
+
+```bash
+pnpm --filter @ccc/mobile test -- primitives
+```
+
+Esperado: PASS, os 4 casos originais mais os 5 novos.
+
 ---
 
-### Task 6: Seções 1 e 2 — apresentação e benefícios
+### Task 7: Seções 1 e 2 — apresentação e benefícios
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/sections/HeroSection.tsx`
@@ -2112,9 +2904,134 @@ git add apps/mobile/src/screens/inicio/sections
 git commit -m "feat(mobile): secoes de apresentacao e beneficios da inicio"
 ```
 
+#### Adendo da emenda de escopo
+
+Esta task ganha a seção de contadores, usada pelos dois estados da home.
+
+**Files adicionais:**
+- Create: `apps/mobile/src/screens/inicio/sections/ClubStatsSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/__tests__/ClubStatsSection.test.tsx`
+
+**Interfaces adicionais produzidas:**
+- `ClubStatsSection({ stats }: { stats: ClubStatsResponse | null })`, que renderiza `null` quando `stats` é `null`.
+
+- [ ] **Step C1: Escrever o teste, que falha**
+
+Criar `apps/mobile/src/screens/inicio/sections/__tests__/ClubStatsSection.test.tsx`, no mesmo boilerplate dos outros testes de seção desta task:
+
+```tsx
+// @vitest-environment jsdom
+
+import type { ClubStatsResponse } from '@ccc/shared/club-stats';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { inicioCopy } from '~/copy/inicio';
+
+import { ClubStatsSection } from '../ClubStatsSection';
+
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+const STATS: ClubStatsResponse = { members: 128, events: 6, cars: 18 };
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+const render = (node: React.ReactNode) => act(() => root.render(node));
+
+describe('ClubStatsSection', () => {
+  it('renders the section label and the three counters', () => {
+    render(<ClubStatsSection stats={STATS} />);
+    expect(container.textContent).toContain(inicioCopy.sections.clubStats);
+    expect(container.textContent).toContain(inicioCopy.clubStats.members);
+    expect(container.textContent).toContain('128');
+    expect(container.textContent).toContain(inicioCopy.clubStats.events);
+    expect(container.textContent).toContain('6');
+    expect(container.textContent).toContain(inicioCopy.clubStats.garage);
+    expect(container.textContent).toContain('18');
+  });
+
+  it('renders zeros for a brand new club rather than hiding the section', () => {
+    render(<ClubStatsSection stats={{ members: 0, events: 0, cars: 0 }} />);
+    expect(container.textContent).toContain(inicioCopy.sections.clubStats);
+    expect(container.textContent).toContain('0');
+  });
+
+  it('renders nothing when stats are unavailable', () => {
+    render(<ClubStatsSection stats={null} />);
+    expect(container.textContent).toBe('');
+  });
+});
+```
+
+- [ ] **Step C2: Escrever ClubStatsSection**
+
+Criar `apps/mobile/src/screens/inicio/sections/ClubStatsSection.tsx`:
+
+```tsx
+// Secao "Status do clube": grid de tres contadores.
+//
+// Os numeros vem de GET /api/club-stats e sao contagens do clube, nunca do
+// membro. A secao aparece nos dois estados da home, entao nao conhece auth.
+//
+// Zero e um valor legitimo e renderiza normalmente. Somente `stats` nulo
+// (falha ou carregando) esconde a secao, para nao deixar cabecalho sem
+// conteudo.
+
+import type { ClubStatsResponse } from '@ccc/shared/club-stats';
+import { StyleSheet, View } from 'react-native';
+
+import { inicioCopy } from '~/copy/inicio';
+import { SectionLabel } from '~/screens/inicio/components/SectionLabel';
+import { StatCard } from '~/screens/inicio/components/StatCard';
+
+export function ClubStatsSection({ stats }: { stats: ClubStatsResponse | null }) {
+  if (!stats) return null;
+
+  return (
+    <View style={styles.wrap}>
+      <SectionLabel label={inicioCopy.sections.clubStats} />
+      <View style={styles.grid}>
+        <StatCard icon="users" label={inicioCopy.clubStats.members} value={stats.members} />
+        <StatCard icon="calendar" label={inicioCopy.clubStats.events} value={stats.events} />
+        <StatCard icon="car" label={inicioCopy.clubStats.garage} value={stats.cars} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { gap: 14 },
+  grid: { flexDirection: 'row', gap: 12 },
+});
+```
+
+- [ ] **Step C3: Rodar e commitar junto com o resto da task**
+
+```bash
+pnpm --filter @ccc/mobile test -- ClubStatsSection
+```
+
+Esperado: PASS, 3 testes.
+
 ---
 
-### Task 7: Seções 3 e 4 — CTAs, e liberação de `/assinaturas` no redirect
+### Task 8: Seções 3 e 4 — CTAs, e liberação de `/assinaturas` no redirect
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/sections/CtaSection.tsx`
@@ -2373,7 +3290,7 @@ git commit -m "feat(mobile): CTAs de criar conta e assinar na inicio"
 
 ---
 
-### Task 8: Seções 5 e 6 — planos e destaques
+### Task 9: Seções 5 e 6 — planos e destaques
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/sections/PlansSection.tsx`
@@ -2846,9 +3763,431 @@ git add apps/mobile/src/screens/inicio/sections
 git commit -m "feat(mobile): secoes de planos e destaques da inicio"
 ```
 
+#### Adendo da emenda de escopo
+
+Esta task ganha duas seções novas e uma ampliação em `HighlightsSection`.
+
+**Files adicionais:**
+- Create: `apps/mobile/src/screens/inicio/sections/StoreTeaserSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/ConfirmedCarsSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/__tests__/StoreTeaserSection.test.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/__tests__/ConfirmedCarsSection.test.tsx`
+
+**Ampliação de `HighlightsSection`:** passa a receber `events` além de `highlights`, e renderiza os eventos reais **antes** dos destaques curados.
+
+```ts
+HighlightsSection({
+  highlights,
+  events,
+  onOpenLink,
+  onOpenEvent,
+}: {
+  highlights: HomeHighlight[];
+  events: EventSummary[];
+  onOpenLink: (path: string) => void;
+  onOpenEvent: (slug: string) => void;
+})
+```
+
+Renderiza `null` somente quando `highlights` e `events` estão ambos vazios. Cada evento é um `FeatureCard` clicável com eyebrow `inicioCopy.highlightKind.event`, título, data formatada por `formatEventDateRange` de `~/lib/format`, e `onPress` chamando `onOpenEvent(event.slug)`. `testID` de cada evento: `inicio-event-<slug>`.
+
+Acrescentar aos testes existentes de `HighlightsSection` os casos: eventos aparecem antes dos destaques; tocar num evento chama `onOpenEvent` com o slug; lista de eventos vazia com destaques presentes ainda renderiza a seção; ambas vazias renderiza `null`.
+
+- [ ] **Step D1: Ler as formas exatas antes de escrever**
+
+Antes de codar, ler e anotar:
+1. `packages/shared/src/events.ts` — a forma de `EventSummary` (campos `id`, `slug`, `title`, `coverUrl`, `startsAt`, `endsAt`, `city`, `stateCode`, `type`, `status`).
+2. `packages/shared/src/store.ts` — a forma do produto devolvido por `listStoreProducts`, em especial o nome do campo de preço e o de imagem.
+3. `apps/mobile/src/hooks/useStoreProducts.ts` — a assinatura real, incluindo o parâmetro de query e o que devolve.
+4. `apps/mobile/src/api/events.ts` — a assinatura de `getConfirmedCars` e a forma de `ConfirmedCar` em `packages/shared/src/events.ts`.
+5. `apps/mobile/src/lib/format.ts` — `formatBRL` e `formatEventDateRange`.
+
+O código abaixo assume nomes plausíveis. Onde divergir do real, usar o real e registrar no report.
+
+- [ ] **Step D2: Escrever StoreTeaserSection**
+
+Criar `apps/mobile/src/screens/inicio/sections/StoreTeaserSection.tsx`. Faixa horizontal de produtos, cada card navegando para `/store/<slug>`. A loja já é rota pública, então isto funciona para o anônimo sem login.
+
+Requisitos:
+- Usa `useStoreProducts` com um limite pequeno. Se o hook não aceitar limite, fatiar o resultado no componente e comentar por quê.
+- `SectionLabel` com `inicioCopy.sections.store`, e um link de rodapé com `inicioCopy.cards.seeAllStore` navegando para `/store`.
+- Cada card: imagem quando houver, nome do produto, preço formatado com `formatBRL`. `testID`: `inicio-store-<slug>`.
+- Renderiza `null` quando a lista está vazia ou o hook está em erro. Nunca mostra cabeçalho sem conteúdo.
+- `ScrollView` horizontal com `showsHorizontalScrollIndicator={false}`, no padrão do rail de eventos que já existe no `welcome.tsx` atual.
+
+Teste: label e produtos aparecem; tocar num card chama a navegação com o slug; lista vazia renderiza `null`. Mocar `~/hooks/useStoreProducts` e `expo-router` no padrão dos outros testes.
+
+- [ ] **Step D3: Escrever ConfirmedCarsSection**
+
+Criar `apps/mobile/src/screens/inicio/sections/ConfirmedCarsSection.tsx`. Prova social: carros já confirmados no próximo evento.
+
+Requisitos:
+- Recebe `eventSlug: string | null` e busca via `getConfirmedCars`. Com `eventSlug` nulo, renderiza `null` sem chamar a API.
+- `SectionLabel` com `inicioCopy.sections.confirmedCars`.
+- Faixa horizontal de miniaturas. Cada item mostra a foto quando houver e o nome do carro. Sem foto, cai num placeholder da cor de superfície.
+- **Renderiza `null` quando a lista volta vazia**, que é o caso mais comum. Isto foi decidido explicitamente: a seção só aparece quando tem substância.
+- Não é clicável nesta entrega. É prova social, não navegação.
+
+Teste: com carros, label e nomes aparecem; com lista vazia, renderiza `null`; com `eventSlug` nulo, renderiza `null` e a função de API não é chamada. Mocar `~/api/events`.
+
+- [ ] **Step D4: Rodar e commitar junto com o resto da task**
+
+```bash
+pnpm --filter @ccc/mobile test -- HighlightsSection StoreTeaserSection ConfirmedCarsSection PlansSection
+```
+
+Esperado: PASS em todos.
 ---
 
-### Task 9: Montagem da tela
+### Task 10: Seções do membro logado
+
+**Files:**
+- Create: `apps/mobile/src/screens/inicio/sections/MemberGreeting.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/NextEventCard.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/MyTicketsSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/MyGarageSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/SubscriptionSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/BoxSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/QuickAccessSection.tsx`
+- Create: `apps/mobile/src/screens/inicio/sections/__tests__/member-sections.test.tsx`
+- Create: `apps/mobile/src/screens/inicio/format-member.ts`
+
+**Interfaces:**
+- Consumes: `SectionLabel`, `GoldPill`, `FeatureCard`, `QuickActionTile` da Task 6. `p` e `homeIcon` da Task 5. `inicioCopy` da Task 5.
+- Produces, todos com props explícitas e sem buscar dados por conta própria (quem busca é o `MemberHome` da Task 11):
+  - `formatMemberSince(iso: string): string` em `~/screens/inicio/format-member`, devolvendo algo como `mar 2026`.
+  - `MemberGreeting({ firstName, createdAt }: { firstName: string | null; createdAt: string | null })`
+  - `NextEventCard({ event, onPress }: { event: EventSummary | null; onPress: (slug: string) => void })`
+  - `MyTicketsSection({ tickets, onOpenTicket, onSeeAll }: { tickets: MyTicket[]; onOpenTicket: (id: string) => void; onSeeAll: () => void })`
+  - `MyGarageSection({ garage, onPress }: { garage: GarageReadResponse | null; onPress: () => void })`
+  - `SubscriptionSection({ status, onManage, onSubscribe }: { status: PremiumStatus | null; onManage: () => void; onSubscribe: () => void })`
+  - `BoxSection({ box, isPremiumActive, onPress }: { box: BoxView | null; isPremiumActive: boolean; onPress: () => void })`
+  - `QuickAccessSection({ onNavigate }: { onNavigate: (path: string) => void })`
+
+**Princípio que vale para todas as sete:** são componentes puros de apresentação. Recebem dados já carregados e renderizam `null` quando não há o que mostrar. Nenhuma delas chama API, nenhuma conhece `useAuth`. Isso é o que permite testar cada uma isolada e é o que faz a regra de erro por bloco da Task 11 funcionar.
+
+- [ ] **Step 1: Ler as formas exatas antes de escrever qualquer linha**
+
+Ler e anotar os tipos reais. O código desta task depende deles e o plano não pode adivinhar:
+
+1. `packages/shared/src/events.ts` — `EventSummary`.
+2. `packages/shared/src/tickets.ts` — `MyTicket`, em especial `id`, `status`, `tierName` e o objeto `event` embutido.
+3. `packages/shared/src/garage.ts` e `packages/shared/src/garage-progress.ts` — `GarageReadResponse`, com `garage.badges`, `garage.premiumTier`, `garage.isPremiumActive`, `cars`, `spots`, `gamification.enabled`, `progress` e `stats`. Anotar quais campos são opcionais.
+4. `packages/shared/src/premium.ts` — a forma devolvida por `getPremiumStatus` (`active`, `tier`, `currentPeriodEnd`, `cancelAtPeriodEnd`).
+5. `packages/shared/src/box.ts` — `BoxView` e o enum de status do ciclo.
+6. `packages/ui/src/index.ts` — as props reais de `XPScoreboard`, `BadgeRow` e `PremiumBadge`. Ler os arquivos dos componentes, não só o barrel.
+7. `apps/mobile/src/lib/format.ts` — `formatBRL` e `formatEventDateRange`.
+
+Registrar no report qualquer divergência entre o que esta task assume e o que os tipos realmente têm, e usar sempre o real.
+
+- [ ] **Step 2: Escrever o helper de data e seu teste**
+
+Criar `apps/mobile/src/screens/inicio/format-member.ts`:
+
+```ts
+// MEMBRO DESDE <MES> <ANO>, derivado de user.createdAt.
+//
+// O handoff pede MEMBRO #0001, mas nao existe campo de numero de membro no
+// banco. Decisao de produto registrada no spec: usar a data de entrada, que
+// comunica pertencimento sem inventar coluna nem expor o tamanho da base.
+
+const MONTHS_PT = [
+  'jan',
+  'fev',
+  'mar',
+  'abr',
+  'mai',
+  'jun',
+  'jul',
+  'ago',
+  'set',
+  'out',
+  'nov',
+  'dez',
+] as const;
+
+/**
+ * Recebe um ISO 8601 e devolve `mes ano` em PT-BR abreviado, por exemplo
+ * `mar 2026`. Devolve string vazia para entrada invalida, para a tela poder
+ * esconder a linha em vez de mostrar `Invalid Date`.
+ */
+export const formatMemberSince = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${MONTHS_PT[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+};
+```
+
+Teste em `apps/mobile/src/screens/inicio/__tests__/format-member.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+import { formatMemberSince } from '../format-member';
+
+describe('formatMemberSince', () => {
+  it('formats an ISO date as abbreviated PT-BR month and year', () => {
+    expect(formatMemberSince('2026-03-14T12:00:00.000Z')).toBe('mar 2026');
+  });
+
+  it('handles January and December without off-by-one', () => {
+    expect(formatMemberSince('2026-01-01T00:00:00.000Z')).toBe('jan 2026');
+    expect(formatMemberSince('2026-12-31T23:59:59.000Z')).toBe('dez 2026');
+  });
+
+  it('returns an empty string for an invalid date', () => {
+    expect(formatMemberSince('not-a-date')).toBe('');
+  });
+});
+```
+
+Rodar e confirmar RED, então GREEN:
+
+```bash
+pnpm --filter @ccc/mobile test -- format-member
+```
+
+- [ ] **Step 3: Escrever MemberGreeting**
+
+Criar `apps/mobile/src/screens/inicio/sections/MemberGreeting.tsx`:
+
+```tsx
+// Saudacao do membro, conforme o handoff.
+//
+// Sem primeiro nome, cai na saudacao generica em vez de renderizar uma virgula
+// solta. Sem createdAt valido, a segunda linha nao renderiza.
+
+import { StyleSheet, Text, View } from 'react-native';
+
+import { inicioCopy } from '~/copy/inicio';
+import { formatMemberSince } from '~/screens/inicio/format-member';
+import { p } from '~/screens/inicio/palette';
+
+export function MemberGreeting({
+  firstName,
+  createdAt,
+}: {
+  firstName: string | null;
+  createdAt: string | null;
+}) {
+  const since = createdAt ? formatMemberSince(createdAt) : '';
+  const greeting = firstName
+    ? inicioCopy.member.greeting(firstName)
+    : inicioCopy.member.greetingFallback;
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.greeting} accessibilityRole="header">
+        {greeting}
+      </Text>
+      {since ? <Text style={styles.since}>{inicioCopy.member.memberSince(since)}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { gap: 6 },
+  greeting: {
+    fontFamily: 'Jost_700Bold',
+    fontSize: 19,
+    letterSpacing: 0.19,
+    color: p.cream,
+  },
+  since: {
+    fontFamily: 'Jost_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 2.9,
+    color: p.muted45,
+  },
+});
+```
+
+- [ ] **Step 4: Escrever NextEventCard**
+
+Criar `apps/mobile/src/screens/inicio/sections/NextEventCard.tsx`, no tratamento do handoff.
+
+Requisitos:
+- `FeatureCard` clicável inteiro, com `testID` `inicio-next-event`. A pílula `VER EVENTO` (`GoldPill` sem `onPress` próprio, ou um `View` com o mesmo tratamento visual) é affordance, não um segundo alvo de toque. Se `GoldPill` exigir `onPress`, passar o mesmo handler do card, mas garantir que o card inteiro também dispara.
+- Label `inicioCopy.sections.nextEvent` como eyebrow dourado.
+- Título do evento em 17px weight 600.
+- Duas metalinhas de 13px com ícone dourado de 16px: `calendar` mais a data via `formatEventDateRange`, e `car` mais cidade e estado quando houver.
+- Thumb do evento à direita com 96px de largura e raio 12, quando `coverUrl` existir.
+- `event` nulo renderiza um vazio discreto com `inicioCopy.empty.noNextEvent`, não `null`. Este é o eixo visual da tela e um buraco aqui fica pior que uma linha de texto. Isto responde a primeira pergunta aberta do handoff em "Antes de implementar".
+
+- [ ] **Step 5: Escrever MyTicketsSection**
+
+Requisitos:
+- `SectionLabel` com `inicioCopy.sections.myTickets`, mais link de rodapé `inicioCopy.cards.seeTickets` chamando `onSeeAll`.
+- Faixa horizontal. Cada card mostra o título do evento, a data, e o `tierName`. `testID`: `inicio-ticket-<id>`.
+- Filtra apenas ingressos válidos. Conferir no Step 1 o nome exato do valor de `status` que representa válido e usar o real.
+- Renderiza `null` quando a lista filtrada está vazia.
+
+- [ ] **Step 6: Escrever MyGarageSection**
+
+Requisitos:
+- Renderiza `null` quando `garage` é nulo **ou** quando `garage.gamification.enabled` é falso. O killswitch de gamificação já existe no backend e precisa ser respeitado aqui.
+- `SectionLabel` com `inicioCopy.sections.myGarage`.
+- Reusa `XPScoreboard` de `@ccc/ui` alimentado por `garage.progress`. Se `progress` estiver ausente, não renderiza o scoreboard mas ainda renderiza o resto.
+- Reusa `BadgeRow` de `@ccc/ui` com `garage.garage.badges`. Se a lista estiver vazia, omite a fileira.
+- Uma linha com a contagem de carros e de vagas, derivada de `garage.cars.length` e `garage.spots.length`.
+- Todo o bloco é clicável, chamando `onPress`, com `testID` `inicio-garage`.
+- **Não reimplementar XP nem badges.** Se as props reais de `XPScoreboard` ou `BadgeRow` não encaixarem no que `getGarage` devolve, parar e reportar em vez de escrever uma versão paralela.
+
+- [ ] **Step 7: Escrever SubscriptionSection**
+
+Requisitos:
+- `status` nulo renderiza `null`.
+- `status.active` verdadeiro: `SectionLabel` com `inicioCopy.sections.subscription`, `PremiumBadge` de `@ccc/ui` com o tier, e um link chamando `onManage`. `testID`: `inicio-subscription-active`.
+- `status.active` falso: bloco de upsell com `GoldPill` de rótulo `inicioCopy.cards.subscribeUpsell` chamando `onSubscribe`. `testID`: `inicio-subscription-upsell`.
+- Conferir no Step 1 se `tier` pode ser nulo com `active` verdadeiro. Se puder, tratar.
+
+- [ ] **Step 8: Escrever BoxSection**
+
+Requisitos:
+- Renderiza `null` quando `isPremiumActive` é falso, **antes** de olhar `box`. A caixa é benefício de assinante e não deve aparecer para quem não é.
+- Renderiza `null` quando `box` é nulo.
+- `SectionLabel` com `inicioCopy.sections.box`, uma linha com o estado do ciclo corrente, e um link `inicioCopy.cards.seeBox` chamando `onPress`. `testID`: `inicio-box`.
+- Para o texto do estado, mapear o enum de status de `BoxView` para PT-BR. Se `apps/mobile/src/copy/caixa.ts` já tiver esse mapa, **reusar** em vez de duplicar.
+
+- [ ] **Step 9: Escrever QuickAccessSection**
+
+Requisitos:
+- `SectionLabel` com `inicioCopy.sections.quickAccess`.
+- Grid 2x2 de `QuickActionTile`, gap 12, com os quatro atalhos: `event` para `/events`, `ticket` para `/tickets`, `car` para `/garage`, `store` para `/store`. Rótulos de `inicioCopy.quickAccess`.
+- `testID` de cada tile: `inicio-quick-<chave>`, por exemplo `inicio-quick-events`.
+- Sempre renderiza. Não depende de dado nenhum.
+
+- [ ] **Step 10: Escrever os testes das seis seções**
+
+Criar `apps/mobile/src/screens/inicio/sections/__tests__/member-sections.test.tsx`, um `describe` por componente, reusando o boilerplate de `render` e `click` dos outros testes de seção.
+
+Cobertura mínima, um caso por linha:
+- `MemberGreeting`: com nome e data renderiza as duas linhas; sem nome usa a saudação genérica; com data inválida omite a segunda linha.
+- `NextEventCard`: com evento renderiza título, data e a pílula; tocar chama `onPress` com o slug; sem evento renderiza o vazio e não o card.
+- `MyTicketsSection`: renderiza os válidos; tocar chama `onOpenTicket` com o id; lista vazia renderiza `null`; lista só com inválidos renderiza `null`.
+- `MyGarageSection`: com gamificação ligada renderiza; com `gamification.enabled` falso renderiza `null`; com `garage` nulo renderiza `null`; tocar chama `onPress`.
+- `SubscriptionSection`: ativa mostra o tier e chama `onManage`; inativa mostra o upsell e chama `onSubscribe`; nula renderiza `null`.
+- `BoxSection`: premium ativo com box renderiza; premium inativo renderiza `null` mesmo com box presente; box nulo renderiza `null`.
+- `QuickAccessSection`: renderiza os quatro rótulos; cada tile chama `onNavigate` com o path certo.
+
+Mocar `@ccc/ui` apenas se `XPScoreboard`, `BadgeRow` ou `PremiumBadge` não renderizarem sob jsdom. Preferir usar os componentes reais; mocar é o último recurso e precisa de justificativa no report.
+
+- [ ] **Step 11: Rodar tudo**
+
+```bash
+pnpm --filter @ccc/mobile test -- member-sections format-member
+```
+
+Esperado: PASS em todos os casos.
+
+```bash
+pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint
+```
+
+Esperado: sem erro.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add apps/mobile/src/screens/inicio
+git commit -m "feat(mobile): secoes da home do membro logado"
+```
+
+---
+
+### Task 11: MemberHome, a home do membro conforme o handoff
+
+**Files:**
+- Create: `apps/mobile/src/screens/inicio/MemberHome.tsx`
+- Create: `apps/mobile/src/screens/inicio/useMemberHomeData.ts`
+- Create: `apps/mobile/src/screens/inicio/__tests__/MemberHome.test.tsx`
+
+**Interfaces:**
+- Consumes: as sete seções da Task 10. `HeroSection` e `ClubStatsSection` da Task 7. `AppHeader` da Task 6. `useHomeContent` e `useClubStats` da Task 5. `useUnreadCount` de `~/hooks/useUnreadCount`. `useAuth` de `~/auth/context`.
+- Produces:
+  - `useMemberHomeData(): MemberHomeData` em `~/screens/inicio/useMemberHomeData`.
+  - `MemberHome()` em `~/screens/inicio/MemberHome`.
+
+**Substitui** o plano original, que movia o `welcome.tsx` atual sem alterar nada. Decisão do usuário registrada no ledger: a home do membro passa a ser reescrita conforme o handoff, surfando o que o app já tem.
+
+**Regra de erro, diferente do GuestHome:** o `GuestHome` é uma request única, então falha é total. O `MemberHome` junta seis fontes independentes, então **falha de um bloco esconde só aquele bloco** e não derruba a tela. Cada bloco tem seu próprio carregamento e vazio. Isto responde a terceira pergunta aberta do handoff em "Antes de implementar", e é o motivo de as seções da Task 10 serem puras.
+
+- [ ] **Step 1: Escrever o hook agregador**
+
+Criar `apps/mobile/src/screens/inicio/useMemberHomeData.ts`.
+
+Requisitos:
+- Dispara em paralelo, cada um com seu próprio estado, sem que a falha de um cancele os outros. Usar `Promise.allSettled` ou um `useState` por fonte. Nunca `Promise.all`, que propagaria a primeira rejeição.
+- Fontes: `getProfile()`, `listEvents({ window: 'upcoming', limit: 1 })`, `listMyTickets()`, `getGarage()`, `getPremiumStatus()`, `getBox()`.
+- **`getBox()` só é chamado quando a garagem já respondeu com `isPremiumActive` verdadeiro.** Chamar para quem não é assinante gera 4xx previsível e ruído no Sentry. Se isso obrigar a uma segunda fase, fazer em duas fases e comentar por quê.
+- Devolve um objeto com um campo por fonte, cada um no formato `{ data, loading, error }`, mais um `refreshAll()`.
+- Tipar o retorno explicitamente com um `type MemberHomeData` exportado, para o `MemberHome` e o teste não dependerem de inferência.
+- Nada de `captureException` para falha de leitura esperada. Seguir o que `welcome.tsx` fazia: falha de rede vira estado, não exceção reportada.
+
+- [ ] **Step 2: Escrever o teste do MemberHome, que falha**
+
+Criar `apps/mobile/src/screens/inicio/__tests__/MemberHome.test.tsx`.
+
+Mocar `~/screens/inicio/useMemberHomeData`, `~/hooks/useHomeContent`, `~/hooks/useClubStats`, `~/hooks/useUnreadCount` e `expo-router`, no padrão de `GuestHome.test.tsx`. Um objeto `vi.hoisted` mutável por hook, reatribuído no `beforeEach`, para cada caso montar o cenário que quer.
+
+Casos obrigatórios:
+- Cenário completo renderiza, na ordem: header, hero, saudação, próximo evento, status do clube, meus ingressos, minha garagem, assinatura, caixa, acesso rápido.
+- **Nenhuma seção da vitrine do anônimo aparece.** Assertar explicitamente que `inicioCopy.cta.signup`, `inicioCopy.cta.subscribe` e `inicioCopy.sections.plans` NÃO estão no `textContent`. Esta é a trava contra vazamento entre os dois estados.
+- Falha só no bloco de ingressos: o resto da tela continua renderizando, e o rótulo de `myTickets` não aparece.
+- Falha só no bloco de garagem: o resto continua, e o rótulo de `myGarage` não aparece.
+- Falha no `useHomeContent`: o hero não aparece, mas saudação, próximo evento e acesso rápido continuam. Prova que a regra por bloco vale também para o conteúdo institucional.
+- Membro não premium: `inicio-box` não existe e `inicio-subscription-upsell` existe.
+- Membro premium: `inicio-box` existe e `inicio-subscription-active` existe.
+- Sino de notificações com não lidas mostra o badge; sem não lidas, não mostra.
+- Tocar no sino navega para `/notifications`.
+- Tocar num tile do acesso rápido navega para o path correspondente.
+
+- [ ] **Step 3: Escrever MemberHome**
+
+Criar `apps/mobile/src/screens/inicio/MemberHome.tsx`.
+
+Requisitos de montagem, na ordem vertical:
+1. `AppHeader` com o sino de notificações no slot `right`. Badge de não lidas via `useUnreadCount(true)`, no mesmo tratamento visual que o `welcome.tsx` atual usa (círculo com a contagem, `99+` acima de 99). Tocar navega para `/notifications`.
+2. `HeroSection` com `content.hero` e `content.institutional` de `useHomeContent`. Não renderiza quando o conteúdo falhou.
+3. `MemberGreeting` com o primeiro nome de `user.name` e `createdAt` do perfil.
+4. `NextEventCard` com o primeiro item de `listEvents`, navegando para `/events/<slug>`.
+5. `ClubStatsSection` com `stats` de `useClubStats`.
+6. `MyTicketsSection`, navegando para `/tickets/<id>` e `/tickets`.
+7. `MyGarageSection`, navegando para `/garage`.
+8. `SubscriptionSection`, navegando para `/assinaturas/minha-assinatura` quando ativa e `/assinaturas` quando não.
+9. `BoxSection`, navegando para `/caixa`.
+10. `QuickAccessSection`.
+
+Estrutura: `SafeAreaView` com `backgroundColor` de `p.bg`, `ScrollView` com `contentContainerStyle` de padding lateral 20, `paddingTop: 6`, `paddingBottom: 48` e `gap: 26`, `showsVerticalScrollIndicator={false}`. Mesmo esqueleto do `GuestHome`.
+
+O primeiro nome sai de `user.name` do `useAuth`, com fallback para o `name` do perfil carregado. Extrair com `(name ?? '').trim().split(/\s+/)[0] ?? ''`, o mesmo idiom que o `welcome.tsx` atual já usa.
+
+- [ ] **Step 4: Rodar e confirmar que passa**
+
+```bash
+pnpm --filter @ccc/mobile test -- MemberHome
+```
+
+Esperado: PASS em todos os casos do Step 2.
+
+- [ ] **Step 5: Typecheck e lint**
+
+```bash
+pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint
+```
+
+Esperado: sem erro.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/mobile/src/screens/inicio
+git commit -m "feat(mobile): home do membro logado conforme o handoff"
+```
+
+---
+
+### Task 12: Montagem da tela
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/GuestHome.tsx`
@@ -3383,9 +4722,35 @@ git add apps/mobile/src/screens/inicio apps/mobile/app/welcome.tsx
 git commit -m "feat(mobile): monta a tela de inicio com vitrine do nao logado"
 ```
 
+#### Adendo da emenda de escopo
+
+Duas mudanças nesta task.
+
+**1. O Step 1 original está CANCELADO.** Ele mandava mover o conteúdo de `app/welcome.tsx` para `MemberHome.tsx` sem alterar nada. A Task 11 já criou o `MemberHome` do zero, conforme o handoff. **Não mover nada de `welcome.tsx`.** O conteúdo antigo do `welcome.tsx` é descartado quando o Step 9 o substitui pelo wrapper. Se algum helper do arquivo antigo (`isSoon`, `venueLine`, `eventTypeLabel`) for útil e não existir em `~/lib/format`, movê-lo para onde faça sentido em vez de deixar código morto, e registrar a decisão no report.
+
+**2. O `GuestHome` ganha o header e as duas seções novas.** A ordem vertical passa a ser:
+
+1. `AppHeader` com um botão `ENTRAR` no slot `right`, navegando para `buildLoginHref('/welcome')`. `testID`: `inicio-guest-login`.
+2. `HeroSection`
+3. `BenefitsSection`
+4. `ClubStatsSection` com `stats` de `useClubStats`
+5. `CtaSection`
+6. `PlansSection`
+7. `HighlightsSection`, agora recebendo também `events` de `listEvents({ window: 'upcoming', limit: 3 })`
+8. `StoreTeaserSection`
+9. `ConfirmedCarsSection`, com o slug do primeiro evento próximo, ou `null` quando não houver
+
+O `GuestHome` passa a consumir `useClubStats` além de `useHomeContent`, e a buscar os próximos eventos. **A regra de erro não muda:** a falha do `useHomeContent` continua sendo total, porque hero, benefícios, planos e destaques curados vêm todos dele e sem eles não há tela. Já `useClubStats`, os eventos, a loja e os carros confirmados são complementares: cada um falha para dentro da própria seção, que simplesmente não renderiza. Comentar essa assimetria no arquivo.
+
+Acrescentar aos testes do `GuestHome`:
+- O header renderiza e o botão `ENTRAR` navega para o login carregando `next=/welcome`.
+- `ClubStatsSection` aparece com stats e desaparece sem.
+- Falha nos eventos não impede o resto de renderizar.
+- **Nenhuma seção do membro aparece:** assertar que `inicioCopy.sections.myTickets`, `inicioCopy.sections.myGarage` e `inicioCopy.sections.quickAccess` NÃO estão no `textContent`. Trava simétrica à do `MemberHome`.
+
 ---
 
-### Task 10: Verificação de ponta a ponta
+### Task 13: Verificação de ponta a ponta
 
 **Files:**
 - Nenhum arquivo novo. Correções pontuais no que a verificação apontar.
@@ -3477,28 +4842,92 @@ gh pr create --base main --title "feat: tela de inicio para usuario nao logado" 
 
 O corpo do PR deve listar explicitamente o que ficou fora de escopo, copiado da seção "Fora de escopo" do spec.
 
+#### Adendo da emenda de escopo
+
+Acrescentar à verificação:
+
+- [ ] **Step A: Conferir o endpoint de contadores na API rodando**
+
+```bash
+curl -s http://localhost:3000/api/club-stats
+```
+
+Esperado: JSON `{"members":N,"events":N,"cars":N}` com inteiros não negativos. Conferir que o número de eventos corresponde apenas aos publicados com início no futuro, comparando com o que `GET /events?window=upcoming` devolve.
+
+- [ ] **Step B: Conferir o cache dos contadores**
+
+Chamar duas vezes seguidas e confirmar que a segunda resposta é imediata. Depois criar um carro no banco, chamar de novo dentro dos cinco minutos, e confirmar que o número **não** mudou. Este é o comportamento pretendido.
+
+- [ ] **Step C: Verificar a home do membro no app**
+
+Autenticar e abrir `/welcome`. Conferir item por item:
+
+1. Header com monograma e sino, badge de não lidas quando houver.
+2. Hero institucional com o mesmo conteúdo do estado anônimo.
+3. Saudação com o primeiro nome e a linha `MEMBRO DESDE`.
+4. Card do próximo evento, navegando para o detalhe.
+5. Status do clube com os três contadores.
+6. Meus ingressos, quando houver ingresso válido.
+7. Minha garagem com XP e badges, quando a gamificação estiver ligada.
+8. Assinatura: tier quando ativa, upsell quando não.
+9. Caixa do mês, apenas quando premium ativo.
+10. Acesso rápido, com os quatro atalhos navegando certo.
+11. **Nenhuma seção da vitrine do anônimo aparece.**
+
+- [ ] **Step D: Verificar a degradação por bloco**
+
+Com a API de pé, derrubar propositalmente uma fonte (por exemplo parando o container do Postgres por alguns segundos, ou apontando o app para uma porta errada só para um teste manual) e confirmar que o `MemberHome` esconde os blocos que falharam sem virar tela de erro inteira. Registrar como foi feito.
+
+- [ ] **Step E: Conferir que o anônimo não regrediu**
+
+Deslogar e conferir as nove seções do `GuestHome`, incluindo o botão `ENTRAR` do header, a vitrine da loja e a seção de carros confirmados (que provavelmente não aparece, e isso é o esperado).
+
 ---
 
 ## Desvios em relação ao spec aprovado
 
-Dois itens que o spec lista e este plano não implementa. Ambos precisam de
-confirmação antes da execução.
+Um item do spec não é implementado.
 
-1. **`AppHeader.tsx` não é criado.** O spec o lista entre os componentes do
-   handoff, mas nenhuma das duas variantes o usa: `GuestHome` não tem header, e
-   `MemberHome` mantém o header atual inline, intocado. Criar o componente aqui
-   deixaria código morto no repo. Ele entra junto da home do membro, que é quem
-   vai consumi-lo.
-2. **Animação de entrada não é implementada.** O spec pede fade mais
+1. **Animação de entrada não é implementada.** O spec pede fade mais
    `translateY` de 10px em 320ms respeitando "reduzir movimento". Ficou de fora
    por ser puro polimento visual, e por `Animated` mais `AccessibilityInfo`
    exigirem harness de teste próprio sob jsdom, o que custaria mais que o ganho
    nesta entrega. Registrado como dívida abaixo.
 
+`AppHeader` **é** implementado (Task 6). Estava na lista de desvios na primeira
+versão deste plano e saiu dela quando o usuário escolheu o header de marca para
+o estado anônimo.
+
+`MemberHome` **é** reescrito conforme o handoff (Tasks 10 e 11). A primeira
+versão deste plano o mantinha byte a byte; a emenda de escopo do usuário
+substituiu essa decisão.
+
 ## Dívidas registradas
 
-1. `apps/mobile/src/screens/assinaturas/tier-visual.ts` duplica a paleta do handoff (`goldDeep`, `goldLight`, surface `#0F0E0B`, hairline `rgba(212,175,55,0.14)`) que a Task 4 promove a token em `packages/design`. Consolidar num PR separado, migrando `tier-visual.ts` para os tokens. Não fazer aqui: mexeria em telas fora do escopo.
-2. CRUD administrativo do conteúdo institucional, incluindo upload das imagens de banner e institucional para R2.
-3. Home do membro conforme o handoff (saudação, status do clube, acesso rápido) e o endpoint de contadores do clube, que não existe.
-4. Animação de entrada da tela (fade mais translateY de 10px em 320ms, respeitando "reduzir movimento").
-5. Pull-to-refresh na Início.
+1. `apps/mobile/src/screens/assinaturas/tier-visual.ts` duplica a paleta do
+   handoff (`goldDeep`, `goldLight`, surface `#0F0E0B`, hairline
+   `rgba(212,175,55,0.14)`) que a Task 5 promove a token em `packages/design`.
+   Consolidar num PR separado, migrando `tier-visual.ts` para os tokens. Não
+   fazer aqui: mexeria em telas fora do escopo.
+2. CRUD administrativo do conteúdo institucional, incluindo upload das imagens
+   de banner e institucional para R2.
+3. Animação de entrada da tela (fade mais `translateY` de 10px em 320ms,
+   respeitando "reduzir movimento").
+4. Pull-to-refresh na Início.
+5. Sem gate automático de drift entre migration e schema no CI.
+   `.github/workflows/ci.yml` roda apenas `prisma migrate deploy`; não existe
+   `prisma validate` nem `prisma format --check` em nenhum workflow ou script.
+   Como este repo escreve migrations à mão, divergência só é pega por acidente.
+   Achado da review da Task 1.
+6. `seed.ts` faz `homeBenefit.deleteMany()` e `homeHighlight.deleteMany()` sem
+   `where`. Quando o CRUD admin existir, rodar `db:seed` apaga linhas curadas.
+   Levar para as notas do PR de CRUD admin. Achado da review da Task 1.
+7. `cheapestActivePrice` em `apps/api/src/routes/home-content.ts` depende do
+   `where: { active: true }` do chamador em vez de filtrar por conta própria.
+   Um segundo chamador sem essa cláusula pegaria preço inativo em silêncio.
+   Achado da review da Task 3.
+8. Tab bar do handoff (Início, Comunidade, Garagem, Perfil). O app tem uma tab
+   bar diferente e `/welcome` não está nela. Fora do escopo desta entrega.
+9. Endpoint público de parceiros. `Partner` e `PartnerModule` só existem em CRUD
+   admin e dentro do `/me/box/catalog` autenticado, então a Seção 6 usa
+   destaques curados para representar parceiros em vez de dados reais.

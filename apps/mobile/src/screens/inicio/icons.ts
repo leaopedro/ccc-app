@@ -4,6 +4,13 @@
 // lucide-react-native. As chaves guardadas em HomeBenefit.icon são desta
 // tabela, não do Material. Chave desconhecida cai em Star, para conteúdo novo
 // cadastrado no banco nunca derrubar a tela.
+//
+// HOME_ICON é tipado como Record<string, LucideIcon>, não `as const` mais
+// cast de chave: com o cast, noUncheckedIndexedAccess não se aplica e o `??
+// Star` vira código morto para o compilador, que passaria a marcá-lo como
+// removível. Object.hasOwn barra chaves herdadas de Object.prototype (ex.:
+// "constructor", "toString"), que HomeBenefit.icon pode conter vindas de um
+// campo editável no admin.
 
 import {
   Calendar,
@@ -20,9 +27,10 @@ import {
   Tag,
   Ticket,
   Users,
+  type LucideIcon,
 } from 'lucide-react-native';
 
-const HOME_ICON = {
+const HOME_ICON: Record<string, LucideIcon> = {
   calendar: Calendar,
   'calendar-check': CalendarCheck,
   car: Car,
@@ -37,9 +45,7 @@ const HOME_ICON = {
   store: Store,
   box: Package,
   crown: Crown,
-} as const;
+};
 
-export type HomeIconKey = keyof typeof HOME_ICON;
-
-export const homeIcon = (key: string): (typeof HOME_ICON)[HomeIconKey] =>
-  HOME_ICON[key as HomeIconKey] ?? Star;
+export const homeIcon = (key: string): LucideIcon =>
+  (Object.hasOwn(HOME_ICON, key) ? HOME_ICON[key] : undefined) ?? Star;

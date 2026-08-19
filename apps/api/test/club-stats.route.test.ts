@@ -76,10 +76,17 @@ describe('GET /api/club-stats', () => {
   });
 
   it('counts active members and cars', async () => {
-    const { user } = await createUser({ verified: true });
+    const { user } = await createUser();
     // nickname e obrigatorio e unico no modelo Car (Step 1); nao assumido no brief original.
     await prisma.car.create({
       data: { userId: user.id, make: 'Nissan', model: 'Skyline', year: 1999, nickname: 'skyline-1' },
+    });
+    // Segundo usuario com status != active. Sem isso, a asserção members === 1
+    // passaria mesmo se a rota trocasse o where por um count() sem filtro, ou
+    // por um predicado errado (ex.: emailVerifiedAt) — o teste ficaria mudo
+    // para a semantica real do contador.
+    await prisma.user.create({
+      data: { email: 'disabled@jdm.test', name: 'Disabled User', status: 'disabled' },
     });
 
     const res = await app.inject(GET);
@@ -93,7 +100,7 @@ describe('GET /api/club-stats', () => {
     const first = clubStatsResponseSchema.parse((await app.inject(GET)).json());
     expect(first.cars).toBe(0);
 
-    const { user } = await createUser({ verified: true });
+    const { user } = await createUser();
     await prisma.car.create({
       data: { userId: user.id, make: 'Honda', model: 'NSX', year: 1992, nickname: 'nsx-1' },
     });

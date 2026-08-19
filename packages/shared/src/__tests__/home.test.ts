@@ -4,6 +4,7 @@ import {
   HOME_CONTENT_SINGLETON_ID,
   HOME_PLAN_BENEFITS_LIMIT,
   homeContentResponseSchema,
+  homeHighlightKindSchema,
 } from '../home.js';
 
 const VALID = {
@@ -50,8 +51,14 @@ describe('homeContentResponseSchema', () => {
     expect(HOME_PLAN_BENEFITS_LIMIT).toBe(3);
   });
 
+  it('pins the highlight kind enum to the Prisma HomeHighlightKind values', () => {
+    // Mirrors packages/db/prisma/schema.prisma's HomeHighlightKind enum, in order.
+    expect(homeHighlightKindSchema.options).toEqual(['event', 'day_use', 'experience', 'partner']);
+  });
+
   it('accepts a full valid payload', () => {
-    expect(() => homeContentResponseSchema.parse(VALID)).not.toThrow();
+    const result = homeContentResponseSchema.parse(VALID);
+    expect(result).toMatchObject(VALID);
   });
 
   it('rejects an unknown highlight kind', () => {
@@ -71,6 +78,51 @@ describe('homeContentResponseSchema', () => {
 
   it('accepts empty benefits, highlights and plans', () => {
     const empty = { ...VALID, benefits: [], highlights: [], plans: [] };
-    expect(() => homeContentResponseSchema.parse(empty)).not.toThrow();
+    const result = homeContentResponseSchema.parse(empty);
+    expect(result).toMatchObject(empty);
+  });
+
+  it('rejects an empty hero title', () => {
+    const bad = { ...VALID, hero: { ...VALID.hero, title: '' } };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('rejects an empty institutional body', () => {
+    const bad = { ...VALID, institutional: { ...VALID.institutional, body: '' } };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('rejects an empty benefit title', () => {
+    const bad = { ...VALID, benefits: [{ ...VALID.benefits[0], title: '' }] };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('rejects an empty highlight title', () => {
+    const bad = { ...VALID, highlights: [{ ...VALID.highlights[0], title: '' }] };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('rejects an empty plan name', () => {
+    const bad = { ...VALID, plans: [{ ...VALID.plans[0], name: '' }] };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('rejects a currency that is not exactly 3 characters', () => {
+    const bad = { ...VALID, plans: [{ ...VALID.plans[0], currency: 'US' }] };
+    expect(() => homeContentResponseSchema.parse(bad)).toThrow();
+  });
+
+  it('strips unknown keys from a parsed plan, so provider ids cannot leak through', () => {
+    const withExtra = {
+      ...VALID,
+      plans: [{ ...VALID.plans[0], stripePriceId: 'price_123' }],
+    };
+    const result = homeContentResponseSchema.parse(withExtra);
+    expect(result.plans[0]).not.toHaveProperty('stripePriceId');
+  });
+
+  it('rejects a payload missing a required top-level field', () => {
+    const { plans: _plans, ...missingPlans } = VALID;
+    expect(() => homeContentResponseSchema.parse(missingPlans)).toThrow();
   });
 });

@@ -102,6 +102,10 @@
       "types": "./src/health.ts",
       "default": "./dist/health.js"
     },
+    "./home": {
+      "types": "./src/home.ts",
+      "default": "./dist/home.js"
+    },
     "./ids": {
       "types": "./src/ids.ts",
       "default": "./dist/ids.js"

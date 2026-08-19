@@ -697,6 +697,104 @@ const seedBoxSettings = async (): Promise<void> => {
   console.log('Seeded box settings.');
 };
 
+// Keep in sync with HOME_CONTENT_SINGLETON_ID in @ccc/shared/home.
+const HOME_CONTENT_SINGLETON_ID = 'home_default';
+
+const HOME_BENEFITS = [
+  {
+    icon: 'calendar',
+    title: 'Eventos exclusivos',
+    description: 'Encontros, track days e drives fechados só para membros.',
+  },
+  {
+    icon: 'sun',
+    title: 'Day Use na sede',
+    description: 'Acesso ao clubhouse em Curitiba nos dias liberados do seu plano.',
+  },
+  {
+    icon: 'handshake',
+    title: 'Benefícios com parceiros',
+    description: 'Condições especiais em oficinas, estética e serviços automotivos.',
+  },
+  {
+    icon: 'star',
+    title: 'Módulos premium',
+    description: 'Detalhamento, garagem estendida e serviços recorrentes opcionais.',
+  },
+  {
+    icon: 'tag',
+    title: 'Descontos em experiências',
+    description: 'Valores de membro nas experiências e nas vagas de garagem.',
+  },
+] as const;
+
+const HOME_HIGHLIGHTS = [
+  {
+    kind: 'event' as const,
+    title: 'Próximos encontros',
+    subtitle: 'A agenda do clube, mês a mês.',
+    linkPath: '/events',
+  },
+  {
+    kind: 'day_use' as const,
+    title: 'Day Use',
+    subtitle: 'Um dia na sede, com a sua máquina.',
+    linkPath: null,
+  },
+  {
+    kind: 'experience' as const,
+    title: 'Experiências automotivas',
+    subtitle: 'Drives guiados e track days.',
+    linkPath: null,
+  },
+  {
+    kind: 'partner' as const,
+    title: 'Parceiros do clube',
+    subtitle: 'Quem cuida do seu carro com condição de membro.',
+    linkPath: null,
+  },
+] as const;
+
+const seedHomeContent = async (): Promise<void> => {
+  // Singleton: update vazio, para uma reexecução do seed não sobrescrever
+  // texto ajustado direto no banco. Mesmo idiom de seedBoxSettings.
+  await prisma.homeContent.upsert({
+    where: { id: HOME_CONTENT_SINGLETON_ID },
+    update: {},
+    create: { id: HOME_CONTENT_SINGLETON_ID },
+  });
+
+  // Benefícios e destaques não têm unique natural além do título. Delete e
+  // recria por bloco mantém a ordem autoritativa e é trivialmente idempotente,
+  // mesmo idiom de premiumPlanBenefit em seedPremiumCatalog.
+  await prisma.homeBenefit.deleteMany();
+  await prisma.homeBenefit.createMany({
+    data: HOME_BENEFITS.map((b, index) => ({
+      icon: b.icon,
+      title: b.title,
+      description: b.description,
+      active: true,
+      sortOrder: index,
+    })),
+  });
+
+  await prisma.homeHighlight.deleteMany();
+  await prisma.homeHighlight.createMany({
+    data: HOME_HIGHLIGHTS.map((h, index) => ({
+      kind: h.kind,
+      title: h.title,
+      subtitle: h.subtitle,
+      linkPath: h.linkPath,
+      active: true,
+      sortOrder: index,
+    })),
+  });
+
+  console.log(
+    `Seeded home content: 1 singleton, ${HOME_BENEFITS.length} benefits, ${HOME_HIGHLIGHTS.length} highlights.`,
+  );
+};
+
 const main = async (): Promise<void> => {
   for (const e of events) {
     const { tiers, ...rest } = e;
@@ -748,6 +846,8 @@ const main = async (): Promise<void> => {
   await seedPremiumCatalog();
 
   await seedBoxSettings();
+
+  await seedHomeContent();
 };
 
 main()

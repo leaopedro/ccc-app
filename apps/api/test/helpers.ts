@@ -108,6 +108,12 @@ export const resetDatabase = async (): Promise<void> => {
   // GeneralSettings.defaultFreeGarageSpots persists across tests and gates
   // POST /me/cars allocation. Reset so each test sees a clean cap.
   await prisma.generalSettings.deleteMany();
+  // Home institucional: singleton + filhas. Sem FK entre elas, ordem livre.
+  // O singleton persiste entre testes e o endpoint público o cria on demand,
+  // então limpar aqui garante que cada spec controle o próprio conteúdo.
+  await prisma.homeBenefit.deleteMany();
+  await prisma.homeHighlight.deleteMany();
+  await prisma.homeContent.deleteMany();
   await prisma.productCollection.deleteMany();
   await prisma.collection.deleteMany();
   await prisma.variant.deleteMany();

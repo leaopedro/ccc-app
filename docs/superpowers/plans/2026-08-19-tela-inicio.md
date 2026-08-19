@@ -15,7 +15,7 @@
 
 - Branch de trabalho: `feat/tela-inicial`. Nunca commitar em `production`. PR abre contra `main`.
 - Todo texto de UI em PT-BR, literal, sem inventar copy nova fora dos arquivos `src/copy/*`.
-- Sem em-dash e sem hífen de substituição em comentários ou copy.
+- Sem em-dash e sem hífen de substituição em **copy de UI** (arquivos `src/copy/*`, textos que o usuário lê) e em mensagens de commit. Comentários de código seguem o estilo já estabelecido no arquivo vizinho: `packages/shared/src/premium-catalog.ts` e `apps/api/src/routes/premium-catalog.ts` usam em-dash em comentários, e divergir disso criaria inconsistência pior que a regra evita. Ruling do controller na Task 2, registrado no ledger.
 - Não usar `Date.now()` em fixtures de teste onde a ordenação importe; usar datas fixas.
 - Nenhum id de provider (`stripePriceId`, `rcProductId`) pode aparecer em resposta de API.
 - `GET /api/home-content` é **unauthed**, igual `premium-catalog.ts` e `store.ts`.

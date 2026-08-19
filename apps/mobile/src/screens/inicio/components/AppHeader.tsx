@@ -18,8 +18,7 @@ export function AppHeader({ right }: { right?: ReactNode }) {
     <View style={styles.row}>
       <View style={styles.left}>
         <Image
-          // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-          source={require('@ccc/design/assets/monogram-ccc-circle-gold.png')}
+          source={require('@ccc/design/assets/brand/monogram-ccc-circle-gold.png')}
           accessibilityLabel={WORDMARK}
           style={styles.monogram}
         />

@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'Jost_600SemiBold',
     fontSize: 11,
-    letterSpacing: 1.8,
+    letterSpacing: 2,
     color: p.bg,
     textTransform: 'uppercase',
   },

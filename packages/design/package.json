@@ -25,7 +25,6 @@
     "dist",
     "tailwind-preset.cjs",
     "assets/*.webp",
-    "assets/*.png",
     "brand.md"
   ],
   "scripts": {

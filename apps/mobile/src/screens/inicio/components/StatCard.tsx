@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontFamily: 'Jost_600SemiBold',
     fontSize: 9,
-    letterSpacing: 2.2,
+    letterSpacing: 2,
     color: p.muted50,
     textAlign: 'center',
   },

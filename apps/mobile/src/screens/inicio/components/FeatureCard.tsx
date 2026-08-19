@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: p.hairlineStrong,
-    backgroundColor: '#100e09',
+    backgroundColor: p.featureSurface,
     gap: 14,
   },
   pressed: { opacity: 0.94 },

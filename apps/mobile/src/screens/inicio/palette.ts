@@ -19,4 +19,6 @@ export const p = {
   muted60: 'rgba(242,232,216,0.6)',
   muted50: 'rgba(242,232,216,0.5)',
   muted45: 'rgba(242,232,216,0.45)',
+  // FeatureCard: 60% stop do gradiente radial do handoff, achatado em solido.
+  featureSurface: '#100e09',
 } as const;

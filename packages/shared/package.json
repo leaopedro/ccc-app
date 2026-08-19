@@ -58,6 +58,10 @@
       "types": "./src/check-in.ts",
       "default": "./dist/check-in.js"
     },
+    "./club-stats": {
+      "types": "./src/club-stats.ts",
+      "default": "./dist/club-stats.js"
+    },
     "./events": {
       "types": "./src/events.ts",
       "default": "./dist/events.js"

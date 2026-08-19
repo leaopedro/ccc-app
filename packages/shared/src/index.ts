@@ -30,3 +30,4 @@ export * from './badges-copy.js';
 export * from './box.js';
 export * from './premium.js';
 export * from './home.js';
+export * from './club-stats.js';

@@ -20,6 +20,7 @@ import { authRoutes } from './routes/auth/index.js';
 import { badgesCatalogRoute } from './routes/badges-catalog.js';
 import { carRoutes } from './routes/cars.js';
 import { cartRoutes } from './routes/cart.js';
+import { clubStatsRoutes } from './routes/club-stats.js';
 import { devUploadRoutes } from './routes/dev-uploads.js';
 import { eventRoutes } from './routes/events.js';
 import { feedRoutes } from './routes/feed.js';
@@ -147,6 +148,7 @@ export const buildApp = async (
   await app.register(premiumPricingRoutes);
   await app.register(premiumCatalogRoutes);
   await app.register(homeContentRoutes);
+  await app.register(clubStatsRoutes);
   await app.register(uploadRoutes);
   await app.register(meDocumentRoutes);
   await app.register(carRoutes);

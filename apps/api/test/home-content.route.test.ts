@@ -104,10 +104,14 @@ describe('GET /api/home-content', () => {
       },
     });
 
-    const body = homeContentResponseSchema.parse((await app.inject(GET)).json());
+    const res = await app.inject(GET);
+    const body = homeContentResponseSchema.parse(res.json());
     expect(body.hero.bannerUrl).toContain('home/banner.webp');
     expect(body.institutional.imageUrl).toContain('home/casa.webp');
-    expect(JSON.stringify(body)).not.toContain('objectKey');
+    // Asserts on the raw HTTP body, not the parsed object: schema parsing
+    // strips unknown keys, so a leak-by-extra-key regression (e.g. spreading
+    // ...content into hero) would stay invisible to a parsed-object check.
+    expect(res.body).not.toContain('objectKey');
   });
 
   it('hides inactive benefits and orders the active ones by sortOrder', async () => {
@@ -252,7 +256,12 @@ describe('GET /api/home-content', () => {
       },
     });
 
-    const raw = (await app.inject(GET)).body;
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = homeContentResponseSchema.parse(res.json());
+    expect(body.plans).toHaveLength(1);
+
+    const raw = res.body;
     expect(raw).not.toContain('price_leak_me');
     expect(raw).not.toContain('rc_leak_me');
   });

@@ -22,7 +22,8 @@
 - Não alterar `/api/plans`, `PremiumPlanPrice`, `PremiumPlanBenefit` nem qualquer tela fora da home.
 - Não alterar os tokens de cor existentes em `packages/design` (`brandDeep`, `brandSoft`, `surface`). Só adicionar novos.
 - Não tocar em `apps/mobile/src/screens/assinaturas/tier-visual.ts`. Ele duplica a paleta do handoff; a consolidação é dívida registrada para outro PR.
-- Padrão de componente mobile desta tela: `StyleSheet.create` mais `Text`/`View` do `react-native`, seguindo `src/screens/assinaturas/PlanosScreen.tsx`. Não usar `@ccc/ui` nem classes NativeWind nos componentes novos.
+- Padrão de componente mobile desta tela: `StyleSheet.create` mais `Text`/`View` do `react-native`, seguindo `src/screens/assinaturas/PlanosScreen.tsx`. Não usar `@ccc/ui` nem classes NativeWind nos componentes **novos**. Isso não vale para `MemberHome.tsx` na Task 9, que é um recorte literal do `welcome.tsx` atual: ele continua usando `@ccc/ui` e NativeWind porque nenhuma linha dele pode mudar nesta entrega.
+- O boilerplate de render de teste (`container`, `root`, `render`, `click`, `beforeEach`/`afterEach` com `IS_REACT_ACT_ENVIRONMENT`) se repete por arquivo de teste de propósito. É a convenção já usada em `src/screens/assinaturas/__tests__/`, e extrair um helper compartilhado é refactor de infraestrutura de teste fora do escopo desta entrega.
 - Ícones vêm de `lucide-react-native`. Nomes Material do handoff são mapeados, não importados.
 - Commits frequentes, um por task no mínimo.
 

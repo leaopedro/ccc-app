@@ -59,6 +59,7 @@ export const ArrowLeft = proxy.ArrowLeft;
 export const Calendar = proxy.Calendar;
 export const CalendarCheck = proxy.CalendarCheck;
 export const Car = proxy.Car;
+export const Check = proxy.Check;
 export const CheckSquare = proxy.CheckSquare;
 export const Crown = proxy.Crown;
 export const Flag = proxy.Flag;

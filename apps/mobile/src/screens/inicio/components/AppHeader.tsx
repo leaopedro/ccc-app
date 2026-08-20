@@ -19,7 +19,7 @@ export function AppHeader({ right }: { right?: ReactNode }) {
       <View style={styles.left}>
         <Image
           source={require('@ccc/design/assets/brand/monogram-ccc-circle-gold.png')}
-          accessibilityLabel={WORDMARK}
+          accessible={false}
           style={styles.monogram}
         />
         <View>

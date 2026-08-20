@@ -141,7 +141,11 @@ describe('GET /api/home-content', () => {
     expect(body.highlights[0]!.kind).toBe('day_use');
   });
 
-  it('uses the cheapest active price as fromAmountCents and caps benefits at three', async () => {
+  it('uses the monthly price as fromAmountCents even when the annual number is smaller, and caps benefits at three', async () => {
+    // Blocker 3: an annual total (e.g. R$399,00/ano) can be numerically
+    // smaller than a monthly price (e.g. R$499,00/mês) while being a far
+    // larger commitment. The client hardcodes "/MÊS" on fromAmountCents, so
+    // picking the annual row here would advertise a 12x-wrong price.
     await makePlan({
       tier: 'gold',
       slug: 'ouro',
@@ -156,7 +160,7 @@ describe('GET /api/home-content', () => {
 
     const body = homeContentResponseSchema.parse((await app.inject(GET)).json());
     expect(body.plans).toHaveLength(1);
-    expect(body.plans[0]!.fromAmountCents).toBe(39900);
+    expect(body.plans[0]!.fromAmountCents).toBe(49900);
     expect(body.plans[0]!.currency).toBe('BRL');
     expect(body.plans[0]!.benefits).toEqual(['Um', 'Dois', 'Tres']);
   });
@@ -176,6 +180,23 @@ describe('GET /api/home-content', () => {
 
     const body = homeContentResponseSchema.parse((await app.inject(GET)).json());
     expect(body.plans[0]!.fromAmountCents).toBe(29900);
+  });
+
+  it('excludes a plan that only has an active annual price', async () => {
+    // Blocker 3: an operator moving a plan to annual-only (deactivating the
+    // monthly row) must drop it from the home summary, not fall back to
+    // advertising the annual total under a "/MÊS" label.
+    await makePlan({
+      tier: 'bronze',
+      slug: 'bronze',
+      name: 'Bronze',
+      sortOrder: 0,
+      prices: [{ cadence: 'annual', baseAmountCents: 149000, active: true }],
+      benefits: ['Um'],
+    });
+
+    const body = homeContentResponseSchema.parse((await app.inject(GET)).json());
+    expect(body.plans).toEqual([]);
   });
 
   it('excludes plans that are inactive, not featured, or have no active price', async () => {

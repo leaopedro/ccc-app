@@ -34,51 +34,53 @@
 
 ## Estrutura de arquivos
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `packages/db/prisma/schema.prisma` | modelos `HomeContent`, `HomeBenefit`, `HomeHighlight`, enum `HomeHighlightKind`, coluna `PremiumPlan.homeFeatured` |
-| `packages/db/prisma/migrations/20260819000000_home_content/migration.sql` | DDL |
-| `packages/db/prisma/seed.ts` | `seedHomeContent()` idempotente |
-| `packages/shared/src/home.ts` | schemas Zod do payload da home |
-| `packages/shared/package.json` | entrada `./home` no mapa de exports |
-| `apps/api/src/services/home-content.ts` | `ensureHomeContent()` |
-| `apps/api/src/routes/home-content.ts` | `GET /api/home-content` |
-| `apps/api/src/app.ts` | registro do plugin |
-| `apps/api/test/helpers.ts` | limpeza das tabelas novas |
-| `apps/api/test/home-content.route.test.ts` | teste de integração |
-| `packages/design/src/tokens.ts` | tokens de cor do handoff |
-| `packages/design/tailwind-preset.cjs` | espelho dos tokens |
-| `apps/mobile/app/_layout.tsx` | pesos Jost 500/600/700 |
-| `apps/mobile/src/copy/inicio.ts` | copy PT-BR |
-| `apps/mobile/src/api/home.ts` | `getHomeContent()` |
-| `apps/mobile/src/hooks/useHomeContent.ts` | estado de carregamento |
-| `apps/mobile/src/screens/inicio/palette.ts` | paleta derivada dos tokens |
-| `apps/mobile/src/screens/inicio/icons.ts` | mapa de chave de ícone para lucide |
-| `apps/mobile/src/screens/inicio/components/SectionLabel.tsx` | label dourado |
-| `apps/mobile/src/screens/inicio/components/GoldPill.tsx` | CTA gradiente dourado |
-| `apps/mobile/src/screens/inicio/components/FeatureCard.tsx` | card de destaque |
-| `apps/mobile/src/screens/inicio/sections/HeroSection.tsx` | Seção 1 |
-| `apps/mobile/src/screens/inicio/sections/BenefitsSection.tsx` | Seção 2 |
-| `apps/mobile/src/screens/inicio/sections/CtaSection.tsx` | Seções 3 e 4 |
-| `apps/mobile/src/screens/inicio/sections/PlansSection.tsx` | Seção 5 |
-| `apps/mobile/src/screens/inicio/sections/HighlightsSection.tsx` | Seção 6 |
-| `apps/mobile/src/screens/inicio/GuestHome.tsx` | monta as 6 seções |
-| `apps/mobile/src/screens/inicio/MemberHome.tsx` | estado logado, movido de `welcome.tsx` |
-| `apps/mobile/src/screens/inicio/InicioScreen.tsx` | escolhe guest, member ou skeleton |
-| `apps/mobile/app/welcome.tsx` | wrapper de uma linha |
-| `apps/mobile/src/auth/redirect-intent.ts` | libera `/assinaturas` no `next` |
+| Arquivo                                                                   | Responsabilidade                                                                                                   |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `packages/db/prisma/schema.prisma`                                        | modelos `HomeContent`, `HomeBenefit`, `HomeHighlight`, enum `HomeHighlightKind`, coluna `PremiumPlan.homeFeatured` |
+| `packages/db/prisma/migrations/20260819000000_home_content/migration.sql` | DDL                                                                                                                |
+| `packages/db/prisma/seed.ts`                                              | `seedHomeContent()` idempotente                                                                                    |
+| `packages/shared/src/home.ts`                                             | schemas Zod do payload da home                                                                                     |
+| `packages/shared/package.json`                                            | entrada `./home` no mapa de exports                                                                                |
+| `apps/api/src/services/home-content.ts`                                   | `ensureHomeContent()`                                                                                              |
+| `apps/api/src/routes/home-content.ts`                                     | `GET /api/home-content`                                                                                            |
+| `apps/api/src/app.ts`                                                     | registro do plugin                                                                                                 |
+| `apps/api/test/helpers.ts`                                                | limpeza das tabelas novas                                                                                          |
+| `apps/api/test/home-content.route.test.ts`                                | teste de integração                                                                                                |
+| `packages/design/src/tokens.ts`                                           | tokens de cor do handoff                                                                                           |
+| `packages/design/tailwind-preset.cjs`                                     | espelho dos tokens                                                                                                 |
+| `apps/mobile/app/_layout.tsx`                                             | pesos Jost 500/600/700                                                                                             |
+| `apps/mobile/src/copy/inicio.ts`                                          | copy PT-BR                                                                                                         |
+| `apps/mobile/src/api/home.ts`                                             | `getHomeContent()`                                                                                                 |
+| `apps/mobile/src/hooks/useHomeContent.ts`                                 | estado de carregamento                                                                                             |
+| `apps/mobile/src/screens/inicio/palette.ts`                               | paleta derivada dos tokens                                                                                         |
+| `apps/mobile/src/screens/inicio/icons.ts`                                 | mapa de chave de ícone para lucide                                                                                 |
+| `apps/mobile/src/screens/inicio/components/SectionLabel.tsx`              | label dourado                                                                                                      |
+| `apps/mobile/src/screens/inicio/components/GoldPill.tsx`                  | CTA gradiente dourado                                                                                              |
+| `apps/mobile/src/screens/inicio/components/FeatureCard.tsx`               | card de destaque                                                                                                   |
+| `apps/mobile/src/screens/inicio/sections/HeroSection.tsx`                 | Seção 1                                                                                                            |
+| `apps/mobile/src/screens/inicio/sections/BenefitsSection.tsx`             | Seção 2                                                                                                            |
+| `apps/mobile/src/screens/inicio/sections/CtaSection.tsx`                  | Seções 3 e 4                                                                                                       |
+| `apps/mobile/src/screens/inicio/sections/PlansSection.tsx`                | Seção 5                                                                                                            |
+| `apps/mobile/src/screens/inicio/sections/HighlightsSection.tsx`           | Seção 6                                                                                                            |
+| `apps/mobile/src/screens/inicio/GuestHome.tsx`                            | monta as 6 seções                                                                                                  |
+| `apps/mobile/src/screens/inicio/MemberHome.tsx`                           | estado logado, movido de `welcome.tsx`                                                                             |
+| `apps/mobile/src/screens/inicio/InicioScreen.tsx`                         | escolhe guest, member ou skeleton                                                                                  |
+| `apps/mobile/app/welcome.tsx`                                             | wrapper de uma linha                                                                                               |
+| `apps/mobile/src/auth/redirect-intent.ts`                                 | libera `/assinaturas` no `next`                                                                                    |
 
 ---
 
 ### Task 1: Banco de dados
 
 **Files:**
+
 - Modify: `packages/db/prisma/schema.prisma`
 - Create: `packages/db/prisma/migrations/20260819000000_home_content/migration.sql`
 - Modify: `packages/db/prisma/seed.ts`
 - Modify: `apps/api/test/helpers.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: modelos Prisma `HomeContent`, `HomeBenefit`, `HomeHighlight`, enum `HomeHighlightKind` com valores `event | day_use | experience | partner`, coluna `PremiumPlan.homeFeatured: boolean`. Clientes Prisma: `prisma.homeContent`, `prisma.homeBenefit`, `prisma.homeHighlight`.
 
@@ -340,7 +342,7 @@ const seedHomeContent = async (): Promise<void> => {
 Dentro de `main`, depois de `await seedBoxSettings();`, adicionar:
 
 ```ts
-  await seedHomeContent();
+await seedHomeContent();
 ```
 
 - [ ] **Step 6: Limpar as tabelas novas entre testes**
@@ -348,12 +350,12 @@ Dentro de `main`, depois de `await seedBoxSettings();`, adicionar:
 Em `apps/api/test/helpers.ts`, dentro de `resetDatabase`, na linha imediatamente após `await prisma.generalSettings.deleteMany();`, adicionar:
 
 ```ts
-  // Home institucional: singleton + filhas. Sem FK entre elas, ordem livre.
-  // O singleton persiste entre testes e o endpoint público o cria on demand,
-  // então limpar aqui garante que cada spec controle o próprio conteúdo.
-  await prisma.homeBenefit.deleteMany();
-  await prisma.homeHighlight.deleteMany();
-  await prisma.homeContent.deleteMany();
+// Home institucional: singleton + filhas. Sem FK entre elas, ordem livre.
+// O singleton persiste entre testes e o endpoint público o cria on demand,
+// então limpar aqui garante que cada spec controle o próprio conteúdo.
+await prisma.homeBenefit.deleteMany();
+await prisma.homeHighlight.deleteMany();
+await prisma.homeContent.deleteMany();
 ```
 
 - [ ] **Step 7: Rodar o seed contra o Postgres local, duas vezes**
@@ -388,12 +390,14 @@ git commit -m "feat(db): conteudo institucional da tela de inicio"
 ### Task 2: Contratos compartilhados
 
 **Files:**
+
 - Create: `packages/shared/src/home.ts`
 - Create: `packages/shared/src/__tests__/home.test.ts`
 - Modify: `packages/shared/package.json`
 - Modify: `packages/shared/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: nada da Task 1 em tempo de compilação. Os valores do enum `HomeHighlightKind` são replicados literalmente aqui.
 - Produces: módulo `@ccc/shared/home` exportando `HOME_CONTENT_SINGLETON_ID: string`, `HOME_PLAN_BENEFITS_LIMIT: number`, e os schemas e tipos `homeHighlightKindSchema`/`HomeHighlightKind`, `homeHeroSchema`/`HomeHero`, `homeInstitutionalSchema`/`HomeInstitutional`, `homeBenefitSchema`/`HomeBenefit`, `homeHighlightSchema`/`HomeHighlight`, `homePlanSchema`/`HomePlan`, `homeContentResponseSchema`/`HomeContentResponse`.
 
@@ -422,7 +426,12 @@ const VALID = {
     imageUrl: 'https://cdn.example.com/casa.webp',
   },
   benefits: [
-    { icon: 'calendar', title: 'Eventos exclusivos', description: 'Encontros fechados.', sortOrder: 0 },
+    {
+      icon: 'calendar',
+      title: 'Eventos exclusivos',
+      description: 'Encontros fechados.',
+      sortOrder: 0,
+    },
   ],
   highlights: [
     {
@@ -628,12 +637,14 @@ git commit -m "feat(shared): schemas do payload da tela de inicio"
 ### Task 3: API
 
 **Files:**
+
 - Create: `apps/api/src/services/home-content.ts`
 - Create: `apps/api/src/routes/home-content.ts`
 - Modify: `apps/api/src/app.ts`
 - Create: `apps/api/test/home-content.route.test.ts`
 
 **Interfaces:**
+
 - Consumes: `@ccc/shared/home` (`HOME_CONTENT_SINGLETON_ID`, `HOME_PLAN_BENEFITS_LIMIT`, `homeContentResponseSchema`) da Task 2. Clientes Prisma da Task 1. `app.uploads.buildPublicUrl(objectKey: string): string` já existente em `src/services/uploads/index.ts`. `isUniqueConstraintError` de `src/lib/prisma-errors.js`.
 - Produces: `ensureHomeContent(): Promise<HomeContent>` em `src/services/home-content.ts`. `homeContentRoutes: FastifyPluginAsync` em `src/routes/home-content.ts`. Rota `GET /api/home-content`.
 
@@ -1086,7 +1097,7 @@ import { homeContentRoutes } from './routes/home-content.js';
 E na sequência de registros, imediatamente depois de `await app.register(premiumCatalogRoutes);`, adicionar:
 
 ```ts
-  await app.register(homeContentRoutes);
+await app.register(homeContentRoutes);
 ```
 
 - [ ] **Step 6: Rodar e confirmar que passa**
@@ -1117,6 +1128,7 @@ git commit -m "feat(api): endpoint publico GET /api/home-content"
 ### Task 4: API dos contadores do clube
 
 **Files:**
+
 - Create: `packages/shared/src/club-stats.ts`
 - Create: `packages/shared/src/__tests__/club-stats.test.ts`
 - Modify: `packages/shared/package.json`
@@ -1126,6 +1138,7 @@ git commit -m "feat(api): endpoint publico GET /api/home-content"
 - Create: `apps/api/test/club-stats.route.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada das tasks anteriores.
 - Produces:
   - `clubStatsResponseSchema` / `ClubStatsResponse` em `@ccc/shared/club-stats`, com a forma `{ members: number; events: number; cars: number }`.
@@ -1135,11 +1148,11 @@ git commit -m "feat(api): endpoint publico GET /api/home-content"
 
 **Semântica de cada contador, decidida aqui para não ficar ambígua:**
 
-| Campo | Query | Por quê |
-| --- | --- | --- |
-| `members` | `prisma.user.count({ where: { status: <valor ativo do enum UserStatus> } })` | membros do clube, não contas desativadas |
-| `events` | `prisma.event.count({ where: { status: 'published', startsAt: { gte: new Date() } } })` | eventos futuros publicados. "6 EVENTOS" na home comunica agenda, não arquivo |
-| `cars` | `prisma.car.count()` | total de carros cadastrados em garagens |
+| Campo     | Query                                                                                   | Por quê                                                                      |
+| --------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `members` | `prisma.user.count({ where: { status: <valor ativo do enum UserStatus> } })`            | membros do clube, não contas desativadas                                     |
+| `events`  | `prisma.event.count({ where: { status: 'published', startsAt: { gte: new Date() } } })` | eventos futuros publicados. "6 EVENTOS" na home comunica agenda, não arquivo |
+| `cars`    | `prisma.car.count()`                                                                    | total de carros cadastrados em garagens                                      |
 
 **Por que esta rota TEM cache e `/api/home-content` não:** são três `COUNT` em tabelas que crescem, na tela mais acessada do app, e um contador defasado por cinco minutos não muda decisão de ninguém. Conteúdo institucional editável é o oposto: precisa aparecer na hora, e é por isso que a outra rota ficou sem cache.
 
@@ -1461,7 +1474,7 @@ import { clubStatsRoutes } from './routes/club-stats.js';
 E na sequência de registros, imediatamente depois de `await app.register(homeContentRoutes);`, adicionar:
 
 ```ts
-  await app.register(clubStatsRoutes);
+await app.register(clubStatsRoutes);
 ```
 
 - [ ] **Step 11: Rodar e confirmar que passa**
@@ -1492,6 +1505,7 @@ git commit -m "feat(api): endpoint publico GET /api/club-stats"
 ### Task 5: Fundação mobile — tokens, fontes, copy, API
 
 **Files:**
+
 - Modify: `packages/design/src/tokens.ts`
 - Modify: `packages/design/tailwind-preset.cjs`
 - Modify: `apps/mobile/app/_layout.tsx`
@@ -1503,6 +1517,7 @@ git commit -m "feat(api): endpoint publico GET /api/club-stats"
 - Create: `apps/mobile/src/screens/inicio/icons.ts`
 
 **Interfaces:**
+
 - Consumes: `@ccc/shared/home` da Task 2. `request` de `~/api/client`. `color` de `@ccc/design`.
 - Produces:
   - `color.goldDeep`, `color.goldLight`, `color.surfaceGold`, `color.hairlineGold`, `color.hairlineGoldStrong` em `@ccc/design`.
@@ -1843,10 +1858,12 @@ git commit -m "feat(mobile): fundacao da tela de inicio, tokens, fontes e api"
 Esta task ganha dois arquivos e duas ampliações. Tudo acima continua valendo.
 
 **Files adicionais:**
+
 - Create: `apps/mobile/src/api/club-stats.ts`
 - Create: `apps/mobile/src/hooks/useClubStats.ts`
 
 **Interfaces adicionais produzidas:**
+
 - `getClubStats(): Promise<ClubStatsResponse>` em `~/api/club-stats`.
 - `useClubStats(): { stats: ClubStatsResponse | null; loading: boolean; error: boolean; refresh: () => Promise<void> }` em `~/hooks/useClubStats`.
 
@@ -1990,12 +2007,14 @@ Acrescentar os arquivos novos ao `git add` do Step de commit desta task.
 ### Task 6: Primitivos visuais do handoff
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/components/SectionLabel.tsx`
 - Create: `apps/mobile/src/screens/inicio/components/GoldPill.tsx`
 - Create: `apps/mobile/src/screens/inicio/components/FeatureCard.tsx`
 - Create: `apps/mobile/src/screens/inicio/components/__tests__/primitives.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `p` de `~/screens/inicio/palette` (Task 4).
 - Produces:
   - `SectionLabel({ label }: { label: string })`
@@ -2275,12 +2294,14 @@ git commit -m "feat(mobile): primitivos visuais do handoff da inicio"
 Esta task ganha três primitivos e a cópia de um asset de marca. Tudo acima continua valendo.
 
 **Files adicionais:**
+
 - Create: `apps/mobile/src/screens/inicio/components/StatCard.tsx`
 - Create: `apps/mobile/src/screens/inicio/components/QuickActionTile.tsx`
 - Create: `apps/mobile/src/screens/inicio/components/AppHeader.tsx`
 - Create: `packages/design/assets/monogram-ccc-circle-gold.png`
 
 **Interfaces adicionais produzidas:**
+
 - `StatCard({ icon, label, value }: { icon: string; label: string; value: number | string })`
 - `QuickActionTile({ icon, label, onPress, testID }: { icon: string; label: string; onPress: () => void; testID?: string })`
 - `AppHeader({ right }: { right?: ReactNode })`
@@ -2540,12 +2561,14 @@ Esperado: PASS, os 4 casos originais mais os 5 novos.
 ### Task 7: Seções 1 e 2 — apresentação e benefícios
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/HeroSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/BenefitsSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/HeroSection.test.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/BenefitsSection.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `HomeHero`, `HomeInstitutional`, `HomeBenefit` de `@ccc/shared/home`. `SectionLabel` da Task 5. `p` e `homeIcon` da Task 4. `inicioCopy` da Task 4.
 - Produces:
   - `HeroSection({ hero, institutional }: { hero: HomeHero; institutional: HomeInstitutional })`
@@ -2645,7 +2668,12 @@ declare global {
 }
 
 const BENEFITS: HomeBenefit[] = [
-  { icon: 'calendar', title: 'Eventos exclusivos', description: 'Encontros fechados.', sortOrder: 0 },
+  {
+    icon: 'calendar',
+    title: 'Eventos exclusivos',
+    description: 'Encontros fechados.',
+    sortOrder: 0,
+  },
   { icon: 'chave-que-nao-existe', title: 'Day Use', description: null, sortOrder: 1 },
 ];
 
@@ -2909,10 +2937,12 @@ git commit -m "feat(mobile): secoes de apresentacao e beneficios da inicio"
 Esta task ganha a seção de contadores, usada pelos dois estados da home.
 
 **Files adicionais:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/ClubStatsSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/ClubStatsSection.test.tsx`
 
 **Interfaces adicionais produzidas:**
+
 - `ClubStatsSection({ stats }: { stats: ClubStatsResponse | null })`, que renderiza `null` quando `stats` é `null`.
 
 - [ ] **Step C1: Escrever o teste, que falha**
@@ -3034,12 +3064,14 @@ Esperado: PASS, 3 testes.
 ### Task 8: Seções 3 e 4 — CTAs, e liberação de `/assinaturas` no redirect
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/CtaSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/CtaSection.test.tsx`
 - Modify: `apps/mobile/src/auth/redirect-intent.ts`
 - Modify: `apps/mobile/src/auth/__tests__/redirect-intent.test.ts` (criar se não existir)
 
 **Interfaces:**
+
 - Consumes: `GoldPill` da Task 5. `inicioCopy` da Task 4. `buildLoginHref` de `~/auth/redirect-intent`.
 - Produces: `CtaSection({ onCreateAccount, onSubscribe }: { onCreateAccount: () => void; onSubscribe: () => void })`. O prefixo `/assinaturas` passa a ser aceito por `sanitizeNext`.
 
@@ -3293,12 +3325,14 @@ git commit -m "feat(mobile): CTAs de criar conta e assinar na inicio"
 ### Task 9: Seções 5 e 6 — planos e destaques
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/PlansSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/HighlightsSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/PlansSection.test.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/HighlightsSection.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `HomePlan`, `HomeHighlight` de `@ccc/shared/home`. `SectionLabel`, `FeatureCard` da Task 5. `inicioCopy`, `p` da Task 4. `formatBRL` de `~/lib/format`.
 - Produces:
   - `PlansSection({ plans, onOpenPlan, onSeeAll }: { plans: HomePlan[]; onOpenPlan: (slug: string) => void; onSeeAll: () => void })`, `null` com lista vazia.
@@ -3575,9 +3609,7 @@ export function PlansSection({
                 </View>
               </View>
 
-              {plan.description ? (
-                <Text style={styles.description}>{plan.description}</Text>
-              ) : null}
+              {plan.description ? <Text style={styles.description}>{plan.description}</Text> : null}
 
               <View style={styles.benefits}>
                 {plan.benefits.map((label) => (
@@ -3768,6 +3800,7 @@ git commit -m "feat(mobile): secoes de planos e destaques da inicio"
 Esta task ganha duas seções novas e uma ampliação em `HighlightsSection`.
 
 **Files adicionais:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/StoreTeaserSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/ConfirmedCarsSection.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/__tests__/StoreTeaserSection.test.tsx`
@@ -3796,6 +3829,7 @@ Acrescentar aos testes existentes de `HighlightsSection` os casos: eventos apare
 - [ ] **Step D1: Ler as formas exatas antes de escrever**
 
 Antes de codar, ler e anotar:
+
 1. `packages/shared/src/events.ts` — a forma de `EventSummary` (campos `id`, `slug`, `title`, `coverUrl`, `startsAt`, `endsAt`, `city`, `stateCode`, `type`, `status`).
 2. `packages/shared/src/store.ts` — a forma do produto devolvido por `listStoreProducts`, em especial o nome do campo de preço e o de imagem.
 3. `apps/mobile/src/hooks/useStoreProducts.ts` — a assinatura real, incluindo o parâmetro de query e o que devolve.
@@ -3809,6 +3843,7 @@ O código abaixo assume nomes plausíveis. Onde divergir do real, usar o real e 
 Criar `apps/mobile/src/screens/inicio/sections/StoreTeaserSection.tsx`. Faixa horizontal de produtos, cada card navegando para `/store/<slug>`. A loja já é rota pública, então isto funciona para o anônimo sem login.
 
 Requisitos:
+
 - Usa `useStoreProducts` com um limite pequeno. Se o hook não aceitar limite, fatiar o resultado no componente e comentar por quê.
 - `SectionLabel` com `inicioCopy.sections.store`, e um link de rodapé com `inicioCopy.cards.seeAllStore` navegando para `/store`.
 - Cada card: imagem quando houver, nome do produto, preço formatado com `formatBRL`. `testID`: `inicio-store-<slug>`.
@@ -3822,6 +3857,7 @@ Teste: label e produtos aparecem; tocar num card chama a navegação com o slug;
 Criar `apps/mobile/src/screens/inicio/sections/ConfirmedCarsSection.tsx`. Prova social: carros já confirmados no próximo evento.
 
 Requisitos:
+
 - Recebe `eventSlug: string | null` e busca via `getConfirmedCars`. Com `eventSlug` nulo, renderiza `null` sem chamar a API.
 - `SectionLabel` com `inicioCopy.sections.confirmedCars`.
 - Faixa horizontal de miniaturas. Cada item mostra a foto quando houver e o nome do carro. Sem foto, cai num placeholder da cor de superfície.
@@ -3836,12 +3872,12 @@ Teste: com carros, label e nomes aparecem; com lista vazia, renderiza `null`; co
 pnpm --filter @ccc/mobile test -- HighlightsSection StoreTeaserSection ConfirmedCarsSection PlansSection
 ```
 
-Esperado: PASS em todos.
----
+## Esperado: PASS em todos.
 
 ### Task 10: Seções do membro logado
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/sections/MemberGreeting.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/NextEventCard.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/MyTicketsSection.tsx`
@@ -3853,6 +3889,7 @@ Esperado: PASS em todos.
 - Create: `apps/mobile/src/screens/inicio/format-member.ts`
 
 **Interfaces:**
+
 - Consumes: `SectionLabel`, `GoldPill`, `FeatureCard`, `QuickActionTile` da Task 6. `p` e `homeIcon` da Task 5. `inicioCopy` da Task 5.
 - Produces, todos com props explícitas e sem buscar dados por conta própria (quem busca é o `MemberHome` da Task 11):
   - `formatMemberSince(iso: string): string` em `~/screens/inicio/format-member`, devolvendo algo como `mar 2026`.
@@ -4007,6 +4044,7 @@ const styles = StyleSheet.create({
 Criar `apps/mobile/src/screens/inicio/sections/NextEventCard.tsx`, no tratamento do handoff.
 
 Requisitos:
+
 - `FeatureCard` clicável inteiro, com `testID` `inicio-next-event`. A pílula `VER EVENTO` (`GoldPill` sem `onPress` próprio, ou um `View` com o mesmo tratamento visual) é affordance, não um segundo alvo de toque. Se `GoldPill` exigir `onPress`, passar o mesmo handler do card, mas garantir que o card inteiro também dispara.
 - Label `inicioCopy.sections.nextEvent` como eyebrow dourado.
 - Título do evento em 17px weight 600.
@@ -4017,6 +4055,7 @@ Requisitos:
 - [ ] **Step 5: Escrever MyTicketsSection**
 
 Requisitos:
+
 - `SectionLabel` com `inicioCopy.sections.myTickets`, mais link de rodapé `inicioCopy.cards.seeTickets` chamando `onSeeAll`.
 - Faixa horizontal. Cada card mostra o título do evento, a data, e o `tierName`. `testID`: `inicio-ticket-<id>`.
 - Filtra apenas ingressos válidos. Conferir no Step 1 o nome exato do valor de `status` que representa válido e usar o real.
@@ -4025,6 +4064,7 @@ Requisitos:
 - [ ] **Step 6: Escrever MyGarageSection**
 
 Requisitos:
+
 - Renderiza `null` quando `garage` é nulo **ou** quando `garage.gamification.enabled` é falso. O killswitch de gamificação já existe no backend e precisa ser respeitado aqui.
 - `SectionLabel` com `inicioCopy.sections.myGarage`.
 - Reusa `XPScoreboard` de `@ccc/ui` alimentado por `garage.progress`. Se `progress` estiver ausente, não renderiza o scoreboard mas ainda renderiza o resto.
@@ -4036,6 +4076,7 @@ Requisitos:
 - [ ] **Step 7: Escrever SubscriptionSection**
 
 Requisitos:
+
 - `status` nulo renderiza `null`.
 - `status.active` verdadeiro: `SectionLabel` com `inicioCopy.sections.subscription`, `PremiumBadge` de `@ccc/ui` com o tier, e um link chamando `onManage`. `testID`: `inicio-subscription-active`.
 - `status.active` falso: bloco de upsell com `GoldPill` de rótulo `inicioCopy.cards.subscribeUpsell` chamando `onSubscribe`. `testID`: `inicio-subscription-upsell`.
@@ -4044,6 +4085,7 @@ Requisitos:
 - [ ] **Step 8: Escrever BoxSection**
 
 Requisitos:
+
 - Renderiza `null` quando `isPremiumActive` é falso, **antes** de olhar `box`. A caixa é benefício de assinante e não deve aparecer para quem não é.
 - Renderiza `null` quando `box` é nulo.
 - `SectionLabel` com `inicioCopy.sections.box`, uma linha com o estado do ciclo corrente, e um link `inicioCopy.cards.seeBox` chamando `onPress`. `testID`: `inicio-box`.
@@ -4052,6 +4094,7 @@ Requisitos:
 - [ ] **Step 9: Escrever QuickAccessSection**
 
 Requisitos:
+
 - `SectionLabel` com `inicioCopy.sections.quickAccess`.
 - Grid 2x2 de `QuickActionTile`, gap 12, com os quatro atalhos: `event` para `/events`, `ticket` para `/tickets`, `car` para `/garage`, `store` para `/store`. Rótulos de `inicioCopy.quickAccess`.
 - `testID` de cada tile: `inicio-quick-<chave>`, por exemplo `inicio-quick-events`.
@@ -4062,6 +4105,7 @@ Requisitos:
 Criar `apps/mobile/src/screens/inicio/sections/__tests__/member-sections.test.tsx`, um `describe` por componente, reusando o boilerplate de `render` e `click` dos outros testes de seção.
 
 Cobertura mínima, um caso por linha:
+
 - `MemberGreeting`: com nome e data renderiza as duas linhas; sem nome usa a saudação genérica; com data inválida omite a segunda linha.
 - `NextEventCard`: com evento renderiza título, data e a pílula; tocar chama `onPress` com o slug; sem evento renderiza o vazio e não o card.
 - `MyTicketsSection`: renderiza os válidos; tocar chama `onOpenTicket` com o id; lista vazia renderiza `null`; lista só com inválidos renderiza `null`.
@@ -4098,11 +4142,13 @@ git commit -m "feat(mobile): secoes da home do membro logado"
 ### Task 11: MemberHome, a home do membro conforme o handoff
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/MemberHome.tsx`
 - Create: `apps/mobile/src/screens/inicio/useMemberHomeData.ts`
 - Create: `apps/mobile/src/screens/inicio/__tests__/MemberHome.test.tsx`
 
 **Interfaces:**
+
 - Consumes: as sete seções da Task 10. `HeroSection` e `ClubStatsSection` da Task 7. `AppHeader` da Task 6. `useHomeContent` e `useClubStats` da Task 5. `useUnreadCount` de `~/hooks/useUnreadCount`. `useAuth` de `~/auth/context`.
 - Produces:
   - `useMemberHomeData(): MemberHomeData` em `~/screens/inicio/useMemberHomeData`.
@@ -4117,6 +4163,7 @@ git commit -m "feat(mobile): secoes da home do membro logado"
 Criar `apps/mobile/src/screens/inicio/useMemberHomeData.ts`.
 
 Requisitos:
+
 - Dispara em paralelo, cada um com seu próprio estado, sem que a falha de um cancele os outros. Usar `Promise.allSettled` ou um `useState` por fonte. Nunca `Promise.all`, que propagaria a primeira rejeição.
 - Fontes: `getProfile()`, `listEvents({ window: 'upcoming', limit: 1 })`, `listMyTickets()`, `getGarage()`, `getPremiumStatus()`, `getBox()`.
 - **`getBox()` só é chamado quando a garagem já respondeu com `isPremiumActive` verdadeiro.** Chamar para quem não é assinante gera 4xx previsível e ruído no Sentry. Se isso obrigar a uma segunda fase, fazer em duas fases e comentar por quê.
@@ -4131,6 +4178,7 @@ Criar `apps/mobile/src/screens/inicio/__tests__/MemberHome.test.tsx`.
 Mocar `~/screens/inicio/useMemberHomeData`, `~/hooks/useHomeContent`, `~/hooks/useClubStats`, `~/hooks/useUnreadCount` e `expo-router`, no padrão de `GuestHome.test.tsx`. Um objeto `vi.hoisted` mutável por hook, reatribuído no `beforeEach`, para cada caso montar o cenário que quer.
 
 Casos obrigatórios:
+
 - Cenário completo renderiza, na ordem: header, hero, saudação, próximo evento, status do clube, meus ingressos, minha garagem, assinatura, caixa, acesso rápido.
 - **Nenhuma seção da vitrine do anônimo aparece.** Assertar explicitamente que `inicioCopy.cta.signup`, `inicioCopy.cta.subscribe` e `inicioCopy.sections.plans` NÃO estão no `textContent`. Esta é a trava contra vazamento entre os dois estados.
 - Falha só no bloco de ingressos: o resto da tela continua renderizando, e o rótulo de `myTickets` não aparece.
@@ -4147,6 +4195,7 @@ Casos obrigatórios:
 Criar `apps/mobile/src/screens/inicio/MemberHome.tsx`.
 
 Requisitos de montagem, na ordem vertical:
+
 1. `AppHeader` com o sino de notificações no slot `right`. Badge de não lidas via `useUnreadCount(true)`, no mesmo tratamento visual que o `welcome.tsx` atual usa (círculo com a contagem, `99+` acima de 99). Tocar navega para `/notifications`.
 2. `HeroSection` com `content.hero` e `content.institutional` de `useHomeContent`. Não renderiza quando o conteúdo falhou.
 3. `MemberGreeting` com o primeiro nome de `user.name` e `createdAt` do perfil.
@@ -4190,6 +4239,7 @@ git commit -m "feat(mobile): home do membro logado conforme o handoff"
 ### Task 12: Montagem da tela
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/GuestHome.tsx`
 - Create: `apps/mobile/src/screens/inicio/InicioScreen.tsx`
 - Modify: `apps/mobile/app/welcome.tsx`
@@ -4197,6 +4247,7 @@ git commit -m "feat(mobile): home do membro logado conforme o handoff"
 - Create: `apps/mobile/src/screens/inicio/__tests__/InicioScreen.test.tsx`
 
 **Interfaces:**
+
 - Consumes: todas as seções das Tasks 6 a 9. `useHomeContent` e `useClubStats` da Task 5. `MemberHome` da Task 11. `useAuth` de `~/auth/context`. `buildLoginHref` de `~/auth/redirect-intent`.
 - Produces: `GuestHome()`, `InicioScreen()` (export default em `InicioScreen.tsx`).
 
@@ -4263,9 +4314,7 @@ const CONTENT: HomeContentResponse = {
     body: 'Um clubhouse automotivo privado em Curitiba.',
     imageUrl: null,
   },
-  benefits: [
-    { icon: 'calendar', title: 'Eventos exclusivos', description: null, sortOrder: 0 },
-  ],
+  benefits: [{ icon: 'calendar', title: 'Eventos exclusivos', description: null, sortOrder: 0 }],
   highlights: [
     {
       kind: 'event',
@@ -4443,10 +4492,7 @@ export function GuestHome() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? <InicioSkeleton /> : null}
 
         {!loading && error ? <InicioError onRetry={() => void refresh()} /> : null}
@@ -4456,11 +4502,7 @@ export function GuestHome() {
             <HeroSection hero={content.hero} institutional={content.institutional} />
             <BenefitsSection benefits={content.benefits} />
             <CtaSection onCreateAccount={goSignup} onSubscribe={goSubscribe} />
-            <PlansSection
-              plans={content.plans}
-              onOpenPlan={goSubscribe}
-              onSeeAll={goSubscribe}
-            />
+            <PlansSection plans={content.plans} onOpenPlan={goSubscribe} onSeeAll={goSubscribe} />
             <HighlightsSection highlights={content.highlights} onOpenLink={goLink} />
           </>
         ) : null}
@@ -4731,6 +4773,7 @@ Duas mudanças nesta task.
 O `GuestHome` passa a consumir `useClubStats` além de `useHomeContent`, e a buscar os próximos eventos. **A regra de erro não muda:** a falha do `useHomeContent` continua sendo total, porque hero, benefícios, planos e destaques curados vêm todos dele e sem eles não há tela. Já `useClubStats`, os eventos, a loja e os carros confirmados são complementares: cada um falha para dentro da própria seção, que simplesmente não renderiza. Comentar essa assimetria no arquivo.
 
 Acrescentar aos testes do `GuestHome`:
+
 - O header renderiza e o botão `ENTRAR` navega para o login carregando `next=/welcome`.
 - `ClubStatsSection` aparece com stats e desaparece sem.
 - Falha nos eventos não impede o resto de renderizar.
@@ -4741,9 +4784,11 @@ Acrescentar aos testes do `GuestHome`:
 ### Task 13: Verificação de ponta a ponta
 
 **Files:**
+
 - Nenhum arquivo novo. Correções pontuais no que a verificação apontar.
 
 **Interfaces:**
+
 - Consumes: tudo das Tasks 1 a 9.
 - Produces: evidência de que o monorepo está verde e a tela funciona no app rodando.
 
@@ -4932,6 +4977,7 @@ direita, abrindo esta tela nos dois estados.
 Isto sai da lista de dívidas (item 8) e entra em escopo.
 
 **Files:**
+
 - Create: `apps/mobile/app/(app)/inicio.tsx`
 - Modify: `apps/mobile/src/navigation/app-tabs.ts`
 - Modify: `apps/mobile/app/(app)/_layout.tsx`
@@ -4944,6 +4990,7 @@ Isto sai da lista de dívidas (item 8) e entra em escopo.
 - Create: `apps/mobile/app/__tests__/inicio-route.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `InicioScreen` da Task 12.
 - Produces: rota `/inicio` dentro do grupo `(app)`, registrada como primeira aba.
 
@@ -5028,16 +5075,16 @@ const InicioIcon = ({ color }: { color: string }) => (
    tratamento de `tabPress` que `events` usa e pelo mesmo motivo:
 
 ```tsx
-      <Tabs.Screen
-        name="inicio"
-        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: InicioIcon }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            router.replace('/inicio');
-          },
-        }}
-      />
+<Tabs.Screen
+  name="inicio"
+  options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: InicioIcon }}
+  listeners={{
+    tabPress: (e) => {
+      e.preventDefault();
+      router.replace('/inicio');
+    },
+  }}
+/>
 ```
 
 4. Corrigir todos os índices deslocados que o Step 1 apurou.

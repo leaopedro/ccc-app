@@ -19,7 +19,12 @@ const VALID = {
     imageUrl: 'https://cdn.example.com/casa.webp',
   },
   benefits: [
-    { icon: 'calendar', title: 'Eventos exclusivos', description: 'Encontros fechados.', sortOrder: 0 },
+    {
+      icon: 'calendar',
+      title: 'Eventos exclusivos',
+      description: 'Encontros fechados.',
+      sortOrder: 0,
+    },
   ],
   highlights: [
     {

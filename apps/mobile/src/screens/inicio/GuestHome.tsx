@@ -111,11 +111,7 @@ export function GuestHome() {
             <BenefitsSection benefits={content.benefits} />
             <ClubStatsSection stats={stats} />
             <CtaSection onCreateAccount={goSignup} onSubscribe={goSubscribe} />
-            <PlansSection
-              plans={content.plans}
-              onOpenPlan={goSubscribe}
-              onSeeAll={goSubscribe}
-            />
+            <PlansSection plans={content.plans} onOpenPlan={goSubscribe} onSeeAll={goSubscribe} />
             <HighlightsSection
               highlights={content.highlights}
               events={events}

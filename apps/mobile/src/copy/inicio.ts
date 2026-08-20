@@ -72,7 +72,6 @@ export const inicioCopy = {
   cards: {
     seeEvent: 'VER EVENTO',
     seeAllStore: 'Ver a loja',
-    seeGarage: 'Ver minha garagem',
     seeSubscription: 'Ver minha assinatura',
     subscribeUpsell: 'ASSINAR',
     seeBox: 'Ver a caixa',
@@ -80,6 +79,5 @@ export const inicioCopy = {
   },
   empty: {
     noNextEvent: 'Nenhum evento agendado.',
-    noTickets: 'Você ainda não tem ingressos.',
   },
 } as const;

@@ -48,8 +48,13 @@ export const clubStatsRoutes: FastifyPluginAsync = async (app) => {
 
     const [members, events, cars] = await Promise.all([
       prisma.user.count({ where: { status: 'active' } }),
-      prisma.event.count({ where: { status: 'published', startsAt: { gte: new Date() } } }),
-      prisma.car.count(),
+      // "upcoming" must match /events?window=upcoming (events.ts), which
+      // filters on endsAt, not startsAt: an in-progress multi-day event
+      // (started yesterday, ends tomorrow) still counts as upcoming there,
+      // and this counter must agree or the two blocks on the same screen
+      // contradict each other.
+      prisma.event.count({ where: { status: 'published', endsAt: { gte: new Date() } } }),
+      prisma.car.count({ where: { user: { status: 'active' } } }),
     ]);
 
     cached = clubStatsResponseSchema.parse({ members, events, cars });

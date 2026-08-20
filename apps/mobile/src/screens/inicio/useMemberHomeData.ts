@@ -36,7 +36,7 @@ export type SourceState<T> = {
   error: boolean;
 };
 
-const initialSource = <T,>(): SourceState<T> => ({ data: null, loading: true, error: false });
+const initialSource = <T>(): SourceState<T> => ({ data: null, loading: true, error: false });
 
 // Hoisted to module scope. Building this inline in the hook body would give
 // it a fresh identity every render; passed into a dependency array that

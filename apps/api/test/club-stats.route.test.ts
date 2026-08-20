@@ -15,6 +15,12 @@ const PAST = new Date('2026-01-10T20:00:00.000Z');
 const PAST_END = new Date('2026-01-11T02:00:00.000Z');
 const FUTURE = new Date('2099-01-10T20:00:00.000Z');
 const FUTURE_END = new Date('2099-01-11T02:00:00.000Z');
+// In-progress event: started yesterday, ends tomorrow — straddles the real
+// "now" the route compares against, so this one has to be Date.now()-relative
+// rather than a fixed date. Must count as "upcoming" here, same definition as
+// /events?window=upcoming (endsAt), not startsAt.
+const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
 const makeEvent = (slug: string, startsAt: Date, endsAt: Date, status: 'published' | 'draft') =>
   prisma.event.create({
@@ -75,18 +81,49 @@ describe('GET /api/club-stats', () => {
     expect(body.events).toBe(1);
   });
 
+  it('counts a published event that is in progress (started yesterday, ends tomorrow)', async () => {
+    // Guards the endsAt-based definition: a startsAt-based count would read
+    // this event as already over and report 0, contradicting the very same
+    // event that /events?window=upcoming (endsAt-based) still lists.
+    await makeEvent('em-andamento', YESTERDAY, TOMORROW, 'published');
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.events).toBe(1);
+  });
+
   it('counts active members and cars', async () => {
     const { user } = await createUser();
     // nickname e obrigatorio e unico no modelo Car (Step 1); nao assumido no brief original.
     await prisma.car.create({
-      data: { userId: user.id, make: 'Nissan', model: 'Skyline', year: 1999, nickname: 'skyline-1' },
+      data: {
+        userId: user.id,
+        make: 'Nissan',
+        model: 'Skyline',
+        year: 1999,
+        nickname: 'skyline-1',
+      },
     });
     // Segundo usuario com status != active. Sem isso, a asserção members === 1
     // passaria mesmo se a rota trocasse o where por um count() sem filtro, ou
     // por um predicado errado (ex.: emailVerifiedAt) — o teste ficaria mudo
     // para a semantica real do contador.
-    await prisma.user.create({
+    const disabledUser = await prisma.user.create({
       data: { email: 'disabled@jdm.test', name: 'Disabled User', status: 'disabled' },
+    });
+    // A disabled user's cars must not count either. Without this, a bare
+    // car.count() (no relation filter at all) would still pass the
+    // body.cars === 1 assertion below, staying silent about the real bug:
+    // banning a member with cars should move GARAGEM too.
+    await prisma.car.create({
+      data: {
+        userId: disabledUser.id,
+        make: 'Toyota',
+        model: 'Supra',
+        year: 1998,
+        nickname: 'supra-1',
+      },
     });
 
     const res = await app.inject(GET);

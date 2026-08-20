@@ -55,17 +55,17 @@ Migration: `20260819000000_home_content`.
 
 ### `HomeContent` (singleton)
 
-| Campo | Tipo | Uso |
-| --- | --- | --- |
-| `id` | `String @id` | constante `HOME_CONTENT_SINGLETON_ID` |
-| `heroTitle` | `VarChar(120)` | Seção 1, mote |
-| `heroSubtitle` | `VarChar(200)?` | Seção 1 |
-| `heroBannerObjectKey` | `VarChar(300)?` | banner principal em R2 |
-| `institutionalTitle` | `VarChar(120)` | Seção 1 |
-| `institutionalBody` | `VarChar(1000)` | texto institucional |
-| `institutionalImageObjectKey` | `VarChar(300)?` | imagem institucional em R2 |
-| `createdAt` | `DateTime @default(now())` | |
-| `updatedAt` | `DateTime @updatedAt` | |
+| Campo                         | Tipo                       | Uso                                   |
+| ----------------------------- | -------------------------- | ------------------------------------- |
+| `id`                          | `String @id`               | constante `HOME_CONTENT_SINGLETON_ID` |
+| `heroTitle`                   | `VarChar(120)`             | Seção 1, mote                         |
+| `heroSubtitle`                | `VarChar(200)?`            | Seção 1                               |
+| `heroBannerObjectKey`         | `VarChar(300)?`            | banner principal em R2                |
+| `institutionalTitle`          | `VarChar(120)`             | Seção 1                               |
+| `institutionalBody`           | `VarChar(1000)`            | texto institucional                   |
+| `institutionalImageObjectKey` | `VarChar(300)?`            | imagem institucional em R2            |
+| `createdAt`                   | `DateTime @default(now())` |                                       |
+| `updatedAt`                   | `DateTime @updatedAt`      |                                       |
 
 ### `HomeBenefit` (Seção 2)
 
@@ -190,13 +190,13 @@ existentes. Casos:
 Acrescentar em `src/tokens.ts` e espelhar em `tailwind-preset.cjs`, como o
 próprio arquivo instrui:
 
-| Token | Valor | Uso |
-| --- | --- | --- |
-| `goldDeep` | `#C9A227` | labels de seção, ícones de metalinha |
-| `goldLight` | `#E8CE86` | topo do gradiente dourado |
-| `surfaceGold` | `#0F0E0B` | fundo de card pequeno |
-| `hairlineGold` | `rgba(212,175,55,0.14)` | borda padrão |
-| `hairlineGoldStrong` | `rgba(212,175,55,0.28)` | borda de ênfase |
+| Token                | Valor                   | Uso                                  |
+| -------------------- | ----------------------- | ------------------------------------ |
+| `goldDeep`           | `#C9A227`               | labels de seção, ícones de metalinha |
+| `goldLight`          | `#E8CE86`               | topo do gradiente dourado            |
+| `surfaceGold`        | `#0F0E0B`               | fundo de card pequeno                |
+| `hairlineGold`       | `rgba(212,175,55,0.14)` | borda padrão                         |
+| `hairlineGoldStrong` | `rgba(212,175,55,0.28)` | borda de ênfase                      |
 
 Os tokens existentes (`brandDeep`, `brandSoft`, `surface`) **não** são alterados,
 para não causar regressão visual nas outras telas.
@@ -243,12 +243,12 @@ implementados: dependem de um endpoint de contagem que não existe.
 
 ### Navegação dos CTAs
 
-| Origem | Anon | Logado |
-| --- | --- | --- |
-| Seção 3, "Criar conta" | `/signup` | seção não renderiza |
-| Seção 4, "Assinar" | `buildLoginHref('/assinaturas')` | `/assinaturas` |
-| Seção 5, card de plano | `buildLoginHref('/assinaturas')` | `/assinaturas` |
-| Seção 6, destaque com `linkPath` | push no path | push no path |
+| Origem                           | Anon                             | Logado              |
+| -------------------------------- | -------------------------------- | ------------------- |
+| Seção 3, "Criar conta"           | `/signup`                        | seção não renderiza |
+| Seção 4, "Assinar"               | `buildLoginHref('/assinaturas')` | `/assinaturas`      |
+| Seção 5, card de plano           | `buildLoginHref('/assinaturas')` | `/assinaturas`      |
+| Seção 6, destaque com `linkPath` | push no path                     | push no path        |
 
 ### Mudança obrigatória em `src/auth/redirect-intent.ts`
 
@@ -304,13 +304,13 @@ sistema: com a preferência ligada, só o fade.
 
 ## Critérios de aceite
 
-| # | Critério | Verificação |
-| --- | --- | --- |
-| 1 | Anon entende a proposta do clube na primeira tela | Seção 1 renderiza hero, título e texto institucional vindos do banco |
-| 2 | Diferenciais da assinatura visíveis | Seção 2 renderiza `HomeBenefit` ativos, ordenados |
-| 3 | Anon inicia o cadastro pela tela inicial | CTA da Seção 3 navega para `/signup` |
-| 4 | Anon é direcionado à jornada de assinatura | CTA da Seção 4 leva a login com `next=/assinaturas` e, após autenticar, aterrissa em `/assinaturas` |
-| 5 | Visão rápida dos planos | Seção 5 mostra nome, valor inicial e até 3 benefícios dos planos com `active && homeFeatured` |
-| 6 | Destaques do clube antes do cadastro | Seção 6 renderiza `HomeHighlight` ativos, ordenados |
-| 7 | Conteúdo dinâmico sem republicar o app | Alterar uma linha no banco muda a tela na próxima abertura, sem build novo |
-| 8 | Estado logado intacto | Teste do estado logado passa sem mudança visual |
+| #   | Critério                                          | Verificação                                                                                         |
+| --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | Anon entende a proposta do clube na primeira tela | Seção 1 renderiza hero, título e texto institucional vindos do banco                                |
+| 2   | Diferenciais da assinatura visíveis               | Seção 2 renderiza `HomeBenefit` ativos, ordenados                                                   |
+| 3   | Anon inicia o cadastro pela tela inicial          | CTA da Seção 3 navega para `/signup`                                                                |
+| 4   | Anon é direcionado à jornada de assinatura        | CTA da Seção 4 leva a login com `next=/assinaturas` e, após autenticar, aterrissa em `/assinaturas` |
+| 5   | Visão rápida dos planos                           | Seção 5 mostra nome, valor inicial e até 3 benefícios dos planos com `active && homeFeatured`       |
+| 6   | Destaques do clube antes do cadastro              | Seção 6 renderiza `HomeHighlight` ativos, ordenados                                                 |
+| 7   | Conteúdo dinâmico sem republicar o app            | Alterar uma linha no banco muda a tela na próxima abertura, sem build novo                          |
+| 8   | Estado logado intacto                             | Teste do estado logado passa sem mudança visual                                                     |

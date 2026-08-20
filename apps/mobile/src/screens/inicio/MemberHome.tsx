@@ -16,7 +16,15 @@
 
 import { useRouter } from 'expo-router';
 import { Bell } from 'lucide-react-native';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { useAuth } from '~/auth/context';
 import { notificationsCopy } from '~/copy/notifications';
@@ -41,8 +49,14 @@ export function MemberHome() {
   const { user } = useAuth();
   const { content } = useHomeContent();
   const { stats } = useClubStats();
-  const { profile, nextEvent, tickets, garage, premium, box } = useMemberHomeData();
+  const { profile, nextEvent, tickets, garage, premium, box, refreshAll } = useMemberHomeData();
   const { count: unreadCount } = useUnreadCount(true);
+
+  // Pull-to-refresh recovery affordance (final review, Blocker 4). Reflects
+  // the five phase-1 sources refreshAll actually re-fetches — box is phase-2
+  // and gated on garage, not part of the pull gesture's own loading window.
+  const refreshing =
+    profile.loading || nextEvent.loading || tickets.loading || garage.loading || premium.loading;
 
   const firstName = (user?.name ?? profile.data?.name ?? '').trim().split(/\s+/)[0] ?? '';
   // Fix round 1 (Minor 9). Two different sources, on purpose:
@@ -61,7 +75,18 @@ export function MemberHome() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: p.bg }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            testID="inicio-refresh-control"
+            refreshing={refreshing}
+            onRefresh={() => void refreshAll()}
+            tintColor={p.gold}
+          />
+        }
+      >
         <AppHeader
           right={
             <Pressable
@@ -92,10 +117,7 @@ export function MemberHome() {
 
         <MemberGreeting firstName={firstName || null} createdAt={profile.data?.createdAt ?? null} />
 
-        <NextEventCard
-          event={nextEvent.data}
-          onPress={(slug) => router.push(`/events/${slug}`)}
-        />
+        <NextEventCard event={nextEvent.data} onPress={(slug) => router.push(`/events/${slug}`)} />
 
         <ClubStatsSection stats={stats} />
 

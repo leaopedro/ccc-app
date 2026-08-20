@@ -73,6 +73,11 @@ vi.mock('react-native', async () => {
         contentContainerStyle,
         accessible,
         numberOfLines,
+        refreshControl,
+        refreshing,
+        onRefresh,
+        tintColor,
+        children,
         ...rest
       } = props;
       const aria: Record<string, unknown> = {};
@@ -100,6 +105,13 @@ vi.mock('react-native', async () => {
       if (resolvedStyle) aria['data-style'] = JSON.stringify(resolvedStyle);
       const resolvedContentStyle = resolveStyle(contentContainerStyle);
       if (resolvedContentStyle) aria['data-content-style'] = JSON.stringify(resolvedContentStyle);
+      // RefreshControl mock (Blocker 4): a plain host tag so
+      // MemberHome's <ScrollView refreshControl={<RefreshControl .../>}>
+      // renders something queryable/clickable instead of leaking a React
+      // element into an unknown DOM attribute.
+      if (typeof refreshing === 'boolean') aria['data-refreshing'] = String(refreshing);
+      if (typeof onRefresh === 'function') aria.onClick = onRefresh;
+      if (typeof tintColor === 'string') aria['data-tint-color'] = tintColor;
       void className;
       void hitSlop;
       void pointerEvents;
@@ -109,7 +121,20 @@ vi.mock('react-native', async () => {
       void showsVerticalScrollIndicator;
       void accessible;
       void numberOfLines;
-      return ReactMod.createElement(tag, { ...rest, ...aria, ref });
+      // Only inject refreshControl as an extra rendered child when it is
+      // actually provided (ScrollView). Every other host tag keeps its
+      // original children untouched, so an `img` (a void element) never
+      // gets an explicit (even empty) children prop.
+      const elementProps: Record<string, unknown> = { ...rest, ...aria, ref, children };
+      if (refreshControl !== undefined && refreshControl !== null) {
+        elementProps.children = ReactMod.createElement(
+          ReactMod.Fragment,
+          null,
+          refreshControl as never,
+          children as never,
+        );
+      }
+      return ReactMod.createElement(tag, elementProps);
     });
   return {
     Pressable: make('button'),
@@ -118,6 +143,7 @@ vi.mock('react-native', async () => {
     Image: make('img'),
     ScrollView: make('div'),
     SafeAreaView: make('div'),
+    RefreshControl: make('div'),
     StyleSheet: {
       create: <T,>(s: T): T => s,
       flatten: <T,>(s: T): T => s,
@@ -481,9 +507,7 @@ describe('MemberHome — per-block degradation', () => {
     expect(text).toContain(inicioCopy.member.greeting('Ana'));
     // But `createdAt` only ever comes from the profile response, so the
     // "member since" line must disappear when it fails.
-    expect(text).not.toContain(
-      inicioCopy.member.memberSince(formatMemberSince(PROFILE.createdAt)),
-    );
+    expect(text).not.toContain(inicioCopy.member.memberSince(formatMemberSince(PROFILE.createdAt)));
     expect(text).toContain(inicioCopy.sections.myTickets);
     expect(text).toContain(inicioCopy.sections.myGarage);
   });
@@ -619,6 +643,33 @@ describe('MemberHome — premium gate', () => {
     await renderMemberHome();
     expect(container.querySelector('[data-testid="inicio-box"]')).toBeNull();
     expect(container.querySelector('[data-testid="inicio-subscription-upsell"]')).not.toBeNull();
+  });
+});
+
+describe('MemberHome — pull to refresh (Blocker 4)', () => {
+  it('calls refreshAll when the RefreshControl fires onRefresh', async () => {
+    const data = defaultMemberHomeData();
+    memberHomeDataState.value = data;
+    await renderMemberHome();
+    click('inicio-refresh-control');
+    expect(data.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('reflects a loading source in the refreshing prop', async () => {
+    memberHomeDataState.value = {
+      ...defaultMemberHomeData(),
+      garage: { data: null, loading: true, error: false },
+    };
+    await renderMemberHome();
+    const control = container.querySelector('[data-testid="inicio-refresh-control"]');
+    expect(control).not.toBeNull();
+    expect(control?.getAttribute('data-refreshing')).toBe('true');
+  });
+
+  it('is not refreshing when every source has settled', async () => {
+    await renderMemberHome();
+    const control = container.querySelector('[data-testid="inicio-refresh-control"]');
+    expect(control?.getAttribute('data-refreshing')).toBe('false');
   });
 });
 

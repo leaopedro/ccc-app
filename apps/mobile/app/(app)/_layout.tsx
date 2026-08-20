@@ -113,7 +113,7 @@ function AppTabs() {
       {primaryTabName === 'store' ? (
         <Tabs.Screen
           name="store"
-          options={{ title: 'Loja', tabBarIcon: StoreIcon }}
+          options={{ title: tabTitle('store'), tabBarIcon: StoreIcon }}
           listeners={{
             tabPress: (e) => {
               e.preventDefault();
@@ -141,12 +141,15 @@ function AppTabs() {
       {showDedicatedTicketsTab ? (
         premiumTab
       ) : (
-        <Tabs.Screen name="store" options={{ href: null, title: 'Loja', tabBarIcon: StoreIcon }} />
+        <Tabs.Screen
+          name="store"
+          options={{ href: null, title: tabTitle('store'), tabBarIcon: StoreIcon }}
+        />
       )}
       {hiddenPremiumTab}
       <Tabs.Screen
         name="tickets"
-        options={{ href: null, title: 'Ingressos', tabBarIcon: TicketsIcon }}
+        options={{ href: null, title: tabTitle('tickets'), tabBarIcon: TicketsIcon }}
       />
       <Tabs.Screen name="garage" options={{ href: null, title: tabTitle('garage') }} />
       <Tabs.Screen

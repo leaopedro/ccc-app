@@ -179,9 +179,7 @@ const CONTENT: HomeContentResponse = {
     body: 'Um clubhouse automotivo privado em Curitiba.',
     imageUrl: null,
   },
-  benefits: [
-    { icon: 'calendar', title: 'Eventos exclusivos', description: null, sortOrder: 0 },
-  ],
+  benefits: [{ icon: 'calendar', title: 'Eventos exclusivos', description: null, sortOrder: 0 }],
   highlights: [
     {
       kind: 'event',

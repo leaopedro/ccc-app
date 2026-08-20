@@ -33,12 +33,23 @@ type PlanWithRelations = DbPremiumPlan & {
 };
 
 /**
- * Linha de preço mais barata entre as ativas. Devolve a linha inteira, e não
- * só o valor, para que a moeda serializada seja a do preço escolhido.
+ * Linha de preço mensal ativa do plano, se houver. Devolve a linha inteira, e
+ * não só o valor, para que a moeda serializada seja a do preço escolhido.
+ *
+ * Restrito a `cadence === 'monthly'` de propósito: `fromAmountCents` vira
+ * "/MÊS" hardcoded em PlansSection.tsx, e `homePlanSchema` não carrega
+ * `cadence` para o cliente distinguir. Reduzir sobre todas as cadências
+ * (monthly e annual) escolheria o menor valor NUMÉRICO ignorando o período —
+ * um plano anual de R$1.490,00/ano apareceria como "R$1.490,00 /MÊS", um erro
+ * de precificação pública de 12x. Um plano sem preço mensal ativo fica de
+ * fora da resposta, mesmo padrão de um plano sem preço ativo nenhum.
  */
-const cheapestActivePrice = (plan: PlanWithRelations): DbPremiumPlanPrice | null =>
+const cheapestMonthlyPrice = (plan: PlanWithRelations): DbPremiumPlanPrice | null =>
   plan.prices.reduce<DbPremiumPlanPrice | null>(
-    (best, price) => (best === null || price.baseAmountCents < best.baseAmountCents ? price : best),
+    (best, price) =>
+      price.cadence === 'monthly' && (best === null || price.baseAmountCents < best.baseAmountCents)
+        ? price
+        : best,
     null,
   );
 
@@ -65,7 +76,10 @@ export const homeContentRoutes: FastifyPluginAsync = async (app) => {
         where: { active: true, homeFeatured: true },
         orderBy: { sortOrder: 'asc' },
         include: {
-          prices: { where: { active: true }, orderBy: { cadence: 'asc' } },
+          // No orderBy here: @@unique([planId, cadence]) caps this relation
+          // at one active row per cadence, so at most one row ever matches
+          // the monthly filter below — order can't change which one wins.
+          prices: { where: { active: true } },
           benefits: { orderBy: { sortOrder: 'asc' } },
         },
       }),
@@ -75,9 +89,10 @@ export const homeContentRoutes: FastifyPluginAsync = async (app) => {
       key ? app.uploads.buildPublicUrl(key) : null;
 
     const serializedPlans = plans.flatMap((plan) => {
-      const price = cheapestActivePrice(plan);
-      // Plano sem preço ativo não tem "valor inicial" para mostrar. Fica fora
-      // em vez de renderizar um card sem preço.
+      const price = cheapestMonthlyPrice(plan);
+      // Plano sem preço mensal ativo não tem "valor inicial" para mostrar
+      // (ver comentário de cheapestMonthlyPrice). Fica fora em vez de
+      // renderizar um card sem preço, ou um preço anual com "/MÊS" errado.
       if (price === null) return [];
       return [
         {

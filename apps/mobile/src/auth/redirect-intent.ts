@@ -16,6 +16,10 @@ const NEXT_ALLOWED_PREFIXES = [
   '/garage',
   '/profile',
   '/caixa',
+  // Seção 4 da tela de Início manda o anônimo para o login com
+  // next=/assinaturas. Sem o prefixo aqui o sanitizador descarta o destino e o
+  // usuário aterrissa em DEFAULT_POST_AUTH, quebrando a jornada de assinatura.
+  '/assinaturas',
 ];
 
 // Post-signin landing per the per-user pivot spec §6.2 + §8: the app

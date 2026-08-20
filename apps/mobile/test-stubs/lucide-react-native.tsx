@@ -56,6 +56,7 @@ const proxy = new Proxy<Record<string, LucideIcon>>({}, handler);
 export default proxy;
 
 export const ArrowLeft = proxy.ArrowLeft;
+export const Bell = proxy.Bell;
 export const Calendar = proxy.Calendar;
 export const CalendarCheck = proxy.CalendarCheck;
 export const Car = proxy.Car;

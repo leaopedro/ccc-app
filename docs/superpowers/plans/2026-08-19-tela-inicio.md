@@ -4919,3 +4919,191 @@ substituiu essa decisão.
 9. Endpoint público de parceiros. `Partner` e `PartnerModule` só existem em CRUD
    admin e dentro do `/me/box/catalog` autenticado, então a Seção 6 usa
    destaques curados para representar parceiros em vez de dados reais.
+
+---
+
+### Task 14: Aba Início na tab bar
+
+Pedida pelo usuário depois da Task 13. A tela existe e funciona, mas só é
+alcançável em `/welcome`, que é rota de topo e não está no grupo `(app)` de
+tabs. O usuário quer um botão Início na tab bar, primeiro da esquerda para a
+direita, abrindo esta tela nos dois estados.
+
+Isto sai da lista de dívidas (item 8) e entra em escopo.
+
+**Files:**
+- Create: `apps/mobile/app/(app)/inicio.tsx`
+- Modify: `apps/mobile/src/navigation/app-tabs.ts`
+- Modify: `apps/mobile/app/(app)/_layout.tsx`
+- Modify: `apps/mobile/app/index.tsx`
+- Modify: `apps/mobile/app/welcome.tsx`
+- Modify: `apps/mobile/src/auth/redirect-intent.ts`
+- Modify: `apps/mobile/src/screens/inicio/GuestHome.tsx`
+- Modify: `apps/mobile/src/auth/__tests__/redirect-intent.test.ts`
+- Modify: `apps/mobile/src/screens/inicio/__tests__/GuestHome.test.tsx`
+- Create: `apps/mobile/app/__tests__/inicio-route.test.tsx`
+
+**Interfaces:**
+- Consumes: `InicioScreen` da Task 12.
+- Produces: rota `/inicio` dentro do grupo `(app)`, registrada como primeira aba.
+
+**Por que dentro de `(app)` e não um link para `/welcome`:** `(app)/_layout.tsx`
+não tem gate de autenticação, só `CartProvider` e `Tabs`, então o anônimo pode
+estar dentro do grupo. Uma aba precisa de uma rota irmã das outras para o estado
+ativo, o histórico e o comportamento de voltar funcionarem como nas demais. Um
+`href` apontando para fora do grupo daria aba sem estado ativo.
+
+- [ ] **Step 1: Levantar o que depende dos índices de `APP_TAB_SPECS`**
+
+`_layout.tsx` referencia `APP_TAB_SPECS[0]`, `[2]`, `[4]` e `[5]` por posição.
+Inserir uma entrada no começo desloca todos. Antes de mexer:
+
+```bash
+grep -rn "APP_TAB_SPECS" apps/mobile
+```
+
+Anotar cada uso e cada teste que dependa de posição ou de contagem. Corrigir
+todos. Se existir teste que assere a lista inteira, ele passa a esperar sete
+entradas com `inicio` na primeira posição.
+
+- [ ] **Step 2: Escrever os testes que falham**
+
+Cobrir, com a mutação que cada um pega anotada no report:
+
+1. `APP_TAB_SPECS[0]` é `{ name: 'inicio', title: 'Início', visible: true }`, e
+   a ordem das outras seis não mudou. Mutação pega: inserir em outra posição.
+2. `apps/mobile/app/(app)/inicio.tsx` renderiza `InicioScreen` e nada mais.
+   Mutação pega: reintroduzir lógica de tela no arquivo de rota.
+3. `sanitizeNext('/inicio')` devolve `/inicio`, e `isPublicPath('/inicio')` é
+   `true`. Mutação pega: esquecer de liberar a rota, o que mandaria o anônimo
+   para o login ao tocar na aba.
+4. `sanitizeNext('/inicioEVIL')` devolve `null`. Mutação pega: matching por
+   prefixo cru em vez de fronteira de segmento.
+5. `/welcome` continua público e continua sobrevivendo ao `sanitizeNext`, para
+   deep links antigos não quebrarem.
+6. O botão `ENTRAR` do `GuestHome` navega para o login carregando
+   `next=/inicio`. Mutação pega: continuar apontando para `/welcome`, o que
+   jogaria o usuário fora do grupo de tabs depois do login.
+
+- [ ] **Step 3: Criar a rota da aba**
+
+Criar `apps/mobile/app/(app)/inicio.tsx`:
+
+```tsx
+// Aba Início. Primeira da tab bar.
+//
+// Fica dentro do grupo (app) para ser irmã das outras abas: estado ativo,
+// historico e comportamento de voltar iguais aos demais. O grupo nao tem gate
+// de autenticacao, so CartProvider e Tabs, entao o anonimo tambem entra aqui e
+// ve a vitrine.
+
+import InicioScreen from '~/screens/inicio/InicioScreen';
+
+export default function InicioTabRoute() {
+  return <InicioScreen />;
+}
+```
+
+- [ ] **Step 4: Registrar a aba como primeira**
+
+Em `apps/mobile/src/navigation/app-tabs.ts`, inserir como primeira entrada de
+`APP_TAB_SPECS`:
+
+```ts
+  { name: 'inicio', title: 'Início', visible: true },
+```
+
+Em `apps/mobile/app/(app)/_layout.tsx`:
+
+1. Importar `Home` de `lucide-react-native` junto dos outros ícones.
+2. Declarar o ícone no mesmo formato dos vizinhos:
+
+```tsx
+const InicioIcon = ({ color }: { color: string }) => (
+  <Home color={color} size={22} strokeWidth={1.75} />
+);
+```
+
+3. Adicionar como **primeiro** filho de `<Tabs>`, antes de `events`, com o mesmo
+   tratamento de `tabPress` que `events` usa e pelo mesmo motivo:
+
+```tsx
+      <Tabs.Screen
+        name="inicio"
+        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: InicioIcon }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.replace('/inicio');
+          },
+        }}
+      />
+```
+
+4. Corrigir todos os índices deslocados que o Step 1 apurou.
+
+- [ ] **Step 5: Apontar a entrada do app para a aba**
+
+`apps/mobile/app/index.tsx` passa a redirecionar para `/inicio`:
+
+```tsx
+import { Redirect } from 'expo-router';
+
+export default function Index() {
+  return <Redirect href="/inicio" />;
+}
+```
+
+`apps/mobile/app/welcome.tsx` deixa de renderizar a tela e passa a redirecionar,
+para deep links antigos, e-mails e qualquer `next=/welcome` gravado continuarem
+funcionando:
+
+```tsx
+// /welcome virou alias historico. A tela agora mora na aba /inicio, dentro do
+// grupo (app), para ter estado ativo na tab bar. Este redirect existe para nao
+// quebrar deep link antigo nem `next=/welcome` ja persistido.
+
+import { Redirect } from 'expo-router';
+
+export default function WelcomeRoute() {
+  return <Redirect href="/inicio" />;
+}
+```
+
+- [ ] **Step 6: Liberar `/inicio` no redirect de auth**
+
+Em `apps/mobile/src/auth/redirect-intent.ts`:
+
+1. Acrescentar `'/inicio'` a `PUBLIC_EXACT`. Sem isso, o anônimo tocando na aba
+   cai no login, que é exatamente o oposto do pedido.
+2. Acrescentar `'/inicio'` a `NEXT_ALLOWED_PREFIXES`.
+3. **Manter `/welcome` nos dois.** O alias precisa continuar público para o
+   redirect do Step 5 ser alcançável.
+
+- [ ] **Step 7: Apontar o CTA de login do `GuestHome` para a aba**
+
+Em `apps/mobile/src/screens/inicio/GuestHome.tsx`, o `ENTRAR` do header passa a
+usar `buildLoginHref('/inicio')`. Deixar `/welcome` ali devolveria o usuário para
+fora do grupo de tabs depois do login.
+
+Conferir se há outro `buildLoginHref('/welcome')` no `GuestHome` ou no
+`MemberHome` e atualizar todos.
+
+- [ ] **Step 8: Rodar tudo**
+
+```bash
+pnpm --filter @ccc/mobile exec vitest run
+```
+
+Esperado: PASS, incluindo os testes de aba e de navegação pré-existentes.
+
+```bash
+pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint
+```
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add apps/mobile
+git commit -m "feat(mobile): aba inicio como primeira da tab bar"
+```

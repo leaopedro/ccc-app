@@ -12,6 +12,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { inicioCopy } from '~/copy/inicio';
+import { TIER_VISUAL } from '~/screens/assinaturas/tier-visual';
 
 import { PlansSection } from '../PlansSection';
 
@@ -98,6 +99,25 @@ const PLANS: HomePlan[] = [
   },
 ];
 
+// Dedicated fixture covering all three tiers, only for the accent-pin test
+// below — the two-plan PLANS fixture above (bronze + gold) does not exercise
+// silver, and a bronze/silver accent swap would slip past a bronze/gold-only
+// comparison.
+const PLANS_ALL_TIERS: HomePlan[] = [
+  { ...PLANS[0]! },
+  {
+    tier: 'silver',
+    slug: 'prata',
+    name: 'Prata',
+    description: null,
+    fromAmountCents: 29900,
+    currency: 'BRL',
+    benefits: ['Day Use ilimitado'],
+    sortOrder: 1,
+  },
+  { ...PLANS[1]! },
+];
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -171,5 +191,27 @@ describe('PlansSection', () => {
     // Catches: changing styles.card's borderRadius away from 14.
     const card = list?.querySelector('button[data-style]') ?? null;
     expect(styleOf(card).borderRadius).toBe(14);
+  });
+
+  it('pins the per-tier accent dot colour to TIER_VISUAL, for every tier', () => {
+    render(<PlansSection plans={PLANS_ALL_TIERS} onOpenPlan={vi.fn()} onSeeAll={vi.fn()} />);
+    // The dot is the only <div data-style> under each plan's card whose
+    // resolved style carries `width: 8` (styles.dot merged with the inline
+    // `{ backgroundColor: accent }` override).
+    const dotAccent = (testID: string): unknown => {
+      const card = container.querySelector(`[data-testid="${testID}"]`);
+      const dot = Array.from(card?.querySelectorAll('div[data-style]') ?? []).find(
+        (el) => styleOf(el).width === 8,
+      );
+      return styleOf(dot ?? null).backgroundColor;
+    };
+    // Catches: hardcoding TIER_ACCENT back into PlansSection.tsx instead of
+    // reading TIER_VISUAL (a silent drift the moment tier-visual.ts changes),
+    // and catches swapping any two tiers' accents (bronze/silver,
+    // bronze/gold or silver/gold), since each assertion is checked against
+    // the actual entry for that specific tier, not a hardcoded copy.
+    expect(dotAccent('inicio-plan-bronze')).toBe(TIER_VISUAL.bronze.accent);
+    expect(dotAccent('inicio-plan-prata')).toBe(TIER_VISUAL.silver.accent);
+    expect(dotAccent('inicio-plan-ouro')).toBe(TIER_VISUAL.gold.accent);
   });
 });

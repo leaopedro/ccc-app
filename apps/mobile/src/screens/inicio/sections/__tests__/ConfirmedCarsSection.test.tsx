@@ -58,6 +58,8 @@ vi.mock('react-native', async () => {
       if (typeof onPress === 'function') aria.onClick = onPress;
       const resolvedStyle = resolveStyle(style);
       if (resolvedStyle) aria['data-style'] = JSON.stringify(resolvedStyle);
+      const resolvedContentStyle = resolveStyle(contentContainerStyle);
+      if (resolvedContentStyle) aria['data-content-style'] = JSON.stringify(resolvedContentStyle);
       void className;
       void hitSlop;
       void pointerEvents;
@@ -65,7 +67,6 @@ vi.mock('react-native', async () => {
       void source;
       void horizontal;
       void showsHorizontalScrollIndicator;
-      void contentContainerStyle;
       void accessible;
       void numberOfLines;
       return ReactMod.createElement(tag, { ...rest, ...aria, ref });
@@ -196,5 +197,50 @@ describe('ConfirmedCarsSection', () => {
     expect(style.width).toBe(56);
     expect(style.height).toBe(56);
     expect(style.borderRadius).toBe(28);
+  });
+
+  it('renders an img for the car with a photoUrl, and no img for the one without', async () => {
+    getConfirmedCars.mockResolvedValue(RESPONSE);
+    await act(async () => {
+      root.render(<ConfirmedCarsSection eventSlug="encontro-de-verao" />);
+      await flush();
+      await flush();
+    });
+    // RESPONSE has one car with photoUrl (Toyota Corolla) and one without
+    // (Honda Civic). Catches: deleting the `car.photoUrl ? <Image/> :
+    // <View placeholder/>` guard entirely (0 imgs instead of 1), or
+    // inverting it (2 imgs instead of 1).
+    expect(container.querySelectorAll('img').length).toBe(1);
+  });
+
+  it('renders nothing and does not throw when the fetch rejects', async () => {
+    getConfirmedCars.mockRejectedValue(new Error('network error'));
+    await act(async () => {
+      root.render(<ConfirmedCarsSection eventSlug="encontro-de-verao" />);
+      await flush();
+      await flush();
+    });
+    // Catches: deleting the `.catch(() => setCars([]))` handler in the
+    // effect, which would leave an unhandled promise rejection on any 4xx/5xx
+    // from the confirmed-cars endpoint on the anonymous home — this test
+    // would surface that as an unhandled rejection/thrown error instead of a
+    // clean empty render.
+    expect(container.textContent).toBe('');
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('pins the horizontal rail gap between confirmed-car items', async () => {
+    getConfirmedCars.mockResolvedValue(RESPONSE);
+    await act(async () => {
+      root.render(<ConfirmedCarsSection eventSlug="encontro-de-verao" />);
+      await flush();
+      await flush();
+    });
+    const rail = container.querySelector('div[data-content-style]');
+    const contentStyle = JSON.parse(
+      rail?.getAttribute('data-content-style') ?? '{}',
+    ) as Record<string, unknown>;
+    // Catches: changing the horizontal rail's gap away from 12.
+    expect(contentStyle.gap).toBe(12);
   });
 });

@@ -7,10 +7,25 @@
 // storeProductListQuerySchema), então pedimos uma página pequena em vez de
 // fatiar o resultado no cliente.
 //
-// Preço exibido é `priceRange.minDisplayPriceCents`, não `minPriceCents`:
-// display* já inclui o dev fee repassado ao comprador (mesma convenção de
-// apps/mobile/app/(app)/store/index.tsx e dos steps de compra de ingresso).
+// TEASER_QUERY é module-scoped de propósito (fix round 1, CRITICAL 1): um
+// objeto literal `{ limit: TEASER_LIMIT }` inline no corpo do componente
+// teria identidade nova a cada render. Dentro de useStoreProducts.ts, esse
+// objeto alimenta `useCallback(refresh, [resolvedQuery])`, e `refresh` é a
+// única dependência do `useEffect` que dispara o fetch — nova identidade a
+// cada render dispara o effect de novo, que troca `loading` e força outro
+// render, loop infinito de GET /store/products. Módulo-scoped garante a
+// mesma referência entre renders sem tocar em useStoreProducts.ts (outros
+// chamadores do hook não passam query nenhuma, então nunca bateram nisso).
+//
+// Preço exibido é `priceRange.minDisplayPriceCents`/`maxDisplayPriceCents`,
+// não `min/maxPriceCents`: display* já inclui o dev fee repassado ao
+// comprador. `formatProductPrice` espelha `formatPriceRange` de
+// apps/mobile/app/(app)/store/index.tsx: produto de preço único mostra um
+// valor, produto de faixa (variantes com preços diferentes) mostra
+// "min - max" — a Início não pode anunciar um preço mais baixo do que a
+// loja mostra para o mesmo produto.
 
+import type { StoreProductSummary } from '@ccc/shared/store';
 import { router } from 'expo-router';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -22,8 +37,18 @@ import { p } from '~/screens/inicio/palette';
 
 const TEASER_LIMIT = 8;
 
+// Module scope, not inline in the component body — see the CRITICAL 1 note
+// above. Must stay a stable reference across renders.
+const TEASER_QUERY = { limit: TEASER_LIMIT } as const;
+
+const formatProductPrice = (priceRange: StoreProductSummary['priceRange']): string => {
+  const { minDisplayPriceCents, maxDisplayPriceCents } = priceRange;
+  if (minDisplayPriceCents === maxDisplayPriceCents) return formatBRL(minDisplayPriceCents);
+  return `${formatBRL(minDisplayPriceCents)} - ${formatBRL(maxDisplayPriceCents)}`;
+};
+
 export function StoreTeaserSection() {
-  const { items, error } = useStoreProducts({ limit: TEASER_LIMIT });
+  const { items, error } = useStoreProducts(TEASER_QUERY);
 
   if (error || items.length === 0) return null;
 
@@ -58,9 +83,7 @@ export function StoreTeaserSection() {
             <Text style={styles.title} numberOfLines={2}>
               {product.title}
             </Text>
-            <Text style={styles.price}>
-              {formatBRL(product.priceRange.minDisplayPriceCents)}
-            </Text>
+            <Text style={styles.price}>{formatProductPrice(product.priceRange)}</Text>
           </Pressable>
         ))}
       </ScrollView>

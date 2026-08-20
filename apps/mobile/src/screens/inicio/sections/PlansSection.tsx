@@ -4,8 +4,15 @@
 // trunca os benefícios. O detalhe completo vive em /assinaturas, então aqui
 // não há CTA de contratação: tocar no card leva para a jornada.
 //
-// O accent por tier é presentação derivada do tier, igual
-// src/screens/assinaturas/tier-visual.ts faz. A API só entrega conteúdo.
+// O accent por tier é presentação derivada do tier, lido de TIER_VISUAL
+// (src/screens/assinaturas/tier-visual.ts) em vez de duplicado aqui. Esse
+// arquivo mora em /assinaturas por histórico de pastas, mas o conteúdo é a
+// fonte única de verdade dos acentos por tier no app inteiro — reescrever os
+// três hex aqui criaria uma terceira cópia (a primeira já duplicada seria a
+// falha: um ajuste de cor no bronze em tier-visual.ts não se propagaria para
+// cá, e /assinaturas e a Início divergeriam silenciosamente). Import atinge
+// outra pasta de tela de propósito; o arquivo é escopo de domínio (tier),
+// não escopo de tela.
 
 import type { HomePlan } from '@ccc/shared/home';
 import { Check } from 'lucide-react-native';
@@ -15,12 +22,7 @@ import { inicioCopy } from '~/copy/inicio';
 import { formatBRL } from '~/lib/format';
 import { SectionLabel } from '~/screens/inicio/components/SectionLabel';
 import { p } from '~/screens/inicio/palette';
-
-const TIER_ACCENT: Record<HomePlan['tier'], string> = {
-  bronze: '#C08A4E',
-  silver: '#C7CCD1',
-  gold: '#E8CE86',
-};
+import { TIER_VISUAL } from '~/screens/assinaturas/tier-visual';
 
 export function PlansSection({
   plans,
@@ -39,7 +41,7 @@ export function PlansSection({
 
       <View style={styles.list}>
         {plans.map((plan) => {
-          const accent = TIER_ACCENT[plan.tier];
+          const accent = TIER_VISUAL[plan.tier].accent;
           return (
             <Pressable
               key={plan.slug}

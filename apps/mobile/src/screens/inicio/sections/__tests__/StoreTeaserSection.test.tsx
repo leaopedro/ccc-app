@@ -123,6 +123,24 @@ const PRODUCT_2: StoreProductSummary = {
   coverImageUrl: null,
 };
 
+// Variable-priced product: variants span a range, mirroring what
+// apps/mobile/app/(app)/store/index.tsx's formatPriceRange renders as
+// "min - max" instead of a single value.
+const PRODUCT_VARIABLE: StoreProductSummary = {
+  ...PRODUCT_1,
+  id: 'prod_3',
+  slug: 'jaqueta-casa',
+  title: 'Jaqueta Casa',
+  priceRange: {
+    minPriceCents: 18900,
+    maxPriceCents: 24900,
+    minDisplayPriceCents: 19500,
+    maxDisplayPriceCents: 25700,
+    devFeePercent: 3,
+    currency: 'BRL',
+  },
+};
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -242,6 +260,53 @@ describe('StoreTeaserSection', () => {
     );
     const [[query]] = useStoreProducts.mock.calls as [[{ limit?: number }]];
     expect(query.limit).toBeLessThanOrEqual(12);
+  });
+
+  it('renders a "min - max" range for a variable-priced product instead of a single low price', () => {
+    useStoreProducts.mockReturnValue({
+      items: [PRODUCT_VARIABLE],
+      nextCursor: null,
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    });
+    render(<StoreTeaserSection />);
+    // Node's Intl pt-BR currency formatting inserts U+00A0 (non-breaking
+    // space) between "R$" and the digits; normalize to a regular space
+    // before asserting so the test doesn't depend on that ICU detail.
+    const nbsp = String.fromCharCode(160);
+    const normalized = (container.textContent ?? '').split(nbsp).join(' ');
+    // Catches: rendering formatBRL(minDisplayPriceCents) alone for a
+    // variable-priced product, which would advertise a lower price on the
+    // home screen (R$ 195,00) than the store itself shows for the same
+    // product (R$ 195,00 - R$ 257,00) — the two surfaces must agree.
+    expect(normalized).toContain('R$ 195,00 - R$ 257,00');
+  });
+
+  it('does not re-request the store on a re-render (stable query identity)', () => {
+    useStoreProducts.mockReturnValue({
+      items: [PRODUCT_1],
+      nextCursor: null,
+      loading: false,
+      error: false,
+      refresh: vi.fn(),
+    });
+    render(<StoreTeaserSection />);
+    render(<StoreTeaserSection />);
+    // useStoreProducts.ts feeds its query argument into
+    // `useCallback(refresh, [resolvedQuery])`, whose sole consumer is
+    // `useEffect(() => void refresh(), [refresh])`. A fresh object literal
+    // built inside StoreTeaserSection's render body would get a new
+    // identity every render, re-triggering that effect and firing another
+    // GET /store/products indefinitely. Catches: reverting the
+    // module-scoped `TEASER_QUERY` back to an inline `{ limit: TEASER_LIMIT }`
+    // literal in the component body, which would make this fail because the
+    // two calls would receive reference-unequal (structurally equal but
+    // distinct) objects.
+    expect(useStoreProducts.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const [firstCallQuery] = useStoreProducts.mock.calls[0] as [unknown];
+    const [secondCallQuery] = useStoreProducts.mock.calls[1] as [unknown];
+    expect(firstCallQuery).toBe(secondCallQuery);
   });
 
   it('pins the card list gap between store teaser cards', () => {

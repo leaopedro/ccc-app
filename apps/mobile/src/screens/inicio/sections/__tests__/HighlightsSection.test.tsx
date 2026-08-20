@@ -46,6 +46,7 @@ vi.mock('react-native', async () => {
         pointerEvents,
         resizeMode,
         source,
+        accessible,
         ...rest
       } = props;
       const aria: Record<string, unknown> = {};
@@ -60,6 +61,7 @@ vi.mock('react-native', async () => {
       void pointerEvents;
       void resizeMode;
       void source;
+      void accessible;
       return ReactMod.createElement(tag, { ...rest, ...aria, ref });
     });
   return {
@@ -289,5 +291,32 @@ describe('HighlightsSection', () => {
     const list = outer?.querySelector('div[data-style]') ?? null;
     // Catches: changing styles.list's gap away from 12.
     expect(styleOf(list).gap).toBe(12);
+  });
+
+  it('renders an image for an event/highlight with a cover, and none for one without', () => {
+    const eventWithCover: EventSummary = {
+      ...EVENTS[0]!,
+      coverUrl: 'https://cdn.example.com/evento.webp',
+    };
+    const highlightWithImage: HomeHighlight = {
+      ...HIGHLIGHTS[0]!,
+      imageUrl: 'https://cdn.example.com/destaque.webp',
+    };
+    render(
+      <HighlightsSection
+        // HIGHLIGHTS[1] (day_use) keeps imageUrl: null, exercising the
+        // without-image branch alongside the two with-image fixtures above.
+        highlights={[highlightWithImage, HIGHLIGHTS[1]!]}
+        events={[eventWithCover]}
+        onOpenLink={vi.fn()}
+        onOpenEvent={vi.fn()}
+      />,
+    );
+    // The mock voids `source`, so the URL itself can't be asserted — only
+    // that an <Image> rendered at all. Catches: deleting the event's
+    // `coverUrl ? <Image/> : null` guard or the highlight's `imageUrl ? ... :
+    // null` guard entirely (0 imgs instead of 2), and catches an inverted
+    // guard on either one (which would produce 1 or 3 imgs instead of 2).
+    expect(container.querySelectorAll('img').length).toBe(2);
   });
 });

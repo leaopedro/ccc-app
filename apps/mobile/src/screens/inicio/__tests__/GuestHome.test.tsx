@@ -321,7 +321,7 @@ describe('GuestHome — happy path', () => {
     await render();
     const text = container.textContent ?? '';
     expect(text).toContain('CASA CAR CLUB');
-    expect(text).toContain('ENTRAR');
+    expect(text).toContain(inicioCopy.cta.login);
     expect(text).toContain('DIRIGIR. CONECTAR. PERTENCER.');
     expect(text).toContain('A Casa');
     expect(text).toContain(inicioCopy.sections.benefits);
@@ -330,6 +330,33 @@ describe('GuestHome — happy path', () => {
     expect(text).toContain(inicioCopy.cta.subscribe);
     expect(text).toContain(inicioCopy.sections.plans);
     expect(text).toContain(inicioCopy.sections.highlights);
+  });
+
+  // Fix round 1 (Important 1): a reviewer moved <ClubStatsSection> from
+  // position 4 to below <StoreTeaserSection> and every other test in this
+  // file still passed. Pin the actual vertical order, not just presence,
+  // the same way MemberHome.test.tsx does (indexOf position markers).
+  it('renders the nine blocks in the addendum-specified order', async () => {
+    await render();
+    const text = container.textContent ?? '';
+    const markers = [
+      'CASA CAR CLUB', // 1. AppHeader
+      'DIRIGIR. CONECTAR. PERTENCER.', // 2. HeroSection
+      inicioCopy.sections.benefits, // 3. BenefitsSection
+      inicioCopy.sections.clubStats, // 4. ClubStatsSection
+      inicioCopy.cta.signup, // 5. CtaSection
+      inicioCopy.sections.plans, // 6. PlansSection
+      inicioCopy.sections.highlights, // 7. HighlightsSection
+      inicioCopy.sections.store, // 8. StoreTeaserSection
+      inicioCopy.sections.confirmedCars, // 9. ConfirmedCarsSection
+    ];
+    const indices = markers.map((m) => text.indexOf(m));
+    indices.forEach((idx, i) => {
+      expect(idx, `marker not found: ${markers[i]}`).toBeGreaterThan(-1);
+    });
+    for (let i = 1; i < indices.length; i++) {
+      expect(indices[i]).toBeGreaterThan(indices[i - 1] ?? -1);
+    }
   });
 
   it('renders both the fetched upcoming event and the curated highlight', async () => {
@@ -390,10 +417,15 @@ describe('GuestHome — happy path', () => {
       root.render(<GuestHome />);
       await flush();
     });
-    // Catches: an inline query literal (task-9/task-11 loop trap) is not
-    // actually the risk here since the effect's own dependency array is
-    // empty — but this pins that GuestHome's fetch-on-mount effect really
-    // does have an empty dependency array and does not refire on re-render.
+    // Fix round 1 (Minor 5): this assertion IS the loop guard, not
+    // incidental filler — do not delete it to "simplify" the suite. Mutating
+    // the effect's dependency array in GuestHome.tsx from `[]` to something
+    // with a fresh identity every render (e.g. `[{}]`) reproduces the
+    // task-9/task-11 infinite-fetch trap empirically: this assertion fails
+    // with "expected spy to be called 1 times, but got 3 times", and the
+    // sibling test below ("keeps the screen up ... when the events fetch
+    // fails") times out at 5000ms waiting on the resulting runaway retry
+    // loop — the same shape a reviewer traced to a V8 heap crash on task-11.
     expect(listEvents).toHaveBeenCalledTimes(1);
   });
 });
@@ -409,6 +441,13 @@ describe('GuestHome — total failure (useHomeContent)', () => {
     await render();
     expect(container.querySelector('[data-testid="inicio-skeleton"]')).not.toBeNull();
     expect(container.textContent).not.toContain(inicioCopy.sections.plans);
+    // Fix round 1 (Important 2): the header, and its ENTRAR login entry
+    // point, is the only way back into the app from the anonymous home's
+    // first screen. It must survive the total-failure gate, not just the
+    // happy path — a reviewer wrapped <AppHeader> in `{content ? … : null}`
+    // and every other test here still passed.
+    expect(container.textContent).toContain(inicioCopy.cta.login);
+    expect(container.querySelector('[data-testid="inicio-guest-login"]')).not.toBeNull();
   });
 
   it('shows the error state with a retry that calls refresh', async () => {
@@ -418,6 +457,11 @@ describe('GuestHome — total failure (useHomeContent)', () => {
     expect(container.textContent).toContain(inicioCopy.states.errorTitle);
     click('inicio-error-retry');
     expect(refresh).toHaveBeenCalledTimes(1);
+    // Fix round 1 (Important 2): same guard as the loading test above —
+    // `/api/home-content` being down must not take the ENTRAR button with
+    // it, or the anonymous visitor loses the app's only login entry point.
+    expect(container.textContent).toContain(inicioCopy.cta.login);
+    expect(container.querySelector('[data-testid="inicio-guest-login"]')).not.toBeNull();
   });
 
   it('omits a section entirely when its list is empty', async () => {
@@ -490,6 +534,38 @@ describe('GuestHome — complementary failures never take down the rest of the s
 
 describe('GuestHome — member-state leak guard', () => {
   it('never renders any member-only section', async () => {
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).not.toContain(inicioCopy.sections.myTickets);
+    expect(text).not.toContain(inicioCopy.sections.myGarage);
+    expect(text).not.toContain(inicioCopy.sections.quickAccess);
+  });
+
+  // Fix round 1 (Minor 4): the guard above only ran against the happy path,
+  // so a member section leaking into the loading or error branch would not
+  // have been caught. Same finding Task 11 got and fixed with a second
+  // scenario; covering both branches here, not just error.
+  it('never renders any member-only section while loading', async () => {
+    hookState.home = {
+      content: null,
+      loading: true,
+      error: false,
+      refresh: () => Promise.resolve(),
+    };
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).not.toContain(inicioCopy.sections.myTickets);
+    expect(text).not.toContain(inicioCopy.sections.myGarage);
+    expect(text).not.toContain(inicioCopy.sections.quickAccess);
+  });
+
+  it('never renders any member-only section in the error state', async () => {
+    hookState.home = {
+      content: null,
+      loading: false,
+      error: true,
+      refresh: () => Promise.resolve(),
+    };
     await render();
     const text = container.textContent ?? '';
     expect(text).not.toContain(inicioCopy.sections.myTickets);

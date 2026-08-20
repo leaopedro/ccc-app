@@ -20,6 +20,10 @@ export const inicioCopy = {
     nextEvent: 'PRÓXIMO EVENTO',
   },
   cta: {
+    // GuestHome header's login entry point (fix round 1, Minor 3): the only
+    // way back into the app for a returning member on the anonymous home,
+    // so it lives here instead of as a literal in the component.
+    login: 'ENTRAR',
     signup: 'CRIAR CONTA',
     signupHint: 'Leva menos de um minuto.',
     subscribe: 'QUERO ASSINAR',

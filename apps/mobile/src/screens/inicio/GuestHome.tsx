@@ -46,13 +46,6 @@ import { StoreTeaserSection } from '~/screens/inicio/sections/StoreTeaserSection
 const LOGIN_NEXT = '/welcome';
 const SUBSCRIBE_PATH = '/assinaturas';
 
-// "ENTRAR" é texto literal, não uma chave de inicioCopy: copy/inicio.ts está
-// na lista de arquivos das Tasks 5-11 que esta task não pode tocar (task-12
-// brief), e o próprio brief já escreve o rótulo do botão do header como texto
-// solto ("um botão ENTRAR"), então não há chave para reaproveitar nem
-// permissão para criar uma nova.
-const LOGIN_LABEL = 'ENTRAR';
-
 // Hoisted to module scope — o trap do task-9/task-11: um literal montado no
 // corpo do componente teria identidade nova a cada render. Aqui o efeito
 // abaixo já tem array de dependências vazio (roda uma vez, ponto), mas o
@@ -99,11 +92,11 @@ export function GuestHome() {
             <Pressable
               onPress={goLogin}
               accessibilityRole="button"
-              accessibilityLabel={LOGIN_LABEL}
+              accessibilityLabel={inicioCopy.cta.login}
               testID="inicio-guest-login"
               style={({ pressed }) => [styles.loginButton, pressed ? styles.pressed : null]}
             >
-              <Text style={styles.loginLabel}>{LOGIN_LABEL}</Text>
+              <Text style={styles.loginLabel}>{inicioCopy.cta.login}</Text>
             </Pressable>
           }
         />

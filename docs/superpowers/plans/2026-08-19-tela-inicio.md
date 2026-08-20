@@ -4191,34 +4191,22 @@ git commit -m "feat(mobile): home do membro logado conforme o handoff"
 
 **Files:**
 - Create: `apps/mobile/src/screens/inicio/GuestHome.tsx`
-- Create: `apps/mobile/src/screens/inicio/MemberHome.tsx`
 - Create: `apps/mobile/src/screens/inicio/InicioScreen.tsx`
 - Modify: `apps/mobile/app/welcome.tsx`
 - Create: `apps/mobile/src/screens/inicio/__tests__/GuestHome.test.tsx`
 - Create: `apps/mobile/src/screens/inicio/__tests__/InicioScreen.test.tsx`
 
 **Interfaces:**
-- Consumes: todas as seções das Tasks 6 a 8. `useHomeContent` da Task 4. `useAuth` de `~/auth/context`. `buildLoginHref` de `~/auth/redirect-intent`.
-- Produces: `GuestHome()`, `MemberHome()`, `InicioScreen()` (export default em `InicioScreen.tsx`).
+- Consumes: todas as seções das Tasks 6 a 9. `useHomeContent` e `useClubStats` da Task 5. `MemberHome` da Task 11. `useAuth` de `~/auth/context`. `buildLoginHref` de `~/auth/redirect-intent`.
+- Produces: `GuestHome()`, `InicioScreen()` (export default em `InicioScreen.tsx`).
 
-- [ ] **Step 1: Mover o estado logado para `MemberHome`, sem alterar comportamento**
+- [ ] **Step 1: CANCELADO. Não criar `MemberHome.tsx`.**
 
-Criar `apps/mobile/src/screens/inicio/MemberHome.tsx` com o conteúdo atual de `apps/mobile/app/welcome.tsx`, aplicando **somente** estas mudanças mecânicas:
+O Step 1 original mandava criar `MemberHome.tsx` com o conteúdo atual de `app/welcome.tsx`, sem alterar comportamento. Isso foi **cancelado pela emenda de escopo**: a Task 11 já criou `apps/mobile/src/screens/inicio/MemberHome.tsx` do zero, conforme o handoff, junto com `useMemberHomeData.ts` e seus testes.
 
-1. Renomear o componente `Welcome` para `MemberHome` e trocar `export default function Welcome()` por `export function MemberHome()`.
-2. Manter `copy`, `eventTypeLabel`, `SEVEN_DAYS_MS`, `isSoon`, `venueLine`, `HeroCard`, `SecondaryCard`, `HeroSkeleton`, `HeroError` e `HeroEmpty` exatamente como estão, movidos junto.
-3. Adicionar no topo do arquivo o comentário:
+**Não sobrescrever, não recriar e não mover nada para esse arquivo.** Ele está pronto, revisado e commitado. `MemberHome` é apenas consumido por `InicioScreen` no Step 8.
 
-```tsx
-// Estado logado da tela de Início.
-//
-// Movido de app/welcome.tsx sem mudança de comportamento nem de aparência: a
-// entrega da vitrine do não logado não altera o que o membro vê. A home do
-// membro descrita no handoff (hero, saudação, status do clube, acesso rápido)
-// é PR seguinte, e reaproveita os componentes em src/screens/inicio/components.
-```
-
-Nenhuma linha de JSX, estilo ou lógica pode mudar nesta etapa.
+O conteúdo antigo de `app/welcome.tsx` é descartado quando o Step 9 o substitui pelo wrapper. Se algum helper do arquivo antigo (`isSoon`, `venueLine`, `eventTypeLabel`) for útil e não existir em `~/lib/format`, movê-lo para onde faça sentido em vez de deixar código morto, e registrar a decisão no report.
 
 - [ ] **Step 2: Escrever o teste do `GuestHome` que falha**
 

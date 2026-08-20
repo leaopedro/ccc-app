@@ -30,6 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GarageReadResponse } from '~/api/garage';
 import type { PremiumStatusResponse } from '~/api/premium';
 import { inicioCopy } from '~/copy/inicio';
+import { formatMemberSince } from '~/screens/inicio/format-member';
 import type { MemberHomeData, SourceState } from '~/screens/inicio/useMemberHomeData';
 
 declare global {
@@ -166,6 +167,11 @@ const clubStatsState = vi.hoisted(() => ({ value: null as unknown }));
 const unreadCountState = vi.hoisted(() => ({ value: null as unknown }));
 const authState = vi.hoisted(() => ({ value: null as unknown }));
 const routerMocks = vi.hoisted(() => ({ push: vi.fn() }));
+// Fix round 1 (Minor 6): records the `enabled` argument MemberHome passes
+// to useUnreadCount, so a regression to `useUnreadCount(false)` (which would
+// silently kill badge polling in production while every bell test here
+// stayed green) has something to be caught by.
+const unreadCountArgs = vi.hoisted(() => ({ fn: vi.fn() }));
 
 vi.mock('~/screens/inicio/useMemberHomeData', () => ({
   useMemberHomeData: () => memberHomeDataState.value,
@@ -177,7 +183,10 @@ vi.mock('~/hooks/useClubStats', () => ({
   useClubStats: () => clubStatsState.value,
 }));
 vi.mock('~/hooks/useUnreadCount', () => ({
-  useUnreadCount: () => unreadCountState.value,
+  useUnreadCount: (enabled: boolean) => {
+    unreadCountArgs.fn(enabled);
+    return unreadCountState.value;
+  },
 }));
 vi.mock('~/auth/context', () => ({
   useAuth: () => authState.value,
@@ -366,6 +375,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   routerMocks.push.mockClear();
+  unreadCountArgs.fn.mockClear();
   memberHomeDataState.value = defaultMemberHomeData();
   homeContentState.value = {
     content: HOME_CONTENT,
@@ -413,6 +423,17 @@ describe('MemberHome — full scenario', () => {
     for (let i = 1; i < indices.length; i++) {
       expect(indices[i]).toBeGreaterThan(indices[i - 1] ?? -1);
     }
+    // Fix round 1 (Important 2): the marker above is only the SECTION
+    // LABEL, which `NextEventCard` also renders in its own empty state
+    // (`inicio/sections/NextEventCard.tsx`), so a regression that fed it
+    // `event={null}` would still pass every assertion up to this point.
+    // Pin the actual card content and its testID.
+    expect(container.querySelector('[data-testid="inicio-next-event"]')).not.toBeNull();
+    expect(text).toContain(EVENT.title);
+    // Fix round 1 (Important 2): pins `createdAt` actually reaching
+    // MemberGreeting — nothing above proves the second ("member since")
+    // line renders at all.
+    expect(text).toContain(inicioCopy.member.memberSince(formatMemberSince(PROFILE.createdAt)));
   });
 
   it('never leaks anonymous-state copy into the member screen', async () => {
@@ -424,9 +445,65 @@ describe('MemberHome — full scenario', () => {
     expect(text).not.toContain(inicioCopy.cta.subscribe);
     expect(text).not.toContain(inicioCopy.sections.plans);
   });
+
+  it('never leaks anonymous-state copy for a non-premium member either', async () => {
+    // Fix round 1 (Minor 8): the leak guard above only ran against the
+    // premium happy path, so a leak gated on `!isPremiumActive` (i.e. the
+    // exact non-premium subscribe-upsell scenario) would not have been
+    // caught by it.
+    memberHomeDataState.value = {
+      ...defaultMemberHomeData(),
+      garage: source(GARAGE_NON_PREMIUM),
+      premium: source(PREMIUM_INACTIVE),
+      box: source(null),
+    };
+    await renderMemberHome();
+    const text = container.textContent ?? '';
+    expect(text).not.toContain(inicioCopy.cta.signup);
+    expect(text).not.toContain(inicioCopy.cta.subscribe);
+    expect(text).not.toContain(inicioCopy.sections.plans);
+  });
 });
 
 describe('MemberHome — per-block degradation', () => {
+  // Fix round 1 (Minor 7): the six sources named in the review are the ones
+  // with a distinct "hide the whole block" degradation. `profile` and
+  // `nextEvent` degrade differently (greeting still shows the fallback via
+  // `useAuth().user.name`; NextEventCard always shows ITS OWN empty state
+  // rather than hiding) — still worth pinning so a future regression can't
+  // silently couple either of them to an unrelated block.
+  it('keeps the rest of the screen when only the profile source fails', async () => {
+    memberHomeDataState.value = { ...defaultMemberHomeData(), profile: source(null) };
+    await renderMemberHome();
+    const text = container.textContent ?? '';
+    // The greeting still shows: firstName comes primarily from
+    // `useAuth().user.name`, not from the failed profile fetch.
+    expect(text).toContain(inicioCopy.member.greeting('Ana'));
+    // But `createdAt` only ever comes from the profile response, so the
+    // "member since" line must disappear when it fails.
+    expect(text).not.toContain(
+      inicioCopy.member.memberSince(formatMemberSince(PROFILE.createdAt)),
+    );
+    expect(text).toContain(inicioCopy.sections.myTickets);
+    expect(text).toContain(inicioCopy.sections.myGarage);
+  });
+
+  it('keeps the rest of the screen when only the next-event source fails', async () => {
+    memberHomeDataState.value = { ...defaultMemberHomeData(), nextEvent: source(null) };
+    await renderMemberHome();
+    const text = container.textContent ?? '';
+    // NextEventCard is the one section that does not hide on null data —
+    // it shows its own discreet empty state instead (see NextEventCard.tsx).
+    // (Not asserting `EVENT.title` absent here: the default ticket fixture
+    // reuses the same event, so its title legitimately still appears in
+    // the tickets rail — the testID check below is the precise signal that
+    // the actual next-event card itself did not render.)
+    expect(text).toContain(inicioCopy.empty.noNextEvent);
+    expect(container.querySelector('[data-testid="inicio-next-event"]')).toBeNull();
+    expect(text).toContain(inicioCopy.sections.myTickets);
+    expect(text).toContain(inicioCopy.sections.myGarage);
+  });
+
   it('keeps the rest of the screen when only the tickets source fails', async () => {
     memberHomeDataState.value = { ...defaultMemberHomeData(), tickets: source(null) };
     await renderMemberHome();
@@ -510,17 +587,38 @@ describe('MemberHome — premium gate', () => {
     expect(container.querySelector('[data-testid="inicio-subscription-active"]')).not.toBeNull();
   });
 
-  it('hides the box block even with box data present, if isPremiumActive is false', async () => {
+  it('hides the box block even with box data present, when premium.active is false', async () => {
     // Catches: MemberHome wiring `box.data` into BoxSection without also
-    // gating on isPremiumActive — would leak the monthly-box teaser to a
-    // non-subscriber whenever a stale box happened to be present.
+    // gating on the render-gate source — would leak the monthly-box teaser
+    // to a non-subscriber whenever a stale box happened to be present.
     memberHomeDataState.value = {
       ...defaultMemberHomeData(),
-      garage: source(GARAGE_NON_PREMIUM),
+      premium: source(PREMIUM_INACTIVE),
       box: source(BOX),
     };
     await renderMemberHome();
     expect(container.querySelector('[data-testid="inicio-box"]')).toBeNull();
+  });
+
+  it('keeps box and subscription consistent when garage and premium disagree', async () => {
+    // Fix round 1 (Minor 9). `garage.garage.isPremiumActive` and
+    // `premium.data.active` are two independent sources for the same
+    // real-world fact; they can briefly disagree. This pins the ruling:
+    // the box block's RENDER gate reads `premium.data.active` — the same
+    // source SubscriptionSection reads — so the two blocks can never
+    // visually disagree, even though garage still says isPremiumActive.
+    // Catches: reverting BoxSection's `isPremiumActive` prop back to
+    // `garage.data.garage.isPremiumActive`, which would show "CAIXA DO MÊS"
+    // right next to the "ASSINAR" upsell here.
+    memberHomeDataState.value = {
+      ...defaultMemberHomeData(),
+      garage: source(GARAGE_PREMIUM), // still says isPremiumActive: true
+      premium: source(PREMIUM_INACTIVE), // but the subscription lapsed
+      box: source(BOX), // and a stale box happens to be present
+    };
+    await renderMemberHome();
+    expect(container.querySelector('[data-testid="inicio-box"]')).toBeNull();
+    expect(container.querySelector('[data-testid="inicio-subscription-upsell"]')).not.toBeNull();
   });
 });
 
@@ -550,6 +648,14 @@ describe('MemberHome — notification bell', () => {
     click('inicio-bell');
     expect(routerMocks.push).toHaveBeenCalledWith('/notifications');
   });
+
+  it('enables polling by calling useUnreadCount(true)', async () => {
+    // Fix round 1 (Minor 6): the mock previously ignored its argument
+    // entirely, so `useUnreadCount(false)` — which kills badge polling in
+    // production — kept every bell test above green.
+    await renderMemberHome();
+    expect(unreadCountArgs.fn).toHaveBeenCalledWith(true);
+  });
 });
 
 describe('MemberHome — quick access', () => {
@@ -559,5 +665,45 @@ describe('MemberHome — quick access', () => {
     // Catches: QuickAccessSection's onNavigate not being wired to the
     // router at all, or wired to the wrong path.
     expect(routerMocks.push).toHaveBeenCalledWith('/store');
+  });
+});
+
+describe('MemberHome — remaining navigation targets (Important 3)', () => {
+  // Fix round 1: only the bell and one quick-access tile were previously
+  // clicked, so a wrong path on any of these six targets shipped green.
+  it('navigates to /garage when the garage block is tapped', async () => {
+    await renderMemberHome();
+    click('inicio-garage');
+    expect(routerMocks.push).toHaveBeenCalledWith('/garage');
+  });
+
+  it('navigates to /caixa when the box block is tapped', async () => {
+    await renderMemberHome();
+    click('inicio-box');
+    expect(routerMocks.push).toHaveBeenCalledWith('/caixa');
+  });
+
+  it('navigates to /assinaturas/minha-assinatura from the active subscription link', async () => {
+    await renderMemberHome();
+    click('inicio-subscription-active');
+    expect(routerMocks.push).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+  });
+
+  it('navigates to /tickets from the tickets "see all" link', async () => {
+    await renderMemberHome();
+    click('inicio-tickets-see-all');
+    expect(routerMocks.push).toHaveBeenCalledWith('/tickets');
+  });
+
+  it('navigates to /tickets/tkt_1 when the ticket card is tapped', async () => {
+    await renderMemberHome();
+    click('inicio-ticket-tkt_1');
+    expect(routerMocks.push).toHaveBeenCalledWith('/tickets/tkt_1');
+  });
+
+  it('navigates to /events/trackday-2026 when the next-event card is tapped', async () => {
+    await renderMemberHome();
+    click('inicio-next-event');
+    expect(routerMocks.push).toHaveBeenCalledWith('/events/trackday-2026');
   });
 });

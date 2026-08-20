@@ -140,11 +140,34 @@ export function useMemberHomeData(): MemberHomeData {
   // Phase 2: getBox() only once garage confirms isPremiumActive. `garage`
   // (the useState value, read via the outer closure) only changes identity
   // when loadGarage's setGarage actually resolves, so this does not loop.
+  //
+  // Fix round 1 (Important 4 + Minor 5). Two things this effect must do
+  // that the original version did not:
+  //
+  // 1. Wait for `garage.loading` to be false before reading the gate at
+  //    all. Without this, `refreshAll()` resetting `boxRequestedRef` to
+  //    false races the fresh `getGarage()` call: `loadGarage`'s own
+  //    `setGarage((s) => ({ ...s, loading: true }))` preserves the STALE
+  //    `data` while flipping `loading` to true, so reading the gate at
+  //    that instant would fire `getBox()` off the previous (possibly
+  //    lapsed) premium flag. Bailing while `garage.loading` is true means
+  //    the gate is only ever read once garage has actually settled with
+  //    fresh data.
+  // 2. Resolve `box` out of its initial `loading: true` state on the
+  //    negative branch (non-premium, or garage failed). Without this,
+  //    `box.loading` stays true forever for a non-subscriber — the
+  //    `MemberHomeData` contract would then be lying to any future
+  //    consumer that renders a skeleton on `box.loading`, even though
+  //    `getBox()` is deliberately never going to be called for them.
   useEffect(() => {
+    if (garage.loading) return;
     if (boxRequestedRef.current) return;
-    if (!garage.data?.garage.isPremiumActive) return;
-    boxRequestedRef.current = true;
-    void loadBox();
+    if (garage.data?.garage.isPremiumActive) {
+      boxRequestedRef.current = true;
+      void loadBox();
+    } else {
+      setBox((s) => (s.loading ? { data: null, loading: false, error: false } : s));
+    }
   }, [garage, loadBox]);
 
   const refreshAll = useCallback(async () => {

@@ -45,7 +45,19 @@ export function MemberHome() {
   const { count: unreadCount } = useUnreadCount(true);
 
   const firstName = (user?.name ?? profile.data?.name ?? '').trim().split(/\s+/)[0] ?? '';
-  const isPremiumActive = garage.data?.garage.isPremiumActive ?? false;
+  // Fix round 1 (Minor 9). Two different sources, on purpose:
+  // - useMemberHomeData's own FETCH gate for getBox() still reads
+  //   `garage.garage.isPremiumActive` (unchanged) — that is whichever of
+  //   the two arrives first, and it is only deciding whether to make a
+  //   request at all.
+  // - The RENDER gate here reads `premium.data.active`, the same source
+  //   SubscriptionSection already reads. Reading two different sources for
+  //   two blocks that both talk about the same subscription would let them
+  //   visually disagree (e.g. "CAIXA DO MÊS" open right next to an "ASSINAR"
+  //   upsell) whenever the two endpoints briefly disagree with each other.
+  //   Reading the same source for both renders keeps them consistent even
+  //   though the fetch gate stays on garage.
+  const boxPremiumActive = premium.data?.active ?? false;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: p.bg }]}>
@@ -103,7 +115,7 @@ export function MemberHome() {
 
         <BoxSection
           box={box.data}
-          isPremiumActive={isPremiumActive}
+          isPremiumActive={boxPremiumActive}
           onPress={() => router.push('/caixa')}
         />
 

@@ -11,6 +11,20 @@ describe('sanitizeNext — jornada de assinatura', () => {
     expect(sanitizeNext('/assinaturas/ouro')).toBe('/assinaturas/ouro');
   });
 
+  it('rejects a path that shares the /assinaturas prefix but not a segment boundary', () => {
+    // Catches: relaxing the segment-boundary check in sanitizeNext (e.g.
+    // `path.startsWith(prefix)` instead of `path === prefix ||
+    // path.startsWith(`${prefix}/`)`), which would let an attacker-controlled
+    // path like /assinaturasEVIL ride the /assinaturas allowlist entry.
+    expect(sanitizeNext('/assinaturasEVIL')).toBeNull();
+  });
+
+  it('rejects a path that shares an existing prefix but not a segment boundary', () => {
+    // Same property, pinned against a pre-existing prefix so it is not
+    // scoped only to the /assinaturas entry this task added.
+    expect(sanitizeNext('/garageXYZ')).toBeNull();
+  });
+
   it('still rejects absolute and protocol-relative urls', () => {
     expect(sanitizeNext('https://evil.example.com/assinaturas')).toBeNull();
     expect(sanitizeNext('//evil.example.com')).toBeNull();

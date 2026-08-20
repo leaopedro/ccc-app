@@ -25,6 +25,17 @@ module.exports = {
           tint: 'rgba(212,175,55,0.12)',
         },
 
+        // Paleta do handoff da tela de Início — espelha src/tokens.ts.
+        gold: {
+          deep: '#C9A227',
+          light: '#E8CE86',
+        },
+        'surface-gold': '#0F0E0B',
+        hairline: {
+          gold: 'rgba(212,175,55,0.14)',
+          'gold-strong': 'rgba(212,175,55,0.28)',
+        },
+
         fg: {
           DEFAULT: '#F2E8D8',
           secondary: '#c7bfb1',

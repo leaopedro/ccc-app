@@ -3,12 +3,20 @@
 
 // /termos and /privacidade are public because the signup form links to both and
 // an anonymous user must be able to read what they are being asked to accept.
-const PUBLIC_EXACT = new Set<string>(['/', '/welcome', '/events', '/termos', '/privacidade']);
+const PUBLIC_EXACT = new Set<string>([
+  '/',
+  '/welcome',
+  '/inicio',
+  '/events',
+  '/termos',
+  '/privacidade',
+]);
 const EVENTS_DETAIL_RE = /^\/events\/[^/]+$/;
 const STORE_PUBLIC_RE = /^\/store(?:\/[^/]+)?$/;
 
 const NEXT_ALLOWED_PREFIXES = [
   '/welcome',
+  '/inicio',
   '/events',
   '/store',
   '/cart',
@@ -16,6 +24,10 @@ const NEXT_ALLOWED_PREFIXES = [
   '/garage',
   '/profile',
   '/caixa',
+  // Seção 4 da tela de Início manda o anônimo para o login com
+  // next=/assinaturas. Sem o prefixo aqui o sanitizador descarta o destino e o
+  // usuário aterrissa em DEFAULT_POST_AUTH, quebrando a jornada de assinatura.
+  '/assinaturas',
 ];
 
 // Post-signin landing per the per-user pivot spec §6.2 + §8: the app

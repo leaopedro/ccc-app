@@ -506,6 +506,10 @@ model PremiumPlan {
   description String?           @db.VarChar(500)
   active      Boolean           @default(true)
   sortOrder             Int               @default(0)
+  /// Status de exibição na Seção 5 da tela de Início. `active` e `sortOrder`
+  /// continuam sendo a fonte da ordem e da disponibilidade do plano; esta
+  /// coluna só decide se o plano aparece no resumo da home.
+  homeFeatured          Boolean           @default(true)
   monthlyBoxBudgetCents Int               @default(0)
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
@@ -1991,4 +1995,64 @@ model FridgeUnlockEvent {
 
   @@index([deviceId, createdAt])
   @@index([userId])
+}
+
+/// Conteúdo institucional da tela de Início. Singleton com id constante e
+/// todas as colunas com default, para que o upsert de criação passe apenas
+/// o id.
+/// O id é declarado sem default de propósito: um create sem id explícito não
+/// compila. GeneralSettings e BoxSettings usam id com default cuid; aqui a
+/// escolha é outra e deliberada.
+/// Editável direto no banco; o CRUD admin entra em PR seguinte.
+model HomeContent {
+  id                          String   @id
+  heroTitle                   String   @default("DIRIGIR. CONECTAR. PERTENCER.") @db.VarChar(120)
+  heroSubtitle                String?  @db.VarChar(200)
+  heroBannerObjectKey         String?  @db.VarChar(300)
+  institutionalTitle          String   @default("A Casa") @db.VarChar(120)
+  institutionalBody           String   @default("Um clubhouse automotivo privado em Curitiba, feito para quem dirige, conecta e pertence.") @db.VarChar(1000)
+  institutionalImageObjectKey String?  @db.VarChar(300)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+/// Benefício da assinatura exibido na Seção 2 da Início. `icon` é uma chave
+/// resolvida no front (src/screens/inicio/icons.ts); chave desconhecida cai
+/// no ícone padrão em vez de quebrar a renderização.
+model HomeBenefit {
+  id          String   @id @default(cuid())
+  icon        String   @db.VarChar(40)
+  title       String   @db.VarChar(80)
+  description String?  @db.VarChar(240)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+enum HomeHighlightKind {
+  event
+  day_use
+  experience
+  partner
+}
+
+/// Destaque curado da Seção 6 da Início. Cobre Day Use e experiências
+/// automotivas, que não têm modelo de domínio próprio. `linkPath` é uma rota
+/// interna do app; nulo significa card informativo, não clicável.
+model HomeHighlight {
+  id             String            @id @default(cuid())
+  kind           HomeHighlightKind
+  title          String            @db.VarChar(80)
+  subtitle       String?           @db.VarChar(140)
+  imageObjectKey String?           @db.VarChar(300)
+  linkPath       String?           @db.VarChar(200)
+  active         Boolean           @default(true)
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([active, sortOrder])
 }

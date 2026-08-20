@@ -1,0 +1,156 @@
+import { prisma } from '@ccc/db';
+import { clubStatsResponseSchema } from '@ccc/shared/club-stats';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { invalidateClubStatsCache } from '../src/routes/club-stats.js';
+
+import { createUser, makeApp, resetDatabase } from './helpers.js';
+
+const GET = { method: 'GET' as const, url: '/api/club-stats' };
+
+// Datas fixas de proposito. A contagem de eventos depende de "futuro", entao
+// uma fixture com Date.now() ficaria fragil na virada do dia.
+const PAST = new Date('2026-01-10T20:00:00.000Z');
+const PAST_END = new Date('2026-01-11T02:00:00.000Z');
+const FUTURE = new Date('2099-01-10T20:00:00.000Z');
+const FUTURE_END = new Date('2099-01-11T02:00:00.000Z');
+// In-progress event: started yesterday, ends tomorrow — straddles the real
+// "now" the route compares against, so this one has to be Date.now()-relative
+// rather than a fixed date. Must count as "upcoming" here, same definition as
+// /events?window=upcoming (endsAt), not startsAt.
+const YESTERDAY = new Date(Date.now() - 24 * 60 * 60 * 1000);
+const TOMORROW = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+const makeEvent = (slug: string, startsAt: Date, endsAt: Date, status: 'published' | 'draft') =>
+  prisma.event.create({
+    data: {
+      slug,
+      title: `Evento ${slug}`,
+      description: 'd',
+      startsAt,
+      endsAt,
+      venueName: 'Sede',
+      venueAddress: 'Rua A, 1',
+      city: 'Curitiba',
+      stateCode: 'PR',
+      type: 'meeting',
+      status,
+      capacity: 100,
+      ...(status === 'published' ? { publishedAt: PAST } : {}),
+    },
+  });
+
+describe('GET /api/club-stats', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    invalidateClubStatsCache();
+    app = await makeApp();
+  });
+
+  afterEach(async () => {
+    invalidateClubStatsCache();
+    await app.close();
+  });
+
+  it('responds 200 without auth and satisfies the shared schema', async () => {
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    expect(() => clubStatsResponseSchema.parse(res.json())).not.toThrow();
+  });
+
+  it('returns zeros on an empty database', async () => {
+    const res = await app.inject(GET);
+    expect(clubStatsResponseSchema.parse(res.json())).toEqual({
+      members: 0,
+      events: 0,
+      cars: 0,
+    });
+  });
+
+  it('counts only future published events', async () => {
+    await makeEvent('futuro-publicado', FUTURE, FUTURE_END, 'published');
+    await makeEvent('passado-publicado', PAST, PAST_END, 'published');
+    await makeEvent('futuro-rascunho', FUTURE, FUTURE_END, 'draft');
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.events).toBe(1);
+  });
+
+  it('counts a published event that is in progress (started yesterday, ends tomorrow)', async () => {
+    // Guards the endsAt-based definition: a startsAt-based count would read
+    // this event as already over and report 0, contradicting the very same
+    // event that /events?window=upcoming (endsAt-based) still lists.
+    await makeEvent('em-andamento', YESTERDAY, TOMORROW, 'published');
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.events).toBe(1);
+  });
+
+  it('counts active members and cars', async () => {
+    const { user } = await createUser();
+    // nickname e obrigatorio e unico no modelo Car (Step 1); nao assumido no brief original.
+    await prisma.car.create({
+      data: {
+        userId: user.id,
+        make: 'Nissan',
+        model: 'Skyline',
+        year: 1999,
+        nickname: 'skyline-1',
+      },
+    });
+    // Segundo usuario com status != active. Sem isso, a asserção members === 1
+    // passaria mesmo se a rota trocasse o where por um count() sem filtro, ou
+    // por um predicado errado (ex.: emailVerifiedAt) — o teste ficaria mudo
+    // para a semantica real do contador.
+    const disabledUser = await prisma.user.create({
+      data: { email: 'disabled@jdm.test', name: 'Disabled User', status: 'disabled' },
+    });
+    // A disabled user's cars must not count either. Without this, a bare
+    // car.count() (no relation filter at all) would still pass the
+    // body.cars === 1 assertion below, staying silent about the real bug:
+    // banning a member with cars should move GARAGEM too.
+    await prisma.car.create({
+      data: {
+        userId: disabledUser.id,
+        make: 'Toyota',
+        model: 'Supra',
+        year: 1998,
+        nickname: 'supra-1',
+      },
+    });
+
+    const res = await app.inject(GET);
+    expect(res.statusCode).toBe(200);
+    const body = clubStatsResponseSchema.parse(res.json());
+    expect(body.members).toBe(1);
+    expect(body.cars).toBe(1);
+  });
+
+  it('serves the cached payload on a second call within the TTL', async () => {
+    const first = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(first.cars).toBe(0);
+
+    const { user } = await createUser();
+    await prisma.car.create({
+      data: { userId: user.id, make: 'Honda', model: 'NSX', year: 1992, nickname: 'nsx-1' },
+    });
+
+    // Dentro do TTL, o cache ainda serve a contagem antiga. Isso e o
+    // comportamento pretendido, nao um bug.
+    const second = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(second.cars).toBe(0);
+
+    // Invalidado, a proxima leitura ve o carro novo. Isso prova que o valor
+    // antigo veio do cache e nao de uma query errada.
+    invalidateClubStatsCache();
+    const third = clubStatsResponseSchema.parse((await app.inject(GET)).json());
+    expect(third.cars).toBe(1);
+  });
+});

@@ -3,7 +3,15 @@ import '../global.css';
 import { brand } from '@ccc/design';
 // Display font. Jost ships its 300 weight as Jost_300Light; we register it
 // under the brand key 'Jost_300Regular' (brand.typography.displayFont).
-import { Jost_300Light } from '@expo-google-fonts/jost';
+// Os pesos 500/600/700 entram para a tela de Início, que usa a escala do
+// handoff (labels 600, mote 700). Cormorant Garamond fica de fora: só serve
+// aos contadores da home do membro, que não entram nesta entrega.
+import {
+  Jost_300Light,
+  Jost_500Medium,
+  Jost_600SemiBold,
+  Jost_700Bold,
+} from '@expo-google-fonts/jost';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -164,6 +172,9 @@ export default function RootLayout() {
   }, []);
   const [fontsLoaded, fontError] = useFonts({
     Jost_300Regular: Jost_300Light,
+    Jost_500Medium,
+    Jost_600SemiBold,
+    Jost_700Bold,
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,

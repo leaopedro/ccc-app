@@ -1,4 +1,5 @@
-// Tela de Início — ponto de entrada de /welcome.
+// Tela de Início — ponto de entrada de /inicio. /welcome é apenas alias
+// histórico (Task 14), continua público e redireciona para /inicio.
 //
 // Duas variantes: a vitrine do não logado (GuestHome) e a home do membro
 // (MemberHome, comportamento atual preservado). Enquanto a sessão não

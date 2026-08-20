@@ -14,7 +14,7 @@ import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
 import { usePremiumSlot } from '~/hooks/usePremiumSlot';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
-import { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName } from '~/navigation/app-tabs';
+import { getCartTabBadge, getPrimaryTabName, tabTitle } from '~/navigation/app-tabs';
 import { useStoreRuntime } from '~/store/runtime-context';
 
 const ACTIVE = brand.color.brand;
@@ -86,9 +86,12 @@ function AppTabs() {
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
         name="inicio"
-        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: InicioIcon }}
+        options={{ title: tabTitle('inicio'), tabBarIcon: InicioIcon }}
         listeners={{
           tabPress: (e) => {
+            // Same reason as the events tabPress right below: default
+            // tab-press behavior on web preserves dynamic params and fails
+            // to pop deep routes. Force a clean replace to /inicio.
             e.preventDefault();
             router.replace('/inicio');
           },
@@ -96,7 +99,7 @@ function AppTabs() {
       />
       <Tabs.Screen
         name="events"
-        options={{ title: APP_TAB_SPECS[1].title, tabBarIcon: EventsIcon }}
+        options={{ title: tabTitle('events'), tabBarIcon: EventsIcon }}
         listeners={{
           tabPress: (e) => {
             // Default tab-press behavior on web preserves dynamic params
@@ -124,7 +127,7 @@ function AppTabs() {
       <Tabs.Screen
         name="cart"
         options={{
-          title: APP_TAB_SPECS[3].title,
+          title: tabTitle('cart'),
           tabBarIcon: CartIcon,
           tabBarBadgeStyle: {
             backgroundColor: ACTIVE,
@@ -145,10 +148,10 @@ function AppTabs() {
         name="tickets"
         options={{ href: null, title: 'Ingressos', tabBarIcon: TicketsIcon }}
       />
-      <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[5].title }} />
+      <Tabs.Screen name="garage" options={{ href: null, title: tabTitle('garage') }} />
       <Tabs.Screen
         name="profile"
-        options={{ title: APP_TAB_SPECS[6].title, tabBarIcon: ProfileIcon }}
+        options={{ title: tabTitle('profile'), tabBarIcon: ProfileIcon }}
       />
       <Tabs.Screen name="notifications" options={{ href: null, title: 'Notificações' }} />
     </Tabs>

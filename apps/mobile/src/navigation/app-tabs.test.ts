@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
 
-const { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName } = await import('./app-tabs');
+const { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName, tabTitle } = await import('./app-tabs');
 
 describe('APP_TAB_SPECS', () => {
   it('keeps the approved bottom-nav order, hiding only garage from the static spec', () => {
@@ -53,5 +53,15 @@ describe('getCartTabBadge', () => {
   it('returns the live cart count badge for populated carts', () => {
     expect(getCartTabBadge(3)).toBe('3');
     expect(getCartTabBadge(12)).toBe('9+');
+  });
+});
+
+describe('tabTitle', () => {
+  it('looks up the title by tab name, not by position', () => {
+    expect(tabTitle('inicio')).toBe('Início');
+    expect(tabTitle('events')).toBe('Eventos');
+    expect(tabTitle('cart')).toBe('Carrinho');
+    expect(tabTitle('garage')).toBe('Garagem');
+    expect(tabTitle('profile')).toBe('Perfil');
   });
 });

@@ -5,7 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { theme } from '~/theme';
 
 export default function SentryDebugScreen() {
-  if (!__DEV__) return <Redirect href="/welcome" />;
+  if (!__DEV__) return <Redirect href="/inicio" />;
 
   return (
     <View style={styles.container}>

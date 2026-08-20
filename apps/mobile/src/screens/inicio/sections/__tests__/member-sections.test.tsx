@@ -11,6 +11,11 @@
 // usado em XPScoreboard.test.tsx / BadgeRow.test.tsx / PremiumBadge.test.tsx
 // para os mocks de react-native/react-native-svg serem aplicados antes do
 // módulo real de `@ccc/ui` carregar.
+//
+// Fix round 1 (Minor 4): o mock de `react-native` agora grava `source` (uri
+// da Image) em `data-src`, além do `style`/`contentContainerStyle` já
+// gravados — necessário para pinar o thumb do NextEventCard e provar qual
+// imagem foi de fato passada, não só que *uma* imagem renderizou.
 
 import type { GarageReadResponse } from '~/api/garage';
 import type { BoxView } from '@ccc/shared/box';
@@ -23,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { caixaCopy } from '~/copy/caixa';
 import { inicioCopy } from '~/copy/inicio';
+import { formatEventDateRange } from '~/lib/format';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -79,6 +85,13 @@ vi.mock('react-native', async () => {
       }
       if (typeof testID === 'string') aria['data-testid'] = testID;
       if (typeof onPress === 'function') aria.onClick = onPress;
+      if (
+        source &&
+        typeof source === 'object' &&
+        typeof (source as { uri?: unknown }).uri === 'string'
+      ) {
+        aria['data-src'] = (source as { uri: string }).uri;
+      }
       const resolvedStyle = resolveStyle(style);
       if (resolvedStyle) aria['data-style'] = JSON.stringify(resolvedStyle);
       const resolvedContentStyle = resolveStyle(contentContainerStyle);
@@ -87,7 +100,6 @@ vi.mock('react-native', async () => {
       void hitSlop;
       void pointerEvents;
       void resizeMode;
-      void source;
       void horizontal;
       void showsHorizontalScrollIndicator;
       void accessible;
@@ -199,26 +211,59 @@ describe('MemberGreeting', () => {
 
   it('falls back to the generic greeting when firstName is null', () => {
     render(<MemberGreeting firstName={null} createdAt="2026-03-14T12:00:00.000Z" />);
-    // Catches: swapping the fallback greeting and the named greeting.
-    expect(container.textContent).toContain(inicioCopy.member.greetingFallback);
-    expect(container.textContent).not.toContain(inicioCopy.member.greeting('Ana'));
+    const heading = container.querySelector('[role="header"]');
+    // Fix round 1 (Minor 5): an exact match on the heading's own textContent,
+    // not `container.textContent` + `toContain`. `greetingFallback` is a
+    // strict prefix of `greeting('Ana')`, so `toContain(greetingFallback)`
+    // alone would pass even when the NAMED greeting renders; only the exact
+    // match on the heading element actually distinguishes the two.
+    expect(heading?.textContent).toBe(inicioCopy.member.greetingFallback);
   });
 
   it('omits the second line when createdAt is invalid', () => {
     render(<MemberGreeting firstName="Ana" createdAt="not-a-date" />);
     expect(container.textContent).toContain(inicioCopy.member.greeting('Ana'));
-    // Catches: rendering "Invalid Date" or memberSince('') instead of hiding the line.
-    expect(container.textContent).not.toContain('MEMBRO DESDE');
+    // Fix round 1 (Minor 5): derived from `inicioCopy.member.memberSince('')`
+    // instead of a hardcoded 'MEMBRO DESDE' literal, so renaming that copy
+    // key cannot silently disarm this assertion.
+    expect(container.textContent).not.toContain(inicioCopy.member.memberSince(''));
   });
 });
 
 describe('NextEventCard', () => {
-  it('renders the title, the formatted date range and the pill label', () => {
+  it('renders the title and the pill label', () => {
     render(<NextEventCard event={EVENT} onPress={vi.fn()} />);
     expect(container.textContent).toContain('Trackday SP');
     expect(container.textContent).toContain(inicioCopy.cards.seeEvent);
     const el = container.querySelector('[data-testid="inicio-next-event"]');
     expect(el).not.toBeNull();
+  });
+
+  it('renders the formatted date range via the real formatter', () => {
+    render(<NextEventCard event={EVENT} onPress={vi.fn()} />);
+    // Fix round 1 (Important 1): derived from `formatEventDateRange` itself
+    // rather than a hardcoded date string, so a format change cannot
+    // silently disarm this. Catches: deleting the calendar metaline.
+    expect(container.textContent).toContain(formatEventDateRange(EVENT.startsAt, EVENT.endsAt));
+  });
+
+  it('renders the city and state meta line', () => {
+    render(<NextEventCard event={EVENT} onPress={vi.fn()} />);
+    // Fix round 1 (Important 1): catches deleting the city/state metaline.
+    expect(container.textContent).toContain(`${EVENT.city}/${EVENT.stateCode}`);
+  });
+
+  it('renders the cover thumb with the correct source and the pinned size', () => {
+    render(<NextEventCard event={EVENT} onPress={vi.fn()} />);
+    const thumb = container.querySelector('[data-testid="inicio-next-event-thumb"]');
+    expect(thumb).not.toBeNull();
+    // Fix round 1 (Important 1 + Minor 4): proves the thumb actually wires
+    // `event.coverUrl`, not merely that *some* image renders.
+    expect(thumb?.getAttribute('data-src')).toBe(EVENT.coverUrl);
+    const style = JSON.parse(thumb?.getAttribute('data-style') ?? '{}') as Record<string, unknown>;
+    // Fix round 1 (Minor 4): pins the 96px width and 12px radius from the handoff.
+    expect(style.width).toBe(96);
+    expect(style.borderRadius).toBe(12);
   });
 
   it('calls onPress with the event slug, not the id, when tapped', () => {
@@ -263,7 +308,7 @@ const TICKET_REVOKED: MyTicket = {
 };
 
 describe('MyTicketsSection', () => {
-  it('renders only tickets with status "valid"', () => {
+  it('renders only tickets with status "valid", including the title and date', () => {
     render(
       <MyTicketsSection
         tickets={[TICKET_VALID, TICKET_REVOKED]}
@@ -274,6 +319,13 @@ describe('MyTicketsSection', () => {
     // Catches: dropping the status filter and rendering every ticket.
     expect(container.textContent).toContain('Pista');
     expect(container.textContent).not.toContain('Revogado');
+    // Fix round 1 (Important 2): catches deleting the event title or the
+    // date-range line from the ticket card — only `tierName` was pinned
+    // before.
+    expect(container.textContent).toContain(TICKET_VALID.event.title);
+    expect(container.textContent).toContain(
+      formatEventDateRange(TICKET_VALID.event.startsAt, TICKET_VALID.event.endsAt),
+    );
   });
 
   it('calls onOpenTicket with the ticket id when a ticket card is tapped', () => {
@@ -305,6 +357,24 @@ describe('MyTicketsSection', () => {
     );
     // Catches: checking tickets.length === 0 instead of the filtered length.
     expect(container.firstChild).toBeNull();
+  });
+
+  it('pins the ticket card width and the horizontal rail gap', () => {
+    render(<MyTicketsSection tickets={[TICKET_VALID]} onOpenTicket={vi.fn()} onSeeAll={vi.fn()} />);
+    const card = container.querySelector('[data-testid="inicio-ticket-tkt_1"]');
+    const cardStyle = JSON.parse(card?.getAttribute('data-style') ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    // Fix round 1 (Minor 4): pins the 160px ticket card width.
+    expect(cardStyle.width).toBe(160);
+    const rail = container.querySelector('div[data-content-style]');
+    const railStyle = JSON.parse(rail?.getAttribute('data-content-style') ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    // Fix round 1 (Minor 4): pins the 12px rail gap.
+    expect(railStyle.gap).toBe(12);
   });
 });
 
@@ -360,7 +430,10 @@ describe('MyGarageSection', () => {
   it('renders null when the top-level gamification.enabled is false', async () => {
     const { MyGarageSection } = await import('../MyGarageSection');
     render(
-      <MyGarageSection garage={makeGarage({ gamification: { enabled: false } })} onPress={vi.fn()} />,
+      <MyGarageSection
+        garage={makeGarage({ gamification: { enabled: false } })}
+        onPress={vi.fn()}
+      />,
     );
     // Catches: removing the killswitch guard, or reading the deprecated
     // nested `garage.garage.gamification.enabled` instead of the top-level one.
@@ -379,6 +452,17 @@ describe('MyGarageSection', () => {
     render(<MyGarageSection garage={makeGarage()} onPress={onPress} />);
     click('inicio-garage');
     expect(onPress).toHaveBeenCalled();
+  });
+
+  it('still shows the car/spot count line, so the card is never empty, when progress is absent', async () => {
+    const { MyGarageSection } = await import('../MyGarageSection');
+    render(<MyGarageSection garage={makeGarage({ progress: undefined })} onPress={vi.fn()} />);
+    // Fix round 1 (Minor 3): with badges dropped (ruling R1) and `progress`
+    // optional per `garageReadSchema`, the count line is what keeps this
+    // section from rendering a `SectionLabel` over an empty `FeatureCard`.
+    // Fixture has 0 cars and 1 spot (see makeGarage's default `spots`).
+    expect(container.textContent).toContain(inicioCopy.garage.counts(0, 1));
+    expect(container.firstChild).not.toBeNull();
   });
 });
 

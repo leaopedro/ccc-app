@@ -11,9 +11,8 @@ import { describe, expect, it } from 'vitest';
 // this test is what actually enforces it. Placed in apps/mobile because
 // packages/design has no test script or vitest dependency configured.
 describe('design tokens <-> tailwind preset sync (gold palette)', () => {
-  const colors = (
-    tailwindPreset as { theme: { extend: { colors: Record<string, unknown> } } }
-  ).theme.extend.colors;
+  const colors = (tailwindPreset as { theme: { extend: { colors: Record<string, unknown> } } })
+    .theme.extend.colors;
   const gold = colors.gold as { deep: string; light: string };
   const hairline = colors.hairline as { gold: string; 'gold-strong': string };
 

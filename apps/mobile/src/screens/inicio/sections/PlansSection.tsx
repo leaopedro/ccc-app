@@ -63,9 +63,7 @@ export function PlansSection({
                 </View>
               </View>
 
-              {plan.description ? (
-                <Text style={styles.description}>{plan.description}</Text>
-              ) : null}
+              {plan.description ? <Text style={styles.description}>{plan.description}</Text> : null}
 
               <View style={styles.benefits}>
                 {plan.benefits.map((label) => (

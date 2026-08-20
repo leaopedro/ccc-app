@@ -156,9 +156,7 @@ describe('HeroSection', () => {
   });
 
   it('renders the banner image when a bannerUrl is present', () => {
-    render(
-      <HeroSection hero={HERO} institutional={{ ...INSTITUTIONAL, imageUrl: null }} />,
-    );
+    render(<HeroSection hero={HERO} institutional={{ ...INSTITUTIONAL, imageUrl: null }} />);
     // Catches: deleting the <Image> element for the hero banner entirely
     // (or changing its guard to always render null), which would make this
     // true-branch silently regress to nothing rendering. The mock discards
@@ -168,9 +166,7 @@ describe('HeroSection', () => {
   });
 
   it('renders the institutional image when an imageUrl is present', () => {
-    render(
-      <HeroSection hero={{ ...HERO, bannerUrl: null }} institutional={INSTITUTIONAL} />,
-    );
+    render(<HeroSection hero={{ ...HERO, bannerUrl: null }} institutional={INSTITUTIONAL} />);
     // hero.bannerUrl is null here, so the banner branch renders no <img>. Any
     // <img> found below can only come from the institutional branch, which
     // distinguishes this from the banner-presence test above. Catches:

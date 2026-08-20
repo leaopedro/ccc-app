@@ -188,10 +188,7 @@ describe('ConfirmedCarsSection', () => {
       await flush();
     });
     const photo = container.querySelector('img[data-style]');
-    const style = JSON.parse(photo?.getAttribute('data-style') ?? '{}') as Record<
-      string,
-      unknown
-    >;
+    const style = JSON.parse(photo?.getAttribute('data-style') ?? '{}') as Record<string, unknown>;
     // Catches: changing the avatar size away from 56 or dropping the 28
     // borderRadius that makes it a circle instead of a rounded square.
     expect(style.width).toBe(56);
@@ -237,9 +234,10 @@ describe('ConfirmedCarsSection', () => {
       await flush();
     });
     const rail = container.querySelector('div[data-content-style]');
-    const contentStyle = JSON.parse(
-      rail?.getAttribute('data-content-style') ?? '{}',
-    ) as Record<string, unknown>;
+    const contentStyle = JSON.parse(rail?.getAttribute('data-content-style') ?? '{}') as Record<
+      string,
+      unknown
+    >;
     // Catches: changing the horizontal rail's gap away from 12.
     expect(contentStyle.gap).toBe(12);
   });

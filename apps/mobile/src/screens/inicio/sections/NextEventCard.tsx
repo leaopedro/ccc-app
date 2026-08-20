@@ -7,16 +7,20 @@
 // buraco aqui, sem cabeçalho e sem faixa dourada, fica pior que uma linha
 // de texto.
 //
-// `GoldPill` "VER EVENTO" recebe o mesmo `onPress` do card: é affordance
-// visual, não um segundo alvo de toque — o card inteiro (FeatureCard) já
-// dispara a mesma ação.
+// A pílula "VER EVENTO" é um `View` com o mesmo tratamento visual de
+// `GoldPill` (mesmo gradiente, raio e tipografia), não o componente
+// `GoldPill` em si — fix round 1 (Minor 7): `GoldPill` exige `onPress` e
+// vira seu próprio `Pressable` com `accessibilityRole="button"`, o que
+// aninhava um segundo alvo de toque dentro do `FeatureCard` que já cobre o
+// card inteiro. Um card com dois alvos de toque sobrepostos é pior a11y do
+// que um card com um alvo e uma pílula puramente visual.
 
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { inicioCopy } from '~/copy/inicio';
 import { formatEventDateRange } from '~/lib/format';
 import { FeatureCard } from '~/screens/inicio/components/FeatureCard';
-import { GoldPill } from '~/screens/inicio/components/GoldPill';
 import { SectionLabel } from '~/screens/inicio/components/SectionLabel';
 import { homeIcon } from '~/screens/inicio/icons';
 import { p } from '~/screens/inicio/palette';
@@ -58,7 +62,9 @@ export function NextEventCard({
             <Text style={styles.title}>{event.title}</Text>
             <View style={styles.meta}>
               <CalendarIcon color={p.gold} size={16} strokeWidth={1.75} />
-              <Text style={styles.metaText}>{formatEventDateRange(event.startsAt, event.endsAt)}</Text>
+              <Text style={styles.metaText}>
+                {formatEventDateRange(event.startsAt, event.endsAt)}
+              </Text>
             </View>
             {locationLine ? (
               <View style={styles.meta}>
@@ -66,10 +72,25 @@ export function NextEventCard({
                 <Text style={styles.metaText}>{locationLine}</Text>
               </View>
             ) : null}
-            <GoldPill label={inicioCopy.cards.seeEvent} onPress={handlePress} />
+            <View style={styles.pillWrap} testID="inicio-next-event-pill">
+              <LinearGradient
+                colors={[p.goldLight, p.goldDeep]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.pillGradient}
+              >
+                <Text style={styles.pillLabel}>{inicioCopy.cards.seeEvent}</Text>
+              </LinearGradient>
+            </View>
           </View>
           {event.coverUrl ? (
-            <Image source={{ uri: event.coverUrl }} accessible={false} style={styles.thumb} resizeMode="cover" />
+            <Image
+              source={{ uri: event.coverUrl }}
+              accessible={false}
+              testID="inicio-next-event-thumb"
+              style={styles.thumb}
+              resizeMode="cover"
+            />
           ) : null}
         </View>
       </FeatureCard>
@@ -97,6 +118,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Jost_500Medium',
     fontSize: 13,
     color: p.muted60,
+  },
+  // Mesmos valores de GoldPill.tsx (wrap/gradient/label), reproduzidos aqui
+  // como affordance puramente visual — ver nota no topo do arquivo.
+  pillWrap: { borderRadius: 9, overflow: 'hidden' },
+  pillGradient: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  pillLabel: {
+    fontFamily: 'Jost_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 2,
+    color: p.bg,
+    textTransform: 'uppercase',
   },
   thumb: {
     width: 96,

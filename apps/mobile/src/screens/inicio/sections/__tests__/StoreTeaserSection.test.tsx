@@ -319,9 +319,10 @@ describe('StoreTeaserSection', () => {
     });
     render(<StoreTeaserSection />);
     const rail = container.querySelector('div[data-content-style]');
-    const contentStyle = JSON.parse(
-      rail?.getAttribute('data-content-style') ?? '{}',
-    ) as Record<string, unknown>;
+    const contentStyle = JSON.parse(rail?.getAttribute('data-content-style') ?? '{}') as Record<
+      string,
+      unknown
+    >;
     // Catches: changing the horizontal rail's gap away from 12.
     expect(contentStyle.gap).toBe(12);
   });

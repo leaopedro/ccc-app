@@ -50,6 +50,15 @@ export const inicioCopy = {
     greetingFallback: 'BEM-VINDO DE VOLTA',
     memberSince: (monthYear: string) => `MEMBRO DESDE ${monthYear.toUpperCase()}`,
   },
+  // Fix round 1 (ruling R3): linha de contagem de carros/vagas da
+  // MyGarageSection. Vocabulário espelha `apps/mobile/src/copy/garage.ts`
+  // (`carCountLabel`: carro/carros); não há pluralizador de vagas lá, então
+  // seguimos o mesmo padrão singular/plural. Joiner (" · ") e ordem (carros
+  // antes de vagas) ficam explícitos aqui, não montados ad-hoc no componente.
+  garage: {
+    counts: (cars: number, spots: number) =>
+      `${cars} ${cars === 1 ? 'carro' : 'carros'} · ${spots} ${spots === 1 ? 'vaga' : 'vagas'}`,
+  },
   quickAccess: {
     events: 'Eventos',
     tickets: 'Ingressos',

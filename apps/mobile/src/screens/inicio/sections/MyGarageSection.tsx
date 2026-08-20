@@ -7,30 +7,33 @@
 // o mesmo aviso "Do NOT read data.garage.gamification.enabled"). Esta seção
 // respeita o mesmo campo aqui.
 //
-// Divergência de escopo registrada no report da task 10: o brief pedia para
-// reusar `BadgeRow` de `@ccc/ui` alimentado por `garage.garage.badges`, mas
-// `BadgeRow` exige `GarageBadgesOwnerResponse` (`{ enabled, catalog, badges
-// }`) — o `catalog` (ícone/raridade por código) não existe em
-// `GarageReadResponse`, só na resposta separada de `GET /me/garage/badges`
-// (`getMyBadges`). Como este componente é puramente apresentacional e só
-// recebe `GarageReadResponse`, a fileira de badges não é renderizada aqui.
-// Não reimplementamos badges em paralelo — ver instrução do brief.
+// Divergência de escopo (task-10 report, ruling R1 no fix round 1): o brief
+// pedia para reusar `BadgeRow` de `@ccc/ui` alimentado por
+// `garage.garage.badges`, mas `BadgeRow` exige `GarageBadgesOwnerResponse`
+// (`{ enabled, catalog, badges }`) — o `catalog` (ícone/raridade por
+// código) não existe em `GarageReadResponse`, só na resposta separada de
+// `GET /me/garage/badges`. `BadgeRow` também exige `onOpenSheet` e
+// `onLockedPress` e traz seus próprios `Pressable`s, que aninhariam dentro
+// do `Pressable` de card inteiro do `FeatureCard`. Ruling do fix round 1:
+// badges ficam só em `/garage`, não entram aqui. Nenhuma reimplementação
+// paralela foi escrita.
 //
-// Segunda divergência registrada no report: o brief pede "uma linha com a
-// contagem de carros e de vagas", mas não existe em `inicioCopy` nenhuma
-// chave para o rótulo dessa linha (ex.: "carros"/"vagas"), e o brief é
-// explícito em não inventar copy inline. `garage.cars.length` e
-// `garage.spots.length` ficam disponíveis para a Task 11 (ou uma chave nova
-// de copy), mas esta seção não renderiza a linha até essa decisão de
-// produto ser tomada.
+// Linha de contagem (ruling R3 no fix round 1): com badges fora do escopo,
+// esta é a única peça de conteúdo do card além do XPScoreboard opcional, e
+// agora tem uma chave de copy dedicada (`inicioCopy.garage.counts`,
+// autorizada no fix round 1). Ela SEMPRE renderiza (0 é um valor válido de
+// `cars.length`/`spots.length`), então o card nunca fica vazio sob
+// `SectionLabel` — não é preciso um guard adicional além do killswitch e do
+// `garage` nulo já cobertos acima.
 
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { XPScoreboard } from '@ccc/ui';
 
 import { inicioCopy } from '~/copy/inicio';
 import { FeatureCard } from '~/screens/inicio/components/FeatureCard';
 import { SectionLabel } from '~/screens/inicio/components/SectionLabel';
+import { p } from '~/screens/inicio/palette';
 
 import type { GarageReadResponse } from '~/api/garage';
 
@@ -47,8 +50,15 @@ export function MyGarageSection({
   return (
     <View style={styles.wrap}>
       <SectionLabel label={inicioCopy.sections.myGarage} />
-      <FeatureCard testID="inicio-garage" accessibilityLabel={inicioCopy.sections.myGarage} onPress={onPress}>
+      <FeatureCard
+        testID="inicio-garage"
+        accessibilityLabel={inicioCopy.sections.myGarage}
+        onPress={onPress}
+      >
         {garage.progress ? <XPScoreboard progress={garage.progress} /> : null}
+        <Text style={styles.counts}>
+          {inicioCopy.garage.counts(garage.cars.length, garage.spots.length)}
+        </Text>
       </FeatureCard>
     </View>
   );
@@ -56,4 +66,9 @@ export function MyGarageSection({
 
 const styles = StyleSheet.create({
   wrap: { gap: 14 },
+  counts: {
+    fontFamily: 'Jost_500Medium',
+    fontSize: 13,
+    color: p.muted60,
+  },
 });

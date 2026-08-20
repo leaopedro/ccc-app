@@ -114,7 +114,15 @@ describe('ClubStatsSection', () => {
     // treat 0 as "no value" and hide a counter or fall back to a dash.
     render(<ClubStatsSection stats={{ members: 0, events: 0, cars: 0 }} />);
     expect(container.textContent).toContain(inicioCopy.sections.clubStats);
-    expect(container.textContent).toContain('0');
+    // `toContain('0')` alone would still pass if only one of the three
+    // counters rendered its zero (e.g. a mutation hiding just `cars` when
+    // zero, since `members`/`events` would still print a '0'). Count the
+    // zero-valued numeral spans directly: StatCard renders `value` as its
+    // own <span>, so a per-counter drop shows up as fewer than 3.
+    const zeroValues = Array.from(container.querySelectorAll('span')).filter(
+      (el) => el.textContent === '0',
+    );
+    expect(zeroValues.length).toBe(3);
   });
 
   it('renders nothing when stats are unavailable', () => {
@@ -123,6 +131,10 @@ describe('ClubStatsSection', () => {
     // would render a "STATUS DO CLUBE" heading with nothing under it.
     expect(container.textContent).toBe('');
     expect(container.querySelector('span')).toBeNull();
+    // The two assertions above pass even for a mutation that returns an empty
+    // `<View style={styles.wrap} />` (no text, no span, but still a <div>
+    // child of container). This is the actual proof of an early `return null`.
+    expect(container.firstChild).toBeNull();
   });
 
   it('pins the stats grid as a row with the handoff gap', () => {

@@ -125,6 +125,15 @@ describe('BenefitsSection', () => {
     // key instead of falling back to Star, which would crash the render.
     render(<BenefitsSection benefits={[DAY_USE_BENEFIT]} />);
     expect(container.textContent).toContain('Day Use');
+    // Proves the fallback actually rendered a glyph, not merely that the row
+    // survived without one. The lucide-react-native test stub (aliased in
+    // vitest.config.ts) renders every icon as a <lucide-icon data-icon="...">
+    // custom element. Catches: guarding the icon render so an unmapped key
+    // renders no glyph at all (e.g. `{HOME_ICON[key] ? <Icon /> : null}`),
+    // which would leave the text assertion above green but drop the icon.
+    const icons = container.querySelectorAll('lucide-icon');
+    expect(icons.length).toBe(1);
+    expect(icons[0]?.getAttribute('data-icon')).toBe('Star');
   });
 
   it('renders nothing when the list is empty', () => {
@@ -134,6 +143,10 @@ describe('BenefitsSection', () => {
     // nothing at all.
     expect(container.textContent).toBe('');
     expect(container.querySelector('span')).toBeNull();
+    // The two assertions above pass even for a mutation that returns an empty
+    // `<View style={styles.wrap} />` (no text, no span, but still a <div>
+    // child of container). This is the actual proof of an early `return null`.
+    expect(container.firstChild).toBeNull();
   });
 
   it('pins the handoff gaps between the label and the benefit rows', () => {

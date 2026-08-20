@@ -167,6 +167,19 @@ describe('HeroSection', () => {
     expect(container.querySelector('img')).not.toBeNull();
   });
 
+  it('renders the institutional image when an imageUrl is present', () => {
+    render(
+      <HeroSection hero={{ ...HERO, bannerUrl: null }} institutional={INSTITUTIONAL} />,
+    );
+    // hero.bannerUrl is null here, so the banner branch renders no <img>. Any
+    // <img> found below can only come from the institutional branch, which
+    // distinguishes this from the banner-presence test above. Catches:
+    // deleting the institutional <Image> element (or its guard always
+    // resolving to null), which the both-null and banner-only tests do not
+    // exercise.
+    expect(container.querySelectorAll('img').length).toBe(1);
+  });
+
   it('pins the handoff hero block height and radius', () => {
     render(<HeroSection hero={HERO} institutional={INSTITUTIONAL} />);
     // The hero block is the first <div> with a data-style (styles.wrap has no
@@ -188,5 +201,17 @@ describe('HeroSection', () => {
     const outer = container.querySelector('div[data-style]');
     // Catches: changing styles.wrap's gap away from 22.
     expect(styleOf(outer).gap).toBe(22);
+  });
+
+  it('pins pointer-events="none" on the hero scrim so taps pass through to content placed inside it', () => {
+    render(<HeroSection hero={HERO} institutional={INSTITUTIONAL} />);
+    // The scrim gradient is the LinearGradient with style={StyleSheet.absoluteFill}
+    // (data-style resolves to {}); the mock forwards pointerEvents via ...rest
+    // since it isn't destructured out, so it lands on the DOM node verbatim.
+    const scrim = container.querySelector('[pointer-events="none"]');
+    // Catches: removing pointer-events="none" from the scrim LinearGradient,
+    // which would let the full-bleed overlay swallow taps on anything placed
+    // inside the hero (Tasks 8/9 CTAs).
+    expect(scrim).not.toBeNull();
   });
 });

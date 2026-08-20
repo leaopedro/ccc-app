@@ -21,4 +21,12 @@ export const p = {
   muted45: 'rgba(242,232,216,0.45)',
   // FeatureCard: 60% stop do gradiente radial do handoff, achatado em solido.
   featureSurface: '#100e09',
+  // HeroSection: aro do bloco de 210px, um valor unico do handoff, deliberadamente
+  // distinto de hairline (.14) e hairlineStrong (.28).
+  heroBorder: 'rgba(212,175,55,0.16)',
+  // HeroSection: os tres stops do degrade vertical do handoff sobre a foto do
+  // hero, do mais transparente (topo) ao mais opaco (base).
+  scrimTop: 'rgba(10,10,10,0.15)',
+  scrimMid: 'rgba(10,10,10,0.35)',
+  scrimBottom: 'rgba(10,10,10,0.86)',
 } as const;

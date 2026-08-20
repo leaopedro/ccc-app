@@ -30,7 +30,7 @@ export function HeroSection({
           />
         ) : null}
         <LinearGradient
-          colors={['rgba(10,10,10,0.15)', 'rgba(10,10,10,0.35)', 'rgba(10,10,10,0.86)']}
+          colors={[p.scrimTop, p.scrimMid, p.scrimBottom]}
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
@@ -39,7 +39,12 @@ export function HeroSection({
           <Text style={styles.mote} accessibilityRole="header">
             {hero.title}
           </Text>
-          <View style={styles.rule} />
+          <LinearGradient
+            colors={[p.goldLight, p.goldDeep]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.rule}
+          />
         </View>
       </View>
 
@@ -69,7 +74,7 @@ const styles = StyleSheet.create({
     height: 210,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.16)',
+    borderColor: p.heroBorder,
     overflow: 'hidden',
     backgroundColor: p.surface,
     justifyContent: 'flex-end',
@@ -87,7 +92,6 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 2,
     marginTop: 14,
-    backgroundColor: p.goldDeep,
   },
   subtitle: {
     fontFamily: 'Jost_500Medium',

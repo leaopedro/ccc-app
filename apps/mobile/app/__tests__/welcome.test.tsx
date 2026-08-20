@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 //
-// welcome.tsx is a thin route wrapper (task-12 Step 9): it must render
-// InicioScreen and nothing else, so a future edit can't quietly reintroduce
-// screen logic into the route file. InicioScreen itself is stubbed — its
-// own behaviour is covered by src/screens/inicio/__tests__/InicioScreen.test.tsx.
+// Task 14: /welcome became a historic alias. The screen now lives at the
+// /inicio tab route inside the (app) group (active tab state, history and
+// back behaviour). /welcome must redirect there instead of rendering the
+// screen directly, so old deep links, e-mails and any already-persisted
+// next=/welcome keep working.
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -23,8 +24,8 @@ vi.mock('react-native', async () => {
   return { Text: make('span'), View: make('div') };
 });
 
-vi.mock('~/screens/inicio/InicioScreen', () => ({
-  default: () => <Text>INICIO_SCREEN</Text>,
+vi.mock('expo-router', () => ({
+  Redirect: ({ href }: { href: string }) => <Text>{`REDIRECT:${href}`}</Text>,
 }));
 
 const WelcomeRoute = (await import('../welcome')).default;
@@ -45,8 +46,12 @@ afterEach(() => {
 });
 
 describe('WelcomeRoute', () => {
-  it('renders InicioScreen and nothing else', () => {
+  it('redirects to /inicio and renders nothing else', () => {
+    // Catches: /welcome reverting to rendering InicioScreen directly (or
+    // redirecting anywhere but /inicio), which would give the anonymous
+    // and member home a route outside the tab group again, losing the
+    // active-tab state the new /inicio tab is meant to provide.
     act(() => root.render(<WelcomeRoute />));
-    expect(container.textContent).toBe('INICIO_SCREEN');
+    expect(container.textContent).toBe('REDIRECT:/inicio');
   });
 });

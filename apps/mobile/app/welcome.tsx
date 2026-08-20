@@ -1,9 +1,9 @@
-// A rota /welcome não muda: continua sendo a primeira tela do app, e segue em
-// PUBLIC_EXACT em src/auth/redirect-intent.ts. O conteúdo mora em
-// src/screens/inicio, no padrão das outras áreas do app.
+// /welcome virou alias historico. A tela agora mora na aba /inicio, dentro do
+// grupo (app), para ter estado ativo na tab bar. Este redirect existe para nao
+// quebrar deep link antigo nem `next=/welcome` ja persistido.
 
-import InicioScreen from '~/screens/inicio/InicioScreen';
+import { Redirect } from 'expo-router';
 
 export default function WelcomeRoute() {
-  return <InicioScreen />;
+  return <Redirect href="/inicio" />;
 }

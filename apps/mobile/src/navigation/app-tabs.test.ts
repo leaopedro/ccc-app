@@ -9,6 +9,7 @@ describe('APP_TAB_SPECS', () => {
     expect(
       APP_TAB_SPECS.filter((tab) => tab.visible).map((tab) => `${tab.name}:${tab.title}`),
     ).toEqual([
+      'inicio:Início',
       'events:Eventos',
       'store:Loja',
       'cart:Carrinho',
@@ -25,6 +26,13 @@ describe('APP_TAB_SPECS', () => {
       title: 'Carrinho',
       visible: true,
     });
+  });
+
+  // Task 14: inicio must be the first entry so it is the leftmost tab.
+  // Catches: the entry existing but landing at a different index (e.g.
+  // pushed instead of unshifted, or inserted after events).
+  it('puts inicio first, at index 0', () => {
+    expect(APP_TAB_SPECS[0]).toEqual({ name: 'inicio', title: 'Início', visible: true });
   });
 
   it('restores Ingressos into the Loja slot when the runtime store killswitch is off', () => {

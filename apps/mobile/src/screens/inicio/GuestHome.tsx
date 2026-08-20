@@ -43,7 +43,7 @@ import { StoreTeaserSection } from '~/screens/inicio/sections/StoreTeaserSection
 // o `next` correspondente. Ambos os prefixos estão liberados em
 // src/auth/redirect-intent.ts, senão o destino seria descartado e o usuário
 // cairia em DEFAULT_POST_AUTH.
-const LOGIN_NEXT = '/welcome';
+const LOGIN_NEXT = '/inicio';
 const SUBSCRIBE_PATH = '/assinaturas';
 
 // Hoisted to module scope — o trap do task-9/task-11: um literal montado no

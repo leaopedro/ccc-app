@@ -45,3 +45,32 @@ describe('isPublicPath — /assinaturas continues to require login', () => {
     expect(isPublicPath('/assinaturas')).toBe(false);
   });
 });
+
+describe('Task 14 — /inicio tab route', () => {
+  it('treats /inicio as public so the anonymous tab tap never bounces to login', () => {
+    // Catches: forgetting to add '/inicio' to PUBLIC_EXACT. Without it, an
+    // anonymous visitor tapping the new Início tab would be redirected to
+    // /login, the exact opposite of what the tab is for.
+    expect(isPublicPath('/inicio')).toBe(true);
+  });
+
+  it('allows /inicio through sanitizeNext so login can send the user back to it', () => {
+    expect(sanitizeNext('/inicio')).toBe('/inicio');
+  });
+
+  it('rejects a path that shares the /inicio prefix but not a segment boundary', () => {
+    // Catches: matching '/inicio' as a raw string prefix (path.startsWith
+    // ('/inicio')) instead of the segment-boundary check (path === prefix ||
+    // path.startsWith(`${prefix}/`)). A raw-prefix match would let
+    // /inicioEVIL ride the /inicio allowlist entry.
+    expect(sanitizeNext('/inicioEVIL')).toBeNull();
+  });
+
+  it('keeps /welcome public and passing sanitizeNext, as the historic alias', () => {
+    // Catches: removing '/welcome' from PUBLIC_EXACT or NEXT_ALLOWED_PREFIXES
+    // while adding '/inicio', which would break old deep links and any
+    // already-persisted next=/welcome.
+    expect(isPublicPath('/welcome')).toBe(true);
+    expect(sanitizeNext('/welcome')).toBe('/welcome');
+  });
+});

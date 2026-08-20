@@ -3,12 +3,20 @@
 
 // /termos and /privacidade are public because the signup form links to both and
 // an anonymous user must be able to read what they are being asked to accept.
-const PUBLIC_EXACT = new Set<string>(['/', '/welcome', '/events', '/termos', '/privacidade']);
+const PUBLIC_EXACT = new Set<string>([
+  '/',
+  '/welcome',
+  '/inicio',
+  '/events',
+  '/termos',
+  '/privacidade',
+]);
 const EVENTS_DETAIL_RE = /^\/events\/[^/]+$/;
 const STORE_PUBLIC_RE = /^\/store(?:\/[^/]+)?$/;
 
 const NEXT_ALLOWED_PREFIXES = [
   '/welcome',
+  '/inicio',
   '/events',
   '/store',
   '/cart',

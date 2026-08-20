@@ -2,6 +2,7 @@ import { cartCopy } from '../copy/cart';
 import { resolveStoreSlot } from '../store/runtime';
 
 export const APP_TAB_SPECS = [
+  { name: 'inicio', title: 'Início', visible: true },
   { name: 'events', title: 'Eventos', visible: true },
   { name: 'store', title: 'Loja', visible: true },
   { name: 'cart', title: cartCopy.title, visible: true },

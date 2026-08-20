@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // GuestHome é a vitrine do não logado. O que vale pinar: o header com o
-// botão ENTRAR desvia pelo login carregando next=/welcome, os nove blocos
+// botão ENTRAR desvia pelo login carregando next=/inicio, os nove blocos
 // da emenda de escopo renderizam com dados do backend (useHomeContent,
 // useClubStats, eventos próximos, loja, carros confirmados), os CTAs
 // desviam pelo login, seção vazia não deixa cabeçalho órfão, loading e erro
@@ -379,13 +379,16 @@ describe('GuestHome — happy path', () => {
     expect(container.textContent).toContain('Toyota');
   });
 
-  it('the header ENTRAR button navigates to login carrying next=/welcome', async () => {
+  it('the header ENTRAR button navigates to login carrying next=/inicio', async () => {
+    // Task 14: /inicio is now the tab route inside (app), so login must send
+    // the user back there, not to the /welcome alias which sits outside the
+    // tab group and would lose the active tab state after signing in.
     await render();
     click('inicio-guest-login');
     expect(routerPush).toHaveBeenCalledTimes(1);
     const href = routerPush.mock.calls[0]?.[0] as string;
     expect(href).toContain('/login');
-    expect(href).toContain(encodeURIComponent('/welcome'));
+    expect(href).toContain(encodeURIComponent('/inicio'));
   });
 
   it('sends the create-account CTA straight to signup', async () => {

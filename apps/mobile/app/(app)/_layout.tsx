@@ -1,6 +1,7 @@
 import { router, Tabs } from 'expo-router';
 import {
   CalendarDays,
+  Home,
   Package,
   ShoppingBag,
   ShoppingCart,
@@ -18,6 +19,9 @@ import { useStoreRuntime } from '~/store/runtime-context';
 
 const ACTIVE = brand.color.brand;
 
+const InicioIcon = ({ color }: { color: string }) => (
+  <Home color={color} size={22} strokeWidth={1.75} />
+);
 const EventsIcon = ({ color }: { color: string }) => (
   <CalendarDays color={color} size={22} strokeWidth={1.75} />
 );
@@ -81,8 +85,18 @@ function AppTabs() {
   return (
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
+        name="inicio"
+        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: InicioIcon }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.replace('/inicio');
+          },
+        }}
+      />
+      <Tabs.Screen
         name="events"
-        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: EventsIcon }}
+        options={{ title: APP_TAB_SPECS[1].title, tabBarIcon: EventsIcon }}
         listeners={{
           tabPress: (e) => {
             // Default tab-press behavior on web preserves dynamic params
@@ -110,7 +124,7 @@ function AppTabs() {
       <Tabs.Screen
         name="cart"
         options={{
-          title: APP_TAB_SPECS[2].title,
+          title: APP_TAB_SPECS[3].title,
           tabBarIcon: CartIcon,
           tabBarBadgeStyle: {
             backgroundColor: ACTIVE,
@@ -131,10 +145,10 @@ function AppTabs() {
         name="tickets"
         options={{ href: null, title: 'Ingressos', tabBarIcon: TicketsIcon }}
       />
-      <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[4].title }} />
+      <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[5].title }} />
       <Tabs.Screen
         name="profile"
-        options={{ title: APP_TAB_SPECS[5].title, tabBarIcon: ProfileIcon }}
+        options={{ title: APP_TAB_SPECS[6].title, tabBarIcon: ProfileIcon }}
       />
       <Tabs.Screen name="notifications" options={{ href: null, title: 'Notificações' }} />
     </Tabs>

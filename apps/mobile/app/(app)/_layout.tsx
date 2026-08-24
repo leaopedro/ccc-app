@@ -1,6 +1,7 @@
 import { router, Tabs } from 'expo-router';
 import {
   CalendarDays,
+  Home,
   Package,
   ShoppingBag,
   ShoppingCart,
@@ -13,11 +14,14 @@ import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
 import { usePremiumSlot } from '~/hooks/usePremiumSlot';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
-import { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName } from '~/navigation/app-tabs';
+import { getCartTabBadge, getPrimaryTabName, tabTitle } from '~/navigation/app-tabs';
 import { useStoreRuntime } from '~/store/runtime-context';
 
 const ACTIVE = brand.color.brand;
 
+const InicioIcon = ({ color }: { color: string }) => (
+  <Home color={color} size={22} strokeWidth={1.75} />
+);
 const EventsIcon = ({ color }: { color: string }) => (
   <CalendarDays color={color} size={22} strokeWidth={1.75} />
 );
@@ -81,8 +85,21 @@ function AppTabs() {
   return (
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
+        name="inicio"
+        options={{ title: tabTitle('inicio'), tabBarIcon: InicioIcon }}
+        listeners={{
+          tabPress: (e) => {
+            // Same reason as the events tabPress right below: default
+            // tab-press behavior on web preserves dynamic params and fails
+            // to pop deep routes. Force a clean replace to /inicio.
+            e.preventDefault();
+            router.replace('/inicio');
+          },
+        }}
+      />
+      <Tabs.Screen
         name="events"
-        options={{ title: APP_TAB_SPECS[0].title, tabBarIcon: EventsIcon }}
+        options={{ title: tabTitle('events'), tabBarIcon: EventsIcon }}
         listeners={{
           tabPress: (e) => {
             // Default tab-press behavior on web preserves dynamic params
@@ -96,7 +113,7 @@ function AppTabs() {
       {primaryTabName === 'store' ? (
         <Tabs.Screen
           name="store"
-          options={{ title: 'Loja', tabBarIcon: StoreIcon }}
+          options={{ title: tabTitle('store'), tabBarIcon: StoreIcon }}
           listeners={{
             tabPress: (e) => {
               e.preventDefault();
@@ -110,7 +127,7 @@ function AppTabs() {
       <Tabs.Screen
         name="cart"
         options={{
-          title: APP_TAB_SPECS[2].title,
+          title: tabTitle('cart'),
           tabBarIcon: CartIcon,
           tabBarBadgeStyle: {
             backgroundColor: ACTIVE,
@@ -124,17 +141,20 @@ function AppTabs() {
       {showDedicatedTicketsTab ? (
         premiumTab
       ) : (
-        <Tabs.Screen name="store" options={{ href: null, title: 'Loja', tabBarIcon: StoreIcon }} />
+        <Tabs.Screen
+          name="store"
+          options={{ href: null, title: tabTitle('store'), tabBarIcon: StoreIcon }}
+        />
       )}
       {hiddenPremiumTab}
       <Tabs.Screen
         name="tickets"
-        options={{ href: null, title: 'Ingressos', tabBarIcon: TicketsIcon }}
+        options={{ href: null, title: tabTitle('tickets'), tabBarIcon: TicketsIcon }}
       />
-      <Tabs.Screen name="garage" options={{ href: null, title: APP_TAB_SPECS[4].title }} />
+      <Tabs.Screen name="garage" options={{ href: null, title: tabTitle('garage') }} />
       <Tabs.Screen
         name="profile"
-        options={{ title: APP_TAB_SPECS[5].title, tabBarIcon: ProfileIcon }}
+        options={{ title: tabTitle('profile'), tabBarIcon: ProfileIcon }}
       />
       <Tabs.Screen name="notifications" options={{ href: null, title: 'Notificações' }} />
     </Tabs>

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0">
+<script src="./image-slot.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  a { color: #D4AF37; text-decoration: none; }
+  a:hover { color: #E8CE86; }
+  .mi { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; line-height: 1; display: inline-block; font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; -webkit-font-smoothing: antialiased; }
+  .scr { -ms-overflow-style: none; scrollbar-width: none; }
+  .scr::-webkit-scrollbar { display: none; }
+  @keyframes ccScreenIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:radial-gradient(120% 80% at 50% -8%, #17161c 0%, #08080A 60%);display:flex;align-items:center;justify-content:center;padding:40px 20px;font-family:'Jost',sans-serif;">
+
+  <div style="position:relative;width:414px;padding:12px;border-radius:56px;background:linear-gradient(150deg,#48484e,#141416 42%,#08080a);box-shadow:0 40px 90px rgba(0,0,0,.7),inset 0 1px 1px rgba(255,255,255,.14);">
+    <div style="position:relative;width:390px;height:844px;border-radius:44px;overflow:hidden;background:#0A0A0A;display:flex;flex-direction:column;">
+
+      <!-- STATUS BAR -->
+      <div style="position:relative;z-index:30;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;flex:0 0 auto;">
+        <div style="font-weight:600;font-size:16px;color:#F2E8D8;letter-spacing:.01em;">9:41</div>
+        <div style="position:absolute;left:50%;top:11px;transform:translateX(-50%);width:118px;height:33px;background:#000;border-radius:20px;"></div>
+        <div style="display:flex;align-items:center;gap:7px;color:#F2E8D8;">
+          <span class="mi" style="font-size:18px;">signal_cellular_alt</span>
+          <span class="mi" style="font-size:18px;">wifi</span>
+          <span class="mi" style="font-size:20px;">battery_full</span>
+        </div>
+      </div>
+
+      <!-- SCREEN BODY -->
+      <div style="flex:1;position:relative;overflow:hidden;">
+
+        <!-- ===================== HOME ===================== -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 20px 120px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <img src="./assets/brand/monogram-ccc-circle-gold.png" alt="Casa Car Club" style="width:40px;height:40px;object-fit:contain;display:block;">
+              <div style="line-height:1;">
+                <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">CASA CAR CLUB</div>
+                <div style="font-size:9px;font-weight:500;letter-spacing:.34em;color:#C9A227;margin-top:3px;">CURITIBA</div>
+              </div>
+            </div>
+            <button onClick="{{ goNotifications }}" style="background:none;border:none;padding:6px;cursor:pointer;color:#D4AF37;position:relative;">
+              <span class="mi" style="font-size:24px;">notifications</span>
+              <span style="position:absolute;top:5px;right:6px;width:7px;height:7px;border-radius:50%;background:#E8CE86;border:1.5px solid #0A0A0A;"></span>
+            </button>
+          </div>
+
+          <!-- hero -->
+          <div style="position:relative;height:210px;border-radius:20px;overflow:hidden;border:1px solid rgba(212,175,55,.16);">
+            <image-slot id="home-hero" shape="rect" placeholder="hero-house.png"></image-slot>
+            <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,10,.15) 0%,rgba(10,10,10,.35) 45%,rgba(10,10,10,.86) 100%);pointer-events:none;"></div>
+            <div style="position:absolute;left:22px;bottom:22px;pointer-events:none;">
+              <div style="font-weight:700;font-size:29px;line-height:1.04;color:#F2E8D8;letter-spacing:-.01em;">DIRIGIR.<br>CONECTAR.<br>PERTENCER.</div>
+              <div style="width:44px;height:3px;background:linear-gradient(90deg,#E8CE86,#C9A227);margin-top:14px;border-radius:2px;"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:22px;">
+            <div style="font-weight:700;font-size:19px;color:#F2E8D8;letter-spacing:.01em;">BEM-VINDO DE VOLTA, PEDRO</div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:.26em;color:rgba(242,232,216,.45);margin-top:6px;">MEMBRO #0001</div>
+          </div>
+
+          <!-- next event -->
+          <button onClick="{{ goEvent }}" style="width:100%;text-align:left;margin-top:20px;background:radial-gradient(130% 120% at 85% 0%, #1c1810 0%, #100e09 60%);border:1px solid rgba(212,175,55,.28);border-radius:18px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:14px;">
+            <div style="display:flex;gap:14px;align-items:stretch;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">PRÓXIMO EVENTO</div>
+                <div style="font-weight:600;font-size:17px;color:#F2E8D8;margin-top:9px;">Sunset Meet &amp; Drive</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:12px;color:rgba(242,232,216,.6);font-size:13px;"><span class="mi" style="font-size:16px;color:#C9A227;">calendar_today</span>25 mai 2026</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:6px;color:rgba(242,232,216,.6);font-size:13px;"><span class="mi" style="font-size:16px;color:#C9A227;">schedule</span>17:00</div>
+              </div>
+              <div style="width:96px;flex:0 0 auto;border-radius:12px;overflow:hidden;">
+                <image-slot id="home-event-thumb" shape="rect" placeholder="media-hub.png"></image-slot>
+              </div>
+            </div>
+            <div style="align-self:flex-end;background:linear-gradient(135deg,#E8CE86,#C9A227);color:#0A0A0A;font-weight:600;font-size:11px;letter-spacing:.18em;padding:11px 20px;border-radius:9px;">VER EVENTO</div>
+          </button>
+
+          <!-- club status -->
+          <div style="margin-top:26px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">STATUS DO CLUBE</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;">
+              <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px 10px;text-align:center;">
+                <span class="mi" style="font-size:20px;color:#C9A227;">group</span>
+                <div style="font-size:9px;font-weight:600;letter-spacing:.22em;color:rgba(242,232,216,.5);margin-top:8px;">MEMBROS</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;color:#F2E8D8;margin-top:4px;">128</div>
+              </div>
+              <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px 10px;text-align:center;">
+                <span class="mi" style="font-size:20px;color:#C9A227;">calendar_today</span>
+                <div style="font-size:9px;font-weight:600;letter-spacing:.22em;color:rgba(242,232,216,.5);margin-top:8px;">EVENTOS</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;color:#F2E8D8;margin-top:4px;">6</div>
+              </div>
+              <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px 10px;text-align:center;">
+                <span class="mi" style="font-size:20px;color:#C9A227;">directions_car</span>
+                <div style="font-size:9px;font-weight:600;letter-spacing:.22em;color:rgba(242,232,216,.5);margin-top:8px;">GARAGEM</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;color:#F2E8D8;margin-top:4px;">18</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- quick access -->
+          <div style="margin-top:26px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">ACESSO RÁPIDO</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+              <button onClick="{{ goEvent }}" style="text-align:left;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:20px;">
+                <span class="mi" style="font-size:24px;color:#D4AF37;">event</span>
+                <span style="font-size:13px;font-weight:500;color:#F2E8D8;">Eventos</span>
+              </button>
+              <button onClick="{{ goReservas }}" style="text-align:left;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:20px;">
+                <span class="mi" style="font-size:24px;color:#D4AF37;">event_available</span>
+                <span style="font-size:13px;font-weight:500;color:#F2E8D8;">Reservas</span>
+              </button>
+              <button onClick="{{ goGarage }}" style="text-align:left;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:20px;">
+                <span class="mi" style="font-size:24px;color:#D4AF37;">directions_car</span>
+                <span style="font-size:13px;font-weight:500;color:#F2E8D8;">Garagem</span>
+              </button>
+              <button onClick="{{ goPlans }}" style="text-align:left;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:20px;">
+                <span class="mi" style="font-size:24px;color:#D4AF37;">sell</span>
+                <span style="font-size:13px;font-weight:500;color:#F2E8D8;">Planos</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===================== EVENT ===================== -->
+        <sc-if value="{{ isEvent }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding-bottom:112px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 20px 14px;">
+            <button onClick="{{ goHome }}" style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:6px;"><span class="mi" style="font-size:26px;">arrow_back</span></button>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">DETALHES DO EVENTO</div>
+            <button style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:6px;"><span class="mi" style="font-size:22px;">ios_share</span></button>
+          </div>
+
+          <div style="height:210px;margin:0 20px;border-radius:18px;overflow:hidden;border:1px solid rgba(212,175,55,.16);">
+            <image-slot id="event-hero" shape="rect" placeholder="event-hall.png"></image-slot>
+          </div>
+
+          <div style="padding:22px 20px 0;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">PRÓXIMO EVENTO</div>
+            <div style="font-weight:700;font-size:26px;color:#F2E8D8;margin-top:9px;letter-spacing:.01em;">SUNSET MEET &amp; DRIVE</div>
+
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:18px;">
+              <div style="display:flex;align-items:center;gap:11px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:19px;color:#C9A227;">location_on</span>Casa Car Club Curitiba</div>
+              <div style="display:flex;align-items:center;gap:26px;">
+                <div style="display:flex;align-items:center;gap:11px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:19px;color:#C9A227;">calendar_today</span>25 mai 2026</div>
+                <div style="display:flex;align-items:center;gap:11px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:19px;color:#C9A227;">schedule</span>17:00 – 22:00</div>
+              </div>
+            </div>
+
+            <p style="color:rgba(242,232,216,.62);font-size:14px;line-height:1.6;margin:20px 0 0;text-wrap:pretty;">Uma noite exclusiva para membros. Bons carros, boas pessoas e momentos inesquecíveis.</p>
+
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;margin-top:26px;">O QUE ESPERAR</div>
+            <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px;">
+              <div style="display:flex;align-items:center;gap:14px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:20px;color:#C9A227;">directions_car</span>Passeio panorâmico</div>
+              <div style="display:flex;align-items:center;gap:14px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:20px;color:#C9A227;">outdoor_grill</span>Churrasco &amp; drinks</div>
+              <div style="display:flex;align-items:center;gap:14px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:20px;color:#C9A227;">star</span>Mostra de carros</div>
+              <div style="display:flex;align-items:center;gap:14px;color:#F2E8D8;font-size:14px;"><span class="mi" style="font-size:20px;color:#C9A227;">music_note</span>Música</div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:26px;padding-top:20px;border-top:1px solid rgba(212,175,55,.14);">
+              <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">VAGAS RESTANTES</div>
+              <div style="font-family:'Cormorant Garamond',serif;font-size:20px;color:#F2E8D8;"><span style="color:#E8CE86;font-weight:600;">32</span> / 60</div>
+            </div>
+          </div>
+        </div>
+        <!-- sticky CTA -->
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 22px;background:linear-gradient(180deg,rgba(10,10,10,0),#0A0A0A 30%);">
+          <button onClick="{{ toggleBook }}" style="width:100%;cursor:pointer;border-radius:12px;padding:17px;font-weight:600;font-size:13px;letter-spacing:.2em;background:{{ bookBg }};color:{{ bookColor }};border:{{ bookBorder }};">{{ bookLabel }}</button>
+        </div>
+        </sc-if>
+
+        <!-- ===================== MEMBERSHIP ===================== -->
+        <sc-if value="{{ isMembership }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 20px 120px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;">
+            <div style="width:34px;"></div>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">ASSOCIAÇÃO</div>
+            <button onClick="{{ goSettings }}" style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:5px;"><span class="mi" style="font-size:22px;">settings</span></button>
+          </div>
+
+          <!-- member card -->
+          <button onClick="{{ goCard }}" style="width:100%;cursor:pointer;text-align:center;border:1px solid rgba(212,175,55,.4);border-radius:20px;padding:22px;background:radial-gradient(130% 100% at 80% 10%, #241f13 0%, #0d0b07 55%, #14110a 100%);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div style="text-align:left;">
+                <div style="font-size:9px;font-weight:600;letter-spacing:.24em;color:rgba(242,232,216,.5);">MEMBRO</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:24px;color:#F2E8D8;margin-top:4px;">#0001</div>
+              </div>
+              <img src="./assets/brand/badge-gold.png" alt="Casa Car Club" style="width:92px;height:92px;object-fit:contain;display:block;">
+
+              <div style="text-align:right;">
+                <div style="font-size:9px;font-weight:600;letter-spacing:.24em;color:rgba(242,232,216,.5);">DESDE</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:24px;color:#F2E8D8;margin-top:4px;">2026</div>
+              </div>
+            </div>
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(212,175,55,.2);font-size:10px;font-weight:600;letter-spacing:.3em;color:#C9A227;">DIRIGIR · CONECTAR · PERTENCER</div>
+          </button>
+
+          <div style="text-align:center;margin-top:26px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.3em;color:#C9A227;">NÍVEL</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:34px;color:#E8CE86;margin-top:8px;letter-spacing:.01em;">MEMBRO FUNDADOR</div>
+            <div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:8px;">Válido até 31/12/2026</div>
+          </div>
+
+          <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;margin-top:30px;">SEUS BENEFÍCIOS</div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+            <button onClick="{{ goBenefit }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px;cursor:pointer;">
+              <span class="mi" style="font-size:22px;color:#C9A227;">schedule</span>
+              <div style="flex:1;"><div style="font-size:15px;font-weight:500;color:#F2E8D8;">Acesso ao clube</div><div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">24 horas</div></div>
+              <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">chevron_right</span>
+            </button>
+            <button onClick="{{ goBenefit }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px;cursor:pointer;">
+              <span class="mi" style="font-size:22px;color:#C9A227;">event_available</span>
+              <div style="flex:1;"><div style="font-size:15px;font-weight:500;color:#F2E8D8;">Prioridade em eventos</div><div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">Acesso exclusivo</div></div>
+              <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">chevron_right</span>
+            </button>
+            <button onClick="{{ goBenefit }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px;cursor:pointer;">
+              <span class="mi" style="font-size:22px;color:#C9A227;">sell</span>
+              <div style="flex:1;"><div style="font-size:15px;font-weight:500;color:#F2E8D8;">Descontos de membro</div><div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">15+ parceiros</div></div>
+              <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">chevron_right</span>
+            </button>
+            <button onClick="{{ goBenefit }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:15px;cursor:pointer;">
+              <span class="mi" style="font-size:22px;color:#C9A227;">group_add</span>
+              <div style="flex:1;"><div style="font-size:15px;font-weight:500;color:#F2E8D8;">Privilégios de convidado</div><div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">Traga até 3 convidados</div></div>
+              <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">chevron_right</span>
+            </button>
+          </div>
+
+          <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;margin-top:30px;">ATIVIDADE RECENTE</div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+            <div style="display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:14px;">
+              <span class="mi" style="font-size:20px;color:#C9A227;">check_circle</span>
+              <div style="flex:1;"><div style="font-size:14px;color:#F2E8D8;">Check-in no clube</div><div style="font-size:11px;color:rgba(242,232,216,.42);margin-top:2px;">Há 2 dias</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:14px;padding:14px;">
+              <span class="mi" style="font-size:20px;color:#C9A227;">event_available</span>
+              <div style="flex:1;"><div style="font-size:14px;color:#F2E8D8;">Reserva confirmada · Track Day</div><div style="font-size:11px;color:rgba(242,232,216,.42);margin-top:2px;">Semana passada</div></div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===================== CARD ===================== -->
+        <sc-if value="{{ isCard }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 24px 40px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 22px;">
+            <button onClick="{{ goMembership }}" style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:5px;"><span class="mi" style="font-size:24px;">close</span></button>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">CARTEIRINHA</div>
+            <button style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:5px;"><span class="mi" style="font-size:22px;">more_horiz</span></button>
+          </div>
+
+          <div style="border:1px solid rgba(212,175,55,.42);border-radius:20px;padding:26px 22px 22px;background:radial-gradient(130% 100% at 80% 10%, #241f13 0%, #0d0b07 55%, #14110a 100%);">
+            <div style="display:flex;justify-content:center;">
+              <img src="./assets/brand/badge-gold.png" alt="Casa Car Club" style="width:150px;height:150px;object-fit:contain;display:block;">
+            </div>
+            <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid rgba(212,175,55,.2);font-size:10px;font-weight:600;letter-spacing:.3em;color:#C9A227;">DIRIGIR · CONECTAR · PERTENCER</div>
+          </div>
+
+          <div style="display:flex;justify-content:center;margin-top:28px;">
+            <div style="background:#F2E8D8;padding:14px;border-radius:16px;">
+              <div style="display:grid;grid-template-columns:repeat(21,1fr);width:184px;height:184px;">
+                <sc-for list="{{ qrCells }}" as="cell" hint-placeholder-count="441">
+                  <div style="background:{{ cell.bg }};"></div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-top:26px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:rgba(242,232,216,.5);">MEMBRO</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-weight:700;font-size:32px;color:#F2E8D8;margin-top:4px;">#0001</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:24px;color:#E8CE86;margin-top:10px;">MEMBRO FUNDADOR</div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:.24em;color:#C9A227;margin-top:8px;">DESDE 2026</div>
+            <p style="font-size:12px;color:rgba(242,232,216,.5);margin:18px auto 0;max-width:250px;line-height:1.55;text-wrap:pretty;">Mostre esta carteirinha para acessar o clube e os benefícios de membro.</p>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===================== COMMUNITY ===================== -->
+        <sc-if value="{{ isCommunity }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 20px 120px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;">
+            <div style="width:34px;"></div>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">COMUNIDADE</div>
+            <button onClick="{{ goCreatePost }}" style="background:none;border:none;cursor:pointer;color:#D4AF37;padding:5px;"><span class="mi" style="font-size:24px;">add_circle</span></button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <!-- post 1 -->
+            <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:18px;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:12px;padding:15px;">
+                <div style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(212,175,55,.4);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:17px;color:#E8CE86;">RM</div>
+                <div style="flex:1;"><div style="font-size:14px;font-weight:600;color:#F2E8D8;">Rafael Menezes</div><div style="font-size:11px;color:rgba(242,232,216,.42);margin-top:2px;">Membro · há 3 h</div></div>
+                <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">more_horiz</span>
+              </div>
+              <div style="height:230px;"><image-slot id="community-post-1" shape="rect" placeholder="foto do membro"></image-slot></div>
+              <div style="padding:15px;">
+                <div style="display:flex;align-items:center;gap:20px;">
+                  <div style="display:flex;align-items:center;gap:7px;color:#F2E8D8;font-size:13px;"><span class="mi" style="font-size:20px;color:#C9A227;">favorite</span>42</div>
+                  <div style="display:flex;align-items:center;gap:7px;color:#F2E8D8;font-size:13px;"><span class="mi" style="font-size:20px;color:rgba(242,232,216,.6);">chat_bubble</span>8</div>
+                </div>
+                <p style="margin:13px 0 0;font-size:14px;line-height:1.55;color:rgba(242,232,216,.82);text-wrap:pretty;"><span style="font-weight:600;color:#F2E8D8;">Rafael Menezes</span> Domingo perfeito de rolê com a família CCC. 🏁</p>
+              </div>
+            </div>
+            <!-- post 2 -->
+            <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:18px;overflow:hidden;">
+              <div style="display:flex;align-items:center;gap:12px;padding:15px;">
+                <div style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(212,175,55,.4);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:17px;color:#E8CE86;">AF</div>
+                <div style="flex:1;"><div style="font-size:14px;font-weight:600;color:#F2E8D8;">Ana Furlan</div><div style="font-size:11px;color:rgba(242,232,216,.42);margin-top:2px;">Membro · há 1 dia</div></div>
+                <span class="mi" style="font-size:20px;color:rgba(242,232,216,.35);">more_horiz</span>
+              </div>
+              <div style="height:230px;"><image-slot id="community-post-2" shape="rect" placeholder="foto do membro"></image-slot></div>
+              <div style="padding:15px;">
+                <div style="display:flex;align-items:center;gap:20px;">
+                  <div style="display:flex;align-items:center;gap:7px;color:#F2E8D8;font-size:13px;"><span class="mi" style="font-size:20px;color:#C9A227;">favorite</span>67</div>
+                  <div style="display:flex;align-items:center;gap:7px;color:#F2E8D8;font-size:13px;"><span class="mi" style="font-size:20px;color:rgba(242,232,216,.6);">chat_bubble</span>15</div>
+                </div>
+                <p style="margin:13px 0 0;font-size:14px;line-height:1.55;color:rgba(242,232,216,.82);text-wrap:pretty;"><span style="font-weight:600;color:#F2E8D8;">Ana Furlan</span> Noite na Casa. Simplesmente incrível conhecer gente que vive carro do mesmo jeito. ✨</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===================== GARAGE ===================== -->
+        <sc-if value="{{ isGarage }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 20px 120px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;">
+            <div style="width:34px;"></div>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">MINHA GARAGEM</div>
+            <div style="width:34px;"></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:18px;overflow:hidden;">
+              <div style="height:190px;"><image-slot id="garage-car-1" shape="rect" placeholder="foto do veículo"></image-slot></div>
+              <div style="padding:16px;">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.26em;color:#C9A227;">PORSCHE</div>
+                <div style="font-weight:600;font-size:18px;color:#F2E8D8;margin-top:6px;">911 Carrera</div>
+                <div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:4px;">2024 · Cinza Ágata</div>
+              </div>
+            </div>
+            <div style="background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:18px;overflow:hidden;">
+              <div style="height:190px;"><image-slot id="garage-car-2" shape="rect" placeholder="foto do veículo"></image-slot></div>
+              <div style="padding:16px;">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.26em;color:#C9A227;">BMW</div>
+                <div style="font-weight:600;font-size:18px;color:#F2E8D8;margin-top:6px;">M4 Competition</div>
+                <div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:4px;">2023 · Preto Safira</div>
+              </div>
+            </div>
+            <button onClick="{{ goAddCar }}" style="width:100%;cursor:pointer;background:none;border:1.5px dashed rgba(212,175,55,.4);border-radius:18px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px;color:#D4AF37;">
+              <span class="mi" style="font-size:28px;">add</span>
+              <span style="font-size:13px;font-weight:600;letter-spacing:.16em;">ADICIONAR VEÍCULO</span>
+            </button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ===================== PLANS ===================== -->
+        <sc-if value="{{ isPlans }}" hint-placeholder-val="{{ false }}">
+        <div class="scr" style="position:absolute;inset:0;overflow-y:auto;animation:ccScreenIn .32s ease both;padding:6px 20px 120px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 14px;">
+            <button onClick="{{ goHome }}" style="background:none;border:none;cursor:pointer;color:#F2E8D8;padding:6px;"><span class="mi" style="font-size:26px;">arrow_back</span></button>
+            <div style="font-size:12px;font-weight:600;letter-spacing:.24em;color:#F2E8D8;">ASSINATURA</div>
+            <div style="width:38px;"></div>
+          </div>
+
+          <div style="text-align:center;padding:4px 0 6px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.3em;color:#C9A227;">ESCOLHA SEU NÍVEL</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:30px;color:#F2E8D8;margin-top:8px;line-height:1.1;">Torne-se membro<br>da Casa</div>
+            <p style="font-size:13px;color:rgba(242,232,216,.55);margin:12px auto 0;max-width:280px;line-height:1.55;text-wrap:pretty;">Selecione o plano que combina com o seu jeito de dirigir, conectar e pertencer.</p>
+          </div>
+
+          <!-- plan cards -->
+          <div style="display:flex;flex-direction:column;gap:16px;margin-top:24px;">
+            <sc-for list="{{ plans }}" as="plan" hint-placeholder-count="3">
+              <div style="position:relative;border-radius:20px;padding:22px;background:{{ plan.bg }};border:{{ plan.border }};box-shadow:{{ plan.shadow }};">
+                <sc-if value="{{ plan.recommended }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#E8CE86,#C9A227);color:#0A0A0A;font-size:9px;font-weight:700;letter-spacing:.22em;padding:5px 16px;border-radius:20px;white-space:nowrap;">RECOMENDADO</div>
+                </sc-if>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:9px;">
+                      <span style="width:8px;height:8px;border-radius:50%;background:{{ plan.accent }};box-shadow:0 0 8px {{ plan.accent }};"></span>
+                      <span style="font-size:10px;font-weight:600;letter-spacing:.28em;color:{{ plan.accent }};">{{ plan.tier }}</span>
+                    </div>
+                    <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;color:#F2E8D8;margin-top:8px;line-height:1;">{{ plan.name }}</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:32px;color:#F2E8D8;line-height:1;">{{ plan.price }}</div>
+                    <div style="font-size:10px;font-weight:600;letter-spacing:.16em;color:rgba(242,232,216,.5);margin-top:5px;">POR MÊS</div>
+                  </div>
+                </div>
+
+                <div style="height:1px;background:{{ plan.divider }};margin:18px 0;"></div>
+
+                <div style="display:flex;flex-direction:column;gap:11px;">
+                  <sc-for list="{{ plan.benefits }}" as="benefit" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:flex-start;gap:11px;color:#F2E8D8;font-size:13.5px;line-height:1.35;">
+                      <span class="mi" style="font-size:18px;color:{{ plan.accent }};flex:0 0 auto;">check</span>
+                      <span>{{ benefit }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <button onClick="{{ goPlans }}" style="width:100%;margin-top:20px;cursor:pointer;border-radius:11px;padding:15px;font-weight:600;font-size:12px;letter-spacing:.2em;background:{{ plan.btnBg }};color:{{ plan.btnColor }};border:{{ plan.btnBorder }};">ASSINAR {{ plan.tier }}</button>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- additional modules -->
+          <div style="margin-top:34px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.28em;color:#C9A227;">MÓDULOS ADICIONAIS</div>
+            <p style="font-size:12.5px;color:rgba(242,232,216,.55);margin:9px 0 0;line-height:1.55;text-wrap:pretty;">Serviços extras opcionais que você pode adicionar à sua assinatura, agora ou depois.</p>
+
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
+              <div style="display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:16px;padding:16px;">
+                <div style="width:44px;height:44px;flex:0 0 auto;border-radius:12px;background:#14110a;border:1px solid rgba(212,175,55,.22);display:flex;align-items:center;justify-content:center;"><span class="mi" style="font-size:23px;color:#D4AF37;">local_car_wash</span></div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:15px;font-weight:600;color:#F2E8D8;">Detailing</div>
+                  <div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">3 acessos/mês para lavagem &amp; detailing</div>
+                </div>
+                <div style="text-align:right;flex:0 0 auto;">
+                  <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:17px;color:#E8CE86;">+R$150</div>
+                  <div style="font-size:9px;font-weight:600;letter-spacing:.14em;color:rgba(242,232,216,.42);margin-top:2px;">/MÊS</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:14px;background:#0F0E0B;border:1px solid rgba(212,175,55,.14);border-radius:16px;padding:16px;">
+                <div style="width:44px;height:44px;flex:0 0 auto;border-radius:12px;background:#14110a;border:1px solid rgba(212,175,55,.22);display:flex;align-items:center;justify-content:center;"><span class="mi" style="font-size:23px;color:#D4AF37;">build</span></div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:15px;font-weight:600;color:#F2E8D8;">Oficina</div>
+                  <div style="font-size:12px;color:rgba(242,232,216,.5);margin-top:2px;">5 horas de oficina por mês</div>
+                </div>
+                <div style="text-align:right;flex:0 0 auto;">
+                  <div style="font-family:'Cormorant Garamond',serif;font-weight:600;font-size:17px;color:#E8CE86;">+R$500</div>
+                  <div style="font-size:9px;font-weight:600;letter-spacing:.14em;color:rgba(242,232,216,.42);margin-top:2px;">/MÊS</div>
+                </div>
+              </div>
+            </div>
+
+            <p style="font-size:11.5px;color:rgba(242,232,216,.4);margin:16px 0 0;line-height:1.5;text-align:center;text-wrap:pretty;">Você poderá adicionar módulos durante a contratação ou depois, em Minha Assinatura.</p>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+
+      <!-- TAB BAR -->
+      <sc-if value="{{ showTabBar }}" hint-placeholder-val="{{ true }}">
+      <div style="position:relative;z-index:20;flex:0 0 auto;display:flex;justify-content:space-around;align-items:flex-start;padding:12px 12px 26px;background:rgba(10,10,10,.92);backdrop-filter:blur(12px);border-top:1px solid rgba(212,175,55,.14);">
+        <button onClick="{{ goHome }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:4px 10px;color:{{ tabHomeColor }};">
+          <span class="mi" style="font-size:24px;">home</span><span style="font-size:10px;font-weight:500;">Início</span>
+        </button>
+        <button onClick="{{ goCommunity }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:4px 10px;color:{{ tabCommunityColor }};">
+          <span class="mi" style="font-size:24px;">groups</span><span style="font-size:10px;font-weight:500;">Comunidade</span>
+        </button>
+        <button onClick="{{ goGarage }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:4px 10px;color:{{ tabGarageColor }};">
+          <span class="mi" style="font-size:24px;">directions_car</span><span style="font-size:10px;font-weight:500;">Garagem</span>
+        </button>
+        <button onClick="{{ goMembership }}" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:4px 10px;color:{{ tabProfileColor }};">
+          <span class="mi" style="font-size:24px;">person</span><span style="font-size:10px;font-weight:500;">Perfil</span>
+        </button>
+      </div>
+      </sc-if>
+
+      <!-- home indicator -->
+      <div style="position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:rgba(242,232,216,.5);z-index:40;"></div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { screen: 'home', booked: false };
+
+  go(s) { this.setState({ screen: s }); }
+
+  buildQr() {
+    const N = 21, cells = [];
+    const finder = (r, c) => {
+      const ring = (r === 0 || r === 6 || c === 0 || c === 6);
+      const core = (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+      return ring || core;
+    };
+    let seed = 1337;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed >> 17) & 1; };
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        let on = false;
+        if (r < 7 && c < 7) on = finder(r, c);
+        else if (r < 7 && c >= N - 7) on = finder(r, c - (N - 7));
+        else if (r >= N - 7 && c < 7) on = finder(r - (N - 7), c);
+        else if (r < 8 && c < 8) on = false;
+        else on = rnd() === 1;
+        cells.push({ bg: on ? '#0A0A0A' : 'transparent' });
+      }
+    }
+    return cells;
+  }
+
+  buildPlans() {
+    return [
+      {
+        tier: 'BRONZE', name: 'Ingresso', price: 'R$490', accent: '#C08A4E',
+        bg: '#0F0E0B',
+        border: '1px solid rgba(192,138,78,.34)',
+        shadow: 'none',
+        divider: 'rgba(192,138,78,.2)',
+        recommended: false,
+        benefits: ['Acesso ao clube em horário comercial', 'Eventos abertos da comunidade', 'Comunidade no app'],
+        btnBg: 'transparent', btnColor: '#E8CE86', btnBorder: '1px solid rgba(192,138,78,.55)',
+      },
+      {
+        tier: 'PRATA', name: 'Estrada', price: 'R$890', accent: '#C7CCD1',
+        bg: '#0F0E0B',
+        border: '1px solid rgba(199,204,209,.34)',
+        shadow: 'none',
+        divider: 'rgba(199,204,209,.2)',
+        recommended: false,
+        benefits: ['Tudo do Bronze', 'Prioridade em eventos exclusivos', '1 convidado por evento', 'Descontos com parceiros'],
+        btnBg: 'transparent', btnColor: '#F2E8D8', btnBorder: '1px solid rgba(199,204,209,.6)',
+      },
+      {
+        tier: 'OURO', name: 'Fundador', price: 'R$1.490', accent: '#E8CE86',
+        bg: 'radial-gradient(130% 110% at 82% 0%, #241f13 0%, #100e09 58%, #14110a 100%)',
+        border: '1px solid rgba(212,175,55,.5)',
+        shadow: '0 18px 44px rgba(0,0,0,.5), inset 0 1px 0 rgba(232,206,134,.12)',
+        divider: 'rgba(212,175,55,.28)',
+        recommended: true,
+        benefits: ['Tudo da Prata', 'Acesso ao clube 24 horas', 'Até 3 convidados por evento', 'Concierge dedicado', 'Vaga premium na garagem'],
+        btnBg: 'linear-gradient(135deg,#E8CE86,#C9A227)', btnColor: '#0A0A0A', btnBorder: '1px solid transparent',
+      },
+    ];
+  }
+
+  renderVals() {
+    const s = this.state.screen;
+    const gold = '#D4AF37';
+    const dim = 'rgba(242,232,216,.42)';
+    return {
+      isHome: s === 'home',
+      isEvent: s === 'event',
+      isMembership: s === 'membership',
+      isCard: s === 'card',
+      isCommunity: s === 'community',
+      isGarage: s === 'garage',
+      isPlans: s === 'plans',
+      plans: this.buildPlans(),
+      goPlans: () => this.go('plans'),
+      showTabBar: s !== 'card',
+      tabHomeColor: (s === 'home' || s === 'event') ? gold : dim,
+      tabCommunityColor: s === 'community' ? gold : dim,
+      tabGarageColor: s === 'garage' ? gold : dim,
+      tabProfileColor: s === 'membership' ? gold : dim,
+      goHome: () => this.go('home'),
+      goEvent: () => this.go('event'),
+      goMembership: () => this.go('membership'),
+      goCard: () => this.go('card'),
+      goCommunity: () => this.go('community'),
+      goGarage: () => this.go('garage'),
+      goNotifications: () => {},
+      goReservas: () => {},
+      goSettings: () => {},
+      goBenefit: () => {},
+      goCreatePost: () => {},
+      goAddCar: () => {},
+      booked: this.state.booked,
+      bookLabel: this.state.booked ? 'VAGA RESERVADA ✓' : 'RESERVAR SUA VAGA',
+      bookBg: this.state.booked ? '#0A0A0A' : 'linear-gradient(135deg,#E8CE86,#C9A227)',
+      bookColor: this.state.booked ? '#E8CE86' : '#0A0A0A',
+      bookBorder: this.state.booked ? '1px solid rgba(212,175,55,.5)' : '1px solid transparent',
+      toggleBook: () => this.setState(st => ({ booked: !st.booked })),
+      qrCells: this.buildQr(),
+    };
+  }
+}
+</script>
+</body>
+</html>

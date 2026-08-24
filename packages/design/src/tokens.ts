@@ -21,6 +21,15 @@ export const color = {
   brandSoft: brand.color.brandSoft,
   brandTint: brand.color.brandTint,
 
+  // Paleta do handoff da tela de Início (design_handoff_inicio). Valores
+  // finais definidos em design. Convivem com brandDeep / brandSoft / surface,
+  // que NÃO são alterados: mudar os antigos repintaria todas as outras telas.
+  goldDeep: '#C9A227',
+  goldLight: '#E8CE86',
+  surfaceGold: '#0F0E0B',
+  hairlineGold: 'rgba(212,175,55,0.14)',
+  hairlineGoldStrong: 'rgba(212,175,55,0.28)',
+
   textPrimary: brand.color.textPrimary,
   textSecondary: brand.color.textSecondary,
   textMuted: brand.color.textMuted,

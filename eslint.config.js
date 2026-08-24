@@ -13,6 +13,7 @@ export default tseslint.config(
       '**/.turbo/**',
       '**/coverage/**',
       '**/node_modules/**',
+      '.handoffs/**',
       'packages/db/prisma/migrations/**',
       'apps/mobile/babel.config.js',
       'apps/mobile/metro.config.js',

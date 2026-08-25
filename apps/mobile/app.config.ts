@@ -178,14 +178,22 @@ const config: ExpoConfig = {
     // Same reasoning. expo-image-picker is autolinked as a dependency and was
     // not listed here, so its config plugin injected generic English camera and
     // microphone strings. The app only picks from the library (no
-    // launchCameraAsync, no expo-camera), so both are dropped and the photo
-    // string is the PT-BR one already declared in ios.infoPlist below.
+    // launchCameraAsync, no expo-camera), so the photo string is the PT-BR one
+    // already declared in ios.infoPlist below.
+    //
+    // The camera string cannot be dropped, though: build 1.0.0 (9) was rejected
+    // at upload with ITMS-90683 because expo-image-picker's native code links
+    // the camera APIs regardless of what JS calls. Apple's validator demands the
+    // key, so it gets an honest PT-BR string. Nothing in the app can trigger the
+    // prompt today (upload-image.ts only calls launchImageLibraryAsync).
+    // Microphone stays dropped — the validator did not ask for it.
     [
       'expo-image-picker',
       {
         photosPermission:
           'O Casa Car Club acessa suas fotos para definir seu avatar, adicionar fotos de veículos e anexar imagens ao suporte.',
-        cameraPermission: false,
+        cameraPermission:
+          'O Casa Car Club pode usar a câmera para você fotografar seu veículo ou um anexo de suporte na hora.',
         microphonePermission: false,
       },
     ],

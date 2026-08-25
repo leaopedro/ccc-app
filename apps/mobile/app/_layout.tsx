@@ -20,6 +20,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import { DarkTheme, ThemeProvider, type Theme } from '@react-navigation/native';
+import { Analytics } from '@vercel/analytics/react';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
@@ -207,6 +208,8 @@ export default function RootLayout() {
           <ToastHost />
         </AuthProvider>
       </StoreRuntimeProvider>
+      {/* Vercel Web Analytics - only renders on web platform */}
+      {Platform.OS === 'web' && <Analytics />}
     </>
   );
 

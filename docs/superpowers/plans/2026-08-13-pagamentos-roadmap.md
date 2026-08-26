@@ -75,6 +75,11 @@ jurídicos mais abaixo.
   traduz para 503. Hoje o Detailing só tem cadência mensal, então Fundador anual
   mais Detailing não fecha. Saídas: criar preço anual do add-on, ou bloquear
   add-on no checkout anual.
+- **Resolvida em 2026-08-26:** a chave de idempotência por pacote em
+  `me-premium.ts` fazia a Stripe replicar uma sessão que o próprio handler tinha
+  expirado, entregando 201 com URL morta por até 24h. Não era específico de iOS,
+  valia para a web. `mintSubscriptionCheckoutSession` re-emite sob chave derivada
+  do id da sessão morta.
 
 ---
 
@@ -181,8 +186,14 @@ completa verde: 262 arquivos, 2268 testes.
 
 ### Painel e ops, na ordem
 
-1. [ ] **PEDRO** Ler a versão de API do endpoint de webhook de test e criar todo
-       endpoint live fixado na mesma. **Gate de tudo.** Motivo em `docs/stripe.md` §0.
+1. [x] **PEDRO** Ler a versão de API do endpoint de webhook de test e criar todo
+       endpoint live fixado na mesma. ~~**Gate de tudo.**~~ **Deixou de ser gate
+       em 2026-08-26.** O pin não preserva a forma antiga da invoice: a
+       reestruturação aconteceu antes de `2026-04-22.dahlia`, então a versão que
+       o SDK fixa já entrega a forma nova. Descoberto com uma cobrança de teste
+       real que caiu em `UNRECOGNIZED_SHAPE` com os dois endpoints já fixados.
+       Corrigido em código, `normalize-stripe.ts` lê as duas formas. Continue
+       fixando os endpoints por higiene, mas não como defesa. Ver `docs/stripe.md` §0.
 2. [ ] **PEDRO** Rodar a purga em dry run contra um dump e conferir as contagens
        à mão antes de rodar valendo. Falso positivo revoga entitlement de quem
        paga. O comando exige o instante da virada, sem default:

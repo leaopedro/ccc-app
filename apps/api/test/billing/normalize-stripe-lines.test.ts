@@ -54,12 +54,16 @@ describe('normalizeStripeEvent — invoice lines', () => {
         amountCents: 149000,
         subscriptionItemRef: 'si_plan',
         metadata: { devFeePercent: '10' },
+        // Legacy shape: the Price came expanded, so metadata is authoritative
+        // and the route must NOT go fetch it.
+        priceMetadataAvailable: true,
       },
       {
         priceRef: 'price_addon_detailing',
         amountCents: 15000,
         subscriptionItemRef: 'si_addon',
         metadata: {},
+        priceMetadataAvailable: true,
       },
     ]);
   });

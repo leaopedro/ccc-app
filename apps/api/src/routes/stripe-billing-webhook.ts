@@ -115,7 +115,15 @@ const parseDevFeePercent = (raw: string | undefined): number => {
  * boundary) without that being ambiguous at all — both resolve to the same
  * PremiumPlanPrice row and must activate/renew normally.
  */
-const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
+const resolveLinesAgainstCatalog = async (
+  lines: BillingLine[],
+  /**
+   * Fetches a Stripe Price's metadata. Injected rather than imported so this
+   * stays a pure function of (lines, fetcher) and the tests keep driving it
+   * without a live client. Returns null when the fetch failed.
+   */
+  fetchPriceMetadata: (priceId: string) => Promise<Record<string, string> | null>,
+) => {
   const priceRefs = lines.map((l) => l.priceRef);
 
   const [planPrices, addonModules] = await Promise.all([
@@ -175,11 +183,34 @@ const resolveLinesAgainstCatalog = async (lines: BillingLine[]) => {
     });
   }
 
-  const devFeePercent = parseDevFeePercent(planLine?.metadata.devFeePercent);
+  // devFeePercent is the ONE value still read from Stripe rather than the
+  // catalog. The legacy invoice shape expanded the Price inline, so it came
+  // free on the line. The 2026 shape sends only the price id, so when the line
+  // has no devFeePercent we have to go get the Price. Fetch only for the plan
+  // line, only when the metadata is genuinely absent, so legacy payloads and
+  // every add-on line cost nothing.
+  let devFeeRaw = planLine?.metadata.devFeePercent;
+  let devFeeUnavailable = false;
+  if (planLine && !planLine.priceMetadataAvailable && devFeeRaw === undefined) {
+    const metadata = await fetchPriceMetadata(planLine.priceRef);
+    if (metadata === null) {
+      devFeeUnavailable = true;
+    } else {
+      devFeeRaw = metadata.devFeePercent;
+    }
+  }
+  const devFeePercent = parseDevFeePercent(devFeeRaw);
   const baseAmountCents = planPrice?.baseAmountCents ?? 0;
 
   return {
     plan: planPrice ? { tier: planPrice.plan.tier, cadence: planPrice.cadence } : null,
+    /**
+     * True when the Price fetch failed, so devFeePercent below is a fabricated
+     * 0 rather than a real value. The caller must refuse: the invoice line is
+     * the source of truth forever, and a wrong 0 written here is not
+     * recoverable by fixing anything later.
+     */
+    devFeeUnavailable,
     baseAmountCents,
     devFeePercent,
     devFeeAmountCents: Math.round((baseAmountCents * devFeePercent) / 100),
@@ -502,11 +533,28 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
 
     // Patch the catalog-resolved values into the event before dispatch, in the
     // same spirit as the garageId patch below.
+    // Price metadata fetcher for the catalog resolver. A Stripe failure must
+    // NOT throw here: the SubscriptionWebhookEvent row already exists with
+    // processedAt null, so an escaping error would poison every retry. Return
+    // null and let the resolver flag it.
+    const fetchPriceMetadata = async (priceId: string): Promise<Record<string, string> | null> => {
+      try {
+        const price = await app.stripe.retrievePrice(priceId);
+        return price.metadata ?? {};
+      } catch (err) {
+        request.log.error(
+          { err, priceId, eventId: event.id },
+          'stripe-billing webhook: could not fetch Price metadata for devFeePercent',
+        );
+        return null;
+      }
+    };
+
     if (
       billingEvt.kind === 'subscription.activated' ||
       billingEvt.kind === 'subscription.renewed'
     ) {
-      const resolved = await resolveLinesAgainstCatalog(billingEvt.lines);
+      const resolved = await resolveLinesAgainstCatalog(billingEvt.lines, fetchPriceMetadata);
 
       // The normalizer's tier placeholder is a VALID enum value ('bronze') and
       // its pricing placeholders are all zero, so a silent fall-through is
@@ -518,6 +566,28 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
       // Decision 2026-07-29: 200 + ignored. Stripe must NOT redeliver, because
       // the fix is an operator action in the admin catalog, not a transient
       // error.
+      // Unlike the catalog miss below, this one is transient: the Price exists,
+      // Stripe just did not answer. Leave processedAt null and 503 so the
+      // retry can succeed, rather than recording a devFee of 0 that no later
+      // fix can correct.
+      if (resolved.devFeeUnavailable) {
+        request.log.error(
+          { eventId: event.id, kind: billingEvt.kind },
+          'stripe-billing webhook: devFeePercent unresolved, signalling retry rather than writing 0',
+        );
+        Sentry.captureMessage(
+          'stripe-billing webhook: could not resolve devFeePercent, apply deferred',
+          {
+            level: 'error',
+            tags: { kind: 'billing-devfee-unresolved', provider: 'stripe' },
+            extra: { eventId: event.id, billingKind: billingEvt.kind },
+          },
+        );
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'devFeePercent unresolved' });
+      }
+
       if (!resolved.plan) {
         await prisma.subscriptionWebhookEvent.update({
           where: { id: webhookEventId },
@@ -561,14 +631,20 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // A tier_changed whose swapped price is an add-on is not a tier change at
     // all: reconcileMembershipAddonsAmount above already handled it.
     if (billingEvt.kind === 'subscription.tier_changed') {
-      const resolved = await resolveLinesAgainstCatalog([
-        {
-          priceRef: billingEvt.priceRef,
-          amountCents: 0,
-          subscriptionItemRef: null,
-          metadata: billingEvt.priceMetadata,
-        },
-      ]);
+      const resolved = await resolveLinesAgainstCatalog(
+        [
+          {
+            priceRef: billingEvt.priceRef,
+            amountCents: 0,
+            subscriptionItemRef: null,
+            metadata: billingEvt.priceMetadata,
+            // subscription.updated still expands the price, so this metadata is
+            // the Price's own and needs no fetch.
+            priceMetadataAvailable: true,
+          },
+        ],
+        fetchPriceMetadata,
+      );
       if (!resolved.plan) {
         await prisma.subscriptionWebhookEvent.update({
           where: { id: webhookEventId },

@@ -13,34 +13,56 @@ Specs relacionados: `docs/superpowers/specs/2026-08-12-stripe-live-web-design.md
 
 ---
 
-## 0. Antes de tudo: a versão de API dos endpoints
+## 0. A versão de API dos endpoints, e por que ela não salva
 
-**Ler a versão de API do endpoint de webhook existente no dashboard e criar todo
-endpoint novo fixado na mesma versão.**
+**Fixe todo endpoint novo em `2026-04-22.dahlia`. Mas não conte com isso para a
+forma da invoice.**
 
-> **Conta nova não tem endpoint antigo para copiar.** A migração para o CNPJ,
-> decidida em 2026-08-14, cria uma conta do zero, e endpoint novo nasce na versão
-> corrente da Stripe, que é mais nova que a fixada aqui. Nesse caminho o
-> descasamento abaixo deixa de ser possibilidade e vira o caso provável: fixe
-> explicitamente cada endpoint em `2026-04-22.dahlia` no momento da criação.
+A versão anterior deste documento chamava o pin de "gate de tudo" e afirmava que
+ele preservaria a forma antiga da invoice, com `subscription` no topo do objeto e
+o `price` expandido na linha. **Isso é falso, e custou uma cobrança real.**
 
-O motivo não é preferência. O normalizador em
-`apps/api/src/services/billing/normalize-stripe.ts` lê a invoice na forma em que
-`subscription` fica no topo do objeto e a linha traz o `price` expandido, com
-`metadata` e `recurring`. Em versões mais novas a Stripe move o vínculo para
-`parent.subscription_details.subscription` e a linha passa a trazer só o id do
-preço em `pricing.price_details.price`. Nessa forma o `devFeePercent` e a
-cadência simplesmente não estão no payload, então não existe remapeamento de
-campo que resolva.
+Em 2026-08-26 o primeiro pagamento de teste entrou com os dois endpoints já
+fixados em `2026-04-22.dahlia`, conferidos por API, e mesmo assim o
+`invoice.paid` chegou na forma nova e caiu em `UNRECOGNIZED_SHAPE`. Cartão
+cobrado, membership não criada.
 
-Endpoint novo nasce na versão corrente da conta, não na do SDK. Se ele render a
-forma nova, o handler não consegue ler a invoice. Ele não vai fingir que leu: a
-Fase 0 fez esse caminho responder 503 com alerta fatal e sem marcar o evento
-como processado, para a entrega sobreviver até a versão ser corrigida. Mas isso é
-rede de segurança, não substituto da configuração.
+Renderizando a mesma invoice em várias versões fica claro por quê:
 
-O SDK está fixado em `stripe@22.1.0` com `apiVersion: '2026-04-22.dahlia'`
-(`apps/api/src/services/stripe/index.ts`).
+| `Stripe-Version`                       | `subscription` no topo | `line.price` expandido |
+| -------------------------------------- | ---------------------- | ---------------------- |
+| `2026-07-29.dahlia` (default da conta) | não                    | não                    |
+| `2026-04-22.dahlia`                    | **não**                | **não**                |
+| `2025-08-27.basil`                     | não                    | não                    |
+| `2024-06-20`                           | sim                    | sim                    |
+
+A reestruturação da invoice aconteceu **antes** de `2026-04-22.dahlia`. Ou seja,
+a versão que o SDK fixa e que este documento mandava usar nos endpoints já
+entrega a forma nova. Nenhum pin razoável traz a forma antiga de volta.
+
+**A correção é código, não painel.** `normalize-stripe.ts` lê as duas formas
+desde então:
+
+| campo               | forma 2026                                                   |
+| ------------------- | ------------------------------------------------------------ |
+| subscription        | `parent.subscription_details.subscription`                   |
+| priceRef            | `lines[].pricing.price_details.price`, id puro               |
+| subscriptionItemRef | `lines[].parent.subscription_item_details.subscription_item` |
+
+O único valor que a forma nova não carrega é o `devFeePercent`, porque a linha
+traz só o id do preço. `stripe-billing-webhook.ts` busca o Price na Stripe para
+resolver isso, e responde 503 se a busca falhar, em vez de gravar `0`: a linha da
+invoice é fonte da verdade para sempre, e um zero inventado ali não tem conserto
+depois.
+
+O pin em `2026-04-22.dahlia` continua valendo como boa prática, para casar com o
+`apiVersion` do SDK em `apps/api/src/services/stripe/index.ts` e evitar que uma
+versão futura mude outra coisa sem aviso. Só não trate ele como defesa da forma
+da invoice, porque não é.
+
+A sentinela `UNRECOGNIZED_SHAPE` segue sendo a rede: ela recusa, responde 503,
+não marca o evento como processado e alerta. Foi ela que impediu o pagamento de
+2026-08-26 de virar uma membership com split zerado e tier chutado.
 
 ---
 

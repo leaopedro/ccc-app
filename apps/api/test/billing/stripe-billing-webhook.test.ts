@@ -235,6 +235,125 @@ describe('POST /webhooks/stripe-billing', () => {
     expect(await prisma.premiumMembership.count()).toBe(0);
   });
 
+  // -------------------------------------------------------------------------
+  // 2026 invoice shape: devFeePercent is not in the payload
+  // -------------------------------------------------------------------------
+
+  /**
+   * Same invoice as the fixture above, rendered in the shape Stripe actually
+   * delivers now: subscription under `parent`, and a line carrying only a price
+   * id. `devFeePercent` cannot be in this payload, so the route has to fetch the
+   * Price. See normalize-stripe-2026-shape.test.ts for the shape evidence.
+   */
+  const newShapeInvoicePaidEvent = (eventId: string): WebhookEvent => ({
+    id: eventId,
+    type: 'invoice.paid',
+    data: {
+      object: {
+        id: 'in_test_001',
+        customer: 'cus_test_001',
+        billing_reason: 'subscription_create',
+        amount_paid: 4990,
+        currency: 'brl',
+        period_start: 1748300000,
+        period_end: 1750892000,
+        status_transitions: { paid_at: 1748300100 },
+        parent: {
+          subscription_details: {
+            subscription: 'sub_test_001',
+            metadata: { cadence: 'monthly' },
+          },
+        },
+        lines: {
+          data: [
+            {
+              amount: 4990,
+              pricing: { price_details: { price: 'price_monthly_test' } },
+              parent: {
+                subscription_item_details: {
+                  subscription: 'sub_test_001',
+                  subscription_item: 'si_test_001',
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+  });
+
+  it('fetches the Stripe Price for devFeePercent when the 2026 shape omits it', async () => {
+    ({ app, stripe } = await buildBillingApp(true));
+    await seedGarageWithStripeCustomer(stripe, 'cus_test_001');
+    stripe.nextEvent = newShapeInvoicePaidEvent('evt_new_shape_devfee_1');
+    stripe.nextRetrievedPrice = {
+      id: 'price_monthly_test',
+      metadata: { devFeePercent: '10' },
+    } as unknown as typeof stripe.nextRetrievedPrice;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(stripe.calls.some((c) => c.kind === 'retrievePrice')).toBe(true);
+
+    const membership = await prisma.premiumMembership.findFirstOrThrow({
+      where: { providerSubRef: 'sub_test_001' },
+    });
+    expect(membership.status).toBe('active');
+    expect(membership.tier).toBe('gold');
+    // 10% of the catalog's baseAmountCents (4536), proving the fetched value
+    // reached the write instead of the silent 0 the payload would have implied.
+    expect(membership.devFeePercent).toBe(10);
+    expect(membership.devFeeAmountCents).toBe(454);
+  });
+
+  it('does not fetch the Price when the legacy shape already carried its metadata', async () => {
+    // A needless round-trip per paid invoice is not free, and the expanded
+    // Price is authoritative: absent devFeePercent there genuinely means 0.
+    ({ app, stripe } = await buildBillingApp(true));
+    await seedGarageWithStripeCustomer(stripe, 'cus_test_001');
+    stripe.nextEvent = invoicePaidEvent('subscription_create', 'evt_legacy_no_fetch_1');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(stripe.calls.some((c) => c.kind === 'retrievePrice')).toBe(false);
+  });
+
+  it('503s and keeps the event when the Price fetch fails, rather than writing devFee 0', async () => {
+    // The invoice line is the source of truth forever, so a fabricated 0 here
+    // is unrecoverable. A Stripe blip is transient; retrying is the only safe
+    // answer.
+    ({ app, stripe } = await buildBillingApp(true));
+    stripe.nextEvent = newShapeInvoicePaidEvent('evt_new_shape_devfee_fail_1');
+    stripe.nextRetrievedPrice = null;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=anything' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(503);
+
+    const row = await prisma.subscriptionWebhookEvent.findFirstOrThrow({
+      where: { providerEventId: 'evt_new_shape_devfee_fail_1' },
+    });
+    expect(row.processedAt).toBeNull();
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
   it('counts redeliveries of an unprocessed event so a stuck one can be escalated', async () => {
     // A deterministically failing apply used to just 503 until Stripe gave up
     // after ~3 days, losing the event with nothing louder than a warning.
@@ -381,7 +500,11 @@ describe('POST /webhooks/stripe-billing', () => {
           period_start: 1748300000,
           period_end: 1750892000,
           parent: { subscription_details: { subscription: 'sub_test_001' } },
-          lines: { data: [{ pricing: { price_details: { price: 'price_monthly_test' } } }] },
+          // A line naming no price in EITHER shape. It used to be a valid
+          // 2026-shape line; the normalizer reads that shape now, so the
+          // fixture has to be a genuinely unreadable payload to still
+          // exercise the 503-and-keep-the-event branch.
+          lines: { data: [{ amount: 4990 }] },
         },
       },
     };

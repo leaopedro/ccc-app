@@ -59,16 +59,64 @@ function newShapeSubscriptionRef(obj: Record<string, unknown>): string | undefin
     ?.subscription_details?.subscription;
 }
 
+/**
+ * Subscription ref from whichever shape the endpoint rendered. The legacy
+ * top-level field wins when present so pre-restructure fixtures and any
+ * endpoint still pinned to an old version keep working unchanged.
+ */
+function subscriptionRefOf(
+  invoice: { subscription?: string },
+  obj: Record<string, unknown>,
+): string | undefined {
+  return invoice.subscription || newShapeSubscriptionRef(obj);
+}
+
 /** Extract cadence from a Stripe Price recurring interval. */
 function cadenceFromInterval(interval: string | undefined): 'monthly' | 'annual' {
   return interval === 'year' ? 'annual' : 'monthly';
 }
 
 type StripeInvoiceLine = {
-  price: { id: string; metadata?: Record<string, string>; recurring?: { interval?: string } };
+  /** Legacy shape: expanded Price, carrying metadata and recurring. */
+  price?: { id: string; metadata?: Record<string, string>; recurring?: { interval?: string } };
   amount?: number;
+  /** Legacy shape. */
   subscription_item?: string | null;
+  /** 2026 shape: bare price id, no metadata, no recurring. */
+  pricing?: { price_details?: { price?: string } };
+  /** 2026 shape: where the subscription item ref moved to. */
+  parent?: { subscription_item_details?: { subscription_item?: string | null } };
 };
+
+/** Price id from either shape. */
+function priceRefOf(line: StripeInvoiceLine): string | undefined {
+  return line.price?.id ?? line.pricing?.price_details?.price;
+}
+
+/**
+ * Subscription item ref from either shape.
+ *
+ * Load-bearing: BillingAddonLine.providerItemRef comes from here, and every
+ * add-on attach/detach keys off it. Losing it does not fail loudly — it
+ * silently produces a membership whose modules are unlinked.
+ */
+function subscriptionItemRefOf(line: StripeInvoiceLine): string | null {
+  return (
+    line.subscription_item ?? line.parent?.subscription_item_details?.subscription_item ?? null
+  );
+}
+
+/**
+ * Price metadata, which only the legacy shape carries.
+ *
+ * In the 2026 shape `line.metadata` exists but holds the SUBSCRIPTION's
+ * metadata mirrored onto the line, not the Price's, so reading it here would
+ * quietly hand the route a `devFeePercent` that never existed. Return empty and
+ * let the route fetch the Price.
+ */
+function priceMetadataOf(line: StripeInvoiceLine): Record<string, string> {
+  return line.price?.metadata ?? {};
+}
 
 /**
  * Pricing shell from the invoice itself.
@@ -92,10 +140,11 @@ function pricingFromInvoice(invoice: { amount_paid: number; currency: string }) 
 /** Map raw Stripe invoice lines to the provider-neutral BillingLine shape. */
 function linesFromInvoice(lines: StripeInvoiceLine[]): BillingLine[] {
   return lines.map((line) => ({
-    priceRef: line.price.id,
+    priceRef: priceRefOf(line) ?? '',
     amountCents: line.amount ?? 0,
-    subscriptionItemRef: line.subscription_item ?? null,
-    metadata: line.price.metadata ?? {},
+    subscriptionItemRef: subscriptionItemRefOf(line),
+    metadata: priceMetadataOf(line),
+    priceMetadataAvailable: line.price !== undefined,
   }));
 }
 
@@ -125,7 +174,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
   if (event.type === 'invoice.paid') {
     const invoice = obj as {
       id: string;
-      subscription: string;
+      subscription?: string;
       customer: string;
       billing_reason: string;
       amount_paid: number;
@@ -136,15 +185,20 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       lines: { data: StripeInvoiceLine[] };
     };
 
-    if (!invoice.subscription) {
-      return newShapeSubscriptionRef(obj) ? UNRECOGNIZED_SHAPE : null;
-    }
+    // No subscription in EITHER shape means this is not a subscription invoice
+    // at all. `null` is correct there: the route marks it processed and answers
+    // 200, which is what a one-off invoice deserves.
+    const subscriptionRef = subscriptionRefOf(invoice, obj);
+    if (!subscriptionRef) return null;
 
-    // A subscription invoice always has at least one line with an expanded
-    // price in the shape we parse. Missing means the shape moved, not that the
-    // invoice is irrelevant.
-    const linePrice = invoice.lines.data[0]?.price;
-    if (!linePrice) return UNRECOGNIZED_SHAPE;
+    // A subscription invoice always names a price on its first line, in one
+    // shape or the other. Missing in both means the payload moved again, and
+    // guessing here would create a membership from nothing.
+    const firstLine = invoice.lines.data[0];
+    if (!firstLine || !priceRefOf(firstLine)) return UNRECOGNIZED_SHAPE;
+    // Only the legacy shape carries recurring; absent just leaves the cadence
+    // placeholder, which the route overwrites from PremiumPlanPrice.cadence.
+    const linePrice = firstLine.price;
 
     const pricing = pricingFromInvoice(invoice);
     const lines = linesFromInvoice(invoice.lines.data);
@@ -157,7 +211,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
     // comment below because it additionally carries the load-bearing safety
     // risk of being a valid enum value ('bronze') on its own; a wrong cadence
     // just gets silently corrected downstream, a wrong tier would not.
-    const cadence = cadenceFromInterval(linePrice.recurring?.interval);
+    const cadence = cadenceFromInterval(linePrice?.recurring?.interval);
     // Placeholder — the route patches this from the catalog, like garageId.
     const tier = 'bronze' as const;
     const paidAt = invoice.status_transitions?.paid_at
@@ -176,7 +230,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         kind: 'subscription.activated',
         provider: 'stripe',
         providerCustomerRef: invoice.customer,
-        providerSubRef: invoice.subscription,
+        providerSubRef: subscriptionRef,
         // garageId placeholder — route patches it from Stripe Customer.metadata.
         garageId: '',
         tier,
@@ -195,7 +249,7 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       return {
         kind: 'subscription.renewed',
         provider: 'stripe',
-        providerSubRef: invoice.subscription,
+        providerSubRef: subscriptionRef,
         currentPeriodStart: new Date(invoice.period_start * 1000),
         currentPeriodEnd: new Date(invoice.period_end * 1000),
         pricing,
@@ -209,13 +263,12 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
 
   if (event.type === 'invoice.payment_failed') {
     const invoice = obj as { subscription?: string; customer?: string };
-    if (!invoice.subscription) {
-      return newShapeSubscriptionRef(obj) ? UNRECOGNIZED_SHAPE : null;
-    }
+    const subscriptionRef = subscriptionRefOf(invoice, obj);
+    if (!subscriptionRef) return null;
     return {
       kind: 'subscription.past_due',
       provider: 'stripe',
-      providerSubRef: invoice.subscription,
+      providerSubRef: subscriptionRef,
     } satisfies BillingEvent & { kind: 'subscription.past_due' };
   }
 

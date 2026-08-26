@@ -24,13 +24,14 @@ import {
 } from '@ccc/shared/premium';
 import { premiumInvoicesResponseSchema } from '@ccc/shared/premium-subscription';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { requireUser } from '../plugins/auth.js';
 import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
+import type { StripeClient, SubscriptionCheckoutSessionResult } from '../services/stripe/index.js';
 
 const billingPortalBodySchema = z.object({
   returnUrl: z.string().url().optional(),
@@ -45,6 +46,55 @@ const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
  */
 const LIVE_STATUSES = ['active', 'past_due', 'cancel_scheduled'] as const;
 const ACTIVE_STATUSES = new Set<string>(LIVE_STATUSES);
+
+/**
+ * How many times to re-mint a checkout session whose idempotency key replayed a
+ * non-open session. Three covers the realistic A→B→A→B→A dance; past that the
+ * handler gives up and 503s rather than looping against Stripe.
+ */
+const MAX_SESSION_MINT_ATTEMPTS = 3;
+
+type MintInput = Parameters<StripeClient['createSubscriptionCheckoutSession']>[0];
+
+/**
+ * Mints a Checkout Session, re-minting under a fresh idempotency key while
+ * Stripe keeps replaying a session that is not `open`. Returns null when every
+ * attempt came back dead, so the caller can 503 instead of handing the member a
+ * URL that cannot take a card.
+ *
+ * A `null` status means "provider did not say" (fakes, or a response without the
+ * field) and is treated as open — refusing on unknown would break checkout for a
+ * shape we have no evidence is broken.
+ */
+const mintSubscriptionCheckoutSession = async (
+  app: FastifyInstance,
+  request: FastifyRequest,
+  input: MintInput,
+): Promise<SubscriptionCheckoutSessionResult | null> => {
+  let session = await app.stripe.createSubscriptionCheckoutSession(input);
+  for (let attempt = 1; attempt < MAX_SESSION_MINT_ATTEMPTS; attempt += 1) {
+    if (!session.status || session.status === 'open') return session;
+    request.log.warn(
+      {
+        sessionId: session.id,
+        status: session.status,
+        idempotencyKey: input.idempotencyKey,
+        attempt,
+      },
+      'me-premium: idempotency replay returned a non-open checkout session; re-minting',
+    );
+    session = await app.stripe.createSubscriptionCheckoutSession({
+      ...input,
+      idempotencyKey: `${input.idempotencyKey}_r${session.id.slice(-12)}`,
+    });
+  }
+  if (!session.status || session.status === 'open') return session;
+  request.log.error(
+    { sessionId: session.id, status: session.status, idempotencyKey: input.idempotencyKey },
+    'me-premium: every checkout session mint came back non-open; refusing to return a dead url',
+  );
+  return null;
+};
 
 export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -347,9 +397,24 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     // R1: a multi-line subscription session requires every price to share the
     // same interval and currency. Stripe rejects the mix, and that is an
     // operator catalog problem, not a client error — surface it as 503.
+    //
+    // The mint is a bounded loop, not a single call, because the idempotency key
+    // above collides with the expire sweep. Stripe replays the STORED response
+    // for a key used in the last 24h, and the stored session may be one this
+    // very handler expired: member asks for package A, wanders off, asks for
+    // package B (which expires A), then comes back to A. The package digest is
+    // unchanged, so Stripe hands back A — now dead — and the member lands on
+    // Stripe's "You're all done here" page behind a 201, with no error logged
+    // anywhere and no way out for up to 24h.
+    //
+    // Deriving the retry key from the dead session id keeps the double-click
+    // dedup that the key exists for (two rapid identical requests still collapse
+    // onto the same replay, dead or alive) while guaranteeing a key Stripe has
+    // never seen. Each iteration burns a distinct dead id, so the loop converges
+    // even when a longer A→B→A→B→A dance poisoned more than one key.
     let session;
     try {
-      session = await app.stripe.createSubscriptionCheckoutSession({
+      session = await mintSubscriptionCheckoutSession(app, request, {
         customerId,
         priceIds: [priceId, ...addonPriceIds],
         successUrl: `${app.env.APP_WEB_BASE_URL}/assinaturas/checkout-return`,
@@ -362,6 +427,15 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         { err, priceIds: [priceId, ...addonPriceIds] },
         'me-premium: stripe rejected the subscription checkout session',
       );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+    }
+
+    // Every attempt came back dead. Answering 503 is worse for the member than a
+    // working checkout and better than a 201 pointing at a page that cannot take
+    // a card: the client already has a retry affordance for 503.
+    if (session === null) {
       return reply
         .status(503)
         .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });

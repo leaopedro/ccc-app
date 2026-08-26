@@ -2,7 +2,7 @@
 
 import { mfaRecoverySchema, mfaVerifySchema } from '@ccc/shared';
 import { authResponseSchema, loginResponseSchema, loginSchema } from '@ccc/shared/auth';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 
 import { apiFetch, ApiError } from './api';
 import { clearSession, writeSession } from './auth-session';
@@ -32,6 +32,7 @@ export const loginAction = async (_prev: LoginState, formData: FormData): Promis
     await writeSession(res);
     role = res.user.role;
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError && e.status === 401) {
       return { error: 'Credenciais inválidas.' };
     }
@@ -65,6 +66,7 @@ export const mfaVerifyAction = async (
     await writeSession(res);
     role = res.user.role;
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError && e.status === 401) {
       return { error: 'Código inválido ou expirado.', mfaToken };
     }
@@ -95,6 +97,7 @@ export const mfaRecoveryAction = async (
     await writeSession(res);
     role = res.user.role;
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError && e.status === 401) {
       return { error: 'Código de recuperação inválido.', mfaToken };
     }

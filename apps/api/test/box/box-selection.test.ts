@@ -5,6 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
+import { futureCutoff } from './cutoff.js';
 
 const env = loadEnv();
 
@@ -36,7 +37,7 @@ const setup = async () => {
       cycleKey: '2026-08-01',
       cycleStart: membership.currentPeriodStart,
       cycleEnd: membership.currentPeriodEnd,
-      cutoffAt: new Date('2026-08-26T00:00:00.000Z'),
+      cutoffAt: futureCutoff(),
       budgetCentsSnapshot: 10000,
     },
   });

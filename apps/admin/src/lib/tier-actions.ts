@@ -2,6 +2,7 @@
 
 import { adminTierCreateSchema, adminTierUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { createTier, deleteTier, updateTier } from './admin-api';
 import { ApiError } from './api';
@@ -27,6 +28,7 @@ export const createTierAction = async (
   try {
     await createTier(eventId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao criar tier.' };
   }
@@ -54,6 +56,7 @@ export const updateTierAction = async (
   try {
     await updateTier(eventId, tierId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar tier.' };
   }
@@ -65,6 +68,7 @@ export const deleteTierAction = async (eventId: string, tierId: string): Promise
   try {
     await deleteTier(eventId, tierId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao remover tier.' };
   }

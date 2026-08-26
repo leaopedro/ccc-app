@@ -68,6 +68,12 @@ export type FakeStripe = StripeClient & {
   nextRetrievedSubscription: Stripe.Subscription | null;
   /** Next subscription checkout session payload returned by createSubscriptionCheckoutSession. */
   nextSubscriptionCheckoutSession: SubscriptionCheckoutSessionResult;
+  /**
+   * Consumed before `nextSubscriptionCheckoutSession`, one entry per call.
+   * Lets a test drive the idempotency-replay path, where the first mint returns
+   * an already-expired session and the retry returns an open one.
+   */
+  subscriptionCheckoutSessionQueue: SubscriptionCheckoutSessionResult[];
   /** Next customer payload returned by findOrCreateCustomer. */
   nextFoundOrCreatedCustomer: FindOrCreateCustomerResult;
   /** Count returned by deleteCustomersByEmail. Defaults to 0. */
@@ -133,7 +139,9 @@ export const buildFakeStripe = (): FakeStripe => {
     nextSubscriptionCheckoutSession: {
       id: 'cs_test_sub_1',
       url: 'https://checkout.stripe.com/pay/cs_test_sub_1',
+      status: 'open',
     },
+    subscriptionCheckoutSessionQueue: [],
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
     nextDeletedCustomerCount: 0,
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
@@ -226,7 +234,7 @@ export const buildFakeStripe = (): FakeStripe => {
       if (fake.nextCreateSubscriptionCheckoutSessionError) {
         throw fake.nextCreateSubscriptionCheckoutSessionError;
       }
-      return fake.nextSubscriptionCheckoutSession;
+      return fake.subscriptionCheckoutSessionQueue.shift() ?? fake.nextSubscriptionCheckoutSession;
     },
 
     findOrCreateCustomer: async (

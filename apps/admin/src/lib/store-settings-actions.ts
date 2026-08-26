@@ -1,6 +1,7 @@
 'use server';
 
 import type { StoreSettings, StoreSettingsUpdate } from '@ccc/shared/store';
+import { unstable_rethrow } from 'next/navigation';
 
 import { getAdminStoreSettings, updateAdminStoreSettings } from './admin-api';
 import { ApiError } from './api';
@@ -20,6 +21,7 @@ export const updateAdminStoreSettingsAction = async (
     const settings = await updateAdminStoreSettings(input);
     return { ok: true, settings };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 400) {
         return { ok: false, error: 'Dados inválidos. Revise os campos e tente novamente.' };

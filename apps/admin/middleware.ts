@@ -9,6 +9,11 @@ export const config = {
     '/financeiro/:path*',
     '/assinaturas/:path*',
     '/box/:path*',
+    // /premium/* was missing, so the middleware never ran on the premium
+    // catalog: an unauthenticated visit rendered the page shell and then died
+    // on an API 401 inside the Server Component instead of bouncing to /login,
+    // and a staff session was not blocked there the way it is on /assinaturas.
+    '/premium/:path*',
     '/login',
   ],
 };
@@ -51,12 +56,15 @@ export const middleware = (req: NextRequest) => {
     return NextResponse.redirect(new URL(homeFor(authedRole), req.url));
   }
 
-  // Staff cannot touch /events/*, /financeiro/*, /assinaturas/* or /box/*.
+  // Staff cannot touch /events/*, /financeiro/*, /assinaturas/*, /premium/* or
+  // /box/*. The API enforces organizer|admin on the premium catalog routes
+  // anyway; this keeps staff from landing on a page that can only error.
   if (
     authedRole === 'staff' &&
     (path.startsWith('/events') ||
       path.startsWith('/financeiro') ||
       path.startsWith('/assinaturas') ||
+      path.startsWith('/premium') ||
       path.startsWith('/box'))
   ) {
     return NextResponse.redirect(new URL('/check-in', req.url));

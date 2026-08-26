@@ -46,6 +46,18 @@ export type BillingLine = {
   amountCents: number;
   subscriptionItemRef: string | null;
   metadata: Record<string, string>;
+  /**
+   * Whether `metadata` is the Price's own metadata, as opposed to an empty
+   * stand-in.
+   *
+   * The legacy invoice shape expanded the Price inline, so an empty `metadata`
+   * there is authoritative: the Price really has no devFeePercent, and 0 is the
+   * right answer. The 2026 shape sends only a price id, so an empty `metadata`
+   * means "not in this payload" and the route has to fetch the Price. Without
+   * this flag the two are indistinguishable, and the route would either fetch
+   * needlessly on every legacy line or silently record 0 on every new-shape one.
+   */
+  priceMetadataAvailable: boolean;
 };
 
 /**

@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
+import { futureCutoff } from './cutoff.js';
 
 const env = loadEnv();
 
@@ -28,7 +29,7 @@ const setupMemberWithBox = async (opts: { cutoffAt?: Date; status?: string } = {
       currency: 'BRL',
     },
   });
-  const cutoffAt = opts.cutoffAt ?? new Date('2026-08-26T00:00:00.000Z');
+  const cutoffAt = opts.cutoffAt ?? futureCutoff();
   const box = await prisma.monthlyBox.create({
     data: {
       membershipId: membership.id,

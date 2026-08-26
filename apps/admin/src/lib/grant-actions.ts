@@ -1,5 +1,7 @@
 'use server';
 
+import { unstable_rethrow } from 'next/navigation';
+
 import { getAdminEvent, grantTicket } from './admin-api';
 import { ApiError } from './api';
 
@@ -33,6 +35,7 @@ export const grantTicketAction = async (
     const result = await grantTicket({ userId, ...input });
     return { ok: true, ticketId: result.ticketId };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) return { ok: false, error: err.message };
     return { ok: false, error: 'Erro inesperado. Tente novamente.' };
   }

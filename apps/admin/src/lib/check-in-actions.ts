@@ -7,6 +7,7 @@ import type {
   StorePickupOrder,
   TicketCheckInResponse,
 } from '@ccc/shared/check-in';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   checkInTicket as apiCheckInTicket,
@@ -49,6 +50,7 @@ export const submitCheckIn = async (
       storePickup: res.storePickup,
     };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       return { ok: false, error: err.code, message: err.message };
     }
@@ -82,6 +84,7 @@ export const submitExtraClaim = async (
       usedAt: res.item.usedAt,
     };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       return { ok: false, error: err.code, message: err.message };
     }
@@ -105,6 +108,7 @@ export const submitVoucherClaim = async (
     const res: PickupVoucherClaimResponse = await apiClaimVoucher({ code, eventId });
     return { ok: true, result: res.result, voucher: res.voucher };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       return { ok: false, error: err.code, message: err.message };
     }

@@ -5,6 +5,9 @@ const createPremiumCheckout = vi.fn();
 const platform = { OS: 'android' as string };
 
 vi.mock('react-native', () => ({ Platform: platform }));
+// checkout.ts now imports ./checkout-error, which reaches ~/api/client and
+// therefore expo-constants. Stub it so this stays a plain node run.
+vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
 vi.mock('expo-web-browser', () => ({ openAuthSessionAsync }));
 vi.mock('~/api/premium', () => ({ createPremiumCheckout }));
 
@@ -70,6 +73,24 @@ describe('startPremiumCheckout', () => {
     const { startPremiumCheckout } = await load();
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
     expect(out.kind).toBe('error');
+  });
+
+  // The seam used to keep only `err.message`, which is the literal string
+  // 'request failed' for every non-2xx, so the screen could not tell 409 from
+  // 503. Goes RED if the status is discarded again.
+  it('keeps the status so an AlreadySubscribed 409 stays distinguishable', async () => {
+    const { ApiError } = await import('~/api/client');
+    createPremiumCheckout.mockRejectedValue(
+      new ApiError(409, 'request failed', {
+        error: 'AlreadySubscribed',
+        manageUrl: 'https://billing.stripe.com/session/abc',
+      }),
+    );
+    const { startPremiumCheckout } = await load();
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+    if (out.kind !== 'error') throw new Error('expected an error outcome');
+    expect(out.error.reason).toBe('already_subscribed');
+    expect(out.error.manageUrl).toBe('https://billing.stripe.com/session/abc');
   });
 
   it('returns "redirected" and navigates when Platform.OS is web, checked at call time', async () => {

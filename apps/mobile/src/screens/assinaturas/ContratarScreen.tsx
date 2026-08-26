@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -26,6 +27,7 @@ import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
 import { startPremiumCheckout } from '~/screens/assinaturas/checkout';
+import type { CheckoutError } from '~/screens/assinaturas/checkout-error';
 import { packageTotalCents } from '~/screens/assinaturas/package-total';
 import { pollSubscriptionActive } from '~/screens/assinaturas/poll-subscription';
 import { TierCta } from '~/screens/assinaturas/TierCta';
@@ -96,7 +98,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
 
   const [submitting, setSubmitting] = useState(false);
   const [phase, setPhase] = useState<'form' | 'confirming' | 'pending'>('form');
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<CheckoutError | null>(null);
   // `submitting` state does not apply synchronously, so a rapid second tap
   // can read it as stale `false` in its own closure before the first tap's
   // re-render lands. Gate on a ref instead — checked and set in the same
@@ -181,14 +183,14 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
-    setErrorMsg(null);
+    setCheckoutError(null);
     try {
       const outcome = await startPremiumCheckout({
         planSlug: plan.slug,
         addonKeys: [...selected],
       });
       if (outcome.kind === 'error') {
-        setErrorMsg(copy.errorGeneric);
+        setCheckoutError(outcome.error);
         return;
       }
       if (outcome.kind === 'returned') {
@@ -286,7 +288,25 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
           </View>
         </View>
 
-        {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+        {checkoutError ? (
+          <View>
+            <Text style={styles.errorText}>{checkoutError.message}</Text>
+            {/* AlreadySubscribed ships a Stripe portal or App Store link. It
+                used to be discarded, leaving the member on a dead end with no
+                way to reach the subscription they already have. */}
+            {checkoutError.manageUrl ? (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => {
+                  const url = checkoutError.manageUrl;
+                  if (url) void Linking.openURL(url);
+                }}
+              >
+                <Text style={styles.errorLink}>{copy.errorAlreadySubscribedCta}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {Platform.OS === 'ios' ? (
           <View style={styles.iosNotice}>
@@ -485,6 +505,14 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: c.danger,
     textAlign: 'center',
+  },
+  errorLink: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12.5,
+    color: c.danger,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+    marginTop: 6,
   },
 
   // iOS notice (no Stripe on iOS)

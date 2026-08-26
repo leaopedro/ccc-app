@@ -67,6 +67,15 @@ export type CreateSubscriptionCheckoutSessionInput = {
 export type SubscriptionCheckoutSessionResult = {
   id: string;
   url: string;
+  /**
+   * Stripe's session status, load-bearing because of idempotency replay.
+   * `checkout.sessions.create` with a key used in the last 24h returns the
+   * STORED response, and the stored session may since have been expired — by
+   * this service's own stale-session sweep. Callers must check this instead of
+   * assuming a fresh create yields an open session. `null` only for fakes and
+   * for a Stripe response that omits it.
+   */
+  status: 'open' | 'complete' | 'expired' | null;
 };
 
 export type FindOrCreateCustomerInput = {
@@ -452,7 +461,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         { idempotencyKey },
       );
       if (!session.url) throw new Error('stripe subscription checkout session missing url');
-      return { id: session.id, url: session.url };
+      return { id: session.id, url: session.url, status: session.status };
     },
     findOrCreateCustomer: async ({ email, garageId }) => {
       // Email-based dedup; matches Stripe's own customer-by-email convention.

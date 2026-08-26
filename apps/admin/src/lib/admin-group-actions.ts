@@ -1,5 +1,7 @@
 'use server';
 
+import { unstable_rethrow } from 'next/navigation';
+
 import {
   addGroupMember,
   createAdminGroup,
@@ -20,6 +22,7 @@ export const createGroupAction = async (
     const group = await createAdminGroup({ name, description });
     return { ok: true, data: { id: group.id } };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 409) return { ok: false, error: 'Já existe um grupo com este nome.' };
       if (err.status === 400) return { ok: false, error: 'Dados inválidos.' };
@@ -38,6 +41,7 @@ export const updateGroupAction = async (
     await updateAdminGroup(id, { name, description });
     return { ok: true };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 404) return { ok: false, error: 'Grupo não encontrado.' };
       if (err.status === 409) return { ok: false, error: 'Já existe um grupo com este nome.' };
@@ -55,6 +59,7 @@ export const addGroupMemberAction = async (
     await addGroupMember(groupId, userId);
     return { ok: true };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 409) return { ok: false, error: 'Usuário já está neste grupo.' };
       if (err.status === 404) return { ok: false, error: 'Grupo ou usuário não encontrado.' };
@@ -72,6 +77,7 @@ export const removeGroupMemberAction = async (
     await removeGroupMember(groupId, userId);
     return { ok: true };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 404) return { ok: false, error: 'Membro não encontrado.' };
       return { ok: false, error: err.message };

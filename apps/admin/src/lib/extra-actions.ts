@@ -2,6 +2,7 @@
 
 import { adminExtraCreateSchema, adminExtraUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { createExtra, deleteExtra, updateExtra } from './admin-api';
 import { ApiError } from './api';
@@ -29,6 +30,7 @@ export const createExtraAction = async (
   try {
     await createExtra(eventId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao criar extra.' };
   }
@@ -60,6 +62,7 @@ export const updateExtraAction = async (
   try {
     await updateExtra(extraId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar extra.' };
   }
@@ -74,6 +77,7 @@ export const deleteExtraAction = async (
   try {
     await deleteExtra(extraId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao remover extra.' };
   }

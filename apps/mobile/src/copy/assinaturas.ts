@@ -58,6 +58,18 @@ export const assinaturasCopy = {
     pendingCta: 'VER MINHA ASSINATURA',
     successToast: 'Assinatura ativada.',
     errorGeneric: 'Não foi possível iniciar o pagamento. Tente novamente.',
+    // One string per actionable failure. Telling a member to "tente novamente"
+    // when the answer is "you already subscribe" or "wait a minute" sends them
+    // into a retry loop that cannot succeed.
+    errorUnavailable: 'A contratação está indisponível agora. Tente mais tarde.',
+    errorAddon: 'Um dos módulos escolhidos está indisponível. Remova ele e tente de novo.',
+    errorAlreadySubscribed: 'Você já tem uma assinatura ativa.',
+    errorAlreadySubscribedCta: 'GERENCIAR ASSINATURA',
+    errorStaleBilling: 'Seu cadastro de pagamento não é mais válido. Fale com a gente.',
+    errorIncompleteProfile: 'Complete seu perfil antes de assinar.',
+    errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
+    errorPlanNotFound: 'Esse plano não está mais disponível.',
+    errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
     iosTitle: 'Contratação pelo site.',
     iosSubcopy: 'No iPhone a contratação é feita pelo site da Casa Car Club.',
   },

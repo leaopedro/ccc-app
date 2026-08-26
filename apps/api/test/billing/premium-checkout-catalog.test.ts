@@ -79,6 +79,7 @@ describe('POST /api/me/premium/checkout — catalog-aware price resolution', () 
     stripe.nextSubscriptionCheckoutSession = {
       id: 'cs_test',
       url: 'https://checkout.stripe.com/pay/cs_test',
+      status: 'open',
     };
     stripe.nextFoundOrCreatedCustomer = { customerId: 'cus_test' };
     app = await buildApp(loadEnv(), { stripe });

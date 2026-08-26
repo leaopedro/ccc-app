@@ -9,6 +9,7 @@ import {
   adminPremiumPriceUpsertSchema,
 } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   createAdminPremiumModule,
@@ -60,6 +61,7 @@ export const createPlanAction = async (
   try {
     await createAdminPremiumPlan(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.status === 409) return { error: 'Tier ou slug já existe.' };
       return { error: e.message };
@@ -86,6 +88,7 @@ export const updatePlanAction = async (
   try {
     await updateAdminPremiumPlan(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar plano.' };
   }
@@ -103,6 +106,7 @@ export const deletePlanAction = async (
   try {
     await deleteAdminPremiumPlan(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao desativar plano.' };
   }
@@ -129,6 +133,7 @@ export const upsertPriceAction = async (
   try {
     await upsertAdminPremiumPrice(id, cadence, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar preço.' };
   }
@@ -157,6 +162,7 @@ export const replaceBenefitsAction = async (
   try {
     await replaceAdminPremiumBenefits(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar benefícios.' };
   }
@@ -189,6 +195,7 @@ export const createModuleAction = async (
   try {
     await createAdminPremiumModule(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.status === 409) return { error: 'Chave já existe.' };
       return { error: e.message };
@@ -222,6 +229,7 @@ export const updateModuleAction = async (
   try {
     await updateAdminPremiumModule(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar módulo.' };
   }
@@ -239,6 +247,7 @@ export const deleteModuleAction = async (
   try {
     await deleteAdminPremiumModule(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao desativar módulo.' };
   }

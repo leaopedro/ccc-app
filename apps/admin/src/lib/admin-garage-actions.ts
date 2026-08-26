@@ -9,6 +9,7 @@ import type {
 } from '@ccc/shared/admin-garage';
 import { adminXpAdjustmentSchema, type AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   adjustGarageXp,
@@ -47,6 +48,7 @@ export const setAdminUserGaragePremiumAction = async (
     const data = await setAdminUserGaragePremium(userId, input);
     return { ok: true, data };
   } catch (err) {
+    unstable_rethrow(err);
     return { ok: false, error: errFromApi(err, 'Falha ao atualizar premium.') };
   }
 };
@@ -59,6 +61,7 @@ export const patchAdminUserGarageAction = async (
     const data = await patchAdminUserGarage(userId, input);
     return { ok: true, data };
   } catch (err) {
+    unstable_rethrow(err);
     return { ok: false, error: errFromApi(err, 'Falha ao atualizar garagem.') };
   }
 };
@@ -70,6 +73,7 @@ export const grantAdminUserGarageSpotAction = async (
     const data = await grantAdminUserGarageSpot(userId);
     return { ok: true, data };
   } catch (err) {
+    unstable_rethrow(err);
     return { ok: false, error: errFromApi(err, 'Falha ao adicionar vaga.') };
   }
 };
@@ -83,6 +87,7 @@ export const revokeAdminUserGarageSpotAction = async (
     await revokeAdminUserGarageSpot(userId, spotId, body);
     return { ok: true, data: null };
   } catch (err) {
+    unstable_rethrow(err);
     return { ok: false, error: errFromApi(err, 'Falha ao remover vaga.') };
   }
 };
@@ -114,6 +119,7 @@ export const grantAdminUserBadgeAction = async (
     await grantAdminUserBadge(userId, code);
     return { ok: true, data: null };
   } catch (err) {
+    unstable_rethrow(err);
     return { ok: false, error: errFromBadgeGrantApi(err) };
   }
 };
@@ -147,6 +153,7 @@ export const adjustAdminUserGarageXpAction = async (
     revalidatePath(`/users/${userId}`);
     return { ok: true, data };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       return { ok: false, status: err.status, code: err.code };
     }

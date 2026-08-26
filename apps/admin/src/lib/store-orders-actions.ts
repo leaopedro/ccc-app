@@ -2,6 +2,7 @@
 
 import { adminStoreFulfillmentUpdateSchema } from '@ccc/shared/store';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { updateAdminStoreOrderFulfillment } from './admin-api';
 import { ApiError } from './api';
@@ -31,6 +32,7 @@ export const updateOrderFulfillmentAction = async (
   try {
     await updateAdminStoreOrderFulfillment(orderId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao atualizar fulfillment.' };
   }

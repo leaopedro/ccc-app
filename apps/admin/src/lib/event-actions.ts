@@ -2,7 +2,7 @@
 
 import { adminEventCreateSchema, adminEventUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 
 import {
   cancelAdminEvent,
@@ -84,6 +84,7 @@ export const createEventAction = async (
   try {
     created = await createAdminEvent(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao criar.', values };
   }
@@ -143,6 +144,7 @@ export const updateEventAction = async (
   try {
     await updateAdminEvent(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao salvar.', values };
   }
@@ -158,6 +160,7 @@ export const publishEventAction = async (
   try {
     await publishAdminEvent(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao publicar.' };
   }
@@ -173,6 +176,7 @@ export const unpublishEventAction = async (
   try {
     await unpublishAdminEvent(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao despublicar.' };
   }
@@ -188,6 +192,7 @@ export const cancelEventAction = async (
   try {
     await cancelAdminEvent(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao cancelar.' };
   }

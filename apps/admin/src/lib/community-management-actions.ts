@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   createFeedBan,
@@ -44,6 +45,7 @@ export const createFeedBanAction = async (
           : undefined,
     });
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao criar banimento.' };
   }
@@ -67,6 +69,7 @@ export const moderateFeedItemAction = async (
     if (kind === 'post') await moderateFeedPost(eventId, itemId, action);
     else await moderateFeedComment(eventId, itemId, action);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao moderar item.' };
   }
@@ -89,6 +92,7 @@ export const resolveReportAction = async (
   try {
     await resolveFeedReport(eventId, reportId, resolution.trim());
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao resolver denúncia.' };
   }
@@ -106,6 +110,7 @@ export const dismissReportAction = async (
   try {
     await dismissFeedReport(eventId, reportId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao dispensar denúncia.' };
   }
@@ -122,6 +127,7 @@ export const deleteFeedBanAction = async (
   try {
     await deleteFeedBan(eventId, banId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao remover banimento.' };
   }

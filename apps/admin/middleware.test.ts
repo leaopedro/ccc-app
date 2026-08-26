@@ -75,4 +75,29 @@ describe('admin auth middleware', () => {
     );
     expect(res.headers.get('location')).toBeNull();
   });
+
+  // /premium/* was absent from the matcher, so an unauthenticated visit to the
+  // premium catalog rendered the page and then failed inside the Server
+  // Component on an API 401 instead of redirecting to /login.
+  it('redirects an unauthenticated visitor away from /premium/catalogo', () => {
+    const res = middleware(makeRequest('/premium/catalogo', ''));
+    expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/login');
+  });
+
+  it('redirects staff away from /premium/catalogo', () => {
+    const res = middleware(
+      makeRequest('/premium/catalogo', 'session_role=staff; session_refresh=valid_refresh_token'),
+    );
+    expect(res.headers.get('location')).toBe('https://jdm-admin-eight.vercel.app/check-in');
+  });
+
+  it('allows organizer on /premium/catalogo', () => {
+    const res = middleware(
+      makeRequest(
+        '/premium/catalogo',
+        'session_role=organizer; session_refresh=valid_refresh_token',
+      ),
+    );
+    expect(res.headers.get('location')).toBeNull();
+  });
 });

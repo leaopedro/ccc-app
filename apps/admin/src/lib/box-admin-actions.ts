@@ -11,6 +11,7 @@ import {
 } from '@ccc/shared/admin-box';
 import { presignRequestSchema, presignResponseSchema } from '@ccc/shared/uploads';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   advanceAdminBoxFulfillment,
@@ -88,6 +89,7 @@ export const createBoxCatalogItemAction = async (
   try {
     await createBoxCatalogItem(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.status === 409) return { error: 'Slug ja existe.' };
       return { error: e.message };
@@ -120,6 +122,7 @@ export const updateBoxCatalogItemAction = async (
   try {
     await updateBoxCatalogItem(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar item.' };
   }
@@ -137,6 +140,7 @@ export const deleteBoxCatalogItemAction = async (
   try {
     await deleteBoxCatalogItem(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao desativar item.' };
   }
@@ -164,6 +168,7 @@ export const createPartnerAction = async (
   try {
     await createBoxPartner(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.status === 409 ? 'Slug ja existe.' : e.message };
     return { error: 'Erro ao criar parceiro.' };
   }
@@ -187,6 +192,7 @@ export const updatePartnerAction = async (
   try {
     await updateBoxPartner(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar parceiro.' };
   }
@@ -204,6 +210,7 @@ export const deletePartnerAction = async (
   try {
     await deleteBoxPartner(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao desativar parceiro.' };
   }
@@ -228,6 +235,7 @@ export const createPartnerModuleAction = async (
   try {
     await createBoxPartnerModule(partnerId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao criar modulo.' };
   }
@@ -252,6 +260,7 @@ export const updatePartnerModuleAction = async (
   try {
     await updateBoxPartnerModule(moduleId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar modulo.' };
   }
@@ -269,6 +278,7 @@ export const deletePartnerModuleAction = async (
   try {
     await deleteBoxPartnerModule(moduleId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao desativar modulo.' };
   }
@@ -307,6 +317,7 @@ export const updateBoxSettingsAction = async (
   try {
     await updateBoxSettings(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao salvar configuracoes.' };
   }
@@ -334,6 +345,7 @@ export const advanceBoxFulfillmentAction = async (
   try {
     await advanceAdminBoxFulfillment(boxId, to);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.bodyCode === 'box_not_ready') return { error: 'Caixa não está confirmada.' };
       if (e.bodyCode === 'order_not_paid')

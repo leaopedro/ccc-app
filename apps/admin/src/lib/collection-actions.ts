@@ -5,7 +5,7 @@ import {
   adminStoreCollectionUpdateSchema,
 } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 
 import {
   createAdminCollection,
@@ -58,6 +58,7 @@ export const createCollectionAction = async (
   try {
     created = await createAdminCollection(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     return { error: errorMessage(e, 'Erro ao criar coleção.'), values };
   }
   revalidatePath('/loja/colecoes');
@@ -91,6 +92,7 @@ export const updateCollectionAction = async (
   try {
     await updateAdminCollection(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     return { error: errorMessage(e, 'Erro ao atualizar coleção.'), values };
   }
   revalidatePath('/loja/colecoes');
@@ -116,6 +118,7 @@ export const setCollectionProductsAction = async (
   try {
     await setAdminCollectionProducts(id, productIds);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.code === 'ProductNotFound') return { error: 'Produto não encontrado.' };
       if (e.code === 'DuplicateProduct') return { error: 'Produto duplicado.' };

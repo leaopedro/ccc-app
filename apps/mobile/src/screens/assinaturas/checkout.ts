@@ -11,11 +11,13 @@ import { Platform } from 'react-native';
 
 import { createPremiumCheckout } from '~/api/premium';
 
+import { resolveCheckoutError, type CheckoutError } from './checkout-error';
+
 export type CheckoutOutcome =
   | { kind: 'redirected' }
   | { kind: 'returned' }
   | { kind: 'ios_unsupported' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; error: CheckoutError };
 
 export async function startPremiumCheckout(input: {
   planSlug: string;
@@ -28,7 +30,11 @@ export async function startPremiumCheckout(input: {
     const session = await createPremiumCheckout(input);
     url = session.url;
   } catch (err) {
-    return { kind: 'error', message: err instanceof Error ? err.message : 'checkout failed' };
+    // Keep the status and body. Collapsing them into `err.message` here is what
+    // made every failure read as the same generic sentence: authedRequest
+    // throws ApiError with the literal message 'request failed' for every
+    // non-2xx, so the message carried no information at all.
+    return { kind: 'error', error: resolveCheckoutError(err) };
   }
 
   if (Platform.OS === 'web') {

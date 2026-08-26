@@ -113,6 +113,21 @@ export const buildApp = async (
           })
         : null;
   app.decorate('abacatepay', abacatepay);
+  // Pix needs BOTH vars; either one missing yields null and silently disables
+  // every Pix path — cart checkout, order create, order resume, box checkout,
+  // and the inbound webhook, which then 503s so a billing created before the
+  // key went missing can never settle. That used to happen with no log at all,
+  // unlike the fridge block below. Warn only when the provider was not injected
+  // by a test override, so the suite stays quiet.
+  if (overrides.abacatepay === undefined && !abacatepay) {
+    app.log.warn(
+      {
+        ABACATEPAY_API_KEY: Boolean(env.ABACATEPAY_API_KEY),
+        ABACATEPAY_WEBHOOK_SECRET: Boolean(env.ABACATEPAY_WEBHOOK_SECRET),
+      },
+      '[abacatepay] Pix disabled — set ABACATEPAY_API_KEY and ABACATEPAY_WEBHOOK_SECRET to enable',
+    );
+  }
   app.decorate('push', overrides.push ?? buildPushSender(env));
   app.decorate('fridge', createFridgeRegistry({ heartbeatMs: 30_000, log: app.log }));
   app.addHook('onClose', () => {

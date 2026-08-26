@@ -160,12 +160,89 @@ const BenefitsEditor = ({ plan }: { plan: AdminPremiumPlan }) => {
 
 // ── Plan card ──────────────────────────────────────────────────────
 
+const CADENCE_LEGEND = { monthly: 'Preço mensal', annual: 'Preço anual' } as const;
+
+/**
+ * One price row, per cadence. Split out of PlanCard so annual gets its own
+ * form state.
+ *
+ * Before this existed the form hardcoded `cadence=monthly` in a hidden input
+ * and read every default off the monthly row, so an annual PremiumPlanPrice was
+ * neither creatable nor visible here — even though the API
+ * (PUT /admin/premium/plans/:id/prices/:cadence) has always accepted it. An
+ * annual invoice whose Stripe price is absent from the catalog is the
+ * `unknown-plan-price` path in stripe-billing-webhook.ts: the card is charged,
+ * the event is marked processed, and no membership is created. This form is what
+ * keeps an operator from ending up there.
+ */
+const PlanPriceForm = ({
+  plan,
+  cadence,
+}: {
+  plan: AdminPremiumPlan;
+  cadence: 'monthly' | 'annual';
+}) => {
+  const [state, action] = useActionState(upsertPriceAction.bind(null, plan.id), initial);
+  const row = plan.prices.find((p) => p.cadence === cadence);
+  const [valorCents, setValorCents] = useState(row?.baseAmountCents ?? 0);
+
+  return (
+    <form
+      action={action}
+      className="flex flex-col gap-2 border-t border-[color:var(--color-border)] pt-4"
+    >
+      <input type="hidden" name="cadence" value={cadence} />
+      <FieldGroup legend={CADENCE_LEGEND[cadence]}>
+        <MoneyCentsField
+          label="Valor"
+          name="baseAmountCents"
+          cents={valorCents}
+          onChangeCents={setValorCents}
+          // Saving a blank annual form would publish a R$0,00 annual price on
+          // the public GET /api/plans. Monthly keeps its historical min of 0.
+          min={cadence === 'annual' ? 1 : 0}
+        />
+        <label className={labelCls}>
+          Moeda
+          <input
+            name="currency"
+            defaultValue={row?.currency ?? 'BRL'}
+            maxLength={3}
+            className={`${inputCls} w-16`}
+          />
+        </label>
+        <label className={labelCls}>
+          ID do preço (Stripe)
+          <input
+            name="stripePriceId"
+            defaultValue={row?.stripePriceId ?? ''}
+            maxLength={120}
+            className={inputCls}
+          />
+        </label>
+        <label className={labelCls}>
+          ID do produto (RevenueCat)
+          <input
+            name="rcProductId"
+            defaultValue={row?.rcProductId ?? ''}
+            maxLength={120}
+            className={inputCls}
+          />
+        </label>
+        <label className={checkboxLabelCls}>
+          <input name="active" type="checkbox" defaultChecked={row?.active ?? true} />
+          Preço ativo
+        </label>
+        <Submit label="Salvar preço" />
+        <Err state={state} />
+      </FieldGroup>
+    </form>
+  );
+};
+
 const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
   const [detailState, detailAction] = useActionState(updatePlanAction.bind(null, plan.id), initial);
-  const [priceState, priceAction] = useActionState(upsertPriceAction.bind(null, plan.id), initial);
   const [deleteState, deleteAction] = useActionState(deletePlanAction.bind(null, plan.id), initial);
-  const monthly = plan.prices.find((p) => p.cadence === 'monthly');
-  const [valorCents, setValorCents] = useState(monthly?.baseAmountCents ?? 0);
 
   return (
     <article
@@ -232,54 +309,8 @@ const PlanCard = ({ plan }: { plan: AdminPremiumPlan }) => {
         </FieldGroup>
       </form>
 
-      <form
-        action={priceAction}
-        className="flex flex-col gap-2 border-t border-[color:var(--color-border)] pt-4"
-      >
-        <input type="hidden" name="cadence" value="monthly" />
-        <FieldGroup legend="Preço mensal">
-          <MoneyCentsField
-            label="Valor"
-            name="baseAmountCents"
-            cents={valorCents}
-            onChangeCents={setValorCents}
-            min={0}
-          />
-          <label className={labelCls}>
-            Moeda
-            <input
-              name="currency"
-              defaultValue={monthly?.currency ?? 'BRL'}
-              maxLength={3}
-              className={`${inputCls} w-16`}
-            />
-          </label>
-          <label className={labelCls}>
-            ID do preço (Stripe)
-            <input
-              name="stripePriceId"
-              defaultValue={monthly?.stripePriceId ?? ''}
-              maxLength={120}
-              className={inputCls}
-            />
-          </label>
-          <label className={labelCls}>
-            ID do produto (RevenueCat)
-            <input
-              name="rcProductId"
-              defaultValue={monthly?.rcProductId ?? ''}
-              maxLength={120}
-              className={inputCls}
-            />
-          </label>
-          <label className={checkboxLabelCls}>
-            <input name="active" type="checkbox" defaultChecked={monthly?.active ?? true} />
-            Preço ativo
-          </label>
-          <Submit label="Salvar preço" />
-          <Err state={priceState} />
-        </FieldGroup>
-      </form>
+      <PlanPriceForm plan={plan} cadence="monthly" />
+      <PlanPriceForm plan={plan} cadence="annual" />
 
       <div className="border-t border-[color:var(--color-border)] pt-4">
         <BenefitsEditor plan={plan} />

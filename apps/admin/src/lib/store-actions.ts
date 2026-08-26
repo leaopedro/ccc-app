@@ -8,7 +8,7 @@ import {
   type AdminStoreVariantAttributes,
 } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 
 import {
   createAdminStoreProduct,
@@ -79,6 +79,7 @@ export const createProductAction = async (
   try {
     created = await createAdminStoreProduct(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao criar produto.', values };
   }
@@ -117,6 +118,7 @@ export const updateProductAction = async (
   try {
     await updateAdminStoreProduct(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao salvar produto.', values };
   }
@@ -129,6 +131,7 @@ export const archiveProductAction = async (id: string): Promise<StoreFormState> 
   try {
     await updateAdminStoreProduct(id, { status: 'archived' });
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao arquivar.' };
   }
@@ -141,6 +144,7 @@ export const activateProductAction = async (id: string): Promise<StoreFormState>
   try {
     await updateAdminStoreProduct(id, { status: 'active' });
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao ativar.' };
   }
@@ -169,6 +173,7 @@ export const createVariantAction = async (
   try {
     await createAdminStoreVariant(productId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao criar variante.', values };
   }
@@ -204,6 +209,7 @@ export const updateVariantAction = async (
   try {
     await updateAdminStoreVariant(variantId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao salvar variante.', values };
   }
@@ -228,6 +234,7 @@ export const updateInventoryAction = async (
   try {
     await updateAdminStoreVariant(variantId, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message, values };
     return { error: 'Erro ao atualizar estoque.', values };
   }
@@ -242,6 +249,7 @@ export const deleteVariantAction = async (
   try {
     await deleteAdminStoreVariant(variantId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao remover variante.' };
   }
@@ -256,6 +264,7 @@ export const addProductPhotoAction = async (
   try {
     await createAdminStoreProductPhoto(productId, input);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao anexar foto.' };
   }
@@ -270,6 +279,7 @@ export const removeProductPhotoAction = async (
   try {
     await deleteAdminStoreProductPhoto(productId, photoId);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao remover foto.' };
   }

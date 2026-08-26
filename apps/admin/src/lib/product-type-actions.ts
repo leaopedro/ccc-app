@@ -2,6 +2,7 @@
 
 import { adminProductTypeCreateSchema, adminProductTypeUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   createAdminProductType,
@@ -27,6 +28,7 @@ export const createProductTypeAction = async (
   try {
     await createAdminProductType(parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao criar tipo.' };
   }
@@ -53,6 +55,7 @@ export const updateProductTypeAction = async (
   try {
     await updateAdminProductType(id, parsed.data);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) return { error: e.message };
     return { error: 'Erro ao atualizar tipo.' };
   }
@@ -70,6 +73,7 @@ export const deleteProductTypeAction = async (
   try {
     await deleteAdminProductType(id);
   } catch (e) {
+    unstable_rethrow(e);
     if (e instanceof ApiError) {
       if (e.status === 409) {
         return {

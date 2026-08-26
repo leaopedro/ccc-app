@@ -1,6 +1,7 @@
 'use server';
 
 import type { UserStatusName } from '@ccc/shared/auth';
+import { unstable_rethrow } from 'next/navigation';
 
 import { createAdminUser, disableAdminUser, enableAdminUser } from './admin-api';
 import { ApiError } from './api';
@@ -12,6 +13,7 @@ export const createAdminUserAction = async (email: string): Promise<CreateUserAc
     const user = await createAdminUser({ email });
     return { ok: true, id: user.id };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 409) {
         return { ok: false, error: 'Já existe um usuário com este email.' };
@@ -34,6 +36,7 @@ export const disableAdminUserAction = async (id: string): Promise<StatusActionRe
     const res = await disableAdminUser(id);
     return { ok: true, status: res.status };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) {
       if (err.status === 400) {
         return { ok: false, error: 'Você não pode desabilitar a sua própria conta.' };
@@ -49,6 +52,7 @@ export const enableAdminUserAction = async (id: string): Promise<StatusActionRes
     const res = await enableAdminUser(id);
     return { ok: true, status: res.status };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) return { ok: false, error: err.message };
     return { ok: false, error: 'Erro inesperado. Tente novamente.' };
   }

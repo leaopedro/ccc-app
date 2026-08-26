@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 
 import { approveAdminDocument, getAdminDocumentFileUrl, rejectAdminDocument } from './admin-api';
 import { ApiError } from './api';
@@ -51,6 +52,7 @@ export const approveAdminDocumentAction = async (
     revalidatePath(`/users/${userId}`);
     return { ok: true, status: 'approved', reviewedAt: data.reviewedAt, rejectionReason: null };
   } catch (err) {
+    unstable_rethrow(err);
     if (isRedirectError(err)) throw err;
     return { ok: false, error: errFromApi(err, 'Falha ao aprovar documento.') };
   }
@@ -74,6 +76,7 @@ export const rejectAdminDocumentAction = async (
       rejectionReason: data.rejectionReason ?? trimmed,
     };
   } catch (err) {
+    unstable_rethrow(err);
     if (isRedirectError(err)) throw err;
     return { ok: false, error: errFromApi(err, 'Falha ao rejeitar documento.') };
   }
@@ -91,6 +94,7 @@ export const getAdminDocumentFileUrlAction = async (
     const url = await getAdminDocumentFileUrl(documentId);
     return { ok: true, url };
   } catch (err) {
+    unstable_rethrow(err);
     if (isRedirectError(err)) throw err;
     if (err instanceof ApiError) {
       if (err.status === 404) return { ok: false, error: 'Documento não encontrado.' };

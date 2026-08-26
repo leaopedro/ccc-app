@@ -1,6 +1,7 @@
 'use server';
 
 import type { AdminSubscriptionDetail } from '@ccc/shared/admin-subscription';
+import { unstable_rethrow } from 'next/navigation';
 
 import {
   attachAdminSubscriptionAddon,
@@ -31,6 +32,7 @@ const run = async (fn: () => Promise<{ pending: boolean }>): Promise<AssinaturaA
     const res = await fn();
     return { ok: true, pending: res.pending };
   } catch (err) {
+    unstable_rethrow(err);
     if (err instanceof ApiError) return { ok: false, error: err.message };
     return { ok: false, error: 'Erro inesperado. Tente novamente.' };
   }

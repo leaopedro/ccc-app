@@ -44,6 +44,7 @@ const buildPremiumApp = async (
   stripe.nextSubscriptionCheckoutSession = {
     id: 'cs_test_mock',
     url: CHECKOUT_URL,
+    status: 'open',
   };
   stripe.nextFoundOrCreatedCustomer = { customerId: 'cus_test_mock' };
   stripe.nextBillingPortalSession = { url: PORTAL_URL };
@@ -396,6 +397,75 @@ describe('POST /api/me/premium/checkout', () => {
     expect(expireCall?.payload).toEqual({ sessionId: 'cs_existing_open' });
     const subCreate = stripe.calls.find((c) => c.kind === 'createSubscriptionCheckoutSession');
     expect(subCreate).toBeDefined();
+  });
+
+  it('mints a fresh session when the idempotency key replays a session we just expired', async () => {
+    // Reproduces the production dead-end: the member asks for package A, walks
+    // away, asks for package B (which expires A), then comes back to A. The
+    // package-based idempotency key is unchanged, so Stripe replays A — which
+    // this very handler expired — and the member lands on a dead Checkout page
+    // with a 201 and no error anywhere.
+    ({ app, stripe } = await buildPremiumApp(true));
+    stripe.nextSubscriptionCheckoutSession = {
+      id: 'cs_replayed_dead',
+      url: 'https://checkout.stripe.com/pay/cs_replayed_dead',
+      status: 'expired',
+    };
+    stripe.subscriptionCheckoutSessionQueue = [
+      // First create → Stripe replays the session the expire loop just killed.
+      {
+        id: 'cs_replayed_dead',
+        url: 'https://checkout.stripe.com/pay/cs_replayed_dead',
+        status: 'expired',
+      },
+      // Retry under a key derived from the dead id → a genuinely new session.
+      { id: 'cs_fresh_open', url: 'https://checkout.stripe.com/pay/cs_fresh_open', status: 'open' },
+    ];
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'replayed@jdm.test', verified: true });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout',
+      headers: { authorization: bearer(env, user.id, 'user') },
+      payload: { cadence: 'monthly' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(json(res).sessionId).toBe('cs_fresh_open');
+
+    const creates = stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession') as {
+      payload: { idempotencyKey: string };
+    }[];
+    expect(creates).toHaveLength(2);
+    const firstKey = creates[0]?.payload.idempotencyKey;
+    const retryKey = creates[1]?.payload.idempotencyKey;
+    // The retry key must differ, or Stripe replays the dead session again.
+    expect(retryKey).not.toBe(firstKey);
+    expect(retryKey).toContain(firstKey);
+  });
+
+  it('answers 503 instead of handing the member a dead Checkout url', async () => {
+    // Every mint attempt comes back non-open. Returning 201 with a dead url is
+    // the bug; a 503 at least tells the client something went wrong.
+    ({ app, stripe } = await buildPremiumApp(true));
+    stripe.nextSubscriptionCheckoutSession = {
+      id: 'cs_always_dead',
+      url: 'https://checkout.stripe.com/pay/cs_always_dead',
+      status: 'expired',
+    };
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'always_dead@jdm.test', verified: true });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout',
+      headers: { authorization: bearer(env, user.id, 'user') },
+      payload: { cadence: 'monthly' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(json(res).error).toBe('ServiceUnavailable');
   });
 });
 

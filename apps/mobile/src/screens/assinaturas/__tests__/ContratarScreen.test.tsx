@@ -250,17 +250,23 @@ describe('ContratarScreen', () => {
     // outcome that doesn't trigger further async work (poll-subscription)
     // does; 'error' is the simplest such settle.
     await act(async () => {
-      resolveOutcome({ kind: 'error', message: 'boom' });
+      resolveOutcome({
+        kind: 'error',
+        error: { reason: 'generic', message: assinaturasCopy.contratar.errorGeneric },
+      });
       await flush();
     });
   });
 
-  // 3. An `error` outcome shows the generic copy and re-enables the button.
-  // Fails if the error branch stops setting errorMsg, or if `finally` stops
-  // clearing `submitting` (button would stay disabled forever after a
+  // 3. An `error` outcome shows the resolved copy and re-enables the button.
+  // Fails if the error branch stops rendering the message, or if `finally`
+  // stops clearing `submitting` (button would stay disabled forever after a
   // failed attempt).
   it('shows the generic error message and re-enables the CTA on an error outcome', async () => {
-    startPremiumCheckout.mockResolvedValue({ kind: 'error', message: 'boom' });
+    startPremiumCheckout.mockResolvedValue({
+      kind: 'error',
+      error: { reason: 'generic', message: assinaturasCopy.contratar.errorGeneric },
+    });
     await renderScreen();
     const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLButtonElement;
     if (!cta) throw new Error('CTA not rendered');
@@ -272,6 +278,33 @@ describe('ContratarScreen', () => {
 
     expect(text()).toContain(assinaturasCopy.contratar.errorGeneric);
     expect(cta.disabled).toBe(false);
+  });
+
+  // 3b. The screen must render whatever message the mapper resolved, not a
+  // hardcoded generic string. Goes RED if the error branch is reverted to
+  // `setErrorMsg(copy.errorGeneric)`, which is what made a 409 with a usable
+  // manage link read as "try again".
+  it('renders the resolved message and the manage link for AlreadySubscribed', async () => {
+    startPremiumCheckout.mockResolvedValue({
+      kind: 'error',
+      error: {
+        reason: 'already_subscribed',
+        message: assinaturasCopy.contratar.errorAlreadySubscribed,
+        manageUrl: 'https://billing.stripe.com/session/abc',
+      },
+    });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLButtonElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(text()).toContain(assinaturasCopy.contratar.errorAlreadySubscribed);
+    expect(text()).not.toContain(assinaturasCopy.contratar.errorGeneric);
+    expect(text()).toContain(assinaturasCopy.contratar.errorAlreadySubscribedCta);
   });
 
   // 4. A `returned` outcome whose poll resolves true navigates to

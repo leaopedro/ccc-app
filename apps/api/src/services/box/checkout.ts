@@ -1,6 +1,7 @@
 import { prisma } from '@ccc/db';
+import * as Sentry from '@sentry/node';
 
-import type { AbacatePayClient } from '../abacatepay/index.js';
+import { AbacatePayUpstreamError, type AbacatePayClient } from '../abacatepay/index.js';
 
 const MIN_WINDOW_MS = 60_000;
 
@@ -80,7 +81,23 @@ export const checkoutBoxOrder = async (args: {
       expiresInSeconds,
       metadata: { orderId: phaseA.orderId, boxId: phaseA.boxId, userId: args.userId },
     });
-  } catch {
+  } catch (err) {
+    // A bare `catch {}` used to sit here. A revoked API key, a 422 from a
+    // payload-shape change and a genuine AbacatePay outage all became the same
+    // opaque 502 `payment_provider_error`, with nothing logged anywhere. That
+    // made this the hardest of the payment paths to diagnose in production,
+    // and Pix has no automatic refund, so a silent failure here is expensive.
+    Sentry.withScope((scope) => {
+      scope.setTag('kind', 'box-pix-checkout-failed');
+      scope.setTag('provider', 'abacatepay');
+      scope.setContext('box', {
+        orderId: phaseA.orderId,
+        boxId: phaseA.boxId,
+        amountCents: phaseA.amountCents,
+        upstreamStatus: err instanceof AbacatePayUpstreamError ? err.status : null,
+      });
+      Sentry.captureException(err);
+    });
     return { kind: 'upstream' };
   }
 

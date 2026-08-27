@@ -2,7 +2,7 @@ import { Text } from '@ccc/ui';
 import { Button } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Minus, Plus, ShoppingBag } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '~/auth/context';
 import { useCart } from '~/cart/context';
 import { getCartAddErrorMessage } from '~/cart/error-message';
 import { cartCopy } from '~/copy/cart';
@@ -22,6 +23,7 @@ import { storeCopy } from '~/copy/store';
 import { useStoreProductDetail } from '~/hooks/useStoreProductDetail';
 import { showMessage } from '~/lib/confirm';
 import { formatBRL } from '~/lib/format';
+import { resolveStoreAddCta } from '~/screens/store/add-to-cart-cta';
 import {
   buildProductCartItemInput,
   getDetailPurchaseMode,
@@ -41,12 +43,17 @@ function productMethodsLabel(product: { canShip: boolean; canPickup: boolean }):
 }
 
 export default function StoreProductDetailScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const {
+    slug,
+    variantId: variantIdParam,
+    quantity: quantityParam,
+  } = useLocalSearchParams<{ slug: string; variantId?: string; quantity?: string }>();
   const router = useRouter();
   const { product, collections, loading, error, refresh } = useStoreProductDetail(
     typeof slug === 'string' ? slug : undefined,
   );
   const { addItem, adding } = useCart();
+  const { status: authStatus } = useAuth();
   const insets = useSafeAreaInsets();
   const backTop = Platform.OS === 'web' ? 16 : Math.max(insets.top, 16);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
@@ -72,6 +79,32 @@ export default function StoreProductDetailScreen() {
     setQuantity((current) => getNextQuantity(product, nextSelectedVariantId, current));
   }, [product, selectedVariantId]);
 
+  // Restore the selection a member had before being sent to /login.
+  // resolveStoreAddCta puts it in the `next` URL, so this is the other half of
+  // that round trip. Runs once per mount, after the product exists: the effect
+  // above resets both fields while `product` is still null, so seeding
+  // useState would be wiped before the fetch resolves.
+  const restoredFromParamsRef = useRef(false);
+  useEffect(() => {
+    if (!product || restoredFromParamsRef.current) return;
+    restoredFromParamsRef.current = true;
+
+    const wantedVariantId = typeof variantIdParam === 'string' ? variantIdParam : null;
+    if (!wantedVariantId) return;
+    // Never trust the URL: a variant that is gone, inactive or out of stock is
+    // ignored rather than restored into an unbuyable selection.
+    const wanted = product.variants.find((variant) => variant.id === wantedVariantId);
+    if (!wanted || !isVariantSelectable(wanted)) return;
+
+    setSelectedVariantId(wanted.id);
+    const parsedQuantity = Number(quantityParam);
+    if (Number.isInteger(parsedQuantity) && parsedQuantity > 0) {
+      // getNextQuantity clamps against stock and MAX_PRODUCT_QUANTITY, so a
+      // hand-edited quantity cannot exceed what the picker would allow.
+      setQuantity(getNextQuantity(product, wanted.id, parsedQuantity));
+    }
+  }, [product, variantIdParam, quantityParam]);
+
   const purchaseMode = product ? getDetailPurchaseMode(product, selectedVariantId) : 'unavailable';
   const selectedVariantStockLabel = selectedVariant ? getVariantStockLabel(selectedVariant) : null;
   const heroImage = product?.images[0]?.url ?? product?.coverImageUrl ?? null;
@@ -86,6 +119,22 @@ export default function StoreProductDetailScreen() {
       showMessage(storeCopy.soldOut);
       return;
     }
+
+    // Anonymous members get a door to the login screen instead of the generic
+    // "Erro ao adicionar item ao carrinho." toast that authedRequest's 401
+    // used to produce. Checked before purchaseMode so the answer does not
+    // depend on whether a variant happens to be selected.
+    const cta = resolveStoreAddCta({
+      authStatus,
+      productSlug: typeof slug === 'string' ? slug : '',
+      selectedVariantId,
+      quantity,
+    });
+    if (cta.kind === 'login') {
+      router.push(cta.href as never);
+      return;
+    }
+    if (cta.kind === 'noop') return;
 
     if (purchaseMode !== 'add' || !selectedVariant) {
       if (purchaseMode === 'open_picker') {

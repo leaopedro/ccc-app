@@ -49,6 +49,16 @@ desde então:
 | priceRef            | `lines[].pricing.price_details.price`, id puro               |
 | subscriptionItemRef | `lines[].parent.subscription_item_details.subscription_item` |
 
+Além dos três acima, o **período** também mudou de lugar, e esse foi o segundo
+tropeço, encontrado no mesmo smoke: numa invoice de `subscription_create`,
+`invoice.period_start` e `invoice.period_end` são **o mesmo instante**, e o
+período realmente cobrado está em `lines[].period`. Ler o nível do invoice grava
+um `currentPeriodEnd` já no passado, e `computeIsPremiumActive` responde
+`premiumUntil > now`, então quem acabou de pagar sai como **não premium**, com
+quota de add-on de duração zero. Silencioso nas duas pontas, porque
+`PremiumMembership.status` continua `active`. `subscription.current_period_end`
+também virou `null`; passou para `items[]`.
+
 O único valor que a forma nova não carrega é o `devFeePercent`, porque a linha
 traz só o id do preço. `stripe-billing-webhook.ts` busca o Price na Stripe para
 resolver isso, e responde 503 se a busca falhar, em vez de gravar `0`: a linha da

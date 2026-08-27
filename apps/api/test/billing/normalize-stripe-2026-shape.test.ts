@@ -49,6 +49,9 @@ const newShapeLine = (priceId: string, amount: number, itemRef: string) => ({
   id: `il_${priceId}`,
   amount,
   currency: 'brl',
+  // The period actually paid for. Verbatim from the real delivery: the invoice
+  // level is a zero-length window at the creation instant, the line is not.
+  period: { start: 1787780132, end: 1790458532 },
   metadata: { cadence: 'monthly', garageId: 'gar_1', userId: 'usr_1' },
   pricing: {
     type: 'price_details',
@@ -74,8 +77,9 @@ const newShapeInvoice = (billingReason: string) => ({
   billing_reason: billingReason,
   amount_paid: 11980,
   currency: 'brl',
-  period_start: 1787780000,
-  period_end: 1790372000,
+  // Zero-length, exactly as Stripe renders it on subscription_create.
+  period_start: 1787780132,
+  period_end: 1787780132,
   status_transitions: { paid_at: 1787780150 },
   // No top-level `subscription` — this is the whole point.
   parent: {
@@ -147,6 +151,38 @@ describe('normalizeStripeEvent — 2026 invoice shape', () => {
     // SUBSCRIPTION's metadata mirrored onto the line, not the Price's.
     expect(out.pricing.devFeePercent).toBe(0);
     expect(out.lines[0]?.metadata.devFeePercent).toBeUndefined();
+  });
+
+  it('takes the billed period from the line, not the zero-length invoice window', () => {
+    // The bug this pins: on a subscription_create invoice the invoice-level
+    // period is a single instant, so reading it wrote a currentPeriodEnd already
+    // in the past. computeIsPremiumActive answers `premiumUntil > now`, so a
+    // member who had just paid came out NOT premium, and every add-on got a
+    // zero-length quota cycle. The real period lives on the line.
+    const out = normalizeStripeEvent(
+      mkEvent('invoice.paid', newShapeInvoice('subscription_create')),
+    );
+    if (!out || out.kind !== 'subscription.activated') throw new Error('shape errada');
+
+    expect(out.currentPeriodStart).toEqual(new Date(1787780132 * 1000));
+    expect(out.currentPeriodEnd).toEqual(new Date(1790458532 * 1000));
+    expect(out.currentPeriodEnd.getTime()).toBeGreaterThan(out.currentPeriodStart.getTime());
+    // The stored invoice row describes the same billed window.
+    expect(out.invoice.periodStart).toEqual(new Date(1787780132 * 1000));
+    expect(out.invoice.periodEnd).toEqual(new Date(1790458532 * 1000));
+  });
+
+  it('falls back to the invoice period when the line carries none', () => {
+    const noLinePeriod = newShapeInvoice('subscription_create');
+    noLinePeriod.period_end = 1790372000;
+    for (const l of noLinePeriod.lines.data) {
+      delete (l as { period?: unknown }).period;
+    }
+
+    const out = normalizeStripeEvent(mkEvent('invoice.paid', noLinePeriod));
+    if (!out || out.kind !== 'subscription.activated') throw new Error('shape errada');
+
+    expect(out.currentPeriodEnd).toEqual(new Date(1790372000 * 1000));
   });
 
   it('renews from a 2026-shape subscription_cycle invoice', () => {

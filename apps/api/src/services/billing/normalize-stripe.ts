@@ -86,6 +86,8 @@ type StripeInvoiceLine = {
   pricing?: { price_details?: { price?: string } };
   /** 2026 shape: where the subscription item ref moved to. */
   parent?: { subscription_item_details?: { subscription_item?: string | null } };
+  /** The window this line actually bills. Present in both shapes. */
+  period?: { start?: number; end?: number };
 };
 
 /** Price id from either shape. */
@@ -104,6 +106,30 @@ function subscriptionItemRefOf(line: StripeInvoiceLine): string | null {
   return (
     line.subscription_item ?? line.parent?.subscription_item_details?.subscription_item ?? null
   );
+}
+
+/**
+ * The window the invoice actually bills.
+ *
+ * On a `subscription_create` invoice the invoice-level period is ZERO LENGTH —
+ * `period_start` and `period_end` are both the creation instant — while the
+ * period paid for sits on the line. Reading the invoice level wrote a
+ * `currentPeriodEnd` already in the past, and `computeIsPremiumActive` answers
+ * `premiumUntil > now`, so a member who had just paid came out NOT premium.
+ * Every add-on also got a zero-length quota cycle, making the benefit
+ * unusable. Both failures were silent, and `PremiumMembership.status` stayed
+ * 'active', so the entitlement surface and the subscription surface disagreed.
+ *
+ * The line period is authoritative in both shapes. Fall back to the invoice
+ * level only when the line omits it.
+ */
+function periodFromInvoice(
+  invoice: { period_start: number; period_end: number },
+  firstLine: StripeInvoiceLine | undefined,
+): { start: Date; end: Date } {
+  const startSeconds = firstLine?.period?.start ?? invoice.period_start;
+  const endSeconds = firstLine?.period?.end ?? invoice.period_end;
+  return { start: new Date(startSeconds * 1000), end: new Date(endSeconds * 1000) };
 }
 
 /**
@@ -218,10 +244,11 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       ? new Date(invoice.status_transitions.paid_at * 1000)
       : new Date();
 
+    const period = periodFromInvoice(invoice, firstLine);
     const invoiceShape = {
       providerInvoiceRef: invoice.id,
-      periodStart: new Date(invoice.period_start * 1000),
-      periodEnd: new Date(invoice.period_end * 1000),
+      periodStart: period.start,
+      periodEnd: period.end,
       paidAt,
     };
 
@@ -235,8 +262,8 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         garageId: '',
         tier,
         cadence,
-        currentPeriodStart: new Date(invoice.period_start * 1000),
-        currentPeriodEnd: new Date(invoice.period_end * 1000),
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
         pricing,
         invoice: invoiceShape,
         lines,
@@ -250,8 +277,8 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
         kind: 'subscription.renewed',
         provider: 'stripe',
         providerSubRef: subscriptionRef,
-        currentPeriodStart: new Date(invoice.period_start * 1000),
-        currentPeriodEnd: new Date(invoice.period_end * 1000),
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
         pricing,
         invoice: invoiceShape,
         lines,

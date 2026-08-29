@@ -719,20 +719,82 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       ? withOrderIdParam(baseSuccessUrl, firstOrderId)
       : baseSuccessUrl;
 
+    // Mesma metadata nos dois ramos. handleCartPaymentSucceeded le cartId
+    // (stripe-webhook.ts:401) e settlePaidOrder le o resto. Divergir aqui deixa
+    // a PI nativa paga sem carrinho resolvivel.
+    //
+    // cartVersion e o discriminador de folha velha. handleCartFailure reabre o
+    // carrinho incrementando version (stripe-webhook.ts:362-366), entao uma PI
+    // minta antes da reabertura carrega uma versao que nao existe mais.
+    const stripeMetadata: Record<string, string> = {
+      cartId: cart.id,
+      userId: sub,
+      orderIds: JSON.stringify(data.orders.map((o) => o.id)),
+      orderKinds: JSON.stringify(data.orders.map((o) => o.kind)),
+      hasShippableItems: requiresShipping ? 'true' : 'false',
+      cartVersion: String(cart.version),
+      ...(shippingAddressId ? { shippingAddressId } : {}),
+    };
+
+    if (input.flow === 'native') {
+      const buyer = await prisma.user.findUnique({
+        where: { id: sub },
+        select: { email: true },
+      });
+
+      try {
+        const intent = await app.stripe.createPaymentIntent({
+          amountCents: data.totalAmountCents,
+          currency: data.currency,
+          metadata: stripeMetadata,
+          idempotencyKey: `cart_native_${cart.id}_v${cart.version}`,
+          // Derivado do sub. Nunca do corpo.
+          ...(buyer?.email ? { receiptEmail: buyer.email } : {}),
+        });
+
+        await prisma.order.updateMany({
+          where: { cartId: cart.id, status: 'pending' },
+          data: { providerRef: null },
+        });
+        await prisma.order.update({
+          where: { id: data.orders[0]!.id },
+          data: { providerRef: intent.id },
+        });
+
+        const updatedCart = await prisma.cart.findUniqueOrThrow({
+          where: { id: cart.id },
+          include: CART_INCLUDE_FOR_SERIALIZE,
+        });
+
+        return reply.status(201).send(
+          beginCheckoutResponseSchema.parse({
+            checkoutId: cart.id,
+            status: 'pending',
+            cart: serializeCart(updatedCart, fulfillmentContext, {
+              devFeePercent: app.env.DEV_FEE_PERCENT,
+            }),
+            orderIds: data.orders.map((o) => o.id),
+            provider: 'stripe',
+            providerRef: intent.id,
+            clientSecret: intent.clientSecret,
+            checkoutUrl: null,
+            brCode: null,
+            reservationExpiresAt: new Date(Date.now() + ORDER_EXPIRY_MS).toISOString(),
+          }),
+        );
+      } catch (err) {
+        await rollbackCartCheckout(cart.id, data.orders);
+        throw err;
+      }
+    }
+
     try {
       const session = await app.stripe.createCheckoutSession({
         amountCents: data.totalAmountCents,
         currency: data.currency,
         productName,
         idempotencyKey: `cart_checkout_${cart.id}_v${cart.version}`,
-        metadata: {
-          cartId: cart.id,
-          userId: sub,
-          orderIds: JSON.stringify(data.orders.map((o) => o.id)),
-          orderKinds: JSON.stringify(data.orders.map((o) => o.kind)),
-          hasShippableItems: requiresShipping ? 'true' : 'false',
-          ...(shippingAddressId ? { shippingAddressId } : {}),
-        },
+        metadata: stripeMetadata,
         successUrl,
         cancelUrl,
         expiresAt: expiresAtUnix,

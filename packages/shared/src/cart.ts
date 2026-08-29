@@ -229,6 +229,14 @@ export type ClearCartResponse = z.infer<typeof clearCartResponseSchema>;
 
 export const beginCheckoutRequestSchema = z.object({
   paymentMethod: cartPaymentMethodSchema,
+  /**
+   * 'hosted' devolve checkoutUrl (Stripe Checkout, caminho da web).
+   * 'native' devolve clientSecret para o PaymentSheet do app.
+   *
+   * Default 'hosted' de proposito: nenhum cliente existente muda de
+   * comportamento no deploy. Pix ignora este campo.
+   */
+  flow: z.enum(['hosted', 'native']).default('hosted'),
   fulfillmentMethod: fulfillmentMethodSchema.optional(),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),

@@ -10,6 +10,13 @@ export type CreatePaymentIntentInput = {
   currency: string;
   metadata: Record<string, string>;
   idempotencyKey: string;
+  /**
+   * Destinatario do recibo da Stripe. SEMPRE derivado do usuario autenticado
+   * no servidor. Aceitar este valor do corpo da requisicao transformaria a
+   * rota numa primitiva de e-mail para destinatario arbitrario, assinada pela
+   * nossa conta Stripe.
+   */
+  receiptEmail?: string;
 };
 
 export type CheckoutSessionResult = {
@@ -282,13 +289,20 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2026-04-22.dahlia' });
 
   return {
-    createPaymentIntent: async ({ amountCents, currency, metadata, idempotencyKey }) => {
+    createPaymentIntent: async ({
+      amountCents,
+      currency,
+      metadata,
+      idempotencyKey,
+      receiptEmail,
+    }) => {
       const pi = await stripe.paymentIntents.create(
         {
           amount: amountCents,
           currency: currency.toLowerCase(),
           metadata,
           automatic_payment_methods: { enabled: true },
+          ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
         },
         { idempotencyKey },
       );

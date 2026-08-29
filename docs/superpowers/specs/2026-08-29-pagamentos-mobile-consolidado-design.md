@@ -1,7 +1,7 @@
 # Pagamentos no mobile — spec consolidado
 
 **Data:** 2026-08-29
-**Status:** revisado adversarialmente, com decisões de produto em aberto
+**Status:** revisado adversarialmente, decisões de produto fechadas em 2026-08-29
 **Não substitui nada.** Indexa os quatro specs, corrige o que eles afirmam de
 errado, e registra o que a revisão de 2026-08-29 derrubou.
 
@@ -178,8 +178,9 @@ Falta nomear: o código de erro e o schema Zod. Ambos entram no bloco 3.
 
 ## Decisão 3 — construir agora, em paralelo
 
-Mantida, com uma ressalva que a revisão de política levantou e que **não é
-decisão de engenharia**: ver Questão Aberta B.
+Mantida. A ressalva que a revisão de política levantou foi fechada pela
+Decisão 7: o gate é construído por inteiro, mas a submissão vai com ele ligado,
+então não há caminho de compra dormente no binário.
 
 ## Decisão 4 — a guarda de duplicidade, refeita
 
@@ -303,72 +304,73 @@ Chave Stripe restrita em vez de `sk_live` completa. Reembolso parcial. Remoção
 do botão morto de RevenueCat. Execução da purga, que o rastreador marca como
 DEV. Benefícios de plano ainda não implementados sob a regra 2.3.1.
 
-## Questões abertas, de produto, não de engenharia
+## Decisão 6 — o pacote misto: tornar a caixa visível antes da compra
 
-Estas travam o plano e não são minhas para decidir.
+Decidido em 2026-08-29. Os desbloqueios digitais **permanecem** na assinatura
+paga. A correção é de exposição, não de arquitetura: a prova física passa a
+aparecer no momento da decisão de compra.
 
-### Questão A — o pacote misto
+Isto não elimina o argumento 3.1.1, apenas o enfraquece. Fica registrado que a
+opção que eliminaria a ambiguidade era tirar capas, selo e feed da membresia
+paga, e que ela foi conscientemente recusada por custo de produto.
 
-Dois revisores independentes concluíram que copy não resolve, e o código
-sustenta a conclusão.
+Trabalho que isto exige, e que a versão anterior do bloco 6 não continha:
 
-Os doze rótulos de benefício semeados
-(`seed.ts:517-558`) são: acesso ao clube, eventos, comunidade no app,
-prioridade, convidados, descontos, concierge, vaga premium. **Nenhum dos doze
-menciona a caixa física.** `monthlyBoxBudgetCents` existe no modelo e nunca é
-serializado por `premium-catalog.ts:42-58`. E `caixa-slot.ts:7` só mostra a aba
-da Caixa para quem **já é premium**.
+- **Rótulos de benefício no banco**, não em `copy/garage.ts`. A tela de compra lê
+  de `GET /api/plans/:slug` via `premium-catalog.ts:42-58`. Cadastrar em
+  `/premium/catalogo`, em produção, incluindo conteúdo da caixa e cadência de
+  entrega. É ação de Pedro no admin, e é o item de maior efeito da lista.
+- **Serializar o que hoje não sai.** `monthlyBoxBudgetCents` existe no modelo e
+  nunca é serializado. Decidir se o valor aparece ou se só a descrição aparece.
+- **Endereço de entrega e cadência no paywall.** `ContratarScreen.tsx:215-230`
+  hoje renderiza tier, nome, preço e add-ons, e não renderiza benefício nenhum.
+- **Folha "O que é Premium?"** reescrita, PT e EN, ainda necessária, mas agora
+  entendida como secundária: é a folha da garagem, não o paywall.
 
-Ou seja: o revisor, não assinante, na tela de compra, vê uma folha explicativa
-100% digital, uma lista de benefícios sem caixa, e um preço. A prova física
-aparece só depois do pagamento.
+Risco que sobra e precisa estar nas notas de review: a folha reescrita promete
+caixa, e `caixa-slot.ts:7` esconde a aba de quem não é premium. Prometer no
+paywall o que a navegação esconde é exposição 2.3.1. A Decisão 8 é o que
+sustenta esta.
 
-Do outro lado, o que a assinatura de fato destrava é digital e é gateado no
-servidor: nove de dez capas (`garage-covers.ts:31-105`), upload de capa custom
-(`routes/garage.ts:262-263`), leitura e postagem no feed de membros
-(`services/feed/access.ts:17,44,89`), e o selo serializado em todo carro.
+## Decisão 7 — submeter com o gate ligado
 
-Bloco 6, como estava escrito, mirava `copy/garage.ts`, que é a folha
-explicativa. A tela de compra lê benefícios do **banco**. A reescrita de copy
-não tocaria o paywall.
+Decidido em 2026-08-29. O binário submetido tem o fluxo de assinatura iOS
+**ativo**. Não haverá caminho de compra completo e inalcançável dentro do
+binário.
 
-Caminhos, do mais eficaz ao menos:
+Motivo: risco concentrado no argumento do pacote misto, que é juízo de revisor e
+pode ir para os dois lados, em vez de exposição de boa-fé sob 2.3.1, que é
+achado pior e atinge a conta.
 
-1. Tirar os desbloqueios digitais da assinatura paga. Capas, selo e feed passam
-   a ser grátis ou atrelados a outra coisa. A assinatura passa a comprar só
-   caixa, clube e serviços, e a 3.1.3(e) fica limpa.
-2. Dois produtos, dois trilhos: IAP StoreKit para a camada digital, Stripe para
-   a física. É a forma que a Apple aprova, e é cara.
-3. Tornar a caixa visível antes da compra: conteúdo, endereço de entrega e
-   cadência no paywall e nos rótulos do banco, para conta não assinante. Isto é
-   **necessário em qualquer um dos caminhos**, não é alternativa aos outros.
+Consequências:
 
-### Questão B — o gate ligado ou desligado na submissão
+- O gate por plataforma continua sendo construído integralmente. Ele deixa de
+  ser postura de submissão e passa a ser **instrumento de resposta** a uma
+  rejeição, que é o que ele sempre deveria ter sido.
+- `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` precisa ser **ligada** no perfil
+  `production` do `eas.json`. Hoje ausente, logo `false`, logo as quatro
+  superfícies do C3 estão desligadas no binário. Sem esse flip, submeter "com o
+  gate ligado" entrega um app sem assinatura de qualquer forma.
+- O texto de encaminhamento do C2 sai. Com pagamento nativo funcionando no iOS,
+  ele deixa de ser necessário e passa a ser só a violação que já era.
 
-Se o gate estiver desligado na review, o binário contém um fluxo completo de
-assinatura Stripe inalcançável pela UI. Revisores inspecionam binário. Isso é
-2.3.1, funcionalidade escondida, que é achado pior que 3.1.1 porque vai a
-boa-fé.
+## Decisão 8 — QA da caixa antes do flip, e antes da submissão
 
-Se estiver ligado, o binário é honesto e corre o risco da Questão A.
+Decidido em 2026-08-29. `EXPO_PUBLIC_CAIXA_ENABLED` só é ligada depois do QA
+manual que os planos do box-builder declararam load-bearing, incluindo confirmar
+na AbacatePay que uma cobrança Pix é impagável depois do `expiresIn`.
 
-A versão anterior assumiu "desligado por padrão" como seguro. É o padrão seguro
-de engenharia e o padrão arriscado de review. Se for desligado, o código de
-assinatura deveria ser compilado para fora, não só desviado em runtime.
+Isto move o QA da caixa para **dentro do caminho crítico da submissão iOS**, o
+que nenhum spec anterior fazia. A Decisão 6 promete a caixa no paywall; a
+Decisão 8 é o que faz a promessa ser verdadeira quando o revisor for conferir.
 
-### Questão C — `EXPO_PUBLIC_CAIXA_ENABLED` antes do QA
+Consequência de sequenciamento: a submissão iOS passa a depender de um bloco de
+QA que não é de engenharia de pagamentos. Ele entra no plano como pré-requisito
+explícito, com dono, não como suposição.
 
-O spec de Apple Pay liga a flag "para que a aba da caixa física exista no
-binário submetido". Mas os planos do box-builder dizem três vezes que o flip é
-passo de go-live **após QA manual**, incluindo confirmar na AbacatePay que uma
-cobrança Pix é impagável depois do `expiresIn`.
+## Questão aberta — o SKU virtual pode estar vivo em produção
 
-Ligar a flag por ótica de review, antes do QA que o próprio time declarou
-load-bearing, é arriscar que a caixa — a defesa inteira da 3.1.3(e) — seja o que
-falha na frente do revisor. E por causa de `caixa-slot.ts:7`, o flip nem resolve
-o que pretendia: revisor não assinante continua sem ver a aba.
-
-### Questão D — o SKU virtual pode estar vivo em produção
+Única que continua aberta, e é fato a apurar, não decisão.
 
 O spec de Apple Pay diz que a "Vaga de Garagem Adicional" de R$49 é inalcançável
 porque `GeneralSettings.defaultFreeGarageSpots` é null e null é ilimitado. Mas
@@ -376,8 +378,8 @@ porque `GeneralSettings.defaultFreeGarageSpots` é null e null é ilimitado. Mas
 `UPDATE "GeneralSettings" SET "defaultFreeGarageSpots" = 1 WHERE … IS NULL`.
 
 Se existia linha de `GeneralSettings` em produção quando essa migração rodou, o
-limite é finito, o tile renderiza, e há um desbloqueio digital de R$49 sendo
-vendido fora do IAP no binário atual. Uma query resolve:
+limite é finito, o tile de `garage-slots.ts:76` renderiza, e há desbloqueio
+digital de R$49 vendido fora do IAP no binário atual. Uma query resolve:
 
 ```sql
 SELECT "defaultFreeGarageSpots" FROM "GeneralSettings";
@@ -439,4 +441,5 @@ código.
 `expo-updates` com `runtimeVersion` por `appVersion`. Alterar comportamento de
 pagamento por OTA depois da aprovação é exposição maior que qualquer flag de
 servidor. Não se faz. A revisão nota que **flag de servidor que liga fluxo de
-compra tem a mesma exposição com transporte diferente**, o que é a Questão B.
+compra tem a mesma exposição com transporte diferente**. É por isso que a
+Decisão 7 submete com o gate ligado, em vez de submeter com o fluxo dormente.

@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { requireUser } from '../plugins/auth.js';
 import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
+import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
 import type { StripeClient, SubscriptionCheckoutSessionResult } from '../services/stripe/index.js';
 
@@ -107,7 +108,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
    */
   app.get(
     '/api/me/premium/checkout-precheck',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, requireSubscriptionsEnabled] },
     async (request, reply) => {
       if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
         return reply
@@ -757,7 +758,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       hook: 'preHandler',
       keyGenerator: (req) => `premium-checkout:${req.user?.sub ?? req.ip}`,
     });
-    scoped.post('/api/me/premium/checkout', checkoutHandler);
+    scoped.post(
+      '/api/me/premium/checkout',
+      { preHandler: requireSubscriptionsEnabled },
+      checkoutHandler,
+    );
   });
 
   await app.register(async (scoped) => {

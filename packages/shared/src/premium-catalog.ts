@@ -47,12 +47,31 @@ export type PremiumPlan = z.infer<typeof premiumPlanSchema>;
 
 /**
  * GET /api/plans — full response.
+ *
+ * `subscriptionsEnabled` is the platform gate, resolved server-side from the
+ * caller's `x-ccc-platform` header. It rides on the catalog reads because
+ * those are the only premium routes that ALWAYS answer:
+ * GET /api/premium/pricing 503s whenever GROWTH_PREMIUM_BILLING_ENABLED is
+ * off, which is precisely when the gate would need to speak.
  */
 export const premiumPlanListResponseSchema = z.object({
   plans: z.array(premiumPlanSchema),
+  subscriptionsEnabled: z.boolean(),
 });
 
 export type PremiumPlanListResponse = z.infer<typeof premiumPlanListResponseSchema>;
+
+/**
+ * GET /api/plans/:slug — wrapped so it can carry the gate alongside the plan.
+ * Previously this route returned a bare plan; the envelope is a breaking
+ * change for `getPremiumPlan` in the mobile client, updated in the same PR.
+ */
+export const premiumPlanDetailResponseSchema = z.object({
+  plan: premiumPlanSchema,
+  subscriptionsEnabled: z.boolean(),
+});
+
+export type PremiumPlanDetailResponse = z.infer<typeof premiumPlanDetailResponseSchema>;
 
 /**
  * A recurring add-on module. `quotaPerCycle`/`quotaUnit` describe the per-cycle
@@ -76,6 +95,7 @@ export type PremiumAddonModule = z.infer<typeof premiumAddonModuleSchema>;
  */
 export const premiumAddonModuleListResponseSchema = z.object({
   modules: z.array(premiumAddonModuleSchema),
+  subscriptionsEnabled: z.boolean(),
 });
 
 export type PremiumAddonModuleListResponse = z.infer<typeof premiumAddonModuleListResponseSchema>;

@@ -1,3 +1,4 @@
+import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import type { Prisma, PremiumProvider, PrismaClient } from '@prisma/client';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
@@ -458,7 +459,7 @@ async function handleExpired(
   const hasActiveLiveMembership = await tx.premiumMembership.findFirst({
     where: {
       garageId,
-      status: { in: ['active', 'past_due', 'cancel_scheduled'] },
+      status: { in: [...LIVE_MEMBERSHIP_STATUSES] },
       id: { not: membership.id },
     },
   });

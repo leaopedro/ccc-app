@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 
 import { prisma } from '@ccc/db';
 import {
+  LIVE_MEMBERSHIP_STATUSES,
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRequestSchema,
@@ -45,7 +46,7 @@ const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
  * Live membership statuses that block a new subscription. `expired` is
  * intentionally excluded so a lapsed user can re-subscribe.
  */
-const LIVE_STATUSES = ['active', 'past_due', 'cancel_scheduled'] as const;
+const LIVE_STATUSES = LIVE_MEMBERSHIP_STATUSES;
 const ACTIVE_STATUSES = new Set<string>(LIVE_STATUSES);
 
 /**

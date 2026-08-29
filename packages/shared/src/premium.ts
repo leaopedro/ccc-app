@@ -131,3 +131,26 @@ export const premiumPricingResponseSchema = z.object({
 });
 
 export type PremiumPricingResponse = z.infer<typeof premiumPricingResponseSchema>;
+
+/**
+ * Estados de membership que bloqueiam uma nova assinatura.
+ *
+ * Fonte unica. Antes disto a lista estava copiada em tres lugares
+ * (me-premium.ts, me-premium-addons.ts e apply-membership-event.ts) e as tres
+ * copias omitiam `trialing` e `paused`: um membro em trial ou com a cobranca
+ * pausada abria uma segunda assinatura sem nada objetar.
+ *
+ * `expired` fica de fora de proposito. E o unico estado que libera recontratacao.
+ */
+export const LIVE_MEMBERSHIP_STATUSES = [
+  'trialing',
+  'active',
+  'past_due',
+  'cancel_scheduled',
+  'paused',
+] as const;
+
+export type LiveMembershipStatus = (typeof LIVE_MEMBERSHIP_STATUSES)[number];
+
+export const isLiveMembershipStatus = (status: string): status is LiveMembershipStatus =>
+  (LIVE_MEMBERSHIP_STATUSES as readonly string[]).includes(status);

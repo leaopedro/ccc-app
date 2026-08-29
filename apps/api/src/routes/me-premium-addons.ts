@@ -19,6 +19,7 @@
  */
 
 import { prisma } from '@ccc/db';
+import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import {
   addonMutationResponseSchema,
   attachAddonRequestSchema,
@@ -34,10 +35,9 @@ import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js'
 
 /**
  * Live membership statuses — the same set me-premium.ts treats as "blocks a new
- * subscription". `expired`/`paused`/`trialing` are intentionally excluded from
- * add-on attach/detach.
+ * subscription".
  */
-const LIVE_STATUSES = ['active', 'past_due', 'cancel_scheduled'] as const;
+const LIVE_STATUSES = LIVE_MEMBERSHIP_STATUSES;
 
 /** Add-on statuses that still count as attached (billable or winding down). */
 const ATTACHED_ADDON_STATUSES = ['active', 'cancel_scheduled'] as const;

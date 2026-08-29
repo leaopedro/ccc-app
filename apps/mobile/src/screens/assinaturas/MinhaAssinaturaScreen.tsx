@@ -25,6 +25,7 @@ import { ApiError } from '~/api/client';
 import { cancelPremiumSubscription } from '~/api/premium';
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { usePremiumInvoices } from '~/hooks/usePremiumInvoices';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
@@ -138,9 +139,11 @@ function InvoiceHistory() {
 function ActiveSubscription({
   sub,
   refresh,
+  subscriptionsEnabled,
 }: {
   sub: MySubscriptionResponse;
   refresh: () => Promise<void>;
+  subscriptionsEnabled: boolean;
 }) {
   const visual = sub.tier ? TIER_VISUAL[sub.tier as ApiTier] : null;
   const periodEnd = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null;
@@ -258,14 +261,21 @@ function ActiveSubscription({
 
         <InvoiceHistory />
 
-        <Pressable
-          onPress={() => router.push('/assinaturas?all=1')}
-          accessibilityRole="button"
-          accessibilityLabel={copy.seeAllPlans}
-          style={styles.seeAllPlans}
-        >
-          <Text style={styles.seeAllPlansText}>{copy.seeAllPlans}</Text>
-        </Pressable>
+        {/* Fix round 1 (Task 10): a button that bounces the user to /inicio
+            is worse than no button — only a purchase entry point (new plans),
+            so it follows the platform gate. minha-assinatura itself stays
+            reachable and ungated either way. */}
+        {subscriptionsEnabled ? (
+          <Pressable
+            onPress={() => router.push('/assinaturas?all=1')}
+            accessibilityRole="button"
+            accessibilityLabel={copy.seeAllPlans}
+            style={styles.seeAllPlans}
+            testID="assinatura-ver-planos"
+          >
+            <Text style={styles.seeAllPlansText}>{copy.seeAllPlans}</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={() => {
@@ -377,6 +387,11 @@ function CenteredState({
 
 export default function MinhaAssinaturaScreen() {
   const { subscription, loading, error, billingUnavailable, refresh } = usePremiumSubscription();
+  // Platform gate (Task 8/10) — governs only the two affordances that lead to
+  // a NEW purchase (see all plans / empty-state "ver planos"). It does not
+  // gate this screen itself: managing an EXISTING subscription stays open
+  // regardless, same as /billing-portal and /cancel on the API side.
+  const { subscriptionsEnabled } = usePremiumPlans();
 
   let body: ReactNode;
   if (loading) {
@@ -405,15 +420,25 @@ export default function MinhaAssinaturaScreen() {
       />
     );
   } else if (subscription && subscription.active) {
-    body = <ActiveSubscription sub={subscription} refresh={refresh} />;
+    body = (
+      <ActiveSubscription
+        sub={subscription}
+        refresh={refresh}
+        subscriptionsEnabled={subscriptionsEnabled}
+      />
+    );
   } else {
     body = (
       <CenteredState
         title={copy.emptyTitle}
         subcopy={copy.emptySubcopy}
-        cta={copy.emptyCta}
-        onPress={goToPlans}
         testID="assinatura-empty-cta"
+        // Same reasoning as the "ver todos os planos" button above: this CTA
+        // starts a NEW purchase, so it follows the platform gate. Spread
+        // (rather than `cta={... : undefined}`) so the optional props are
+        // omitted, not set-to-undefined — required under
+        // exactOptionalPropertyTypes.
+        {...(subscriptionsEnabled ? { cta: copy.emptyCta, onPress: goToPlans } : {})}
       />
     );
   }

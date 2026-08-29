@@ -48,11 +48,29 @@ const invoicesState = vi.hoisted(() => ({
   value: null as unknown,
 }));
 
+// Fix round 1 (Task 10): the platform gate that hides the two
+// plan-browsing affordances ("ver todos os planos" / empty-state "ver
+// planos"). Defaults to true so every pre-existing test below — none of
+// which cares about the gate — keeps seeing the same UI it always has.
+const plansState = vi.hoisted(() => ({
+  current: { subscriptionsEnabled: true, loading: false },
+}));
+
 const cancelMock = vi.hoisted(() => ({ fn: vi.fn() }));
 const openURLMock = vi.hoisted(() => ({ fn: vi.fn() }));
 
 vi.mock('~/hooks/usePremiumSubscription', () => ({
   usePremiumSubscription: () => hookState.value,
+}));
+
+vi.mock('~/hooks/usePremiumPlans', () => ({
+  usePremiumPlans: () => ({
+    plans: [],
+    loading: plansState.current.loading,
+    error: false,
+    subscriptionsEnabled: plansState.current.subscriptionsEnabled,
+    refresh: () => Promise.resolve(),
+  }),
 }));
 
 vi.mock('~/hooks/usePremiumInvoices', () => ({
@@ -318,6 +336,7 @@ describe('MinhaAssinaturaScreen', () => {
     cancelMock.fn.mockReset();
     openURLMock.fn.mockReset();
     invoicesState.value = invoicesResult({});
+    plansState.current = { subscriptionsEnabled: true, loading: false };
   });
 
   afterEach(async () => {
@@ -365,6 +384,44 @@ describe('MinhaAssinaturaScreen', () => {
       await flush();
     });
     expect(replace).toHaveBeenCalledWith('/assinaturas');
+  });
+
+  // Fix round 1 (Task 10): PlanosScreen/ContratarScreen/[slug] are gated by
+  // redirecting away entirely — but minha-assinatura must stay reachable for
+  // a paying member to see their own subscription. The gate here only
+  // removes the two affordances that would send someone into a NEW purchase
+  // (which, on a gated platform, would land them on a page that itself
+  // redirects to /inicio — a worse dead end than no button).
+  it('hides the empty-state "ver planos" CTA when subscriptions are gated', async () => {
+    plansState.current = { subscriptionsEnabled: false, loading: false };
+    hookState.value = result({ subscription: inactiveSub });
+    await renderScreen();
+    expect(text()).toContain('Você ainda não é assinante.');
+    expect(container.querySelector('[data-testid="assinatura-empty-cta"]')).toBeNull();
+  });
+
+  it('shows the empty-state "ver planos" CTA when subscriptions are enabled', async () => {
+    plansState.current = { subscriptionsEnabled: true, loading: false };
+    hookState.value = result({ subscription: inactiveSub });
+    await renderScreen();
+    expect(container.querySelector('[data-testid="assinatura-empty-cta"]')).not.toBeNull();
+  });
+
+  it('hides the "ver todos os planos" button on an active subscription when subscriptions are gated', async () => {
+    plansState.current = { subscriptionsEnabled: false, loading: false };
+    hookState.value = result({ subscription: activeSub });
+    await renderScreen();
+    // The subscription itself, and the cancel path, must still be reachable.
+    expect(text()).toContain('Fundador');
+    expect(container.querySelector('[data-testid="assinatura-cancelar"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assinatura-ver-planos"]')).toBeNull();
+  });
+
+  it('shows the "ver todos os planos" button on an active subscription when subscriptions are enabled', async () => {
+    plansState.current = { subscriptionsEnabled: true, loading: false };
+    hookState.value = result({ subscription: activeSub });
+    await renderScreen();
+    expect(container.querySelector('[data-testid="assinatura-ver-planos"]')).not.toBeNull();
   });
 
   it('renders an informative state when billing is unavailable (503/flag off)', async () => {

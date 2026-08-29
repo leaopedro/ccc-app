@@ -5,9 +5,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// ../client imports react-native directly (for the x-ccc-platform header),
+// whose Flow-flavored `import typeof` syntax vitest's SSR transform cannot
+// parse. Mock it before importing, same as
+// api/__tests__/account-disabled.test.ts.
 vi.mock('expo-constants', () => ({
   default: { expoConfig: { extra: { apiBaseUrl: 'https://api.test' } } },
 }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { getMyBadges, togglePinBadge } = await import('../garage');
 const { registerTokenProvider } = await import('../client');

@@ -9,7 +9,12 @@ import {
 } from '@ccc/shared/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// ../client imports react-native directly (for the x-ccc-platform header),
+// whose Flow-flavored `import typeof` syntax vitest's SSR transform cannot
+// parse. Mock it before importing, same as
+// api/__tests__/account-disabled.test.ts.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const {
   createShippingAddress,
@@ -88,11 +93,11 @@ describe('mobile store API client', () => {
     expect(collections.items).toHaveLength(1);
     expect(productTypes.items).toHaveLength(1);
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:4000/store/collections', {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-ccc-platform': 'ios' },
       method: 'GET',
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:4000/store/product-types', {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-ccc-platform': 'ios' },
       method: 'GET',
     });
   });
@@ -124,7 +129,7 @@ describe('mobile store API client', () => {
     expect(settings.storeHeaderTitle).toBe('Drop novo. Corre antes que acabe.');
     expect(settings.storeHeaderSubtitle).toBe('Itens oficiais da cena JDM com estoque limitado.');
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:4000/store/settings', {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-ccc-platform': 'ios' },
       method: 'GET',
     });
   });
@@ -156,7 +161,7 @@ describe('mobile store API client', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:4000/store/products?q=camiseta&collectionSlug=drops-jdm&productTypeSlug=vestuario&inStock=true&sort=price_desc&cursor=cursor_1&limit=12',
       {
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-ccc-platform': 'ios' },
         method: 'GET',
       },
     );
@@ -229,7 +234,7 @@ describe('mobile store API client', () => {
 
     expect(response.product.slug).toBe('camiseta-jdm');
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:4000/store/products/camiseta%20jdm', {
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-ccc-platform': 'ios' },
       method: 'GET',
     });
   });
@@ -337,7 +342,7 @@ describe('mobile store API client', () => {
     expect(updated.recipientName).toBe('Maria Silva');
     expect(deleted).toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:4000/me/shipping-addresses', {
-      headers: { authorization: 'Bearer token-123' },
+      headers: { authorization: 'Bearer token-123', 'x-ccc-platform': 'ios' },
       method: 'GET',
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:4000/me/shipping-addresses', {
@@ -345,6 +350,7 @@ describe('mobile store API client', () => {
       headers: {
         authorization: 'Bearer token-123',
         'content-type': 'application/json',
+        'x-ccc-platform': 'ios',
       },
       method: 'POST',
     });
@@ -356,6 +362,7 @@ describe('mobile store API client', () => {
         headers: {
           authorization: 'Bearer token-123',
           'content-type': 'application/json',
+          'x-ccc-platform': 'ios',
         },
         method: 'PATCH',
       },
@@ -364,7 +371,7 @@ describe('mobile store API client', () => {
       4,
       'http://localhost:4000/me/shipping-addresses/addr_2',
       {
-        headers: { authorization: 'Bearer token-123' },
+        headers: { authorization: 'Bearer token-123', 'x-ccc-platform': 'ios' },
         method: 'DELETE',
       },
     );

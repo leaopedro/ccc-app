@@ -2,7 +2,12 @@ import { ACCOUNT_DISABLED_ERROR } from '@ccc/shared/auth';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+// ../client imports react-native directly (for the x-ccc-platform header)
+// and expo-constants, which also transitively pulls in react-native. Its
+// Flow-flavored `import typeof` syntax vitest's SSR transform cannot parse.
+// Mock both before importing.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { ApiError, authedRequest, registerTokenProvider } = await import('../client');
 

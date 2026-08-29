@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// expo-constants (imported by ../client) transitively pulls in react-native,
-// whose Flow-flavored `import typeof` syntax vitest's SSR transform cannot
-// parse. Mock it before importing, same as
-// api/__tests__/account-disabled.test.ts.
+// ../client imports react-native directly (for the x-ccc-platform header)
+// and expo-constants, which also transitively pulls in react-native. Its
+// Flow-flavored `import typeof` syntax vitest's SSR transform cannot parse.
+// Mock both before importing, same as api/__tests__/account-disabled.test.ts.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { ApiError } = await import('../client');
 const { getValidationFieldErrors } = await import('../errors');

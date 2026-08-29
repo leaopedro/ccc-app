@@ -5,11 +5,12 @@ import type { PickedImage } from '~/lib/upload-image';
 
 import { authCopy } from '~/copy/auth';
 
-// expo-constants (imported transitively via ~/api/client) pulls in
-// react-native, whose Flow-flavored `import typeof` syntax vitest's SSR
-// transform cannot parse. Mock it before importing, same as
-// api/__tests__/errors.test.ts.
+// ~/api/client imports react-native directly (for the x-ccc-platform header)
+// and reads expo-constants at module load, which also pulls in react-native.
+// Its Flow-flavored `import typeof` syntax vitest's SSR transform cannot
+// parse. Mock both before importing, same as api/__tests__/errors.test.ts.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { ApiError } = await import('~/api/client');
 const { buildSignupPayload, submitSignup } = await import('./signup-submit');

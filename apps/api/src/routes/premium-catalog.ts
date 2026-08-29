@@ -75,8 +75,26 @@ const serializeAddonModule = (module: DbPremiumAddonModule) => ({
 });
 
 export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
+  // `trustProxy` is NOT set in app.ts, so behind Railway `req.ip` is the edge
+  // proxy's address for every caller — this key collapses to ONE GLOBAL
+  // BUCKET, not a per-client limit. Enabling trustProxy would fix that, but
+  // it changes every rate limit in the app and is its own task (final
+  // review, Important 3), not this one.
+  //
+  // Given that, this ceiling is not abuse protection — it is a
+  // database-protection backstop against a runaway client (a retry loop,
+  // a bad deploy). It must clear ordinary fleet-wide traffic on its own:
+  // `usePremiumSlot` refetches GET /api/plans on every app foreground, and
+  // the minha-assinatura path alone mounts three independent callers of
+  // `usePremiumPlans` (PlanosScreen, MinhaAssinaturaScreen,
+  // useSubscriptionsGate), each with its own fetch. A single push
+  // notification foregrounds the whole membership at once, so the bucket
+  // has to absorb every installed app's foreground burst inside the same
+  // one-minute window without tripping. 6000/min (100 req/s) clears that
+  // with wide margin for this club's membership size while still catching a
+  // genuine runaway loop.
   await app.register(rateLimit, {
-    max: 60,
+    max: 6000,
     timeWindow: '1 minute',
     hook: 'preHandler',
     keyGenerator: (req) => `premium-catalog:${req.ip}`,

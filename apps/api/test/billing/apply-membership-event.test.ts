@@ -354,6 +354,126 @@ describe('applyMembershipEvent', () => {
     expect(garage.premiumUntil!.toISOString()).toBe(futureDate.toISOString());
   });
 
+  // -- expired + sibling membership (LIVE_MEMBERSHIP_STATUSES widening, task 1) --
+  //
+  // `hasActiveLiveMembership` in handleExpired now treats `trialing` and
+  // `paused` as live, same as the precheck route. These two cases prove the
+  // sibling-membership branch actually holds the snapshot instead of just
+  // asserting a value that would pass on unrelated code paths: each seeds a
+  // premiumUntil that is already in the past (same setup as the "no other
+  // live membership" case above, which clears), but adds a second live
+  // membership row on the SAME garage. Pairing with that clearing test
+  // proves this isn't vacuous — the only difference is the sibling row.
+
+  const seedSiblingMembership = (
+    gid: string,
+    status: 'trialing' | 'paused',
+  ): ReturnType<typeof prisma.premiumMembership.create> =>
+    prisma.premiumMembership.create({
+      data: {
+        garageId: gid,
+        provider: 'stripe',
+        providerCustomerRef: `cus_sibling_${status}`,
+        providerSubRef: `sub_sibling_${status}`,
+        tier: 'gold',
+        cadence: 'monthly',
+        status,
+        currentPeriodStart: new Date('2026-05-01'),
+        currentPeriodEnd: new Date('2026-12-01'),
+        baseAmountCents: 2990,
+        devFeePercent: 10,
+        devFeeAmountCents: 299,
+        grossAmountCents: 3289,
+        currency: 'BRL',
+      },
+    });
+
+  it('expired: does NOT clear Garage snapshot when a trialing sibling membership exists', async () => {
+    const { user } = await createUser({ email: 'am8b@jdm.test', verified: true });
+    const gid = await garageId(user.id);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+      await applyMembershipEvent(
+        tx,
+        buildActivatedEvt(gid, {
+          currentPeriodEnd: new Date('2020-01-01'), // already in the past
+        }),
+      );
+    });
+
+    // Same past-premiumUntil setup as the "clears" case above — the only
+    // difference here is the sibling membership seeded next.
+    await prisma.garage.update({
+      where: { id: gid },
+      data: { premiumUntil: new Date('2020-01-01') },
+    });
+
+    await seedSiblingMembership(gid, 'trialing');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+      await applyMembershipEvent(tx, {
+        kind: 'subscription.expired',
+        provider: 'stripe',
+        providerSubRef: 'sub_test001',
+        cancelledAt: new Date('2020-01-01'),
+      });
+    });
+
+    const expiredMembership = await prisma.premiumMembership.findFirst({
+      where: { garageId: gid, providerSubRef: 'sub_test001' },
+    });
+    expect(expiredMembership!.status).toBe('expired');
+
+    // Snapshot must be preserved: the trialing sibling counts as a live
+    // membership even though premiumUntil is already in the past.
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { id: gid } });
+    expect(garage.premiumTier).toBe('gold');
+    expect(garage.premiumUntil).not.toBeNull();
+  });
+
+  it('expired: does NOT clear Garage snapshot when a paused sibling membership exists', async () => {
+    const { user } = await createUser({ email: 'am8c@jdm.test', verified: true });
+    const gid = await garageId(user.id);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+      await applyMembershipEvent(
+        tx,
+        buildActivatedEvt(gid, {
+          currentPeriodEnd: new Date('2020-01-01'),
+        }),
+      );
+    });
+
+    await prisma.garage.update({
+      where: { id: gid },
+      data: { premiumUntil: new Date('2020-01-01') },
+    });
+
+    await seedSiblingMembership(gid, 'paused');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+      await applyMembershipEvent(tx, {
+        kind: 'subscription.expired',
+        provider: 'stripe',
+        providerSubRef: 'sub_test001',
+        cancelledAt: new Date('2020-01-01'),
+      });
+    });
+
+    const expiredMembership = await prisma.premiumMembership.findFirst({
+      where: { garageId: gid, providerSubRef: 'sub_test001' },
+    });
+    expect(expiredMembership!.status).toBe('expired');
+
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { id: gid } });
+    expect(garage.premiumTier).toBe('gold');
+    expect(garage.premiumUntil).not.toBeNull();
+  });
+
   it('past_due: flips status only — no snapshot change', async () => {
     const { user } = await createUser({ email: 'am9@jdm.test', verified: true });
     const gid = await garageId(user.id);

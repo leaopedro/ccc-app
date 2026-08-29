@@ -22,6 +22,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PublicProfile } from '@ccc/shared/profile';
+import { profileCopy } from '~/copy/profile';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -43,6 +44,20 @@ const hookState = vi.hoisted(() => ({
 
 vi.mock('~/hooks/usePremiumSubscription', () => ({
   usePremiumSubscription: () => hookState.value,
+}));
+
+// Fix (final review, Critical 1): the "Assinatura" menu row now also reads
+// the platform gate (usePremiumPlans), so a gated build does not offer a
+// second path back to /assinaturas -> /inicio (the gate's own redirect
+// target). Defaults to true so the existing tests below (which only assert
+// on the premium badge/label, not this row) keep exercising the same
+// behaviour as before this fix.
+const plansHookState = vi.hoisted(() => ({
+  value: { subscriptionsEnabled: true } as { subscriptionsEnabled: boolean },
+}));
+
+vi.mock('~/hooks/usePremiumPlans', () => ({
+  usePremiumPlans: () => plansHookState.value,
 }));
 
 vi.mock('~/hooks/useUnreadCount', () => ({
@@ -177,6 +192,13 @@ const hookResult = (over: Partial<HookResult>): HookResult => ({
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
+// `PREMIUM_BILLING_ENABLED` (~/lib/premium-runtime) is a top-level const
+// evaluated from `process.env.EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` at
+// module-load time, not re-read per render. Same pattern as
+// PremiumScreen.test.tsx: `vi.resetModules()` plus a dynamic `import()` of
+// the route for every test, so each test's env var is actually observed.
+const FLAG_VAR = 'EXPO_PUBLIC_PREMIUM_BILLING_ENABLED';
+
 describe('ProfileMenuScreen (app/(app)/profile/index.tsx)', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -186,6 +208,11 @@ describe('ProfileMenuScreen (app/(app)/profile/index.tsx)', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    vi.resetModules();
+    // Preserves the pre-existing default (env var unset) every other test in
+    // this file already relies on.
+    process.env[FLAG_VAR] = 'false';
+    plansHookState.value = { subscriptionsEnabled: true };
     getProfileMock.mockReset();
     getProfileMock.mockResolvedValue(baseProfile);
   });
@@ -196,6 +223,7 @@ describe('ProfileMenuScreen (app/(app)/profile/index.tsx)', () => {
       await flush();
     });
     container.remove();
+    delete process.env[FLAG_VAR];
   });
 
   const renderScreen = async () => {
@@ -263,5 +291,35 @@ describe('ProfileMenuScreen (app/(app)/profile/index.tsx)', () => {
     hookState.value = hookResult({ subscription: { active: true, tier: 'gold' } });
     await renderScreen();
     expect(text()).not.toContain('Premium Gold');
+  });
+
+  // Fix (final review, Critical 1): this row pushes /assinaturas, which
+  // redirects right back to /inicio when the platform gate is off — a
+  // gated build must not offer that bounce. Same standard already applied
+  // to the /inicio upsell pill (MinhaAssinaturaScreen, Task 10).
+  describe('assinatura menu row (platform gate)', () => {
+    it('hides the row when billing is on but the platform gate is off', async () => {
+      process.env[FLAG_VAR] = 'true';
+      plansHookState.value = { subscriptionsEnabled: false };
+      hookState.value = hookResult({ subscription: null });
+      await renderScreen();
+      expect(text()).not.toContain(profileCopy.menu.assinatura);
+    });
+
+    it('shows the row when billing is on and the platform gate is on', async () => {
+      process.env[FLAG_VAR] = 'true';
+      plansHookState.value = { subscriptionsEnabled: true };
+      hookState.value = hookResult({ subscription: null });
+      await renderScreen();
+      expect(text()).toContain(profileCopy.menu.assinatura);
+    });
+
+    it('hides the row when billing is off, regardless of the platform gate', async () => {
+      process.env[FLAG_VAR] = 'false';
+      plansHookState.value = { subscriptionsEnabled: true };
+      hookState.value = hookResult({ subscription: null });
+      await renderScreen();
+      expect(text()).not.toContain(profileCopy.menu.assinatura);
+    });
   });
 });

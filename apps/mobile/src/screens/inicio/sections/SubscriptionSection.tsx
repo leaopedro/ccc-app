@@ -16,16 +16,25 @@ import type { PremiumStatus } from '@ccc/shared/premium';
 
 export function SubscriptionSection({
   status,
+  subscriptionsEnabled,
   onManage,
   onSubscribe,
 }: {
   status: PremiumStatus | null;
+  subscriptionsEnabled: boolean;
   onManage: () => void;
   onSubscribe: () => void;
 }) {
   if (!status) return null;
 
   if (!status.active) {
+    // Fix (final review, Critical 1): /inicio is the very route the platform
+    // gate redirects TO, so this pill would bounce a gated member straight
+    // back to where they already are. Same standard as MinhaAssinaturaScreen
+    // (Task 10): a button that bounces is worse than no button, so it only
+    // renders when the gate is on. No informative state either — there is
+    // nothing left to show a non-member here when the whole entry point is off.
+    if (!subscriptionsEnabled) return null;
     return (
       <View style={styles.wrap}>
         <SectionLabel label={inicioCopy.sections.subscription} />

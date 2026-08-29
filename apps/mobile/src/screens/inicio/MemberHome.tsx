@@ -30,6 +30,7 @@ import { useAuth } from '~/auth/context';
 import { notificationsCopy } from '~/copy/notifications';
 import { useClubStats } from '~/hooks/useClubStats';
 import { useHomeContent } from '~/hooks/useHomeContent';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { useUnreadCount } from '~/hooks/useUnreadCount';
 import { AppHeader } from '~/screens/inicio/components/AppHeader';
 import { p } from '~/screens/inicio/palette';
@@ -51,6 +52,10 @@ export function MemberHome() {
   const { stats } = useClubStats();
   const { profile, nextEvent, tickets, garage, premium, box, refreshAll } = useMemberHomeData();
   const { count: unreadCount } = useUnreadCount(true);
+  // Platform gate (final review, Critical 1) — governs only the upsell pill,
+  // which starts a NEW purchase. Same source SubscriptionSection's sibling
+  // screens (MinhaAssinaturaScreen, PlanosScreen) already read.
+  const { subscriptionsEnabled } = usePremiumPlans();
 
   // Pull-to-refresh recovery affordance (final review, Blocker 4). Reflects
   // the five phase-1 sources refreshAll actually re-fetches — box is phase-2
@@ -131,6 +136,7 @@ export function MemberHome() {
 
         <SubscriptionSection
           status={premium.data}
+          subscriptionsEnabled={subscriptionsEnabled}
           onManage={() => router.push('/assinaturas/minha-assinatura')}
           onSubscribe={() => router.push('/assinaturas')}
         />

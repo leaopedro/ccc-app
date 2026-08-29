@@ -491,27 +491,62 @@ describe('SubscriptionSection', () => {
     const { SubscriptionSection } = await import('../SubscriptionSection');
     const onManage = vi.fn();
     render(
-      <SubscriptionSection status={ACTIVE_STATUS} onManage={onManage} onSubscribe={vi.fn()} />,
+      <SubscriptionSection
+        status={ACTIVE_STATUS}
+        subscriptionsEnabled={true}
+        onManage={onManage}
+        onSubscribe={vi.fn()}
+      />,
     );
     expect(container.textContent).toContain('Gold');
     click('inicio-subscription-active');
     expect(onManage).toHaveBeenCalled();
   });
 
-  it('shows the upsell and calls onSubscribe when inactive', async () => {
+  it('shows the upsell and calls onSubscribe when inactive and the platform gate is on', async () => {
     const { SubscriptionSection } = await import('../SubscriptionSection');
     const onSubscribe = vi.fn();
     render(
-      <SubscriptionSection status={INACTIVE_STATUS} onManage={vi.fn()} onSubscribe={onSubscribe} />,
+      <SubscriptionSection
+        status={INACTIVE_STATUS}
+        subscriptionsEnabled={true}
+        onManage={vi.fn()}
+        onSubscribe={onSubscribe}
+      />,
     );
     expect(container.textContent).toContain(inicioCopy.cards.subscribeUpsell);
     click('inicio-subscription-upsell');
     expect(onSubscribe).toHaveBeenCalled();
   });
 
+  // Fix (final review, Critical 1): /inicio is the platform gate's own
+  // redirect target, so this pill (which pushes /assinaturas) must not
+  // render when the gate is off — it would bounce a gated member straight
+  // back to /inicio. Same standard as MinhaAssinaturaScreen (Task 10): a
+  // button that bounces is worse than no button.
+  it('renders null when inactive and the platform gate is off', async () => {
+    const { SubscriptionSection } = await import('../SubscriptionSection');
+    render(
+      <SubscriptionSection
+        status={INACTIVE_STATUS}
+        subscriptionsEnabled={false}
+        onManage={vi.fn()}
+        onSubscribe={vi.fn()}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
   it('renders null when status is null', async () => {
     const { SubscriptionSection } = await import('../SubscriptionSection');
-    render(<SubscriptionSection status={null} onManage={vi.fn()} onSubscribe={vi.fn()} />);
+    render(
+      <SubscriptionSection
+        status={null}
+        subscriptionsEnabled={true}
+        onManage={vi.fn()}
+        onSubscribe={vi.fn()}
+      />,
+    );
     expect(container.firstChild).toBeNull();
   });
 });

@@ -20,12 +20,15 @@ vi.mock('./usePremiumSubscription', () => ({
     refresh: () => Promise.resolve(),
   }),
 }));
-const plansState: { current: { subscriptionsEnabled: boolean } } = {
-  current: { subscriptionsEnabled: true },
+type PlansState = { subscriptionsEnabled: boolean; loading: boolean; error: boolean };
+const plansState: { current: PlansState } = {
+  current: { subscriptionsEnabled: true, loading: false, error: false },
 };
 vi.mock('./usePremiumPlans', () => ({
   usePremiumPlans: () => ({
     subscriptionsEnabled: plansState.current.subscriptionsEnabled,
+    loading: plansState.current.loading,
+    error: plansState.current.error,
     refresh: () => Promise.resolve(),
   }),
 }));
@@ -57,7 +60,7 @@ beforeEach(() => {
   last = undefined;
   for (const k of Object.keys(store)) delete store[k];
   subState.current = { subscription: { active: false }, loading: false, error: false };
-  plansState.current = { subscriptionsEnabled: true };
+  plansState.current = { subscriptionsEnabled: true, loading: false, error: false };
 });
 
 describe('usePremiumSlot', () => {
@@ -83,7 +86,7 @@ describe('usePremiumSlot', () => {
 
   it('empties the slot for a free user when subscriptions are gated', async () => {
     subState.current = { subscription: { active: false }, loading: false, error: false };
-    plansState.current = { subscriptionsEnabled: false };
+    plansState.current = { subscriptionsEnabled: false, loading: false, error: false };
     const root = createRoot(document.createElement('div'));
     await act(async () => {
       root.render(<Probe />);
@@ -94,7 +97,7 @@ describe('usePremiumSlot', () => {
 
   it('keeps caixa for an active member even when subscriptions are gated', async () => {
     subState.current = { subscription: { active: true }, loading: false, error: false };
-    plansState.current = { subscriptionsEnabled: false };
+    plansState.current = { subscriptionsEnabled: false, loading: false, error: false };
     const root = createRoot(document.createElement('div'));
     await act(async () => {
       root.render(<Probe />);
@@ -115,5 +118,48 @@ describe('usePremiumSlot', () => {
     expect(last).toBe('caixa');
     // And the cached `true` is not clobbered by the failed request.
     expect(store['caixa.premiumActive']).toBe('true');
+  });
+
+  // Fix (final review, Important 3): the gate used to default to `false`
+  // (fail-closed) on ANY plans error/loading state, which leaked to
+  // web/Android — platforms where the gate is never actually off — and hid
+  // the assinaturas tab there too. It must now fall back to the last
+  // known-good persisted value, exactly like `premiumActive` above.
+  it('keeps the cached gate=true on a transient /api/plans error instead of hiding the tab', async () => {
+    store['caixa.subscriptionsEnabled'] = 'true';
+    subState.current = { subscription: { active: false }, loading: false, error: false };
+    plansState.current = { subscriptionsEnabled: false, loading: false, error: true };
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      await flush();
+    });
+    expect(last).toBe('assinaturas');
+    // And the cached `true` is not clobbered by the failed request.
+    expect(store['caixa.subscriptionsEnabled']).toBe('true');
+  });
+
+  it('persists a known-good gate value once the plans fetch resolves', async () => {
+    subState.current = { subscription: { active: false }, loading: false, error: false };
+    plansState.current = { subscriptionsEnabled: true, loading: false, error: false };
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      await flush();
+    });
+    expect(store['caixa.subscriptionsEnabled']).toBe('true');
+  });
+
+  // The deliberate fail-closed default must survive: with nothing ever
+  // stored and the plans fetch itself failing, the gate still reads as off.
+  it('still fails closed on a plans error when nothing has ever been cached', async () => {
+    subState.current = { subscription: { active: false }, loading: false, error: false };
+    plansState.current = { subscriptionsEnabled: false, loading: false, error: true };
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      await flush();
+    });
+    expect(last).toBe('none');
   });
 });

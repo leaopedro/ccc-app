@@ -154,3 +154,21 @@ export type LiveMembershipStatus = (typeof LIVE_MEMBERSHIP_STATUSES)[number];
 
 export const isLiveMembershipStatus = (status: string): status is LiveMembershipStatus =>
   (LIVE_MEMBERSHIP_STATUSES as readonly string[]).includes(status);
+
+/**
+ * Rejeicoes de checkout premium que o cliente consegue tratar. Sao erros de
+ * combinacao, nao de disponibilidade: repetir a mesma requisicao nunca
+ * funciona, entao 503 e a resposta errada.
+ */
+export const PREMIUM_CHECKOUT_ERROR_CODES = ['ANNUAL_CADENCE_ADDON_UNSUPPORTED'] as const;
+
+export type PremiumCheckoutErrorCode = (typeof PREMIUM_CHECKOUT_ERROR_CODES)[number];
+
+export const premiumCheckoutRejectionSchema = z.object({
+  error: z.literal('PremiumCheckoutRejected'),
+  code: z.enum(PREMIUM_CHECKOUT_ERROR_CODES),
+  message: z.string().min(1),
+  addonKeys: z.array(z.string()),
+});
+
+export type PremiumCheckoutRejection = z.infer<typeof premiumCheckoutRejectionSchema>;

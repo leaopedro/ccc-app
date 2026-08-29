@@ -19,9 +19,11 @@ import {
   LIVE_MEMBERSHIP_STATUSES,
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
+  premiumCheckoutRejectionSchema,
   premiumCheckoutRequestSchema,
   premiumCheckoutResponseSchema,
   premiumStatusSchema,
+  type PremiumCheckoutRejection,
 } from '@ccc/shared/premium';
 import { premiumInvoicesResponseSchema } from '@ccc/shared/premium-subscription';
 import rateLimit from '@fastify/rate-limit';
@@ -96,6 +98,36 @@ const mintSubscriptionCheckoutSession = async (
     'me-premium: every checkout session mint came back non-open; refusing to return a dead url',
   );
   return null;
+};
+
+/**
+ * Decisao 2 (2026-08-29): `PremiumAddonModule` so tem `monthlyDeltaCents` e
+ * uma unica `stripePriceId` — add-on e mensal por construcao. A Stripe
+ * recusa uma sessao de assinatura com intervalos misturados, e ate agora
+ * essa recusa vinha como 503 generico do catch de `checkoutHandler`. Um 503
+ * diz "tente de novo", e tentar de novo nunca funciona: o modelo ja prova a
+ * incompatibilidade sem round-trip nenhum a Stripe.
+ *
+ * Exportada para que a rota nativa de assinatura (Task 9, mesmo arquivo)
+ * reuse este mesmo guard em vez de reimplementar a checagem — caso
+ * contrario o caminho nativo aceitaria uma combinacao que o checkout
+ * hospedado recusa, e a Stripe acabaria recusando-a de novo la na frente
+ * como um 503, exatamente o resultado que esta decisao existe para eliminar.
+ *
+ * Retorna o payload de rejeicao (pronto para `reply.status(422).send(...)`)
+ * quando a combinacao e invalida, ou `null` quando pode prosseguir.
+ */
+export const checkAnnualCadenceAddonRejection = (
+  cadence: 'monthly' | 'annual',
+  addonKeys: readonly string[],
+): PremiumCheckoutRejection | null => {
+  if (cadence !== 'annual' || addonKeys.length === 0) return null;
+  return premiumCheckoutRejectionSchema.parse({
+    error: 'PremiumCheckoutRejected',
+    code: 'ANNUAL_CADENCE_ADDON_UNSUPPORTED',
+    message: 'Modulos adicionais sao mensais e nao podem ser contratados no plano anual.',
+    addonKeys: [...addonKeys],
+  });
 };
 
 export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
@@ -217,6 +249,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     }
     const { cadence, planSlug, addonKeys } = parsed.data;
     const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
+
+    const cadenceAddonRejection = checkAnnualCadenceAddonRejection(cadence, selectedAddonKeys);
+    if (cadenceAddonRejection) {
+      return reply.status(422).send(cadenceAddonRejection);
+    }
 
     // Resolve the target tier. Default 'gold' keeps the legacy single-tier
     // env flow working when no planSlug is supplied. When planSlug is given

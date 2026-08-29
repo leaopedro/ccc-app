@@ -19,9 +19,10 @@ import {
   premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
 } from '@ccc/shared/premium-catalog';
-import type { FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { premiumCatalogRoutes } from '../../src/routes/premium-catalog.js';
 import { makeApp, resetDatabase } from '../helpers.js';
 
 type PlanSeed = {
@@ -373,6 +374,60 @@ describe('platform gate on the catalog reads', () => {
     });
     expect(res.headers.vary).toContain('x-ccc-platform');
     expect(res.headers['cache-control']).toContain('no-store');
+  });
+
+  // @fastify/cors is registered ahead of this plugin in app.ts and, when
+  // CORS_ORIGINS is non-empty, adds `Vary: Origin` via its own onRequest
+  // hook. `reply.header('Vary', ...)` REPLACES rather than appends, so a
+  // naive hook here would silently drop the CORS entry. This test forces
+  // CORS_ORIGINS on for one app instance (the default test env leaves it
+  // empty — see test/setup.ts — which disables CORS entirely and means it
+  // never sets Vary at all) and asserts both entries survive.
+  it('preserves an existing Vary: Origin set by CORS alongside x-ccc-platform', async () => {
+    process.env.CORS_ORIGINS = 'https://example.com';
+    const corsEnabled = await makeApp();
+    try {
+      const res = await corsEnabled.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'web', origin: 'https://example.com' },
+      });
+      const vary = (res.headers.vary ?? '')
+        .toString()
+        .split(',')
+        .map((part) => part.trim().toLowerCase());
+      expect(vary).toContain('origin');
+      expect(vary).toContain('x-ccc-platform');
+      expect(res.headers['cache-control']).toContain('no-store');
+    } finally {
+      delete process.env.CORS_ORIGINS;
+      await corsEnabled.close();
+    }
+  });
+
+  // Guards the dedup branch of the onSend hook itself: if x-ccc-platform is
+  // already present on Vary by the time our hook runs, it must not be
+  // appended a second time. In production only CORS precedes this plugin's
+  // hook (covered above, and it only ever adds `Origin`), so a bare Fastify
+  // instance is used here to plant `Vary: x-ccc-platform` via an onSend hook
+  // registered ahead of the real premiumCatalogRoutes plugin — still a real
+  // request going through the real route/hook code, just without the rest of
+  // the app.ts stack.
+  it('does not duplicate x-ccc-platform when Vary already lists it', async () => {
+    const standalone = Fastify();
+    standalone.decorateRequest('subscriptionsEnabled', true);
+    standalone.addHook('onSend', async (_request, reply, payload) => {
+      reply.header('Vary', 'x-ccc-platform');
+      return payload;
+    });
+    await standalone.register(premiumCatalogRoutes);
+    try {
+      const res = await standalone.inject({ method: 'GET', url: '/api/plans' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers.vary).toBe('x-ccc-platform');
+    } finally {
+      await standalone.close();
+    }
   });
 
   it('still 404s an unknown slug', async () => {

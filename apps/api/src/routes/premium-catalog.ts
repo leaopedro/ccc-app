@@ -84,8 +84,28 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
 
   // The body varies on x-ccc-platform. Without both headers, any shared cache
   // may hand an iOS client the web answer.
+  //
+  // `reply.header('Vary', ...)` REPLACES rather than appends. @fastify/cors is
+  // registered globally ahead of this plugin and may already have set
+  // `Vary: Origin` on the same response; overwriting it here would silently
+  // drop that entry. Append instead: read whatever Vary is already present
+  // (string, string[], or unset — `getHeader` can return any of those) and
+  // add x-ccc-platform only if it is not already listed.
   app.addHook('onSend', async (_request, reply) => {
-    void reply.header('Vary', 'x-ccc-platform');
+    const existing = reply.getHeader('Vary');
+    const existingValues = Array.isArray(existing)
+      ? existing
+      : existing === undefined
+        ? []
+        : [String(existing)];
+    const parts = existingValues
+      .flatMap((value) => value.split(','))
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!parts.some((part) => part.toLowerCase() === 'x-ccc-platform')) {
+      parts.push('x-ccc-platform');
+    }
+    void reply.header('Vary', parts.join(', '));
     void reply.header('Cache-Control', 'no-store');
   });
 

@@ -170,13 +170,15 @@ describe('ContratarScreen platform gate', () => {
   };
 
   it('does not render the subscribe CTA when the gate is off', async () => {
-    getPremiumPlan.mockResolvedValue({ plan: goldPlan, subscriptionsEnabled: false });
+    // Flattened, not nested under `plan` (final review, Important 2) — the
+    // real route now returns the plan fields at the top level.
+    getPremiumPlan.mockResolvedValue({ ...goldPlan, subscriptionsEnabled: false });
     await renderScreen();
     expect(container.querySelector('[data-testid="contratar-cta"]')).toBeNull();
   });
 
   it('renders the subscribe CTA when the gate is on', async () => {
-    getPremiumPlan.mockResolvedValue({ plan: goldPlan, subscriptionsEnabled: true });
+    getPremiumPlan.mockResolvedValue({ ...goldPlan, subscriptionsEnabled: true });
     await renderScreen();
     expect(container.querySelector('[data-testid="contratar-cta"]')).not.toBeNull();
   });

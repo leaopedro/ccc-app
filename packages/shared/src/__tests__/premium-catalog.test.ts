@@ -23,9 +23,18 @@ describe('premium catalog response schemas', () => {
     ).toMatchObject({ subscriptionsEnabled: false });
   });
 
-  it('wraps the single-plan response so it can carry the gate', () => {
-    expect(
-      premiumPlanDetailResponseSchema.parse({ plan, subscriptionsEnabled: true }),
-    ).toMatchObject({ subscriptionsEnabled: true, plan: { slug: 'fundador' } });
+  it('flattens the single-plan response with the gate, not nested under a `plan` key', () => {
+    // Fix (final review, Important 2): this route used to wrap the plan in
+    // `{ plan, subscriptionsEnabled }`. Already-shipped binaries call this
+    // route and parse the bare plan shape directly, so re-nesting it would
+    // throw on every installed app. The flattened shape must carry every
+    // `premiumPlanSchema` field alongside the gate, at the top level.
+    const parsed = premiumPlanDetailResponseSchema.parse({ ...plan, subscriptionsEnabled: true });
+    expect(parsed).toMatchObject({ ...plan, subscriptionsEnabled: true });
+    expect(parsed).not.toHaveProperty('plan');
+  });
+
+  it('requires subscriptionsEnabled on the single-plan response too', () => {
+    expect(() => premiumPlanDetailResponseSchema.parse(plan)).toThrow();
   });
 });

@@ -238,11 +238,15 @@ describe('GET /api/plans/:slug', () => {
 
     const res = await app.inject({ method: 'GET', url: '/api/plans/gold' });
     expect(res.statusCode).toBe(200);
-    const { plan } = premiumPlanDetailResponseSchema.parse(res.json());
+    // Flattened with the gate, NOT nested under a `plan` key (final review,
+    // Important 2) — an already-installed binary parses the bare plan shape
+    // directly, so a nested envelope would break every one of them.
+    const plan = premiumPlanDetailResponseSchema.parse(res.json());
     expect(plan.slug).toBe('gold');
     expect(plan.tier).toBe('gold');
     expect(plan.prices).toHaveLength(1);
     expect(plan.benefits).toHaveLength(1);
+    expect(res.json()).not.toHaveProperty('plan');
   });
 
   it('returns 404 for an unknown slug', async () => {
@@ -342,7 +346,7 @@ describe('platform gate on the catalog reads', () => {
     }
   });
 
-  it('wraps the single-plan response and carries the gate', async () => {
+  it('flattens the single-plan response with the gate, not nested under `plan`', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/plans/fundador',
@@ -350,9 +354,10 @@ describe('platform gate on the catalog reads', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
-      plan: { slug: 'fundador' },
+      slug: 'fundador',
       subscriptionsEnabled: true,
     });
+    expect(res.json()).not.toHaveProperty('plan');
   });
 
   it('carries the gate on the addon modules read', async () => {

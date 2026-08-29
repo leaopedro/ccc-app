@@ -128,8 +128,11 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
       include: PLAN_INCLUDE,
     });
     if (!plan) return reply.status(404).send({ error: 'NotFound' });
+    // Flattened (final review, Important 2), NOT nested under `plan` — see
+    // the schema comment in @ccc/shared/premium-catalog for why a nested
+    // envelope would break every already-installed binary.
     return premiumPlanDetailResponseSchema.parse({
-      plan: serializePlan(plan),
+      ...serializePlan(plan),
       subscriptionsEnabled: request.subscriptionsEnabled,
     });
   });

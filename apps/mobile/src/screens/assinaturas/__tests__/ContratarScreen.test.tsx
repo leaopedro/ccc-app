@@ -172,7 +172,9 @@ describe('ContratarScreen', () => {
 
     platform.OS = 'android';
     getPremiumPlan.mockReset();
-    getPremiumPlan.mockResolvedValue({ plan: PLAN, subscriptionsEnabled: true });
+    // Flattened, not nested under `plan` (final review, Important 2) — the
+    // real route now returns the plan fields at the top level.
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: true });
     startPremiumCheckout.mockReset();
     pollSubscriptionActive.mockReset();
     showToast.mockReset();

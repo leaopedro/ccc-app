@@ -129,7 +129,9 @@ describe('PlanoDetalheScreen', () => {
     root = createRoot(container);
     routerPush.mockClear();
     getPremiumPlan.mockReset();
-    getPremiumPlan.mockResolvedValue({ plan: SAMPLE, subscriptionsEnabled: true });
+    // Flattened, not nested under `plan` (final review, Important 2) — the
+    // real route now returns the plan fields at the top level.
+    getPremiumPlan.mockResolvedValue({ ...SAMPLE, subscriptionsEnabled: true });
   });
 
   afterEach(async () => {
@@ -171,7 +173,7 @@ describe('PlanoDetalheScreen', () => {
   });
 
   it('does not render the Assinar CTA when the platform gate is off', async () => {
-    getPremiumPlan.mockResolvedValue({ plan: SAMPLE, subscriptionsEnabled: false });
+    getPremiumPlan.mockResolvedValue({ ...SAMPLE, subscriptionsEnabled: false });
     await renderScreen();
     expect(container.querySelector('[data-testid="detalhe-assinar"]')).toBeNull();
     // The rest of the plan detail still renders — only the CTA is gated.

@@ -77,8 +77,12 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
     setLoading(true);
     setError(false);
     try {
+      // Response is the plan fields FLATTENED with subscriptionsEnabled, not
+      // nested under `plan` (final review, Important 2) — old installed
+      // binaries parse the bare plan shape, so a nested envelope would have
+      // broken every one of them the moment the API deploys.
       const response = await getPremiumPlan(slug);
-      setPlan(response.plan);
+      setPlan(response);
       setSubscriptionsEnabled(response.subscriptionsEnabled);
     } catch {
       setError(true);

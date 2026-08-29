@@ -62,12 +62,17 @@ export const premiumPlanListResponseSchema = z.object({
 export type PremiumPlanListResponse = z.infer<typeof premiumPlanListResponseSchema>;
 
 /**
- * GET /api/plans/:slug — wrapped so it can carry the gate alongside the plan.
- * Previously this route returned a bare plan; the envelope is a breaking
- * change for `getPremiumPlan` in the mobile client, updated in the same PR.
+ * GET /api/plans/:slug — the plan fields FLATTENED with the gate, not
+ * nested under a `plan` key. Already-installed binaries call this route and
+ * parse the bare plan shape (`premiumPlanSchema`, which requires `tier`,
+ * `slug`, etc.) directly; a nested `{ plan, subscriptionsEnabled }` envelope
+ * would throw on every one of them the moment this deploys, since a bare
+ * plan object has none of the fields `premiumPlanSchema` requires. Old
+ * clients ignore the extra `subscriptionsEnabled` key; new clients read it.
+ * `premiumPlanSchema` has no field named `subscriptionsEnabled`, so the
+ * flatten cannot collide.
  */
-export const premiumPlanDetailResponseSchema = z.object({
-  plan: premiumPlanSchema,
+export const premiumPlanDetailResponseSchema = premiumPlanSchema.extend({
   subscriptionsEnabled: z.boolean(),
 });
 

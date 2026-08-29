@@ -62,7 +62,7 @@ function OuroBackground() {
   );
 }
 
-function PlanCard({ plan }: { plan: PremiumPlan }) {
+function PlanCard({ plan, showCta }: { plan: PremiumPlan; showCta: boolean }) {
   const t = tierStyle(plan.tier);
   const visual = TIER_VISUAL[plan.tier];
   const isOuro = plan.tier === 'gold';
@@ -122,33 +122,35 @@ function PlanCard({ plan }: { plan: PremiumPlan }) {
           ))}
         </View>
 
-        {t.btnBg === 'gradient' ? (
-          <Pressable
-            onPress={() => openPlan(plan.slug)}
-            accessibilityRole="button"
-            accessibilityLabel={ctaLabel}
-            style={styles.ctaGradient}
-            testID={`assinar-${plan.tier}`}
-          >
-            <LinearGradient
-              colors={[c.goldLight, c.goldDeep]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>{ctaLabel}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => openPlan(plan.slug)}
-            accessibilityRole="button"
-            accessibilityLabel={ctaLabel}
-            style={[styles.cta, { borderColor: t.btnBorder }]}
-            testID={`assinar-${plan.tier}`}
-          >
-            <Text style={[styles.ctaText, { color: t.btnColor }]}>{ctaLabel}</Text>
-          </Pressable>
-        )}
+        {showCta ? (
+          t.btnBg === 'gradient' ? (
+            <Pressable
+              onPress={() => openPlan(plan.slug)}
+              accessibilityRole="button"
+              accessibilityLabel={ctaLabel}
+              style={styles.ctaGradient}
+              testID={`assinar-${plan.tier}`}
+            >
+              <LinearGradient
+                colors={[c.goldLight, c.goldDeep]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={[styles.ctaText, { color: t.btnColor }]}>{ctaLabel}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => openPlan(plan.slug)}
+              accessibilityRole="button"
+              accessibilityLabel={ctaLabel}
+              style={[styles.cta, { borderColor: t.btnBorder }]}
+              testID={`assinar-${plan.tier}`}
+            >
+              <Text style={[styles.ctaText, { color: t.btnColor }]}>{ctaLabel}</Text>
+            </Pressable>
+          )
+        ) : null}
       </View>
     </Pressable>
   );
@@ -192,7 +194,7 @@ function Header() {
 }
 
 export default function PlanosScreen({ showAll = false }: { showAll?: boolean }) {
-  const { plans, loading, error, refresh } = usePremiumPlans();
+  const { plans, loading, error, subscriptionsEnabled, refresh } = usePremiumPlans();
   const { modules } = usePremiumAddonModules();
   const { subscription, loading: subLoading } = usePremiumSubscription();
 
@@ -256,7 +258,7 @@ export default function PlanosScreen({ showAll = false }: { showAll?: boolean })
       ) : (
         <View style={styles.plans}>
           {plans.map((plan) => (
-            <PlanCard key={plan.slug} plan={plan} />
+            <PlanCard key={plan.slug} plan={plan} showCta={subscriptionsEnabled} />
           ))}
         </View>
       )}

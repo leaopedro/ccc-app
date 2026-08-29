@@ -7,12 +7,15 @@ type UsePremiumPlansResult = {
   plans: PremiumPlan[];
   loading: boolean;
   error: boolean;
+  /** Platform gate from the same response — false (safe default) until the first fetch resolves. */
+  subscriptionsEnabled: boolean;
   refresh: () => Promise<void>;
 };
 
 // GET /api/plans (public). Ordered by sortOrder server-side.
 export function usePremiumPlans(): UsePremiumPlansResult {
   const [plans, setPlans] = useState<PremiumPlan[]>([]);
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -22,6 +25,7 @@ export function usePremiumPlans(): UsePremiumPlansResult {
     try {
       const response = await listPremiumPlans();
       setPlans(response.plans);
+      setSubscriptionsEnabled(response.subscriptionsEnabled);
     } catch {
       setError(true);
     } finally {
@@ -33,5 +37,5 @@ export function usePremiumPlans(): UsePremiumPlansResult {
     void refresh();
   }, [refresh]);
 
-  return { plans, loading, error, refresh };
+  return { plans, loading, error, subscriptionsEnabled, refresh };
 }

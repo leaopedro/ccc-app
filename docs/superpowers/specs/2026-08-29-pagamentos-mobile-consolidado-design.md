@@ -87,6 +87,36 @@ instalado 22.1.0, `services/stripe/index.ts:282` usa `2026-04-22.dahlia`, e
 `Invoice` tem `confirmation_secret` no topo e não tem `payment_intent`. Único
 item da lista de verificação que passou intacto.
 
+**C10. Google Pay é opt-in, não vem por padrão.** A seção "Android, que os specs
+esqueciam" abaixo afirmava que o Android ganha a folha nativa com Google Pay
+por padrão assim que o `PaymentSheet` entrar. Falso. Em
+`@stripe/stripe-react-native` 0.50.3, `googlePay` é parâmetro explícito de
+`initPaymentSheet` (`PaymentSheet.d.ts:18`, params `:120-135`), e `applePay`
+também (`:16`, `:103`). Nenhum dos dois aparece sem ser pedido. A decisão sobre
+Google Pay continua necessária, mas o risco de entregar sem querer não existe.
+
+**C11. Reembolso parcial não funciona por acidente.** O Spec A, o rastreador e a
+primeira versão deste documento diziam que o reembolso parcial "funciona por
+acidente porque o carrinho gera um único Order". Falso.
+`stripe-webhook.ts:505-516` detecta e **recusa explicitamente** o reembolso
+parcial, alertando com `payment-webhook-partial-refund`. O comportamento é
+deliberado e testável.
+
+**C12. Três documentos já estão corretos.** `docs/stripe.md` já foi reescrito
+para o Casa Car Club e sua seção 6 já mata a afirmação falsa sobre Stripe Tax.
+`docs/revenuecat.md` já está marcado dormente. `docs/observability.md:56-65` já
+cobre os três endpoints de webhook na regra 2 do Sentry; o que falta ali é
+código, porque nada impede que os paths sejam renomeados por baixo do alerta.
+
+**C13. Só três dos oito docs têm o bundle id antigo.** `com.jdmexperience.app`
+literal aparece em `docs/mobile-build.md`, `docs/revenuecat.md` e
+`docs/manual-testing.md`. Os outros cinco carregam marca JDM como domínio, nome
+de projeto ou e-mail, que é trabalho diferente.
+
+**C14. `'Assinaturas em breve.'` está em `copy/assinaturas.ts:101`,** não `:89`,
+e alimenta um ramo `billingUnavailable` vivo em
+`MinhaAssinaturaScreen.tsx:388-395`. Reescrever, não apagar.
+
 ## Estado verificado do código
 
 ### Aberto em produção, apesar de semeado em dev

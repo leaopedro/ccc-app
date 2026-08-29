@@ -20,6 +20,15 @@ vi.mock('./usePremiumSubscription', () => ({
     refresh: () => Promise.resolve(),
   }),
 }));
+const plansState: { current: { subscriptionsEnabled: boolean } } = {
+  current: { subscriptionsEnabled: true },
+};
+vi.mock('./usePremiumPlans', () => ({
+  usePremiumPlans: () => ({
+    subscriptionsEnabled: plansState.current.subscriptionsEnabled,
+    refresh: () => Promise.resolve(),
+  }),
+}));
 vi.mock('../screens/caixa/caixa-enabled', () => ({ isCaixaBuildEnabled: () => true }));
 vi.mock('react-native', () => ({
   AppState: { addEventListener: () => ({ remove: () => {} }) },
@@ -48,6 +57,7 @@ beforeEach(() => {
   last = undefined;
   for (const k of Object.keys(store)) delete store[k];
   subState.current = { subscription: { active: false }, loading: false, error: false };
+  plansState.current = { subscriptionsEnabled: true };
 });
 
 describe('usePremiumSlot', () => {
@@ -69,6 +79,28 @@ describe('usePremiumSlot', () => {
       await flush();
     });
     expect(last).toBe('assinaturas');
+  });
+
+  it('empties the slot for a free user when subscriptions are gated', async () => {
+    subState.current = { subscription: { active: false }, loading: false, error: false };
+    plansState.current = { subscriptionsEnabled: false };
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      await flush();
+    });
+    expect(last).toBe('none');
+  });
+
+  it('keeps caixa for an active member even when subscriptions are gated', async () => {
+    subState.current = { subscription: { active: true }, loading: false, error: false };
+    plansState.current = { subscriptionsEnabled: false };
+    const root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root.render(<Probe />);
+      await flush();
+    });
+    expect(last).toBe('caixa');
   });
 
   it('keeps the cached active entitlement on a transient error, and does not overwrite it', async () => {

@@ -6,7 +6,10 @@
  *   DELETE /api/me/premium/addons/:addonKey    — schedule add-on cancellation
  *
  * All endpoints gate on env.GROWTH_PREMIUM_BILLING_ENABLED (503 when off) and
- * require app.authenticate, mirroring me-premium.ts.
+ * require app.authenticate, mirroring me-premium.ts. POST (attach) also runs
+ * requireSubscriptionsEnabled: attaching a new paid add-on is a purchase
+ * entry point, same family as /checkout. DELETE (detach) and GET do not —
+ * they let an existing payer reduce or view what they already bought.
  *
  * Provider billing (P5): attach/detach wire Stripe subscription items when the
  * membership is Stripe-backed AND the module has a stripePriceId. Provider calls
@@ -27,6 +30,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { requireUser } from '../plugins/auth.js';
 import { attachAddon, detachAddon } from '../services/billing/addons.js';
 import { isBillingActionError } from '../services/billing/errors.js';
+import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
 
 /**
  * Live membership statuses — the same set me-premium.ts treats as "blocks a new
@@ -289,6 +293,10 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
       hook: 'preHandler',
       keyGenerator: (req) => `premium-addons:${req.user?.sub ?? req.ip}`,
     });
-    scoped.post('/api/me/premium/addons', attachAddonHandler);
+    scoped.post(
+      '/api/me/premium/addons',
+      { preHandler: requireSubscriptionsEnabled },
+      attachAddonHandler,
+    );
   });
 };

@@ -62,6 +62,16 @@ function OuroBackground() {
   );
 }
 
+// `showCta` (final review, Minor): kept, belt-and-braces. The whole card is
+// already a `Pressable` calling `openPlan` regardless of this flag, and the
+// index route redirects away before this screen ever renders with the gate
+// off (see app/(app)/assinaturas/index.tsx), so this prop never actually
+// prevents a purchase navigation by itself. It stays because it reads its
+// own independent `usePremiumPlans()` call (line ~197) from the route's —
+// two separate fetches of the same endpoint — so in the narrow window where
+// they briefly disagree, this at least removes the explicit gold "Assinar"
+// pill instead of showing an affirmative CTA next to a gate that just
+// turned itself off.
 function PlanCard({ plan, showCta }: { plan: PremiumPlan; showCta: boolean }) {
   const t = tierStyle(plan.tier);
   const visual = TIER_VISUAL[plan.tier];

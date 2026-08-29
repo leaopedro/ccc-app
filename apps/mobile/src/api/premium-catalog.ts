@@ -7,8 +7,8 @@
 
 import {
   premiumAddonModuleListResponseSchema,
+  premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
-  premiumPlanSchema,
   type PremiumAddonModuleListResponse,
   type PremiumPlan,
   type PremiumPlanListResponse,
@@ -23,7 +23,6 @@ import type { z } from 'zod';
 
 import { authedRequest, request } from '~/api/client';
 
-const planSchema = premiumPlanSchema as z.ZodType<PremiumPlan>;
 const planListSchema = premiumPlanListResponseSchema as z.ZodType<PremiumPlanListResponse>;
 const addonListSchema =
   premiumAddonModuleListResponseSchema as z.ZodType<PremiumAddonModuleListResponse>;
@@ -33,8 +32,13 @@ const invoicesSchema = premiumInvoicesResponseSchema as z.ZodType<PremiumInvoice
 export const listPremiumPlans = (): Promise<PremiumPlanListResponse> =>
   request('/api/plans', planListSchema);
 
-export const getPremiumPlan = (slug: string): Promise<PremiumPlan> =>
-  request(`/api/plans/${encodeURIComponent(slug)}`, planSchema);
+export const getPremiumPlan = async (slug: string): Promise<PremiumPlan> => {
+  const { plan } = await request(
+    `/api/plans/${encodeURIComponent(slug)}`,
+    premiumPlanDetailResponseSchema,
+  );
+  return plan;
+};
 
 export const listPremiumAddonModules = (): Promise<PremiumAddonModuleListResponse> =>
   request('/api/addon-modules', addonListSchema);

@@ -9,7 +9,11 @@
  * premium-pricing.ts). Both admin + mobile render the catalog before sign-in.
  *
  * These endpoints are NOT gated on GROWTH_PREMIUM_BILLING_ENABLED — the catalog
- * is informational. That flag gates checkout/attach in a later phase.
+ * is informational. That flag gates checkout/attach in a later phase. They DO
+ * carry the per-platform subscriptions gate (`request.subscriptionsEnabled`,
+ * set by the platform-gate plugin): every response reports whether the caller's
+ * platform can subscribe, alongside `Vary: x-ccc-platform` so a shared cache
+ * never hands an iOS client the web answer.
  *
  * Provider price ids (stripePriceId/rcProductId) live on the DB rows but are
  * never serialized here; the response schemas do not carry them.
@@ -18,9 +22,11 @@
 import { prisma } from '@ccc/db';
 import {
   premiumAddonModuleListResponseSchema,
+  premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
   premiumPlanSchema,
 } from '@ccc/shared/premium-catalog';
+import rateLimit from '@fastify/rate-limit';
 import type {
   PremiumAddonModule as DbPremiumAddonModule,
   PremiumPlan as DbPremiumPlan,
@@ -68,9 +74,22 @@ const serializeAddonModule = (module: DbPremiumAddonModule) => ({
   sortOrder: module.sortOrder,
 });
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/api/plans', async () => {
+  await app.register(rateLimit, {
+    max: 60,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `premium-catalog:${req.ip}`,
+  });
+
+  // The body varies on x-ccc-platform. Without both headers, any shared cache
+  // may hand an iOS client the web answer.
+  app.addHook('onSend', async (_request, reply) => {
+    void reply.header('Vary', 'x-ccc-platform');
+    void reply.header('Cache-Control', 'no-store');
+  });
+
+  app.get('/api/plans', async (request) => {
     const plans = await prisma.premiumPlan.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
@@ -78,6 +97,7 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     });
     return premiumPlanListResponseSchema.parse({
       plans: plans.map(serializePlan),
+      subscriptionsEnabled: request.subscriptionsEnabled,
     });
   });
 
@@ -88,16 +108,20 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
       include: PLAN_INCLUDE,
     });
     if (!plan) return reply.status(404).send({ error: 'NotFound' });
-    return serializePlan(plan);
+    return premiumPlanDetailResponseSchema.parse({
+      plan: serializePlan(plan),
+      subscriptionsEnabled: request.subscriptionsEnabled,
+    });
   });
 
-  app.get('/api/addon-modules', async () => {
+  app.get('/api/addon-modules', async (request) => {
     const modules = await prisma.premiumAddonModule.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
     });
     return premiumAddonModuleListResponseSchema.parse({
       modules: modules.map(serializeAddonModule),
+      subscriptionsEnabled: request.subscriptionsEnabled,
     });
   });
 };

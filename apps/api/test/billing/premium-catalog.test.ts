@@ -16,8 +16,8 @@
 import { prisma } from '@ccc/db';
 import {
   premiumAddonModuleListResponseSchema,
+  premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
-  premiumPlanSchema,
 } from '@ccc/shared/premium-catalog';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -237,7 +237,7 @@ describe('GET /api/plans/:slug', () => {
 
     const res = await app.inject({ method: 'GET', url: '/api/plans/gold' });
     expect(res.statusCode).toBe(200);
-    const plan = premiumPlanSchema.parse(res.json());
+    const { plan } = premiumPlanDetailResponseSchema.parse(res.json());
     expect(plan.slug).toBe('gold');
     expect(plan.tier).toBe('gold');
     expect(plan.prices).toHaveLength(1);
@@ -295,5 +295,88 @@ describe('GET /api/addon-modules', () => {
     const res = await app.inject({ method: 'GET', url: '/api/addon-modules' });
     expect(res.payload).not.toContain('price_secret_addon');
     expect(res.payload).not.toContain('stripePriceId');
+  });
+});
+
+describe('platform gate on the catalog reads', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await resetCatalog();
+    app = await makeApp();
+    await seedPlan({
+      tier: 'gold',
+      slug: 'fundador',
+      name: 'Fundador',
+      prices: [{ cadence: 'monthly', baseAmountCents: 24990 }],
+      benefits: [{ label: 'Acesso ao clube 24 horas', sortOrder: 1 }],
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('reports the gate as off for iOS and on for web', async () => {
+    process.env.PREMIUM_SUBSCRIPTIONS_IOS = 'false';
+    const gated = await makeApp();
+    try {
+      const ios = await gated.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'ios' },
+      });
+      expect(ios.json().subscriptionsEnabled).toBe(false);
+
+      const web = await gated.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'web' },
+      });
+      expect(web.json().subscriptionsEnabled).toBe(true);
+    } finally {
+      delete process.env.PREMIUM_SUBSCRIPTIONS_IOS;
+      await gated.close();
+    }
+  });
+
+  it('wraps the single-plan response and carries the gate', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plans/fundador',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      plan: { slug: 'fundador' },
+      subscriptionsEnabled: true,
+    });
+  });
+
+  it('carries the gate on the addon modules read', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/addon-modules',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.json()).toHaveProperty('subscriptionsEnabled', true);
+  });
+
+  // A cache in front of the API that ignores the header would serve a web body
+  // to an iOS client. That is the exact rejection the gate exists to prevent.
+  it('marks the response as varying on the platform header and uncacheable', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plans',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.headers.vary).toContain('x-ccc-platform');
+    expect(res.headers['cache-control']).toContain('no-store');
+  });
+
+  it('still 404s an unknown slug', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/plans/nao-existe' });
+    expect(res.statusCode).toBe(404);
   });
 });

@@ -1,9 +1,9 @@
 # Pagamentos no mobile — spec consolidado
 
 **Data:** 2026-08-29
-**Status:** aprovado, aguardando plano de implementação
-**Não substitui nada.** Indexa os quatro specs e registra três decisões novas,
-mais o estado verificado do código em 2026-08-29.
+**Status:** revisado adversarialmente, com decisões de produto em aberto
+**Não substitui nada.** Indexa os quatro specs, corrige o que eles afirmam de
+errado, e registra o que a revisão de 2026-08-29 derrubou.
 
 Specs indexados: [Fase 0](2026-08-12-billing-fixes-design.md) ·
 [Spec A, web](2026-08-12-stripe-live-web-design.md) ·
@@ -11,237 +11,432 @@ Specs indexados: [Fase 0](2026-08-12-billing-fixes-design.md) ·
 [Apple Pay](2026-08-12-apple-pay-ios-design.md) ·
 [Rastreador](../plans/2026-08-13-pagamentos-roadmap.md)
 
-## Por que este documento existe
+## Correções de fato, aplicáveis a todos os specs anteriores
 
-Os quatro specs foram escritos entre 12 e 13 de agosto. Dezessete dias depois,
-parte do que eles descrevem como pendente já foi feito, e um item do desenho de
-Apple Pay não sobrevive à leitura do código atual. Um plano de implementação
-escrito direto de cima deles construiria coisa já construída e apontaria o gate
-de plataforma para uma rota que não responde.
+Quatro revisores adversariais leram este documento e o código em 2026-08-29.
+Estas são as afirmações que não sobreviveram. Elas estão erradas nos specs
+anteriores também, e nos comentários de código citados.
 
-Este documento é a camada de verificação entre os specs e o plano.
+**C1. A diretriz citada está morta.** Todos os specs citam `3.1.5(a)` para a
+isenção de bens físicos. Hoje **3.1.5 é "Cryptocurrencies"** e não tem alínea
+(a). A citação correta é **3.1.3(e) — Goods and Services Outside of the App**:
+_"If your app enables people to purchase **physical** goods or services that
+will be consumed outside of the app, you must use purchase methods other than
+in-app purchase to collect those payments, such as Apple Pay or traditional
+credit card entry."_
 
-## Estado verificado em 2026-08-29
+Corrigir em `packages/db/prisma/seed.ts:826` e nos quatro specs. E notar a
+palavra que a paráfrase dos specs perdia: **physical**. O texto real é mais
+estreito que a leitura que vinha sendo usada.
 
-Confirmado por leitura de código, não por memória.
+**C2. O chapeau da 3.1.3 já é violado hoje.** _"Apps in this section cannot,
+within the app, encourage users to use a purchasing method other than in-app
+purchase, except for apps on the United States storefront."_
 
-### Já feito, sai do escopo
+`apps/mobile/src/copy/assinaturas.ts:73-74` entrega, no iOS:
 
-| Item                                          | Onde                                                 | Evidência                             |
-| --------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
-| `monthlyBoxBudgetCents` por tier              | `packages/db/prisma/seed.ts:523,536,550`             | 4490 / 9890 / 22490, só no `create`   |
-| `vendorName` do detailing                     | `seed.ts:573`                                        | `Vortex Detailing`                    |
-| Oficina fora de comercialização               | `seed.ts`                                            | módulo `active: false`                |
-| Benefício não implementado removido da folha  | `apps/mobile/src/copy/garage.ts:99-104`              | comentário datado 2026-08-14, PT e EN |
-| Script de aposentadoria do SKU virtual        | `apps/api/src/scripts/retire-garage-spot-product.ts` | existe, com `--dry-run`               |
-| Bloqueadores de review 1.2, 5.1.1, 5.1.2, 2.1 | vários                                               | marcados `[x]` no rastreador          |
+```
+iosTitle: 'Contratação pelo site.',
+iosSubcopy: 'No iPhone a contratação é feita pelo site da Casa Car Club.'
+```
 
-O SKU "Vaga de Garagem Adicional" está meio removido: o script de aposentadoria
-existe, as constantes seguem em `packages/db/src/garage-spot-product.ts`. Não há
-decisão pendente, há execução pendente contra o banco de produção. É item de
-Pedro, não de DEV.
+Renderizado em `ContratarScreen.tsx:315-318`. Isso é encaminhamento para compra
+externa dentro do app, na storefront do Brasil. A exceção dos EUA não se aplica.
+É rejeição autônoma, presente no binário de hoje, independente de todo o resto.
+A versão anterior deste spec tratava a remoção disso como cosmética.
 
-### Ainda pendente, confirmado
+**C3. `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` é gate, e está desligado em
+produção.** A versão anterior dizia que nenhuma tela a lê. Lêem quatro:
+`app/(app)/profile/index.tsx:248` esconde a linha de menu,
+`screens/settings/PremiumScreen.tsx:54` troca a tela por aviso de manutenção,
+`hooks/usePremiumSubscription.ts:26-29` e `hooks/usePremiumInvoices.ts:6`
+abortam a chamada. O perfil `production` do `eas.json` não a define, logo ela é
+`false` no binário submetido. Qualquer gate de runtime é empilhado sobre um gate
+de build-time já desligado.
 
-| Item                                  | Onde                                                          | Estado                                                      |
-| ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
-| Isolamento iOS do Stripe              | `apps/mobile/app/_layout.tsx:222`                             | `Platform.OS !== 'ios'` ainda gateia o `StripeProvider`     |
-| Regra de lint                         | `apps/mobile/eslint-rules/no-stripe-on-ios.cjs`               | ativa, registrada em `eslint.config.js`                     |
-| Teste de isolamento                   | `src/screens/settings/__tests__/ios-stripe-isolation.test.ts` | ativo                                                       |
-| Caminho nativo no avulso              | `apps/api/src/routes/cart.ts:686,769`                         | `clientSecret: null` nos dois retornos                      |
-| `merchantIdentifier` fora de produção | `apps/mobile/app.config.ts:39`                                | `variant === 'production' ? … : undefined`                  |
-| Assinatura nativa                     | —                                                             | endpoint não existe                                         |
-| Gate por plataforma                   | —                                                             | nenhuma ocorrência de plataforma em `routes/me-premium.ts`  |
-| Folha "O que é Premium?"              | `copy/garage.ts:105` e `:221`                                 | dois benefícios, ambos digitais, PT e EN                    |
-| `payoutAmountCents` do detailing      | `seed.ts:572,583`                                             | zero                                                        |
-| Chave da conta antiga no `eas.json`   | `apps/mobile/eas.json`, perfil `preview`                      | `pk_test_51RD9T6…`, conta JDM, nenhuma das duas contas CCC  |
-| Perfil `production` sem chave Stripe  | `apps/mobile/eas.json`                                        | nenhuma variável Stripe, nenhum `EXPO_PUBLIC_CAIXA_ENABLED` |
+**C4. `ContratarScreen` não lê `GET /api/plans`.** Lê `GET /api/plans/:slug`
+(`ContratarScreen.tsx:24,77` → `api/premium-catalog.ts:36-37`). Só
+`PlanosScreen.tsx:195` lê a lista. Colocar o booleano do gate apenas na lista
+deixa a tela de contratação sem ele. Corrigido na Decisão 1.
 
-## Enquadramento na App Store, registrado de propósito
+**C5. `docs/eas-credentials.md` já está correto.** Já usa
+`com.casacarclub.app`. O `com.jdmexperience.app` obsoleto está em oito outros
+arquivos: `docs/mobile-build.md`, `docs/secrets.md`, `docs/revenuecat.md`,
+`docs/vercel.md`, `docs/mobile-web.md`, `docs/railway.md`,
+`docs/manual-testing.md`, `docs/legal/encarregado.md`. A versão anterior herdou
+a linha desatualizada do rastreador sem conferir.
 
-O rastreador e o spec de Apple Pay assumem esse enquadramento sem enunciá-lo. Ele
-é a premissa de tudo que vem depois, então fica escrito.
+**C6. A linha de cadência anual já existe no admin.**
+`apps/admin/.../premium-catalog-client.tsx:312-313` renderiza `PlanPriceForm`
+para as duas cadências, e o comentário em `:166-176` diz que o `cadence=monthly`
+fixo foi removido exatamente por causa do `unknown-plan-price`. Item morto, sai
+do bloco 7.
 
-Stripe dentro de app iOS na loja é permitido. A diretriz 3.1.1 exige IAP para
-desbloqueio de conteúdo e funcionalidade digital. A diretriz 3.1.5(a), bens e
-serviços consumidos fora do app, proíbe IAP e nomeia Apple Pay e entrada de
-cartão como os métodos corretos.
+**C7. Seed não é produção, e a ressalva vale para tudo.** A versão anterior fez
+essa ressalva só para o SKU virtual. `monthlyBoxBudgetCents` entra apenas no
+ramo `create` (`seed.ts:608-616`), então banco de produção que já tem as linhas
+nunca recebe o valor. Vale igual para `vendorName` e para `oficina active:
+false`. Tudo isso continua **aberto em produção**, não "já feito".
 
-Apple Pay não é alternativa ao Stripe. Apple Pay é carteira, Stripe é
-processadora. A alternativa real ao Stripe é StoreKit, que é o que a RevenueCat
-embrulha, e é onde a Apple cobra a comissão.
+**C8. Blocker 2.1 não está fechado.** A varredura de aba com placeholder
+(`rastreador:256`) segue `[ ]`. A versão anterior listava 2.1 como concluído e
+ao mesmo tempo colocava a varredura no bloco 6.
 
-O canon §F8.16 estava correto para o produto de maio de 2026, que era digital:
-capa, selo, garagem em destaque, página sem rodapé. Sob 3.1.1, link de checkout
-Stripe no bundle iOS é rejeição direta. O que mudou em 12 de agosto não foi a
-leitura jurídica, foi o produto: caixa física mensal, acesso ao clube e serviços
-de fornecedor caem em 3.1.5(a).
+**C9. O Stripe SDK confere.** `apps/api/package.json:37` fixa `^22.1.0`,
+instalado 22.1.0, `services/stripe/index.ts:282` usa `2026-04-22.dahlia`, e
+`Invoice` tem `confirmation_secret` no topo e não tem `payment_intent`. Único
+item da lista de verificação que passou intacto.
 
-O risco residual não é técnico. Premium é pacote misto: entrega caixa física e
-também destrava capa e selo, que são gateados no servidor e inequivocamente
-digitais. É dessa ambiguidade que veio a estimativa de 65 a 85 por cento de
-rejeição, e é por isso que a reescrita da folha de copy é item de plano e não
-polimento.
+## Estado verificado do código
 
-Avulso de ingresso é caso mais seguro. Ingresso para evento presencial é serviço
-consumido fora do app sob qualquer leitura.
+### Aberto em produção, apesar de semeado em dev
 
-## Decisão 1 — gate por plataforma
+`monthlyBoxBudgetCents` por tier, `vendorName` do detailing, `oficina
+active:false`, e a aposentadoria do SKU "Vaga de Garagem Adicional". Todos
+dependem de ação contra o banco de produção via `/premium/catalogo` ou script.
 
-O spec de Apple Pay exige "gate por plataforma servido pela API, lido em
-runtime". Não fixa a forma. Fica fixada aqui.
+### Pendente em código, confirmado
 
-### Correção ao desenho considerado primeiro
+Isolamento iOS do `StripeProvider` (`app/_layout.tsx:222`), regra de lint
+`no-stripe-on-ios.cjs`, teste de isolamento, caminho nativo no avulso
+(`cart.ts:686,769` devolvem `clientSecret: null`), `merchantIdentifier` só em
+`production` (`app.config.ts:39`), endpoint de assinatura nativa inexistente,
+gate por plataforma inexistente, folha "O que é Premium?" com dois benefícios
+digitais (`copy/garage.ts:105` e `:221`), `payoutAmountCents` zero, chave
+`pk_test_51RD9T6…` da conta JDM no perfil `preview` do `eas.json`, perfil
+`production` sem nenhuma variável Stripe.
 
-A ideia inicial era carregar o booleano em `GET /api/premium/pricing`. **Não
-funciona.** Essa rota devolve 503 quando `GROWTH_PREMIUM_BILLING_ENABLED` está
-desligada (`apps/api/src/routes/premium-pricing.ts:49`), e hoje ela devolve
-503 em produção de qualquer forma, porque `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY` e
-`_ANNUAL` não estão setadas no Railway. Gate que não responde não é gate.
+### Achado novo: botão morto no binário iOS
+
+`screens/settings/PremiumScreen.tsx:164-180` renderiza "Assinar Gold" no iOS,
+chamando `fetchOfferings()` contra um SDK RevenueCat que nunca é inicializado
+(`lib/revenuecat.ts:26`, sem chamador). A rota é deep-linkable. Botão de compra
+que não funciona é rejeição 2.1 sozinho. Nenhum bloco dos specs anteriores
+agendava a remoção.
+
+## Decisão 1 — gate por plataforma, corrigido
+
+### O que a revisão derrubou
+
+A forma anterior tinha quatro furos. Todos corrigidos abaixo.
+
+- Carregava o booleano só em `GET /api/plans`, que a tela de contratação não lê
+  (C4).
+- Cobria a escrita só em `routes/me-premium.ts`. `POST /api/me/premium/addons`
+  vive em `routes/me-premium-addons.ts` e ficava aberto: um cliente iOS anexa
+  add-on recorrente passando ao largo do gate. `POST /api/me/premium/billing-portal`
+  e `/checkout-precheck` idem.
+- Falhava aberto. "Ausente ou desconhecido é tratado como `web`" numa rota que
+  vira portadora de decisão de compliance significa que qualquer chamada sem o
+  header serve `subscriptionsEnabled: true` ao iOS.
+- Dizia "esconder a aba" sem dizer o que ocupa o slot. `caixa-slot.ts:7`
+  devolve `'assinaturas'` incondicionalmente quando a caixa está desligada, e a
+  caixa **está** desligada em produção. Esconder `assinaturas` no iOS deixa o
+  slot premium sem aba nenhuma.
 
 ### Forma adotada
 
-O booleano viaja em `GET /api/plans` (`routes/premium-catalog.ts`). Essa rota é
-unauthed, é explicitamente não gateada pela flag global, e é a que a
-`ContratarScreen` de fato lê.
+- **Detecção.** Header `x-ccc-platform` com `Platform.OS`, preenchido nos dois
+  pontos de saída da API do cliente, `api/client.ts:33` e `:78`. Não é "o único
+  ponto de saída" do app: `shipping/useCepLookup.ts:34` e `lib/upload-image.ts:70`
+  também saem, mas não batem na nossa API.
+- **Falha fechada.** Header ausente ou desconhecido resolve para o valor
+  **restritivo** quando o `User-Agent` é de app nativo. Só navegador declarado
+  resolve para `web`. O modo de falha de um gate de compliance não pode ser
+  "ligado".
+- **Leitura.** `subscriptionsEnabled` viaja nas **três** rotas de catálogo:
+  `GET /api/plans`, `GET /api/plans/:slug` e `GET /api/addon-modules`. Com
+  `Vary: x-ccc-platform` e `Cache-Control: no-store`, senão um cache à frente da
+  API serve corpo de web para cliente iOS, que é exatamente a rejeição que o
+  gate existe para evitar.
+- **Escrita.** Barra `me-premium.ts` (`/checkout`, `/checkout-precheck`,
+  `/billing-portal`) **e** `me-premium-addons.ts` (`POST /api/me/premium/addons`).
+- **Slot da aba.** `resolveCaixaSlot` ganha um terceiro estado. Gate desligado e
+  caixa desligada significa slot vazio, não aba órfã. Testes de navegação
+  atualizados.
+- **Deep link.** Esconder a aba não remove a rota. `app/(app)/assinaturas/`
+  tem `contratar`, `[slug]`, `minha-assinatura` e `checkout-return`, todas
+  alcançáveis por deep link. Cada uma redireciona quando o gate está desligado.
+- **Rate limit.** As três rotas de catálogo hoje não têm nenhum
+  (`premium-catalog.ts`, zero ocorrências, ao contrário de `badges-catalog.ts`).
+  Promovê-las a portadoras do gate sem limite é fan-out de banco não autenticado
+  de graça.
 
-- **Detecção.** Header `x-ccc-platform`, preenchido com `Platform.OS` no único
-  ponto de saída do cliente mobile, `apps/mobile/src/api/client.ts:33` e `:78`.
-  Ausente ou desconhecido é tratado como `web`.
-- **Resolução.** Uma variável por plataforma no Railway. Ausente significa
-  ligada, para que nenhum ambiente existente mude de comportamento no deploy.
-- **Leitura.** `GET /api/plans` passa a devolver `subscriptionsEnabled`. O mobile
-  lê em runtime e, quando falso, não renderiza a entrada de assinatura **nem a
-  aba**. Aba primária com "em breve" é rejeição por completude, que é
-  exatamente a armadilha que o Plano B antigo tinha.
-- **Escrita.** O gate também barra os endpoints de checkout em
-  `routes/me-premium.ts`. Esconder no cliente não basta: a rota é alcançável.
-
-A flag `GROWTH_PREMIUM_BILLING_ENABLED` continua existindo e continua global.
-Ela não vira o gate de plataforma, e desligá-la segue derrubando web, Android e
-o processamento de renovação junto. O gate novo é o instrumento de resposta a
-uma rejeição da Apple; a flag global não é, e nunca foi.
-
-`EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` é build-time
-(`apps/mobile/src/lib/premium-runtime.ts:9`) e nenhuma tela de assinatura a lê.
-Fica como está. Não é gate de nada hoje e este spec não a promove a gate.
-
-**Verificação obrigatória:** gate de iOS desligado ⇒ iOS sem entrada e sem aba,
-web e Android intactos, webhook de renovação intacto.
+`GROWTH_PREMIUM_BILLING_ENABLED` continua global e não vira gate de plataforma.
+`EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` é build-time, **é** gate de quatro
+superfícies (C3), e precisa ser ligada no perfil `production` no bloco 6, senão
+o gate de runtime é decorativo.
 
 ## Decisão 2 — anual mais add-on
 
-A Stripe recusa preço anual junto de add-on mensal na mesma sessão, e a API
-traduz isso para 503. Detailing só tem cadência mensal, então Fundador anual mais
-Detailing não fecha.
+Mantida: rejeição tipada em vez de 503, com add-ons escondidos na UI quando a
+cadência for anual. A premissa segue válida — `api/premium.ts:26` fixa
+`monthly`, então anual não é selecionável no app. C6 remove só a verificação do
+admin, não muda a decisão.
 
-**Adotado:** rejeitar a combinação explicitamente, com erro tipado em vez de 503,
-e esconder add-ons na UI quando a cadência selecionada for anual.
-
-Motivo: a cadência anual não é selecionável no app hoje, então a combinação é
-inalcançável pela interface. Criar preço anual de add-on é trabalho de catálogo
-numa conta Stripe que ainda não foi ativada, e precificaria um serviço cujo
-`payoutAmountCents` segue em zero. Se a cadência anual virar selecionável, a
-decisão é revisitada com dado de uso.
+Falta nomear: o código de erro e o schema Zod. Ambos entram no bloco 3.
 
 ## Decisão 3 — construir agora, em paralelo
 
-As duas contas Stripe estão com `charges_enabled: false`. A ativação depende da
-Stripe, não de nós, e o rastreador serializa iOS estritamente depois do smoke da
-web.
+Mantida, com uma ressalva que a revisão de política levantou e que **não é
+decisão de engenharia**: ver Questão Aberta B.
 
-**Adotado:** escrever e testar todo o código contra Stripe em test mode agora, com
-o gate de iOS desligado por padrão. Nada fica exposto antes dos passos de Pedro.
-O que a serialização protegia era o risco de escrever código contra premissas que
-a conta live invalidaria; o gate de plataforma cobre esse risco melhor, porque
-permite desligar sem build novo.
+## Decisão 4 — a guarda de duplicidade, refeita
 
-## Decomposição
+### Por que a anterior era pior que não ter guarda
 
-Sete blocos. A ordem é por dependência.
+A revisão de segurança demonstrou o seguinte, e eu confirmei cada passo:
 
-**1. Gate por plataforma.** Primeiro porque é o que torna seguro mesclar código
-de pagamento iOS enquanto a conta está inativa. Conforme a Decisão 1.
+1. `PremiumMembershipStatus` (`schema.prisma:269-276`) é
+   `trialing | active | past_due | cancel_scheduled | expired | paused`. **Não
+   existe `incomplete`.** O índice parcial proposto não pode ser escrito.
+2. `premiumMembership.create` existe em um lugar só,
+   `services/billing/apply-membership-event.ts:97`, dentro de `handleActivated`,
+   disparado por `invoice.paid`. Logo o índice não impede a Stripe de criar a
+   segunda assinatura. Ele impede o banco de **registrar** uma que a Stripe já
+   cobrou.
+3. Caminho do desastre: segunda `invoice.paid` → `handleActivated` → P2002 →
+   escapa do `$transaction` → 500 → Stripe reentrega por ~3 dias → 503 no ramo
+   de não processado → evento perdido. **Cobrança mensal recorrente, sem
+   membership, sem entitlement, sem reembolso.** `billing-reconcile.ts:246` só
+   varre `active/past_due/cancel_scheduled`, então nada encontra.
+4. O caso de teste obrigatório do próprio spec é o gatilho: cancelar grava
+   `cancel_scheduled`, que está dentro do predicado proposto.
+5. Trocar a chave determinística por UUID por tentativa remove a única proteção
+   real que existe hoje (`me-premium.ts:384`), sem colocar nada no lugar antes
+   do pagamento.
 
-**2. Avulso nativo na API.** Campo `flow` em `POST /api/cart/checkout`, valores
-`hosted` e `native`, default `hosted`. Nativo com método `card` cria PaymentIntent
-com a metadata que o webhook já lê, grava `providerRef`, devolve `clientSecret`
-com `checkoutUrl: null`. Seta `receipt_email`, que a página hospedada dava de
-graça e a PaymentIntent crua não dá. Cancela a PI quando a varredura expirar o
-pedido, reusando `cancelPaymentIntent`. Pix ignora `flow`. Caminho web intocado.
+### Forma adotada
 
-**3. Assinatura nativa na API.** Endpoint irmão com
-`payment_behavior: default_incomplete`, lendo
-`latest_invoice.confirmation_secret.client_secret`. Em `stripe@22.1.0` com
-`2026-04-22.dahlia` não existe `payment_intent` no topo da Invoice; esse caminho
-não compila. Idempotência por tentativa, UUID novo a cada toque. A proteção
-contra duplicidade sai da chave Stripe e vira índice único parcial por `garageId`
-sobre `active`, `past_due`, `cancel_scheduled` e `incomplete`. A rejeição da
-Decisão 2 entra aqui. Método novo em `services/stripe/index.ts` com espelho em
-`fake.ts`.
+Três peças, e nenhuma toca no enum de `PremiumMembership`, evitando o efeito
+cascata por ~25 arquivos que o enum novo provocaria.
 
-Caso de teste obrigatório: cancelar e recontratar o mesmo pacote dentro de 24
-horas, afirmando que nasce assinatura nova. A chave por pacote que o spec
-original propunha falha exatamente aí, devolvendo a assinatura cancelada e uma
-invoice já liquidada.
+- **Lock antes da Stripe.** `SELECT … FOR UPDATE` na linha de `Garage` antes de
+  qualquer `subscriptions.create`, o mesmo padrão que
+  `stripe-billing-webhook.ts:752` já usa. Dois toques concorrentes serializam.
+- **Tabela de tentativa.** `PremiumSubscriptionAttempt` nova, com índice único
+  parcial por `garageId` onde `status = 'pending'`. É o registro pré-pagamento.
+  `PremiumMembership` fica intocada, o que **preserva** a invariante de que
+  membership só nasce de webhook verificado.
+- **Chave de idempotência determinística com discriminador de tentativa.**
+  `sub_${garageId}_${cadence}_${digest}_${attemptId}`. Toques concorrentes caem
+  na mesma tentativa e colapsam numa assinatura só. Recontratação depois de
+  cancelar abre tentativa nova e portanto assinatura nova, que é o caso
+  obrigatório, agora satisfeito sem colisão.
+- **Reaping.** Tentativa expira por TTL de 23h no worker de reconciliação, antes
+  de a Stripe transicionar para `incomplete_expired`. Sem isso, quem toca em
+  assinar e fecha o app fica travado para sempre.
+- **Visibilidade entre plataformas.** `listOpenSubscriptionCheckoutSessions`
+  (`services/stripe/index.ts:227`) enumera Checkout Sessions, e uma assinatura
+  `default_incomplete` não cria nenhuma. A precheck em `me-premium.ts:363` passa
+  a consultar também a tabela de tentativa, senão iniciar no iOS nativo e
+  terminar na web cobra duas vezes.
+- **Rate limit** no endpoint nativo. Sem ele, "UUID novo a cada toque" é uma
+  torneira de assinaturas órfãs.
 
-**4. Remoção do isolamento iOS.** Cai o gate do `StripeProvider`, cai a regra de
-lint, cai o teste de isolamento. O canon §F8.16 em
-`plans/2026-05-26-f8-billing-chunks-skeleton.md:52` é marcado superseded com data
-e motivo, não apagado. `merchantIdentifier` passa a ser preenchido em toda
-variant.
+`LIVE_STATUSES` está duplicado em três lugares (`me-premium.ts:47`,
+`me-premium-addons.ts:36`, `apply-membership-event.ts:461`) e omite `trialing` e
+`paused` — um membro em trial ou pausado abre segunda assinatura sem nada
+objetar. Unificar numa constante só, em `packages/shared`.
 
-**5. `PaymentSheet` no mobile.** Carrinho, assinatura e retomar pedido. Uma
-configuração só, sem botão dedicado: o sheet apresenta Apple Pay quando
-configurado. `returnURL` com o scheme do app, para o retorno do 3DS. Cartão
-brasileiro autentica acima da média e sem isso o pagamento fica pendurado.
-`src/screens/assinaturas/checkout.ts:26` para de devolver `ios_unsupported`.
+## Decisão 5 — o avulso nativo, com as corridas fechadas
 
-**6. Copy e configuração de build.** Folha do Premium reescrita em PT
-(`copy/garage.ts:105`) e EN (`:221`), liderando com caixa, clube e serviços, com
-selo e capa como extras. É a folha que o revisor lê, e hoje ela argumenta contra
-nós. Perfil `production` do `eas.json` ganha chave publicável real,
-`EXPO_PUBLIC_CAIXA_ENABLED` e `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED`. Perfil
-`preview` perde a chave da conta JDM. `docs/eas-credentials.md` para de dizer
-`com.jdmexperience.app`. Varredura afirmando que nenhuma aba primária cai em
-placeholder no binário submetido.
+Bloco 2 mantido, com três defeitos que a revisão achou e que precisam de
+resposta no plano:
 
-**7. Código do go-live da web.** Independente dos blocos 1 a 6, roda em paralelo.
-AbacatePay entra no fanout de exclusão de conta
-(`services/account-deletion/vendor-fanout.ts`), onde hoje falta apesar de ser
-Operador nomeado na política. `legal.ts` passa a assinatura de RevenueCat para
-Stripe, na prosa e na tabela de subprocessadores, com bump de
-`PRIVACY_POLICY_VERSION`. Pedidos pré-cutover marcados, senão o primeiro
-relatório de receita real soma dinheiro de teste em `routes/admin/finance.ts`.
-Caminho administrativo de recuperação de membership, espelhando
-`POST /admin/tickets/grant`. Worker de reconciliação do Pix, espelhando
-`billing-reconcile.ts`. Verificar se `/premium/catalogo` cria linha de cadência
-anual em `PremiumPlanPrice`; sem ela uma fatura anual cai em `unknown-plan-price`
-e o dinheiro entra sem assinatura nascer.
+- **`handleCartFailure` não cancela a PaymentIntent** (`stripe-webhook.ts:289`).
+  Ele marca os pedidos `failed`, libera estoque e reabre o carrinho. O
+  `PaymentSheet`, por design, continua montado para nova tentativa na mesma PI.
+  Recusa seguida de sucesso na mesma folha cai no ramo `dead` de
+  `stripe-webhook.ts:161-180` e vira cobrança seguida de reembolso, com estoque
+  já revendido. Recusa de 3DS é o modo de falha mais comum em cartão
+  brasileiro, e o próprio spec diz isso.
+- **Folha velha com `clientSecret` velho** confirma depois de o carrinho ter
+  sido reaberto e uma PI nova criada. As duas PIs carregam o mesmo `cartId`.
+  Cobrança dupla, a segunda sem `providerRef`, invisível para `charge.refunded`
+  e para `charge.dispute.created`.
+- **Não existe worker de expiração.** `apps/api/src/workers/` não tem nenhum;
+  toda varredura é preguiçosa, disparada por outro checkout do mesmo
+  tier/variant ou por `GET /orders/:id`. "Cancela a PI quando a varredura
+  expirar o pedido" não tem gatilho confiável.
 
-## Fora do escopo de DEV
+O plano precisa fechar os três, não só adicionar `flow: native`.
+`receipt_email` deve ser derivado do `sub` no servidor, nunca do corpo da
+requisição, senão vira primitiva de e-mail para destinatário arbitrário no
+domínio Stripe.
 
-Ativação da conta Stripe do CNPJ, catálogo e webhooks e portal live, variáveis do
-Railway, AbacatePay de produção com `?webhookSecret=` na query string, instante
-de corte da purga, `payoutAmountCents` do detailing, habilitação do
-`merchant.com.casacarclub.app` nos App IDs `.dev` e `.preview` com regeração de
-profiles, regras de alerta do Sentry, decisões de nota fiscal e Stripe Tax e
-parcelamento, execução do script de aposentadoria do SKU virtual, teste manual de
-Apple Pay em aparelho, notas de review, submissão.
+## Escopo que faltava
+
+Nada disto estava na versão anterior e tudo é necessário.
+
+**Migrações.** Tabela `PremiumSubscriptionAttempt`. Campo de `livemode` ou
+equivalente em `Order` para o corte pré-cutover, mais backfill e filtro em
+`routes/admin/finance.ts` e na UI de finanças do admin. Doc de rollback por
+migração, conforme os três `docs/migration-rollback-*.md` que já existem.
+
+**Schemas Zod em `packages/shared`.** `beginCheckoutRequestSchema` ganha `flow`.
+Os schemas de catálogo ganham `subscriptionsEnabled`. Par novo de
+request/response para a assinatura nativa. Forma tipada do erro da Decisão 2.
+`LIVE_STATUSES` unificada.
+
+**Copy PT e EN.** Falhas do `PaymentSheet`, cancelamento, retorno de 3DS, o erro
+da Decisão 2, o estado de gate desligado, e a remoção de
+`'Assinaturas em breve.'` (`copy/assinaturas.ts:89`). Mais a remoção do texto de
+encaminhamento do C2.
+
+**Tags de Sentry.** `docs/observability.md` usa convenção de regra por tag. Os
+blocos 2, 3 e 5 introduzem modos de falha sem observabilidade nenhuma: PI nativa
+criada e nunca confirmada, tentativa de assinatura abandonada, retorno de 3DS
+perdido, rejeição do gate na escrita. As regras de painel são de Pedro; as tags
+são código.
+
+**Rate limiting.** `cart.ts` e `premium-catalog.ts` têm zero. `app.ts:95` não
+seta `trustProxy`, então qualquer limite por IP atrás do Railway é um balde
+global e vira alavanca de DoS em vez de proteção. Resolver o `trustProxy` antes
+de adicionar limite por IP em rota não autenticada.
+
+**Itens que a versão anterior perdeu dos specs de origem.** Reescrita de
+`docs/stripe.md`, que o Spec A diz que "induz erro de operação" e contém
+afirmação falsa sobre Stripe Tax. Fluxo de reembolso para suporte, que não
+existe hoje. Os onze casos de smoke obrigatórios do Spec A. Seção de rollback.
+Chave Stripe restrita em vez de `sk_live` completa. Reembolso parcial. Remoção
+do botão morto de RevenueCat. Execução da purga, que o rastreador marca como
+DEV. Benefícios de plano ainda não implementados sob a regra 2.3.1.
+
+## Questões abertas, de produto, não de engenharia
+
+Estas travam o plano e não são minhas para decidir.
+
+### Questão A — o pacote misto
+
+Dois revisores independentes concluíram que copy não resolve, e o código
+sustenta a conclusão.
+
+Os doze rótulos de benefício semeados
+(`seed.ts:517-558`) são: acesso ao clube, eventos, comunidade no app,
+prioridade, convidados, descontos, concierge, vaga premium. **Nenhum dos doze
+menciona a caixa física.** `monthlyBoxBudgetCents` existe no modelo e nunca é
+serializado por `premium-catalog.ts:42-58`. E `caixa-slot.ts:7` só mostra a aba
+da Caixa para quem **já é premium**.
+
+Ou seja: o revisor, não assinante, na tela de compra, vê uma folha explicativa
+100% digital, uma lista de benefícios sem caixa, e um preço. A prova física
+aparece só depois do pagamento.
+
+Do outro lado, o que a assinatura de fato destrava é digital e é gateado no
+servidor: nove de dez capas (`garage-covers.ts:31-105`), upload de capa custom
+(`routes/garage.ts:262-263`), leitura e postagem no feed de membros
+(`services/feed/access.ts:17,44,89`), e o selo serializado em todo carro.
+
+Bloco 6, como estava escrito, mirava `copy/garage.ts`, que é a folha
+explicativa. A tela de compra lê benefícios do **banco**. A reescrita de copy
+não tocaria o paywall.
+
+Caminhos, do mais eficaz ao menos:
+
+1. Tirar os desbloqueios digitais da assinatura paga. Capas, selo e feed passam
+   a ser grátis ou atrelados a outra coisa. A assinatura passa a comprar só
+   caixa, clube e serviços, e a 3.1.3(e) fica limpa.
+2. Dois produtos, dois trilhos: IAP StoreKit para a camada digital, Stripe para
+   a física. É a forma que a Apple aprova, e é cara.
+3. Tornar a caixa visível antes da compra: conteúdo, endereço de entrega e
+   cadência no paywall e nos rótulos do banco, para conta não assinante. Isto é
+   **necessário em qualquer um dos caminhos**, não é alternativa aos outros.
+
+### Questão B — o gate ligado ou desligado na submissão
+
+Se o gate estiver desligado na review, o binário contém um fluxo completo de
+assinatura Stripe inalcançável pela UI. Revisores inspecionam binário. Isso é
+2.3.1, funcionalidade escondida, que é achado pior que 3.1.1 porque vai a
+boa-fé.
+
+Se estiver ligado, o binário é honesto e corre o risco da Questão A.
+
+A versão anterior assumiu "desligado por padrão" como seguro. É o padrão seguro
+de engenharia e o padrão arriscado de review. Se for desligado, o código de
+assinatura deveria ser compilado para fora, não só desviado em runtime.
+
+### Questão C — `EXPO_PUBLIC_CAIXA_ENABLED` antes do QA
+
+O spec de Apple Pay liga a flag "para que a aba da caixa física exista no
+binário submetido". Mas os planos do box-builder dizem três vezes que o flip é
+passo de go-live **após QA manual**, incluindo confirmar na AbacatePay que uma
+cobrança Pix é impagável depois do `expiresIn`.
+
+Ligar a flag por ótica de review, antes do QA que o próprio time declarou
+load-bearing, é arriscar que a caixa — a defesa inteira da 3.1.3(e) — seja o que
+falha na frente do revisor. E por causa de `caixa-slot.ts:7`, o flip nem resolve
+o que pretendia: revisor não assinante continua sem ver a aba.
+
+### Questão D — o SKU virtual pode estar vivo em produção
+
+O spec de Apple Pay diz que a "Vaga de Garagem Adicional" de R$49 é inalcançável
+porque `GeneralSettings.defaultFreeGarageSpots` é null e null é ilimitado. Mas
+`migrations/20260520120100_garage_spots_tables/migration.sql:58-61` faz
+`UPDATE "GeneralSettings" SET "defaultFreeGarageSpots" = 1 WHERE … IS NULL`.
+
+Se existia linha de `GeneralSettings` em produção quando essa migração rodou, o
+limite é finito, o tile renderiza, e há um desbloqueio digital de R$49 sendo
+vendido fora do IAP no binário atual. Uma query resolve:
+
+```sql
+SELECT "defaultFreeGarageSpots" FROM "GeneralSettings";
+```
+
+Independente do resultado, a correção durável não é aposentar um SKU. É recusar
+item `virtual: true` no `POST /api/cart/checkout` quando a plataforma for iOS,
+no servidor. Aposentar a linha resolve a instância de hoje; o schema do carrinho
+continua permitindo a próxima.
+
+## Ordem, corrigida
+
+A ordem anterior tinha três erros de dependência.
+
+- **Bloco 7 não é independente.** `packages/shared/src/legal.ts` é empacotado no
+  binário mobile (`app/(auth)/privacidade.tsx:2`). Submeter o iOS com política
+  dizendo que assinatura é gerida pela RevenueCat, enquanto o app cobra por
+  Stripe, é contradição visível ao revisor. Bloco 7 precede a submissão.
+  O bump de `PRIVACY_POLICY_VERSION` também exige mexer em
+  `PREVIOUS_PRIVACY_POLICY_VERSION` (`legal.ts:25`) e faz o banner de cookies do
+  admin reaparecer.
+- **Bloco 4 depende de Pedro.** `merchantIdentifier` em toda variant quebra
+  build `.dev` e `.preview` até a Apple habilitar
+  `merchant.com.casacarclub.app` nesses App IDs e os profiles serem regerados.
+- **Bloco 5 depende do bloco 6.** `_layout.tsx:222` exige `stripeKey`, e o
+  perfil `production` não tem nenhuma. O `PaymentSheet` nasce morto em build de
+  produção até o bloco 6 entrar.
 
 ## Verificação
 
-| Camada    | Como                                                                          |
-| --------- | ----------------------------------------------------------------------------- |
-| API       | Integração contra Postgres real via Testcontainers, conforme regra do repo    |
-| Mobile    | vitest com o SDK da Stripe mockado                                            |
-| Apple Pay | Manual, aparelho físico, cartão real na carteira, Stripe em test mode         |
-| Gate      | Teste: iOS desligado ⇒ sem entrada e sem aba; web, Android e webhook intactos |
+| Camada        | Como                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| API           | Integração contra Postgres real via Testcontainers, conforme regra do repo                                             |
+| Mobile        | vitest com o SDK da Stripe mockado                                                                                     |
+| Apple Pay     | Manual, aparelho físico, cartão real na carteira, Stripe em test mode                                                  |
+| Gate          | iOS desligado ⇒ sem entrada, sem aba, sem deep link, escrita barrada nos dois routers; web, Android e webhook intactos |
+| Duplicidade   | Cancelar e recontratar dentro de 24h; dois toques concorrentes; tentativa abandonada reapada em 23h                    |
+| Avulso nativo | Recusa de 3DS seguida de nova tentativa na mesma folha; folha velha confirmando após reabertura do carrinho            |
 
-Apple Pay não roda em simulador nem em CI.
+Apple Pay não roda em simulador nem em CI. Os onze casos de smoke do Spec A
+continuam obrigatórios e estão lá, não aqui.
+
+## Android, que os specs esqueciam
+
+Com `flow: native` no bloco 2 e o `PaymentSheet` no bloco 5, **o Android ganha a
+folha nativa por padrão**: `_layout.tsx:222` só gateia iOS, e
+`orders.tsx:209` já habilita Stripe fora do iOS. O rastreador diz que Google Pay
+"não foi pedido", mas ele vem junto do `PaymentSheet` a menos que seja
+explicitamente suprimido em `initPaymentSheet`. Decidir: suprimir, ou aceitar e
+testar. Hoje o plano entrega sem decidir.
+
+Também aberto: `PremiumScreen` no Android abre WebBrowser hospedado e
+`ContratarScreen` no Android usa `redirectToStripeCheckout`. Se o Android migra
+para nativo ou fica no hospedado é decisão de produto escondida num bloco de
+código.
 
 ## Exposição registrada
 
-`expo-updates` está no projeto com `runtimeVersion` por `appVersion`. Alterar
-comportamento de pagamento por OTA depois da aprovação é exposição maior que
-qualquer flag de servidor. Não se faz.
+`expo-updates` com `runtimeVersion` por `appVersion`. Alterar comportamento de
+pagamento por OTA depois da aprovação é exposição maior que qualquer flag de
+servidor. Não se faz. A revisão nota que **flag de servidor que liga fluxo de
+compra tem a mesma exposição com transporte diferente**, o que é a Questão B.

@@ -36,6 +36,39 @@ describe('resolveClientPlatform', () => {
     expect(resolveClientPlatform({ userAgent: 'okhttp/4.12.0' })).toBe('android');
   });
 
+  it('treats a Mozilla-prefixed Android UA as web, because that is our web app on Android', () => {
+    expect(
+      resolveClientPlatform({
+        userAgent:
+          'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Mobile Safari/537.36',
+      }),
+    ).toBe('web');
+  });
+
+  it('treats a Mozilla-prefixed iPhone Safari UA as web, for the same reason', () => {
+    expect(
+      resolveClientPlatform({
+        userAgent:
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+      }),
+    ).toBe('web');
+  });
+
+  it('classifies a native iOS UA before the browser check can see it', () => {
+    expect(
+      resolveClientPlatform({ userAgent: 'CasaCarClub/1.4.0 CFNetwork/1494 Darwin/23.4.0' }),
+    ).toBe('ios');
+  });
+
+  it('still lets an explicit header override any user-agent', () => {
+    expect(
+      resolveClientPlatform({
+        platform: 'ios',
+        userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) Chrome/126',
+      }),
+    ).toBe('ios');
+  });
+
   it('falls back to ios when nothing at all is known', () => {
     expect(resolveClientPlatform({})).toBe('ios');
   });

@@ -23,9 +23,11 @@ export type PlatformGateEnv = {
 
 const KNOWN: readonly string[] = ['ios', 'android', 'web'];
 
+/** React Native's fetch: okhttp on Android, CFNetwork/Darwin on iOS. */
+const NATIVE_ANDROID_UA = /okhttp/i;
+const NATIVE_IOS_UA = /CFNetwork|Darwin/i;
 /** Browsers all send a UA starting with `Mozilla/`. Native clients do not. */
 const BROWSER_UA = /^Mozilla\//i;
-const ANDROID_UA = /okhttp|Android/i;
 
 export const resolveClientPlatform = (headers: {
   platform?: string;
@@ -35,9 +37,12 @@ export const resolveClientPlatform = (headers: {
   if (declared && KNOWN.includes(declared)) return declared as ClientPlatform;
 
   const ua = headers.userAgent ?? '';
+  // Native markers first. A bare "Android" substring cannot discriminate
+  // Chrome-on-Android (our web app) from a native Android client, because
+  // both carry it — so it is not used.
+  if (NATIVE_ANDROID_UA.test(ua)) return 'android';
+  if (NATIVE_IOS_UA.test(ua)) return 'ios';
   if (BROWSER_UA.test(ua)) return 'web';
-  if (ANDROID_UA.test(ua)) return 'android';
-
   return 'ios';
 };
 

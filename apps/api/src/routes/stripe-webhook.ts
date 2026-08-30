@@ -298,12 +298,18 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     request: { log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void } },
     reply: { status: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
+    const refsToCancel: string[] = [];
+
     await prisma.$transaction(async (tx) => {
       const cartOrders = await tx.order.findMany({
         where: { cartId, status: 'pending' },
       });
 
       for (const order of cartOrders) {
+        if (order.provider === 'stripe' && order.providerRef) {
+          refsToCancel.push(order.providerRef);
+        }
+
         await tx.order.update({
           where: { id: order.id },
           data: { status: 'failed', failedAt: new Date() },
@@ -365,6 +371,28 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         data: { status: 'open', version: { increment: 1 } },
       });
     });
+
+    // Cancel the PI AFTER the commit, and never let the error escape.
+    //
+    // Without this the PaymentSheet stays mounted on the same PI, and a
+    // second successful attempt hits the `dead` branch below (~:161-183):
+    // charge followed by a refund, with the stock already resold to someone
+    // else. A 3DS decline is the most common failure mode on Brazilian cards.
+    //
+    // Deliberately best-effort: Stripe 400s the cancel of a PI it has already
+    // closed itself, and letting that error escape would put this event into
+    // Stripe's ~3-day redelivery loop against a cart that already reopened
+    // correctly.
+    for (const ref of [...new Set(refsToCancel)]) {
+      try {
+        await app.stripe.cancelPaymentIntent(ref);
+      } catch (cancelErr) {
+        request.log.warn(
+          { err: cancelErr, cartId, providerRef: ref },
+          'stripe webhook: failed to cancel the PI of the reopened cart',
+        );
+      }
+    }
 
     const firstTime = await markProcessed(webhookEvent.id, webhookEvent);
     request.log.info({ cartId, firstTime }, 'stripe webhook: cart checkout failed/expired');

@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "PremiumSubscriptionAttemptStatus" AS ENUM ('pending', 'succeeded', 'abandoned');
+CREATE TYPE "PremiumSubscriptionAttemptStatus" AS ENUM ('pending', 'succeeded', 'abandoned', 'failed');
 
 -- CreateTable
 CREATE TABLE "PremiumSubscriptionAttempt" (

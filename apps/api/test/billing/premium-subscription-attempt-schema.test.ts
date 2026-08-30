@@ -111,4 +111,23 @@ describe('PremiumSubscriptionAttempt', () => {
 
     expect(await prisma.premiumMembership.count({ where: { garageId: garage.id } })).toBe(2);
   });
+
+  // Mesmo padrao de schema-f8.test.ts:122-131 para
+  // premium_membership_live_per_garage. O comportamento acima (testes 2 e 3)
+  // passaria igual sob um predicado ERRADO mas parecido, por exemplo
+  // `status IN ('pending', 'succeeded')` — so essa asserção fixa a definição
+  // real do indice (nome E predicado) no pg_indexes, entao um `prisma migrate
+  // dev` futuro que tentar dropar o indice (porque ele e invisivel ao
+  // schema.prisma) quebra aqui antes de virar um DROP INDEX silencioso.
+  it('confirma que o indice unico parcial existe no pg_indexes com o predicado certo', async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexname: string; indexdef: string }>>`
+      SELECT indexname, indexdef
+      FROM pg_indexes
+      WHERE tablename = 'PremiumSubscriptionAttempt'
+        AND indexname = 'PremiumSubscriptionAttempt_garageId_pending_unique'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.indexdef).toMatch(/WHERE/i);
+    expect(rows[0]!.indexdef).toMatch(/\(status = 'pending'::"PremiumSubscriptionAttemptStatus"\)/);
+  });
 });

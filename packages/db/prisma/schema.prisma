@@ -501,6 +501,9 @@ enum PremiumSubscriptionAttemptStatus {
   pending
   succeeded
   abandoned
+  /// Stripe recusou (cartao, 3DS, etc). Distinto de `abandoned` (usuario
+  /// desistiu) para observabilidade e handling separados.
+  failed
 }
 
 /// Registro PRE-pagamento de uma tentativa de assinatura premium.
@@ -511,11 +514,20 @@ enum PremiumSubscriptionAttemptStatus {
 /// impediria o BANCO de registrar uma assinatura que a Stripe JA COBROU, e o
 /// P2002 resultante escaparia do $transaction, viraria 500, e o evento se
 /// perderia depois de ~3 dias de reentrega. Cobranca recorrente sem membership,
-/// sem entitlement e sem reembolso.
+/// sem entitlement e sem reembolso. Esta tabela MITIGA esse cenario ao tornar
+/// dificil abrir uma segunda assinatura Stripe viva para a mesma garagem; ela
+/// nao o elimina (checkout hospedado concorrente, criacao pelo dashboard da
+/// Stripe, ou re-assinatura sequencial apos `succeeded` seguem possiveis).
 ///
 /// O indice unico parcial por garageId onde status = 'pending' esta na
 /// migracao em SQL cru; o Prisma nao suporta indice unico parcial no DSL.
 /// Mesmo padrao de Cart_userId_open_unique.
+///
+/// RISCO CONHECIDO: um crash entre subscriptions.create e a troca de status
+/// deixa a linha presa em `pending` para sempre, e o indice parcial entao
+/// bloqueia QUALQUER nova tentativa para aquela garagem. A Task 11 (TTL
+/// reaper) e quem limpa isso — Tasks 8-10 nao devem ir para producao sem a
+/// Task 11.
 model PremiumSubscriptionAttempt {
   id             String                           @id @default(cuid())
   garageId       String

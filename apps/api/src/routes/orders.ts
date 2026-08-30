@@ -248,8 +248,9 @@ async function prepareOrder(
 
 async function createPendingOrder(
   data: PreparedOrder,
+  expiresInMs: number = ORDER_EXPIRY_MS,
 ): Promise<{ order: { id: string }; extraEntries: Array<{ extraId: string; quantity: number }> }> {
-  const expiresAt = new Date(Date.now() + ORDER_EXPIRY_MS);
+  const expiresAt = new Date(Date.now() + expiresInMs);
   const order = await prisma.order.create({
     data: {
       userId: data.sub,
@@ -547,18 +548,21 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       }
 
       try {
-        const { order } = await createPendingOrder(data);
+        // Stripe requires expires_at >= 30 min from now, longer than the
+        // default order TTL (ORDER_EXPIRY_MS, 15 min). The order-expiry worker
+        // runs every minute unconditionally, so the order itself must carry
+        // this longer TTL too — otherwise it gets killed while the customer is
+        // still on the hosted Stripe page (3DS, bank app), with stock already
+        // released. Native PaymentSheet orders keep ORDER_EXPIRY_MS.
+        const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
+        const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
+        const { order } = await createPendingOrder(data, sessionExpiryMs);
         const successUrl = withReturnParams(input.successUrl, { orderId: order.id });
         const cancelUrl = withReturnParams(input.cancelUrl, {
           orderId: order.id,
           cancelled: 'true',
         });
 
-        // Stripe requires expires_at >= 30 min from now; order expiry is 15 min.
-        // Use the Stripe minimum so the session is accepted; the order-level sweep
-        // handles early cancellation independently.
-        const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
-        const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
         const expiresAtUnix = Math.floor((Date.now() + sessionExpiryMs) / 1000);
         const session = await app.stripe.createCheckoutSession({
           amountCents: data.amountCents,

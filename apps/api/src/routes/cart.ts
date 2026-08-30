@@ -635,12 +635,26 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       shippingAddressId = shippingAddress.id;
     }
 
+    // Reservas de checkout hospedado (Stripe Checkout Session) tem que durar
+    // pelo menos o TTL da sessao (STRIPE_MIN_SESSION_MS, 30 min), senao o
+    // worker de expiracao (order-expiry.ts, roda a cada minuto) mata o pedido
+    // enquanto o cliente ainda esta na pagina da Stripe (banco, 3DS, ligacao),
+    // com o estoque ja liberado para outro comprador. O checkout nativo e uma
+    // interacao rapida dentro do app — 15 min (ORDER_EXPIRY_MS) e o certo ali,
+    // e manter a PI nativa confirmavel so por esse tanto e o motivo do worker
+    // existir. Pix usa ORDER_EXPIRY_MS tambem, sem mudanca.
+    const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
+    const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
+    const expiresInMs =
+      input.paymentMethod === 'card' && input.flow === 'hosted' ? sessionExpiryMs : ORDER_EXPIRY_MS;
+
     const reserveResult = await reserveAndCreateOrders(cart, sub, {
       method: input.paymentMethod,
       shippingAddressId,
       pickupEventId: pickupEventIdToUse,
       fulfillmentMethod: resolvedFulfillmentMethod,
       devFeePercent: app.env.DEV_FEE_PERCENT,
+      expiresInMs,
     });
     if (!reserveResult.ok) {
       return reply.status(reserveResult.status).send({
@@ -707,7 +721,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
             clientSecret: null,
             checkoutUrl: null,
             brCode: billing.brCode,
-            reservationExpiresAt: new Date(Date.now() + ORDER_EXPIRY_MS).toISOString(),
+            reservationExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
           }),
         );
       } catch (err) {
@@ -726,8 +740,6 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
-    const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
     const expiresAtUnix = Math.floor((Date.now() + sessionExpiryMs) / 1000);
 
     const productName = data.orders.map((o) => o.description).join(' + ');
@@ -803,7 +815,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
             clientSecret: intent.clientSecret,
             checkoutUrl: null,
             brCode: null,
-            reservationExpiresAt: new Date(Date.now() + ORDER_EXPIRY_MS).toISOString(),
+            reservationExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
           }),
         );
       } catch (err) {
@@ -840,7 +852,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
         include: CART_INCLUDE_FOR_SERIALIZE,
       });
 
-      const reservationExpiresAt = new Date(Date.now() + ORDER_EXPIRY_MS);
+      const reservationExpiresAt = new Date(Date.now() + expiresInMs);
 
       return reply.status(201).send(
         beginCheckoutResponseSchema.parse({

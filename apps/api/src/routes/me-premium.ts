@@ -22,6 +22,7 @@ import {
   premiumCheckoutRejectionSchema,
   premiumCheckoutRequestSchema,
   premiumCheckoutResponseSchema,
+  premiumNativeCheckoutResponseSchema,
   premiumStatusSchema,
   type PremiumCheckoutRejection,
 } from '@ccc/shared/premium';
@@ -128,6 +129,134 @@ export const checkAnnualCadenceAddonRejection = (
     message: 'Modulos adicionais sao mensais e nao podem ser contratados no plano anual.',
     addonKeys: [...addonKeys],
   });
+};
+
+/**
+ * Resolucao de tier, price e add-ons compartilhada pelo checkout hospedado e
+ * pelo checkout nativo (Task 9). Extraida do antigo corpo de `checkoutHandler`
+ * para que os dois caminhos apliquem exatamente a mesma validacao — do
+ * contrario o caminho nativo aceitaria uma combinacao que o hospedado recusa,
+ * e a Stripe recusaria de novo mais na frente como um 503.
+ *
+ * Devolve `null` quando ja respondeu 404, 400, 422 ou 503 por conta propria;
+ * nesse caso o chamador deve apenas devolver a `reply` recebida.
+ */
+const resolveSubscriptionPackage = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<{
+  tier: 'gold' | 'silver' | 'bronze';
+  cadence: 'monthly' | 'annual';
+  priceId: string;
+  addonPriceIds: string[];
+} | null> => {
+  const parsed = premiumCheckoutRequestSchema.safeParse(request.body);
+  if (!parsed.success) {
+    await reply.status(422).send({
+      error: 'UnprocessableEntity',
+      issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+    });
+    return null;
+  }
+  const { cadence, planSlug, addonKeys } = parsed.data;
+  const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
+
+  const cadenceAddonRejection = checkAnnualCadenceAddonRejection(cadence, selectedAddonKeys);
+  if (cadenceAddonRejection) {
+    await reply.status(422).send(cadenceAddonRejection);
+    return null;
+  }
+
+  // Resolve the target tier. Default 'gold' keeps the legacy single-tier
+  // env flow working when no planSlug is supplied. When planSlug is given
+  // we resolve the tier from the catalog (server-side; never trust a
+  // client price id).
+  let tier: 'gold' | 'silver' | 'bronze' = 'gold';
+  if (planSlug) {
+    const plan = await prisma.premiumPlan.findUnique({
+      where: { slug: planSlug },
+      select: { tier: true, active: true },
+    });
+    if (!plan || !plan.active) {
+      await reply.status(404).send({ error: 'NotFound', message: 'plan not found' });
+      return null;
+    }
+    tier = plan.tier;
+  }
+
+  // Catalog-aware price resolution (additive). Prefer the catalog's
+  // stripePriceId for (tier, cadence) when configured. Fall back to the
+  // legacy GOLD env price ONLY for the gold tier, so existing behavior is
+  // unchanged when the catalog has no provider price wired. A non-gold tier
+  // without a configured stripePriceId is 503 (we never substitute the gold
+  // price for another tier).
+  const catalogPrice = await prisma.premiumPlanPrice.findFirst({
+    where: { plan: { tier }, cadence },
+    select: { stripePriceId: true },
+  });
+
+  let priceId: string | undefined;
+  if (catalogPrice?.stripePriceId) {
+    priceId = catalogPrice.stripePriceId;
+  } else if (tier === 'gold') {
+    priceId =
+      cadence === 'monthly'
+        ? request.server.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY
+        : request.server.env.STRIPE_PRICE_PREMIUM_GOLD_ANNUAL;
+  }
+
+  if (!priceId) {
+    request.log.error(
+      { cadence, tier, planSlug },
+      'me-premium: checkout requested but no stripe price resolved (catalog + env)',
+    );
+    await reply
+      .status(503)
+      .send({ error: 'ServiceUnavailable', message: 'billing price not configured' });
+    return null;
+  }
+
+  // Resolve add-on prices from the catalog. Unknown/inactive key is a client
+  // error (400); a known module with no stripePriceId is an operator
+  // misconfiguration (503).
+  const addonPriceIds: string[] = [];
+  if (selectedAddonKeys.length > 0) {
+    const modules = await prisma.premiumAddonModule.findMany({
+      where: { key: { in: selectedAddonKeys }, active: true },
+      select: { key: true, stripePriceId: true },
+    });
+
+    const found = new Set(modules.map((m) => m.key));
+    const unknownAddonKeys = selectedAddonKeys.filter((k) => !found.has(k));
+    if (unknownAddonKeys.length > 0) {
+      await reply
+        .status(400)
+        .send({ error: 'BadRequest', message: 'unknown add-on key', unknownAddonKeys });
+      return null;
+    }
+
+    const missingAddonKeys = modules.filter((m) => !m.stripePriceId).map((m) => m.key);
+    if (missingAddonKeys.length > 0) {
+      request.log.error(
+        { missingAddonKeys },
+        'me-premium: checkout requested but add-on stripePriceId not configured',
+      );
+      await reply.status(503).send({
+        error: 'ServiceUnavailable',
+        message: 'add-on price not configured',
+        missingAddonKeys,
+      });
+      return null;
+    }
+
+    // Preserve catalog order for a stable session; the plan price stays first.
+    for (const key of selectedAddonKeys) {
+      const foundModule = modules.find((m) => m.key === key);
+      if (foundModule?.stripePriceId) addonPriceIds.push(foundModule.stripePriceId);
+    }
+  }
+
+  return { tier, cadence, priceId, addonPriceIds };
 };
 
 export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
@@ -240,105 +369,9 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     const gated = await enforceProfileGate(app, request, sub, reply, 'subscription');
     if (gated) return gated;
 
-    const parsed = premiumCheckoutRequestSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(422).send({
-        error: 'UnprocessableEntity',
-        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
-      });
-    }
-    const { cadence, planSlug, addonKeys } = parsed.data;
-    const selectedAddonKeys = [...new Set(addonKeys ?? [])].sort();
-
-    const cadenceAddonRejection = checkAnnualCadenceAddonRejection(cadence, selectedAddonKeys);
-    if (cadenceAddonRejection) {
-      return reply.status(422).send(cadenceAddonRejection);
-    }
-
-    // Resolve the target tier. Default 'gold' keeps the legacy single-tier
-    // env flow working when no planSlug is supplied. When planSlug is given
-    // we resolve the tier from the catalog (server-side; never trust a
-    // client price id).
-    let tier: 'gold' | 'silver' | 'bronze' = 'gold';
-    if (planSlug) {
-      const plan = await prisma.premiumPlan.findUnique({
-        where: { slug: planSlug },
-        select: { tier: true, active: true },
-      });
-      if (!plan || !plan.active) {
-        return reply.status(404).send({ error: 'NotFound', message: 'plan not found' });
-      }
-      tier = plan.tier;
-    }
-
-    // Catalog-aware price resolution (additive). Prefer the catalog's
-    // stripePriceId for (tier, cadence) when configured. Fall back to the
-    // legacy GOLD env price ONLY for the gold tier, so existing behavior is
-    // unchanged when the catalog has no provider price wired. A non-gold tier
-    // without a configured stripePriceId is 503 (we never substitute the gold
-    // price for another tier).
-    const catalogPrice = await prisma.premiumPlanPrice.findFirst({
-      where: { plan: { tier }, cadence },
-      select: { stripePriceId: true },
-    });
-
-    let priceId: string | undefined;
-    if (catalogPrice?.stripePriceId) {
-      priceId = catalogPrice.stripePriceId;
-    } else if (tier === 'gold') {
-      priceId =
-        cadence === 'monthly'
-          ? app.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY
-          : app.env.STRIPE_PRICE_PREMIUM_GOLD_ANNUAL;
-    }
-
-    if (!priceId) {
-      request.log.error(
-        { cadence, tier, planSlug },
-        'me-premium: checkout requested but no stripe price resolved (catalog + env)',
-      );
-      return reply
-        .status(503)
-        .send({ error: 'ServiceUnavailable', message: 'billing price not configured' });
-    }
-
-    // Resolve add-on prices from the catalog. Unknown/inactive key is a client
-    // error (400); a known module with no stripePriceId is an operator
-    // misconfiguration (503).
-    const addonPriceIds: string[] = [];
-    if (selectedAddonKeys.length > 0) {
-      const modules = await prisma.premiumAddonModule.findMany({
-        where: { key: { in: selectedAddonKeys }, active: true },
-        select: { key: true, stripePriceId: true },
-      });
-
-      const found = new Set(modules.map((m) => m.key));
-      const unknownAddonKeys = selectedAddonKeys.filter((k) => !found.has(k));
-      if (unknownAddonKeys.length > 0) {
-        return reply
-          .status(400)
-          .send({ error: 'BadRequest', message: 'unknown add-on key', unknownAddonKeys });
-      }
-
-      const missingAddonKeys = modules.filter((m) => !m.stripePriceId).map((m) => m.key);
-      if (missingAddonKeys.length > 0) {
-        request.log.error(
-          { missingAddonKeys },
-          'me-premium: checkout requested but add-on stripePriceId not configured',
-        );
-        return reply.status(503).send({
-          error: 'ServiceUnavailable',
-          message: 'add-on price not configured',
-          missingAddonKeys,
-        });
-      }
-
-      // Preserve catalog order for a stable session; the plan price stays first.
-      for (const key of selectedAddonKeys) {
-        const found = modules.find((m) => m.key === key);
-        if (found?.stripePriceId) addonPriceIds.push(found.stripePriceId);
-      }
-    }
+    const pkg = await resolveSubscriptionPackage(request, reply);
+    if (!pkg) return reply; // resolveSubscriptionPackage ja respondeu
+    const { cadence, priceId, addonPriceIds } = pkg;
 
     // Inline precheck — close the race window between GET precheck + POST.
     const existingGarage = await prisma.garage.findUnique({
@@ -483,6 +516,158 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     return reply
       .status(201)
       .send(premiumCheckoutResponseSchema.parse({ url: session.url, sessionId: session.id }));
+  };
+
+  /**
+   * POST /api/me/premium/checkout-native
+   *
+   * Assinatura para o PaymentSheet. Guarda de duplicidade da Decisao 4, quatro
+   * pecas:
+   *
+   *  1. SELECT ... FOR UPDATE na linha de Garage antes de qualquer
+   *     subscriptions.create. Mesmo padrao de stripe-billing-webhook.ts:754.
+   *     Dois toques concorrentes serializam.
+   *  2. PremiumSubscriptionAttempt com unique parcial por garageId onde
+   *     status = 'pending'. E o registro pre-pagamento. PremiumMembership fica
+   *     intocada, o que PRESERVA a invariante de que membership so nasce de
+   *     webhook verificado.
+   *  3. Chave determinstica sub_${garageId}_${cadence}_${digest}_${attemptId}.
+   *     Toques concorrentes caem na mesma tentativa e colapsam numa assinatura
+   *     so. Recontratar depois de cancelar abre tentativa nova, e portanto
+   *     assinatura nova, sem colisao de chave.
+   *  4. Reaping por TTL de 23h no worker de reconciliacao (task separada), antes
+   *     de a Stripe transicionar para incomplete_expired.
+   */
+  const nativeCheckoutHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+    }
+
+    const { sub } = requireUser(request);
+
+    const gated = await enforceProfileGate(app, request, sub, reply, 'subscription');
+    if (gated) return gated;
+
+    const pkg = await resolveSubscriptionPackage(request, reply);
+    if (!pkg) return reply; // resolveSubscriptionPackage ja respondeu
+
+    const user = await prisma.user.findUnique({ where: { id: sub }, select: { email: true } });
+    if (!user) return reply.status(401).send({ error: 'Unauthorized' });
+
+    const garage = await prisma.garage.upsert({
+      where: { userId: sub },
+      create: { userId: sub, name: 'Garagem', slug: `garage-${sub}` },
+      update: {},
+      select: { id: true },
+    });
+
+    const { customerId } = await app.stripe.findOrCreateCustomer({
+      email: user.email,
+      garageId: garage.id,
+    });
+
+    const packageDigest = createHash('sha1')
+      .update([pkg.priceId, ...pkg.addonPriceIds].join('|'))
+      .digest('hex')
+      .slice(0, 12);
+
+    // Lock + precheck + tentativa numa transacao so. O lock e o que faz dois
+    // toques concorrentes serializarem em vez de criarem duas assinaturas.
+    const outcome = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garage.id} FOR UPDATE`;
+
+      const live = await tx.premiumMembership.findFirst({
+        where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
+        select: { provider: true, providerCustomerRef: true },
+      });
+      if (live) return { kind: 'already' as const, live };
+
+      const pending = await tx.premiumSubscriptionAttempt.findFirst({
+        where: { garageId: garage.id, status: 'pending' },
+      });
+      if (pending) return { kind: 'reuse' as const, attempt: pending };
+
+      const created = await tx.premiumSubscriptionAttempt.create({
+        data: {
+          garageId: garage.id,
+          cadence: pkg.cadence,
+          planTier: pkg.tier,
+          packageDigest,
+          idempotencyKey: '',
+          status: 'pending',
+        },
+      });
+      return { kind: 'created' as const, attempt: created };
+    });
+
+    if (outcome.kind === 'already') {
+      return reply.status(409).send({
+        error: 'AlreadySubscribed',
+        provider: outcome.live.provider,
+        message: 'ja existe assinatura viva para esta garagem',
+      });
+    }
+
+    const attempt = outcome.attempt;
+
+    // Chave derivada de attempt.id, nao de um valor aleatorio por toque: um
+    // segundo toque que reutiliza a MESMA tentativa 'pending' (outcome.kind
+    // === 'reuse') recalcula a MESMA chave, e e a Stripe — nao este handler —
+    // quem colapsa a segunda chamada na resposta ja processada da primeira.
+    const idempotencyKey = `sub_${garage.id}_${pkg.cadence}_${packageDigest}_${attempt.id}`;
+
+    let result;
+    try {
+      result = await app.stripe.createNativeSubscription({
+        customerId,
+        priceIds: [pkg.priceId, ...pkg.addonPriceIds],
+        metadata: { garageId: garage.id, userId: sub, cadence: pkg.cadence },
+        idempotencyKey,
+      });
+    } catch (err) {
+      // A tentativa vira abandoned imediatamente. Deixa-la pending travaria a
+      // garagem por 23h por causa de uma falha que nem chegou na Stripe.
+      await prisma.premiumSubscriptionAttempt.update({
+        where: { id: attempt.id },
+        data: { status: 'abandoned' },
+      });
+      request.log.error(
+        { err, garageId: garage.id },
+        'me-premium: stripe recusou a assinatura nativa',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+    }
+
+    if (!result.clientSecret) {
+      await prisma.premiumSubscriptionAttempt.update({
+        where: { id: attempt.id },
+        data: { status: 'abandoned', providerSubRef: result.subscriptionId, idempotencyKey },
+      });
+      request.log.error(
+        { garageId: garage.id, subscriptionId: result.subscriptionId, status: result.status },
+        'me-premium: assinatura nativa sem confirmation_secret',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+    }
+
+    await prisma.premiumSubscriptionAttempt.update({
+      where: { id: attempt.id },
+      data: { providerSubRef: result.subscriptionId, idempotencyKey },
+    });
+
+    return reply.status(201).send(
+      premiumNativeCheckoutResponseSchema.parse({
+        subscriptionId: result.subscriptionId,
+        clientSecret: result.clientSecret,
+        attemptId: attempt.id,
+      }),
+    );
   };
 
   /**
@@ -800,6 +985,25 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       '/api/me/premium/checkout',
       { preHandler: requireSubscriptionsEnabled },
       checkoutHandler,
+    );
+  });
+
+  // Limite por usuario autenticado, nao por IP. app.ts nao seta trustProxy,
+  // entao atras do Railway req.ip e o proxy de borda para todo mundo e um
+  // limite por IP seria um balde global. Chavear no sub evita o problema.
+  // Sem limite, "UUID novo a cada toque" e torneira de assinaturas orfas.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 5,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => `premium-checkout-native:${req.user?.sub ?? req.ip}`,
+    });
+    scoped.post(
+      '/api/me/premium/checkout-native',
+      { preHandler: requireSubscriptionsEnabled },
+      nativeCheckoutHandler,
     );
   });
 

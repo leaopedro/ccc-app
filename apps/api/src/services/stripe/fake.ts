@@ -9,10 +9,12 @@ import type {
   CheckoutSessionResult,
   CreateBillingPortalSessionInput,
   CreateCheckoutSessionInput,
+  CreateNativeSubscriptionInput,
   CreatePaymentIntentInput,
   CreateSubscriptionCheckoutSessionInput,
   FindOrCreateCustomerInput,
   FindOrCreateCustomerResult,
+  NativeSubscriptionResult,
   OpenSubscriptionCheckoutSession,
   PauseSubscriptionCollectionInput,
   PaymentIntentResult,
@@ -35,6 +37,7 @@ type FakeCall = {
     | 'retrievePaymentIntent'
     | 'retrieveSubscription'
     | 'createSubscriptionCheckoutSession'
+    | 'createNativeSubscription'
     | 'findOrCreateCustomer'
     | 'deleteCustomersByEmail'
     | 'createBillingPortalSession'
@@ -74,6 +77,10 @@ export type FakeStripe = StripeClient & {
    * an already-expired session and the retry returns an open one.
    */
   subscriptionCheckoutSessionQueue: SubscriptionCheckoutSessionResult[];
+  /** Next payload returned by createNativeSubscription. */
+  nextNativeSubscription: NativeSubscriptionResult;
+  /** When set, createNativeSubscription throws this error. */
+  nextCreateNativeSubscriptionError: Error | null;
   /** Next customer payload returned by findOrCreateCustomer. */
   nextFoundOrCreatedCustomer: FindOrCreateCustomerResult;
   /** Count returned by deleteCustomersByEmail. Defaults to 0. */
@@ -142,6 +149,12 @@ export const buildFakeStripe = (): FakeStripe => {
       status: 'open',
     },
     subscriptionCheckoutSessionQueue: [],
+    nextNativeSubscription: {
+      subscriptionId: 'sub_native_fake_1',
+      clientSecret: 'pi_sub_secret_fake',
+      status: 'incomplete',
+    },
+    nextCreateNativeSubscriptionError: null,
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
     nextDeletedCustomerCount: 0,
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
@@ -235,6 +248,14 @@ export const buildFakeStripe = (): FakeStripe => {
         throw fake.nextCreateSubscriptionCheckoutSessionError;
       }
       return fake.subscriptionCheckoutSessionQueue.shift() ?? fake.nextSubscriptionCheckoutSession;
+    },
+
+    createNativeSubscription: async (
+      input: CreateNativeSubscriptionInput,
+    ): Promise<NativeSubscriptionResult> => {
+      fake.calls.push({ kind: 'createNativeSubscription', payload: input });
+      if (fake.nextCreateNativeSubscriptionError) throw fake.nextCreateNativeSubscriptionError;
+      return fake.nextNativeSubscription;
     },
 
     findOrCreateCustomer: async (

@@ -85,6 +85,25 @@ export type SubscriptionCheckoutSessionResult = {
   status: 'open' | 'complete' | 'expired' | null;
 };
 
+export type CreateNativeSubscriptionInput = {
+  customerId: string;
+  /** Todos os prices recorrentes, plano primeiro. Mesmo intervalo e moeda. */
+  priceIds: string[];
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+};
+
+export type NativeSubscriptionResult = {
+  subscriptionId: string;
+  /**
+   * client_secret da confirmation_secret da latest_invoice. Null quando a
+   * Stripe finaliza a fatura sem exigir confirmacao (valor zero, credito),
+   * caso em que nao ha nada para o PaymentSheet apresentar.
+   */
+  clientSecret: string | null;
+  status: Stripe.Subscription.Status;
+};
+
 export type FindOrCreateCustomerInput = {
   email: string;
   garageId: string;
@@ -219,6 +238,21 @@ export type StripeClient = {
   createSubscriptionCheckoutSession: (
     input: CreateSubscriptionCheckoutSessionInput,
   ) => Promise<SubscriptionCheckoutSessionResult>;
+  /**
+   * Assinatura nativa para o PaymentSheet. payment_behavior
+   * 'default_incomplete' faz a Stripe criar a assinatura em `incomplete` e
+   * deixar a primeira fatura aguardando confirmacao no cliente.
+   *
+   * O segredo sai de `latest_invoice.confirmation_secret.client_secret`. Na SDK
+   * 22.1.0 com apiVersion 2026-04-22.dahlia, `Invoice` NAO tem `payment_intent`
+   * no topo (Invoices.d.ts:207 e :472-481); o unico `payment_intent` do arquivo
+   * esta dentro de LastFinalizationError. `invoice.payment_intent` nao compila.
+   *
+   * `confirmation_secret` so vem preenchida com expand explicito.
+   */
+  createNativeSubscription: (
+    input: CreateNativeSubscriptionInput,
+  ) => Promise<NativeSubscriptionResult>;
   findOrCreateCustomer: (input: FindOrCreateCustomerInput) => Promise<FindOrCreateCustomerResult>;
   /**
    * Delete (Stripe-side "forget") every live customer matching this email.
@@ -476,6 +510,25 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       );
       if (!session.url) throw new Error('stripe subscription checkout session missing url');
       return { id: session.id, url: session.url, status: session.status };
+    },
+    createNativeSubscription: async ({ customerId, priceIds, metadata, idempotencyKey }) => {
+      const sub = await stripe.subscriptions.create(
+        {
+          customer: customerId,
+          items: priceIds.map((price) => ({ price, quantity: 1 })),
+          payment_behavior: 'default_incomplete',
+          payment_settings: { save_default_payment_method: 'on_subscription' },
+          metadata,
+          expand: ['latest_invoice.confirmation_secret'],
+        },
+        { idempotencyKey },
+      );
+      const invoice = typeof sub.latest_invoice === 'string' ? null : sub.latest_invoice;
+      return {
+        subscriptionId: sub.id,
+        clientSecret: invoice?.confirmation_secret?.client_secret ?? null,
+        status: sub.status,
+      };
     },
     findOrCreateCustomer: async ({ email, garageId }) => {
       // Email-based dedup; matches Stripe's own customer-by-email convention.

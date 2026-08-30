@@ -172,3 +172,17 @@ export const premiumCheckoutRejectionSchema = z.object({
 });
 
 export type PremiumCheckoutRejection = z.infer<typeof premiumCheckoutRejectionSchema>;
+
+/**
+ * POST /api/me/premium/checkout-native — resposta.
+ *
+ * clientSecret e obrigatorio: uma resposta 201 sem segredo daria ao app uma
+ * folha de pagamento que nao pode cobrar nada.
+ */
+export const premiumNativeCheckoutResponseSchema = z.object({
+  subscriptionId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  attemptId: z.string().min(1),
+});
+
+export type PremiumNativeCheckoutResponse = z.infer<typeof premiumNativeCheckoutResponseSchema>;

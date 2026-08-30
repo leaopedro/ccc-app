@@ -723,9 +723,9 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
     // (stripe-webhook.ts:401) e settlePaidOrder le o resto. Divergir aqui deixa
     // a PI nativa paga sem carrinho resolvivel.
     //
-    // cartVersion e o discriminador de folha velha. handleCartFailure reabre o
-    // carrinho incrementando version (stripe-webhook.ts:362-366), entao uma PI
-    // minta antes da reabertura carrega uma versao que nao existe mais.
+    // cartVersion so e emitido aqui por enquanto; nada em stripe-webhook.ts
+    // ainda le metadata.cartVersion. Deteccao de folha velha e de uma task
+    // futura, nao deste handler.
     const stripeMetadata: Record<string, string> = {
       cartId: cart.id,
       userId: sub,

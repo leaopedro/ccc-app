@@ -1,5 +1,5 @@
 import type {
-  BeginCheckoutRequest,
+  BeginCheckoutRequestInput,
   BeginCheckoutResponse,
   CartItemInput,
   ClearCartResponse,
@@ -48,7 +48,7 @@ export const clearCart = (): Promise<ClearCartResponse> => {
   return authedRequest('/cart', clearCartResponseSchema, { method: 'DELETE' });
 };
 
-export const beginCheckout = (input: BeginCheckoutRequest): Promise<BeginCheckoutResponse> => {
+export const beginCheckout = (input: BeginCheckoutRequestInput): Promise<BeginCheckoutResponse> => {
   return authedRequest('/cart/checkout', beginCheckoutResponseSchema, {
     method: 'POST',
     body: beginCheckoutRequestSchema.parse(input),

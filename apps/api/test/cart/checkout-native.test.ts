@@ -132,6 +132,27 @@ describe('POST /cart/checkout — flow native', () => {
     expect(order.providerRef).toBe('pi_test_1');
   });
 
+  // Invariante mais importante deste caminho: so o webhook verificado pode
+  // marcar o pedido como pago. O checkout nativo so grava o providerRef.
+  it('nao marca o pedido como pago; so o webhook faz isso', async () => {
+    const { user } = await createUser({ verified: true });
+    const token = bearer(env, user.id);
+    const { event, tier } = await seedPublishedEvent();
+    await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/cart/checkout',
+      headers: { authorization: token },
+      payload: { paymentMethod: 'card', flow: 'native' },
+    });
+
+    const body = beginCheckoutResponseSchema.parse(res.json());
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body.orderIds[0]! } });
+    expect(order.status).toBe('pending');
+    expect(order.paidAt).toBeNull();
+  });
+
   // Sem esta metadata o webhook nao resolve o carrinho e a PI paga fica orfa.
   it('carrega a mesma metadata que o webhook de carrinho ja le', async () => {
     const { user } = await createUser({ verified: true });

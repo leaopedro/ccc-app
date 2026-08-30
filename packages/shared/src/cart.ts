@@ -244,6 +244,9 @@ export const beginCheckoutRequestSchema = z.object({
   pickupEventId: z.string().min(1).optional(),
 });
 export type BeginCheckoutRequest = z.infer<typeof beginCheckoutRequestSchema>;
+// Input type: 'flow' is optional here (schema default fills it in server-side).
+// Callers building the request body should use this type, not BeginCheckoutRequest.
+export type BeginCheckoutRequestInput = z.input<typeof beginCheckoutRequestSchema>;
 
 export const beginCheckoutResponseSchema = z.object({
   checkoutId: z.string().min(1),

@@ -507,6 +507,27 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'ServiceUnavailable', message: 'store is currently disabled' });
     }
 
+    // Diretriz 3.1.3(e) da Apple isenta bens FISICOS consumidos fora do app.
+    // Um produto `virtual: true` e desbloqueio digital, e vender desbloqueio
+    // digital fora do IAP e rejeicao 3.1.1. Aposentar um SKU resolve a
+    // instancia de hoje; recusar aqui resolve a proxima.
+    //
+    // Recusa antes de reserveAndCreateOrders: abaixo desta linha o carrinho vai
+    // para `checking_out` e o estoque e reservado.
+    if (request.clientPlatform === 'ios') {
+      const virtualVariantIds = cart.items
+        .filter((item) => item.kind === 'product' && item.variant?.product.virtual === true)
+        .map((item) => item.variant!.id);
+      if (virtualVariantIds.length > 0) {
+        return reply.status(403).send({
+          error: 'PlatformNotSupported',
+          code: 'VIRTUAL_ITEM_IOS_BLOCKED',
+          message: 'Itens digitais nao podem ser comprados pelo aplicativo iOS.',
+          variantIds: virtualVariantIds,
+        });
+      }
+    }
+
     if (cart.status !== 'open') {
       return reply.status(409).send({
         error: 'Conflict',

@@ -153,6 +153,17 @@ async function handleActivated(
     });
   }
 
+  // Task 9's native checkout (POST /checkout-native) leaves the originating
+  // PremiumSubscriptionAttempt row 'pending' until the subscription is
+  // actually confirmed paid — this event is that confirmation. updateMany
+  // (not update): a hosted-checkout membership has no matching attempt row
+  // at all, and a replay of this same event finds the row already
+  // 'succeeded'; both must be a no-op, not a thrown "record not found".
+  await tx.premiumSubscriptionAttempt.updateMany({
+    where: { providerSubRef, status: 'pending' },
+    data: { status: 'succeeded' },
+  });
+
   // Insert invoice — idempotent on (provider, providerInvoiceRef).
   // P2002 = replay; silently skip (the invoice already landed).
   // SAVEPOINT wrap mirrors xp-awarder pattern: Prisma's $transaction does

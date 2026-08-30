@@ -311,6 +311,32 @@ export type OpenSubscriptionCheckoutSession = {
   url: string | null;
 };
 
+/**
+ * True only when the error PROVES the Stripe API rejected the request without
+ * creating anything — safe for a caller to mark a pre-payment record (e.g.
+ * PremiumSubscriptionAttempt) as abandoned.
+ *
+ * False for everything else, on purpose:
+ *  - StripeIdempotencyError: a concurrent call reused the SAME key while the
+ *    first call is still in flight ("request outstanding"). The subscription
+ *    may be created any moment by that first call.
+ *  - StripeConnectionError: the request may never have reached Stripe, or it
+ *    reached Stripe and the response was lost in transit. Either way, the
+ *    subscription may exist.
+ *  - StripeAPIError (Stripe 5xx) and anything unrecognised: Stripe's own
+ *    infrastructure failed after receiving the request — no guarantee the
+ *    resource was not created.
+ *
+ * Callers MUST treat a false result as "outcome unknown", not "succeeded":
+ * leave the pre-payment record alone (do not flip it to a terminal status)
+ * and let a slower path (retry, reconciliation) resolve it later.
+ */
+export const isDefinitiveSubscriptionRejection = (err: unknown): boolean =>
+  err instanceof Stripe.errors.StripeInvalidRequestError ||
+  err instanceof Stripe.errors.StripeCardError ||
+  err instanceof Stripe.errors.StripeAuthenticationError ||
+  err instanceof Stripe.errors.StripePermissionError;
+
 type StripeEnv = {
   readonly STRIPE_SECRET_KEY: string;
   readonly STRIPE_WEBHOOK_SECRET: string;

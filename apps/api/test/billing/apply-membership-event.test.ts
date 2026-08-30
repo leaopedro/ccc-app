@@ -125,6 +125,52 @@ describe('applyMembershipEvent', () => {
     expect(updatedGarage.xp).toBe(200);
   });
 
+  // Fix round 1, finding 3 (Task 9 plan defect): nothing else in this plan
+  // ever flips a PremiumSubscriptionAttempt to 'succeeded'. Without this, a
+  // real subscriber's attempt row stays 'pending' forever — Task 11's reaper
+  // would eventually reap a row belonging to a LIVE subscription, and Task
+  // 10's precheck would answer "attempt in flight" for up to 23h to someone
+  // who already paid.
+  it('activated: flips a matching pending PremiumSubscriptionAttempt to succeeded', async () => {
+    const { user } = await createUser({ email: 'am-attempt@jdm.test', verified: true });
+    const gid = await garageId(user.id);
+    const attempt = await prisma.premiumSubscriptionAttempt.create({
+      data: {
+        garageId: gid,
+        cadence: 'monthly',
+        planTier: 'gold',
+        packageDigest: 'digestfortest',
+        idempotencyKey: 'sub_test_monthly_digestfortest_attempt1',
+        providerSubRef: 'sub_test001',
+        status: 'pending',
+      },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+      await applyMembershipEvent(tx, buildActivatedEvt(gid));
+    });
+
+    const updated = await prisma.premiumSubscriptionAttempt.findUniqueOrThrow({
+      where: { id: attempt.id },
+    });
+    expect(updated.status).toBe('succeeded');
+  });
+
+  // A hosted-checkout membership has no PremiumSubscriptionAttempt row at
+  // all. updateMany must be a silent no-op, not a thrown "record not found".
+  it('activated: no matching attempt row is a no-op, not an error', async () => {
+    const { user } = await createUser({ email: 'am-no-attempt@jdm.test', verified: true });
+    const gid = await garageId(user.id);
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${gid} FOR UPDATE`;
+        await applyMembershipEvent(tx, buildActivatedEvt(gid));
+      }),
+    ).resolves.not.toThrow();
+  });
+
   it('activated: max() rule — existing admin-grant premiumUntil beyond sub period is not clobbered', async () => {
     const { user } = await createUser({ email: 'am2@jdm.test', verified: true });
     const gid = await garageId(user.id);

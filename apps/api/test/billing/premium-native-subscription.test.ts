@@ -16,6 +16,7 @@
 
 import { prisma } from '@ccc/db';
 import type { FastifyInstance } from 'fastify';
+import Stripe from 'stripe';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -231,6 +232,115 @@ describe('POST /api/me/premium/checkout-native', () => {
     expect(keys[1]?.startsWith(`sub_${garage.id}_monthly_`)).toBe(true);
 
     expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
+  // Fix round 1, finding 1 (CRITICAL): trocar de pacote enquanto a tentativa
+  // anterior ainda esta pending (invoice.paid nao chegou) NAO pode reusar
+  // aquela tentativa — reusar mintaria uma SEGUNDA assinatura viva com uma
+  // chave nova (digest diferente), deixando A e B cobrando ao mesmo tempo.
+  it('trocar de pacote com uma tentativa pending recusa em vez de abrir segunda assinatura', async () => {
+    const plan = await prisma.premiumPlan.findUniqueOrThrow({ where: { slug: 'fundador' } });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: plan.id,
+        cadence: 'annual',
+        baseAmountCents: 249_900,
+        currency: 'BRL',
+        stripePriceId: 'price_gold_annual',
+      },
+    });
+    const { user } = await createUser({ verified: true });
+    const token = bearer(env, user.id);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: token, 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+    expect(first.statusCode).toBe(201);
+    const firstBody = first.json() as { attemptId: string; subscriptionId: string };
+
+    // invoice.paid ainda nao chegou: a tentativa da primeira escolha continua
+    // pending quando o usuario tenta um pacote diferente.
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: token, 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'annual', planSlug: 'fundador' },
+    });
+
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toMatchObject({ error: 'SubscriptionAttemptInFlight' });
+
+    // Nenhuma segunda chamada a Stripe, nenhuma segunda tentativa.
+    const nativeCalls = stripe.calls.filter((c) => c.kind === 'createNativeSubscription');
+    expect(nativeCalls).toHaveLength(1);
+    expect(await prisma.premiumSubscriptionAttempt.count()).toBe(1);
+
+    const attempt = await prisma.premiumSubscriptionAttempt.findUniqueOrThrow({
+      where: { id: firstBody.attemptId },
+    });
+    expect(attempt.status).toBe('pending');
+    expect(attempt.providerSubRef).toBe(firstBody.subscriptionId);
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
+  // Fix round 1, finding 2 (Important): a chamada perdedora de duas
+  // concorrentes com a MESMA chave recebe um idempotency_error da Stripe
+  // enquanto a vencedora ainda esta em voo — isso NAO prova que a assinatura
+  // nao foi criada. Marcar a tentativa como abandoned aqui destruiria o
+  // rastro de uma assinatura que pode estar viva e cobrando.
+  it('idempotency_error da chamada perdedora nao marca a tentativa como abandoned', async () => {
+    const { user } = await createUser({ verified: true });
+    stripe.nextCreateNativeSubscriptionError = new Stripe.errors.StripeIdempotencyError();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(env, user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    const attempt = await prisma.premiumSubscriptionAttempt.findFirstOrThrow();
+    expect(attempt.status).toBe('pending');
+  });
+
+  // Mesma logica para timeout/erro de conexao: a requisicao pode ter
+  // chegado na Stripe e criado a assinatura antes da resposta se perder.
+  it('erro de conexao/timeout tambem nao marca a tentativa como abandoned', async () => {
+    const { user } = await createUser({ verified: true });
+    stripe.nextCreateNativeSubscriptionError = new Stripe.errors.StripeConnectionError();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(env, user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    const attempt = await prisma.premiumSubscriptionAttempt.findFirstOrThrow();
+    expect(attempt.status).toBe('pending');
+  });
+
+  // Regressao: uma recusa que PROVA que nada foi criado do lado da Stripe
+  // ainda deve marcar a tentativa como abandoned, exatamente como antes.
+  it('uma recusa definitiva da Stripe marca a tentativa como abandoned', async () => {
+    const { user } = await createUser({ verified: true });
+    stripe.nextCreateNativeSubscriptionError = new Stripe.errors.StripeInvalidRequestError();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(env, user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    const attempt = await prisma.premiumSubscriptionAttempt.findFirstOrThrow();
+    expect(attempt.status).toBe('abandoned');
   });
 
   it('recusa quando ja existe membership viva', async () => {

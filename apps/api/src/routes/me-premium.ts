@@ -36,7 +36,11 @@ import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
-import type { StripeClient, SubscriptionCheckoutSessionResult } from '../services/stripe/index.js';
+import {
+  isDefinitiveSubscriptionRejection,
+  type StripeClient,
+  type SubscriptionCheckoutSessionResult,
+} from '../services/stripe/index.js';
 
 const billingPortalBodySchema = z.object({
   returnUrl: z.string().url().optional(),
@@ -584,10 +588,23 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       });
       if (live) return { kind: 'already' as const, live };
 
+      // Um pending de OUTRO pacote (cadence ou packageDigest diferentes) NAO
+      // pode ser reusado: a chave recalculada levaria o novo digest, a Stripe
+      // trataria como chave inedita (nao colapsaria com a tentativa em voo),
+      // e um segundo subscriptions.create mintaria uma SEGUNDA assinatura
+      // viva para a mesma garagem enquanto a primeira ainda pode confirmar.
+      // Recusar aqui, antes de qualquer chamada a Stripe, mantem valendo a
+      // garantia de "no maximo uma assinatura por garagem" que a guarda
+      // inteira existe para dar.
       const pending = await tx.premiumSubscriptionAttempt.findFirst({
         where: { garageId: garage.id, status: 'pending' },
       });
-      if (pending) return { kind: 'reuse' as const, attempt: pending };
+      if (pending) {
+        if (pending.cadence === pkg.cadence && pending.packageDigest === packageDigest) {
+          return { kind: 'reuse' as const, attempt: pending };
+        }
+        return { kind: 'conflict' as const };
+      }
 
       const created = await tx.premiumSubscriptionAttempt.create({
         data: {
@@ -610,6 +627,13 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    if (outcome.kind === 'conflict') {
+      return reply.status(409).send({
+        error: 'SubscriptionAttemptInFlight',
+        message: 'ja existe uma tentativa de assinatura em andamento para outro pacote',
+      });
+    }
+
     const attempt = outcome.attempt;
 
     // Chave derivada de attempt.id, nao de um valor aleatorio por toque: um
@@ -627,12 +651,28 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         idempotencyKey,
       });
     } catch (err) {
-      // A tentativa vira abandoned imediatamente. Deixa-la pending travaria a
-      // garagem por 23h por causa de uma falha que nem chegou na Stripe.
-      await prisma.premiumSubscriptionAttempt.update({
-        where: { id: attempt.id },
-        data: { status: 'abandoned' },
-      });
+      // So marca abandoned quando a Stripe PROVA que recusou o pedido sem
+      // criar nada (isDefinitiveSubscriptionRejection). Um idempotency_error
+      // (a chamada perdedora de duas concorrentes com a MESMA chave, presa
+      // atras da primeira ainda em voo), um erro de conexao/timeout, ou um
+      // 5xx da Stripe NAO provam isso — a assinatura pode ter sido criada do
+      // lado da Stripe. Marcar abandoned nesses casos apagaria o rastro
+      // (providerSubRef) de uma assinatura que pode estar viva e cobrando, e
+      // abriria espaco para uma segunda tentativa mintar uma SEGUNDA
+      // assinatura. Deixar 'pending' e o resultado seguro; TTL/reconciliacao
+      // (task separada) resolve o caso raro em que a Stripe de fato nao
+      // criou nada.
+      if (isDefinitiveSubscriptionRejection(err)) {
+        await prisma.premiumSubscriptionAttempt.update({
+          where: { id: attempt.id },
+          data: { status: 'abandoned' },
+        });
+      } else {
+        request.log.warn(
+          { err, garageId: garage.id, attemptId: attempt.id },
+          'me-premium: assinatura nativa falhou de forma ambigua; tentativa permanece pending',
+        );
+      }
       request.log.error(
         { err, garageId: garage.id },
         'me-premium: stripe recusou a assinatura nativa',

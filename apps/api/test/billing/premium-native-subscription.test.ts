@@ -6,12 +6,16 @@
  * still only happens from the invoice.paid webhook (a separate task) — this
  * route MUST NEVER write a PremiumMembership row.
  *
- * The duplicate guard has four pieces, all exercised below:
+ * The duplicate guard has five pieces, all exercised below:
  *   1. SELECT ... FOR UPDATE on Garage before any subscriptions.create.
  *   2. PremiumSubscriptionAttempt with a partial unique index on
  *      (garageId) WHERE status = 'pending'.
  *   3. Deterministic idempotency key sub_{garageId}_{cadence}_{digest}_{attemptId}.
  *   4. Terminal status flip on the outcomes this task can observe (abandoned).
+ *   5. (Task 10, fix round 1) listOpenSubscriptionCheckoutSessions after the
+ *      transaction, refusing rather than minting when a hosted Checkout
+ *      Session is already open for this garage — the mirror-direction guard
+ *      of Task 10's hosted-side fix.
  */
 
 import { prisma } from '@ccc/db';
@@ -374,6 +378,46 @@ describe('POST /api/me/premium/checkout-native', () => {
 
     expect(res.statusCode).toBe(409);
     expect(await prisma.premiumSubscriptionAttempt.count()).toBe(0);
+  });
+
+  // Task 10, fix round 1 — espelho do guard cross-path: um checkout hospedado
+  // ja aberto (Checkout Session, sem membership, sem PremiumSubscriptionAttempt
+  // nenhuma) tem que ser visivel para o caminho nativo, ou o caminho nativo
+  // mintaria uma SEGUNDA assinatura viva por cima do checkout hospedado em
+  // andamento.
+  it('recusa quando ja existe uma Checkout Session hospedada aberta, sem chamar a Stripe', async () => {
+    const { user } = await createUser({ verified: true });
+    stripe.nextOpenSubscriptionCheckoutSessions = [
+      { id: 'cs_hosted_in_flight', url: 'https://checkout.stripe.com/pay/cs_hosted_in_flight' },
+    ];
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(env, user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'SubscriptionAttemptInFlight' });
+
+    // O ponto central do teste: a Stripe nunca foi chamada para criar a
+    // assinatura nativa. Checar so o status code deixaria passar uma
+    // implementacao que minta a assinatura e SO DEPOIS recusa a resposta.
+    const nativeCalls = stripe.calls.filter((c) => c.kind === 'createNativeSubscription');
+    expect(nativeCalls).toHaveLength(0);
+
+    // A tentativa criada por esta mesma requisicao (outcome 'created', nao
+    // 'reuse' — era a primeira tentativa nativa desta garagem) e marcada
+    // abandoned, nao deixada pending: um 'pending' orfao aqui bloquearia
+    // permanentemente o precheck/checkout hospedado (guard do Task 10).
+    const attempt = await prisma.premiumSubscriptionAttempt.findFirstOrThrow({
+      where: {
+        garageId: (await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } })).id,
+      },
+    });
+    expect(attempt.status).toBe('abandoned');
+    expect(await prisma.premiumMembership.count()).toBe(0);
   });
 
   it('herda a rejeicao de anual mais add-on da Decisao 2', async () => {

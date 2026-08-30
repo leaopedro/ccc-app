@@ -584,7 +584,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
   /**
    * POST /api/me/premium/checkout-native
    *
-   * Assinatura para o PaymentSheet. Guarda de duplicidade da Decisao 4, quatro
+   * Assinatura para o PaymentSheet. Guarda de duplicidade da Decisao 4, cinco
    * pecas:
    *
    *  1. SELECT ... FOR UPDATE na linha de Garage antes de qualquer
@@ -600,6 +600,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
    *     assinatura nova, sem colisao de chave.
    *  4. Reaping por TTL de 23h no worker de reconciliacao (task separada), antes
    *     de a Stripe transicionar para incomplete_expired.
+   *  5. (Task 10, espelho do guard cross-path do checkout hospedado)
+   *     listOpenSubscriptionCheckoutSessions apos a transacao: recusa em vez
+   *     de mintar quando ha uma Checkout Session hospedada aberta para esta
+   *     garagem, senao o caminho nativo fica cego para um checkout hospedado
+   *     ja em andamento e mintaria uma segunda assinatura viva.
    */
   const nativeCheckoutHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
@@ -694,6 +699,45 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const attempt = outcome.attempt;
+
+    // Espelho do guard cross-path do Task 10 (que fez o hospedado enxergar a
+    // tentativa nativa): aqui e o caminho nativo que precisa enxergar uma
+    // Checkout Session hospedada aberta. Sem isso, um usuario que comeca um
+    // checkout hospedado na web (Checkout Session aberta, nenhuma membership
+    // ainda, nenhuma PremiumSubscriptionAttempt) e depois toca em assinar no
+    // iOS passaria por live-membership e pending-attempt sem achar nada, e
+    // este handler mintaria uma SEGUNDA assinatura viva — o mesmo buraco de
+    // cobranca duplicada, so que na direcao oposta.
+    //
+    // Chamada de rede, portanto roda DEPOIS que a transacao acima liberou o
+    // lock (mesma razao pela qual createNativeSubscription tambem fica fora
+    // da transacao). Recusa em vez de mintar, sem distinguir pacote: o
+    // hospedado nao tem nenhum vinculo de idempotencia com esta tentativa
+    // nativa, entao mesmo um pacote identico resultaria numa segunda
+    // assinatura genuinamente nova se deixassemos passar.
+    const openHostedSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
+    if (openHostedSessions.length > 0) {
+      if (outcome.kind === 'created') {
+        // Esta linha foi criada agora mesmo para ESTA requisicao e nunca
+        // chegou na Stripe (createNativeSubscription nem rodou ainda).
+        // Marcar abandoned evita deixar um 'pending' orfao que bloquearia
+        // permanentemente o precheck/checkout hospedado (guard do Task 10).
+        await prisma.premiumSubscriptionAttempt.update({
+          where: { id: attempt.id },
+          data: { status: 'abandoned' },
+        });
+      }
+      // outcome.kind === 'reuse': a linha pending e anterior a esta
+      // requisicao (outra tentativa nativa a criou) — deixa-la como estava.
+      request.log.warn(
+        { garageId: garage.id, openSessionIds: openHostedSessions.map((s) => s.id) },
+        'me-premium: assinatura nativa recusada, checkout hospedado ja em andamento',
+      );
+      return reply.status(409).send({
+        error: 'SubscriptionAttemptInFlight',
+        message: 'ja existe um checkout hospedado em andamento para esta garagem',
+      });
+    }
 
     // Chave derivada de attempt.id, nao de um valor aleatorio por toque: um
     // segundo toque que reutiliza a MESMA tentativa 'pending' (outcome.kind

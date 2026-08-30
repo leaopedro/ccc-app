@@ -107,6 +107,30 @@ once that integration lands.
   `--created-before=<ISO>`. There is no default on purpose — guessing it
   revokes entitlement from paying members.
 
+### 2f. Folha velha pagou apos reabertura
+
+- **Condition:** `tags[kind]:stripe-stale-cart-version`, threshold ≥ 1.
+- **Why:** um PaymentSheet antigo confirmou um clientSecret mintado antes de o
+  carrinho ser reaberto. A API reembolsa sozinha. O alerta existe porque o
+  estoque pode ja ter sido revendido para outra pessoa, e alguem precisa falar
+  com quem pagou. Volume alto significa que o cancelamento da PI em
+  handleCartFailure parou de funcionar.
+
+### 2g. Assinatura nativa sem segredo de confirmacao
+
+- **Condition:** `tags[kind]:premium-native-subscription-no-secret`, threshold ≥ 1.
+- **Why:** a Stripe criou a assinatura mas a primeira fatura voltou sem
+  `confirmation_secret`. O membro recebe 503 e nao consegue assinar pelo app.
+  Causa tipica: o `expand` de `latest_invoice.confirmation_secret` caiu num
+  refactor, ou o price esta configurado com valor zero.
+
+### 2h. Falha ao cancelar PI de pedido expirado
+
+- **Condition:** `tags[kind]:order-expiry-cancel-failed` em 1 hora, threshold ≥ 5.
+- **Why:** uma ocorrencia isolada e normal: a Stripe 400a o cancel de uma PI que
+  ela propria ja fechou. Cinco em uma hora significa que a chave Stripe perdeu
+  permissao ou que os refs do banco apontam para o outro modo.
+
 ### 3. Webhook signature mismatch
 
 - **Condition:** `tags[kind]:payment-webhook-signature` in 1 hour,
@@ -144,6 +168,19 @@ once that integration lands.
 > threshold ≥ 1. A sudden high volume means either a stale client still
 > hitting a disabled platform, or one of the `PREMIUM_SUBSCRIPTIONS_*`
 > variables flipped by mistake.
+
+> **Not wired yet: native subscription attempt reaping.**
+> `reapAbandonedAttempts` (`apps/api/src/workers/billing-reconcile.ts`) flips a
+> stale `PremiumSubscriptionAttempt` from `pending` to `abandoned` past its TTL
+> (23h with a `providerSubRef`, 15min without one) and only logs
+> `kind: 'reconcile.attempts_reaped'` — no Sentry call. This is by design, not
+> an oversight to fix blindly: reaping a TTL-expired attempt is expected
+> steady-state behavior, not a failure, so a naive rule on volume would be
+> noise. No `premium-attempt-reaped` tag exists in code today, so no rule is
+> documented for it here. If reaping volume ever needs a human (e.g. a sudden
+> spike suggesting the native checkout path is failing upstream of Stripe),
+> wire a `Sentry.captureMessage` at the point above with
+> `tags: { kind: 'premium-attempt-reaped' }` first, then add the rule.
 
 ## Synthetic verification
 

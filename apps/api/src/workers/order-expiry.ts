@@ -107,6 +107,11 @@ export const runOrderExpiryTick = async (
       await deps.stripe.cancelPaymentIntent(order.providerRef);
       cancelled += 1;
     } catch (err) {
+      Sentry.captureMessage('order-expiry: falha ao cancelar a PI do pedido expirado', {
+        level: 'warning',
+        tags: { kind: 'order-expiry-cancel-failed', provider: 'stripe' },
+        extra: { orderId: order.id, providerRef: order.providerRef },
+      });
       deps.log?.warn(
         { err, orderId: order.id, providerRef: order.providerRef },
         '[order-expiry] falha ao cancelar a PI do pedido expirado',

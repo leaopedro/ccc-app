@@ -18,6 +18,7 @@
 import { createHash } from 'node:crypto';
 
 import { prisma } from '@ccc/db';
+import * as Sentry from '@sentry/node';
 import {
   LIVE_MEMBERSHIP_STATUSES,
   premiumBillingPortalResponseSchema,
@@ -830,6 +831,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         { garageId: garage.id, subscriptionId: result.subscriptionId, status: result.status },
         'me-premium: assinatura nativa sem confirmation_secret',
       );
+      Sentry.captureMessage('me-premium: assinatura nativa sem confirmation_secret', {
+        level: 'error',
+        tags: { kind: 'premium-native-subscription-no-secret', provider: 'stripe' },
+        extra: { subscriptionId: result.subscriptionId, status: result.status },
+      });
       return reply
         .status(503)
         .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });

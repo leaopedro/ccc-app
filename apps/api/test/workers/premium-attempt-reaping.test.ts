@@ -1,7 +1,6 @@
 import { prisma } from '@ccc/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { buildFakeStripe } from '../../src/services/stripe/fake.js';
 import { reapAbandonedAttempts } from '../../src/workers/billing-reconcile.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
@@ -148,19 +147,18 @@ describe('reapAbandonedAttempts', () => {
     expect(await reapAbandonedAttempts(new Date())).toBe(0);
   });
 
-  it('nao faz nenhuma chamada Stripe', async () => {
-    const garageA = await newGarage();
-    const garageB = await newGarage();
-    await seedAttempt(garageA.id, 24 * HOUR, { providerSubRef: 'sub_live_4' });
-    await seedAttempt(garageB.id, 20 * MIN);
-
-    // reapAbandonedAttempts(now, log) nem recebe um StripeClient — nao ha
-    // como esta funcao fazer uma chamada a Stripe. O fake abaixo prova isso:
-    // como nunca e passado adiante, seu array de chamadas permanece vazio.
-    const stripe = buildFakeStripe();
-
-    await reapAbandonedAttempts(new Date());
-
-    expect(stripe.calls).toEqual([]);
-  });
+  // NAO ha teste "nao faz nenhuma chamada Stripe" aqui de proposito: uma
+  // versao anterior instanciava um FakeStripe nunca conectado a nada e
+  // afirmava `stripe.calls` vazio — isso passa incondicionalmente contra
+  // QUALQUER implementacao, inclusive uma que chamasse a Stripe por outro
+  // handle. Removido por ser teste vazio (nao pode falhar).
+  //
+  // A garantia e estrutural, nao testavel por essa via: a assinatura de
+  // `reapAbandonedAttempts` e `(now: Date, log?: FastifyBaseLogger) =>
+  // Promise<number>` — nao recebe um StripeClient. E `billing-reconcile.ts`
+  // nao guarda nenhum handle de Stripe em escopo de modulo (o unico
+  // StripeClient do arquivo chega via `ReconcileTickDeps.stripe`, injetado
+  // por chamada em `runReconcileTick`/`startReconcileWorker`, fora do
+  // caminho de `reapAbandonedAttempts`). Sem uma referencia a um
+  // StripeClient em escopo, a funcao nao tem como emitir uma chamada.
 });

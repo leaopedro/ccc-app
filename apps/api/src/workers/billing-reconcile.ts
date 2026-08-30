@@ -73,6 +73,20 @@ const ATTEMPT_TTL_MS = 23 * 60 * 60 * 1000;
  * troca de plano no meio do fluxo) — nesse caso o `providerSubRef` normalmente
  * ja foi gravado antes da resposta do request voltar ao cliente, entao a linha
  * cai no TTL de 23h de qualquer forma. Ver relatorio da tarefa.
+ *
+ * TRADE-OFF ACEITO (revisao 2026-08-30): Task 9 deriva a idempotency key de
+ * `attempt.id` justamente para que um novo toque no MESMO pending row (branch
+ * `reuse`) replique a mesma chave e a Stripe devolva a assinatura ORIGINAL
+ * (recuperando o orfao em vez de mintar uma segunda). Reapar em 15min mata
+ * essa recuperacao no caso 2 acima: o novo toque cria uma tentativa nova, uma
+ * chave nova, e a Stripe abre uma segunda assinatura de verdade enquanto a
+ * primeira so expira sozinha em ~24h. Aceito de qualquer forma porque os
+ * casos 1 e 2 sao INDISTINGUIVEIS por esta query — ambos so tem `pending` +
+ * `providerSubRef` nulo — e o caso 1 (crash antes de qualquer chamada a
+ * Stripe, nada la fora) e puro dano se travado por 23h. Perder a reutilizacao
+ * do caso 2 custa uma assinatura `incomplete` a mais que se autoexpira sem
+ * cobrar nada; manter o caso 1 preso por 23h e dano real ao usuario. Ganho
+ * rapido vence.
  */
 const ATTEMPT_TTL_NO_SUBREF_MS = 15 * 60 * 1000;
 const STRIPE_EXPIRED_STATUSES = new Set(['canceled', 'incomplete_expired', 'unpaid']);

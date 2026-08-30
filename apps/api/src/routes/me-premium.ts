@@ -7,7 +7,10 @@
  * and return 503 ServiceUnavailable when the flag is off.
  *
  * Spec refs:
- *   §5  — precheck: 200 { available: true } or 409 AlreadySubscribed
+ *   §5  — precheck: 200 { available: true }, 409 AlreadySubscribed (live
+ *         membership), or 409 SubscriptionAttemptInFlight (pending native
+ *         PremiumSubscriptionAttempt, Task 10 — closes the gap where a
+ *         checkout-native call is invisible to a Checkout-Session-only check)
  *   §8.2 — checkout body { cadence } + server-resolved priceId
  *   §8.3 — status response shape (premiumStatusSchema)
  */
@@ -268,7 +271,14 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/me/premium/checkout-precheck
    *
    * Returns 200 { available: true } if the user can start a new subscription,
-   * 409 { error: 'AlreadySubscribed', provider, manageUrl } otherwise.
+   * 409 { error: 'AlreadySubscribed', provider, manageUrl } if a live
+   * PremiumMembership already covers this garage, or 409
+   * { error: 'SubscriptionAttemptInFlight' } if there is no live membership
+   * but a native checkout-native call (Task 9) left a `pending`
+   * PremiumSubscriptionAttempt for this garage. The live-membership check
+   * runs first: someone who already paid gets AlreadySubscribed, not an
+   * in-flight answer, even if a pending attempt row also exists (e.g. the
+   * webhook that would flip it to `succeeded` has not landed yet).
    * For Stripe members the manageUrl is a freshly-minted Billing Portal URL;
    * for Apple/RC members it is the App Store deep link.
    */
@@ -305,6 +315,27 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       });
 
       if (!liveMembership) {
+        // No live membership, but the native path (Task 9) may have left a
+        // `pending` PremiumSubscriptionAttempt for this garage — invisible to
+        // a Checkout-Session-only check, since checkout-native never creates
+        // one. Without this, a user who starts a native subscription, does
+        // not finish, then opens the web app would sail through this
+        // precheck and mint a second, hosted subscription. Filtered on
+        // status='pending' specifically: `succeeded`/`abandoned` rows must
+        // NOT block, or every past subscriber (whose attempt flipped to
+        // succeeded on invoice.paid) would be refused a future resubscribe.
+        const pendingAttempt = await prisma.premiumSubscriptionAttempt.findFirst({
+          where: { garageId: garage.id, status: 'pending' },
+          select: { id: true },
+        });
+        if (pendingAttempt) {
+          return reply.status(409).send(
+            premiumCheckoutPrecheckResponseSchema.parse({
+              available: false,
+              error: 'SubscriptionAttemptInFlight',
+            }),
+          );
+        }
         return reply
           .status(200)
           .send(premiumCheckoutPrecheckResponseSchema.parse({ available: true }));
@@ -352,7 +383,9 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
    * Steps:
    *   1. Resolve priceId from env (server-side; never trust client price IDs).
    *   2. Re-run the precheck inline to close the race between GET precheck and
-   *      POST checkout.
+   *      POST checkout — including a check for a `pending` native
+   *      PremiumSubscriptionAttempt (Task 10), which has no Checkout Session
+   *      and so is otherwise invisible to step 4 below.
    *   3. findOrCreateCustomer with the user's email + garageId metadata.
    *   4. listOpenSubscriptionCheckoutSessions to close the cross-cadence dup
    *      window between session creation and webhook activation.
@@ -414,6 +447,32 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
             error: 'AlreadySubscribed',
             provider: liveMembership.provider,
             manageUrl,
+          }),
+        );
+      }
+
+      // No live membership, but a native checkout-native call (Task 9) may
+      // have left a `pending` PremiumSubscriptionAttempt for this garage —
+      // invisible to listOpenSubscriptionCheckoutSessions below, since
+      // checkout-native never creates a Checkout Session. Block unconditionally
+      // here regardless of whether `pending.cadence`/`packageDigest` match this
+      // request's resolved package: unlike checkout-native's own same-package
+      // reuse (which collapses onto the SAME Stripe subscription via a shared
+      // idempotency key derived from attempt.id), this hosted path always mints
+      // a brand-new Checkout Session/subscription with no link back to that
+      // attempt — so even a same-package retry here would create a second live
+      // subscription alongside the native one. Filtered on status='pending'
+      // specifically: a `succeeded`/`abandoned` row must NOT block, or every
+      // past subscriber would be refused a future resubscribe.
+      const pendingAttempt = await prisma.premiumSubscriptionAttempt.findFirst({
+        where: { garageId: existingGarage.id, status: 'pending' },
+        select: { id: true },
+      });
+      if (pendingAttempt) {
+        return reply.status(409).send(
+          premiumCheckoutPrecheckResponseSchema.parse({
+            available: false,
+            error: 'SubscriptionAttemptInFlight',
           }),
         );
       }

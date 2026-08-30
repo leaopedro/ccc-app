@@ -32,16 +32,38 @@ export type PremiumCheckoutResponse = z.infer<typeof premiumCheckoutResponseSche
 
 /**
  * GET /api/me/premium/checkout-precheck — response.
- * Two discriminants: available=true (no live membership) or available=false
- * (AlreadySubscribed). See spec §5.
+ *
+ * Three shapes, discriminated by `available` + `error` together (both `false`
+ * branches share `available: false`, which is why this is a plain `z.union`
+ * rather than a `z.discriminatedUnion('available', ...)` — the latter
+ * requires the discriminant literal to be unique per branch):
+ *   - available=true — no live membership, no in-flight attempt. See spec §5.
+ *   - available=false, error=AlreadySubscribed — a live PremiumMembership
+ *     already covers this garage (any provider).
+ *   - available=false, error=SubscriptionAttemptInFlight — no live
+ *     membership, but a native checkout-native call (Task 9) left a
+ *     `pending` PremiumSubscriptionAttempt for this garage. No `provider`/
+ *     `manageUrl`: there is no live subscription to manage yet, only an
+ *     attempt that has not resolved. Reported the same way regardless of
+ *     which package the pending attempt is for — this precheck has no
+ *     client-supplied package to compare against (GET, no body), and the
+ *     hosted checkout that consults this same shape inline cannot safely
+ *     reuse a native attempt's subscription even when the package matches
+ *     (unlike checkout-native's own same-package reuse, hosted checkout has
+ *     no idempotency-key link back to that attempt), so blocking is
+ *     unconditional either way.
  */
-export const premiumCheckoutPrecheckResponseSchema = z.discriminatedUnion('available', [
+export const premiumCheckoutPrecheckResponseSchema = z.union([
   z.object({ available: z.literal(true) }),
   z.object({
     available: z.literal(false),
     error: z.literal('AlreadySubscribed'),
     provider: z.enum(['stripe', 'apple_revenuecat']),
     manageUrl: z.string().url(),
+  }),
+  z.object({
+    available: z.literal(false),
+    error: z.literal('SubscriptionAttemptInFlight'),
   }),
 ]);
 

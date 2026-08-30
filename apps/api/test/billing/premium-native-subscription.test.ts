@@ -420,6 +420,41 @@ describe('POST /api/me/premium/checkout-native', () => {
     expect(await prisma.premiumMembership.count()).toBe(0);
   });
 
+  // Fix round 2 — o bare await de listOpenSubscriptionCheckoutSessions nao
+  // tinha try/catch. Uma falha de rede ali (antes de sabermos se ha ou nao
+  // um checkout hospedado aberto) nunca chegava no createNativeSubscription
+  // (correto, falha fechado), mas TAMBEM nunca chegava no update que marca
+  // abandoned — a linha 'pending' que a transacao ja tinha commitado ficava
+  // orfa, e o unique parcial por garageId WHERE status='pending' bloquearia
+  // essa garagem ate o reaper de 23h por causa de uma falha que nem provou
+  // duplicidade nenhuma.
+  it('recusa e limpa a tentativa quando a consulta de Checkout Sessions falha (nao deixa pending orfa)', async () => {
+    const { user } = await createUser({ verified: true });
+    stripe.nextListOpenSubscriptionCheckoutSessionsError = new Error('stripe timeout');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(env, user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly', planSlug: 'fundador' },
+    });
+
+    expect(res.statusCode).toBe(503);
+
+    const nativeCalls = stripe.calls.filter((c) => c.kind === 'createNativeSubscription');
+    expect(nativeCalls).toHaveLength(0);
+
+    // O ponto central do fix: a linha NAO fica pending. Sem esta asserção o
+    // teste provaria so o fail-closed (que ja funcionava), nao a limpeza.
+    const attempt = await prisma.premiumSubscriptionAttempt.findFirstOrThrow({
+      where: {
+        garageId: (await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } })).id,
+      },
+    });
+    expect(attempt.status).toBe('abandoned');
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
   it('herda a rejeicao de anual mais add-on da Decisao 2', async () => {
     const { user } = await createUser({ verified: true });
     await prisma.premiumAddonModule.create({

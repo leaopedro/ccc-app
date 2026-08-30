@@ -95,6 +95,8 @@ export type FakeStripe = StripeClient & {
   nextBillingPortalError: Error | null;
   /** Next list returned by listOpenSubscriptionCheckoutSessions. Defaults to []. */
   nextOpenSubscriptionCheckoutSessions: OpenSubscriptionCheckoutSession[];
+  /** When set, listOpenSubscriptionCheckoutSessions throws this error (provider-failure path). */
+  nextListOpenSubscriptionCheckoutSessionsError: Error | null;
   /** When set, createSubscriptionCheckoutSession throws this error. */
   nextCreateSubscriptionCheckoutSessionError: Error | null;
   /** When set, expireCheckoutSession throws this error (provider-failure path). */
@@ -160,6 +162,7 @@ export const buildFakeStripe = (): FakeStripe => {
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
     nextBillingPortalError: null,
     nextOpenSubscriptionCheckoutSessions: [],
+    nextListOpenSubscriptionCheckoutSessionsError: null,
     nextCreateSubscriptionCheckoutSessionError: null,
     nextExpireCheckoutSessionError: null,
     nextRetrievedPrice: null,
@@ -282,6 +285,9 @@ export const buildFakeStripe = (): FakeStripe => {
       customerId: string,
     ): Promise<OpenSubscriptionCheckoutSession[]> => {
       fake.calls.push({ kind: 'listOpenSubscriptionCheckoutSessions', payload: { customerId } });
+      if (fake.nextListOpenSubscriptionCheckoutSessionsError) {
+        throw fake.nextListOpenSubscriptionCheckoutSessionsError;
+      }
       return fake.nextOpenSubscriptionCheckoutSessions;
     },
 

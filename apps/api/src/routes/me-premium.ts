@@ -700,6 +700,20 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
     const attempt = outcome.attempt;
 
+    // So marca abandoned quando ESTA requisicao foi quem criou a linha
+    // (outcome.kind === 'created'): ela nunca chegou na Stripe
+    // (createNativeSubscription nem rodou ainda), entao nao ha nada la fora
+    // para perder o rastro. Uma linha 'reuse' e anterior a esta requisicao
+    // (outra tentativa nativa a criou) — nao e desta chamada para abandonar.
+    const abandonIfJustCreated = async (): Promise<void> => {
+      if (outcome.kind === 'created') {
+        await prisma.premiumSubscriptionAttempt.update({
+          where: { id: attempt.id },
+          data: { status: 'abandoned' },
+        });
+      }
+    };
+
     // Espelho do guard cross-path do Task 10 (que fez o hospedado enxergar a
     // tentativa nativa): aqui e o caminho nativo que precisa enxergar uma
     // Checkout Session hospedada aberta. Sem isso, um usuario que comeca um
@@ -715,20 +729,42 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     // hospedado nao tem nenhum vinculo de idempotencia com esta tentativa
     // nativa, entao mesmo um pacote identico resultaria numa segunda
     // assinatura genuinamente nova se deixassemos passar.
-    const openHostedSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
+    //
+    // try/catch explicito, NAO finally: um `finally` rodaria tambem no
+    // caminho feliz (nenhuma sessao hospedada aberta), e abandonaria a
+    // tentativa 'pending' bem no momento em que o codigo logo abaixo precisa
+    // dela para chamar createNativeSubscription — quebraria o caminho feliz
+    // inteiro. So o catch (falha ao consultar a Stripe) e o ramo "achou
+    // sessao aberta" abaixo devem abandonar; o caminho sem erro e sem sessao
+    // aberta nao deve tocar a linha.
+    let openHostedSessions: Awaited<
+      ReturnType<StripeClient['listOpenSubscriptionCheckoutSessions']>
+    >;
+    try {
+      openHostedSessions = await app.stripe.listOpenSubscriptionCheckoutSessions(customerId);
+    } catch (err) {
+      // A chamada nao provou nada sobre a existencia (ou nao) de um checkout
+      // hospedado aberto — mas TAMBEM nao chegamos em createNativeSubscription,
+      // entao nada foi criado do lado da Stripe para esta tentativa. Falhar
+      // fechado (nao mintar) esta certo; o que nao pode acontecer e deixar a
+      // linha 'pending' orfa so porque a falha aconteceu ANTES do ramo que já
+      // sabia limpar (o "achou sessao aberta" abaixo) — mesmo unique parcial
+      // por garageId WHERE status='pending' bloquearia essa garagem ate o
+      // reaper de 23h por causa de uma falha de rede que nem chegou a provar
+      // duplicidade nenhuma.
+      await abandonIfJustCreated();
+      request.log.error(
+        { err, garageId: garage.id, attemptId: attempt.id },
+        'me-premium: falha ao consultar checkout hospedado aberto; assinatura nativa recusada',
+      );
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'could not start checkout' });
+    }
     if (openHostedSessions.length > 0) {
-      if (outcome.kind === 'created') {
-        // Esta linha foi criada agora mesmo para ESTA requisicao e nunca
-        // chegou na Stripe (createNativeSubscription nem rodou ainda).
-        // Marcar abandoned evita deixar um 'pending' orfao que bloquearia
-        // permanentemente o precheck/checkout hospedado (guard do Task 10).
-        await prisma.premiumSubscriptionAttempt.update({
-          where: { id: attempt.id },
-          data: { status: 'abandoned' },
-        });
-      }
       // outcome.kind === 'reuse': a linha pending e anterior a esta
       // requisicao (outra tentativa nativa a criou) — deixa-la como estava.
+      await abandonIfJustCreated();
       request.log.warn(
         { garageId: garage.id, openSessionIds: openHostedSessions.map((s) => s.id) },
         'me-premium: assinatura nativa recusada, checkout hospedado ja em andamento',

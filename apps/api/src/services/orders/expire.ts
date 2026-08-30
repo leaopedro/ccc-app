@@ -131,7 +131,7 @@ export const sweepExpiredOrdersForTier = async (
   tx: Prisma.TransactionClient,
 ): Promise<SweepResult> => {
   const now = new Date();
-  const expired = await tx.order.findMany({
+  const candidates = await tx.order.findMany({
     where: {
       status: 'pending',
       expiresAt: { not: null, lt: now },
@@ -141,15 +141,27 @@ export const sweepExpiredOrdersForTier = async (
     select: { id: true, providerRef: true },
   });
 
+  if (candidates.length === 0) return { count: 0, expiredProviderRefs: [] };
+
+  // Guard each transition with `status: 'pending'` and only keep the orders
+  // THIS call actually flipped. The order-expiry worker (apps/api/src/workers/
+  // order-expiry.ts) runs the same expiry continuously in its own transaction;
+  // without this guard, a row it already expired-and-released between our
+  // `findMany` above and this update would be re-matched by an id-only
+  // predicate (no-op on the value) and then released a second time here,
+  // double-decrementing `quantitySold`. Mirrors `expireSingleOrderInTransaction`.
+  const expired: typeof candidates = [];
+  for (const order of candidates) {
+    const flipped = await tx.order.updateMany({
+      where: { id: order.id, status: 'pending' },
+      data: { status: 'expired' },
+    });
+    if (flipped.count > 0) expired.push(order);
+  }
+
   if (expired.length === 0) return { count: 0, expiredProviderRefs: [] };
 
   const expiredIds = expired.map((o) => o.id);
-
-  await tx.order.updateMany({
-    where: { id: { in: expiredIds } },
-    data: { status: 'expired' },
-  });
-
   await releaseAllReservationsForOrders(tx, expiredIds);
 
   Sentry.addBreadcrumb({
@@ -176,7 +188,7 @@ export const sweepExpiredOrdersForVariant = async (
   tx: Prisma.TransactionClient,
 ): Promise<SweepResult> => {
   const now = new Date();
-  const expired = await tx.order.findMany({
+  const candidates = await tx.order.findMany({
     where: {
       status: 'pending',
       expiresAt: { not: null, lt: now },
@@ -185,14 +197,22 @@ export const sweepExpiredOrdersForVariant = async (
     select: { id: true, providerRef: true },
   });
 
+  if (candidates.length === 0) return { count: 0, expiredProviderRefs: [] };
+
+  // See sweepExpiredOrdersForTier above for why this is per-order and
+  // status-guarded rather than a single blind updateMany.
+  const expired: typeof candidates = [];
+  for (const order of candidates) {
+    const flipped = await tx.order.updateMany({
+      where: { id: order.id, status: 'pending' },
+      data: { status: 'expired' },
+    });
+    if (flipped.count > 0) expired.push(order);
+  }
+
   if (expired.length === 0) return { count: 0, expiredProviderRefs: [] };
 
   const expiredIds = expired.map((o) => o.id);
-  await tx.order.updateMany({
-    where: { id: { in: expiredIds } },
-    data: { status: 'expired' },
-  });
-
   await releaseAllReservationsForOrders(tx, expiredIds);
 
   Sentry.addBreadcrumb({

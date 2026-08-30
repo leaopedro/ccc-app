@@ -29,6 +29,7 @@
  * corrigido aqui por ser código não relacionado a esta tarefa.
  */
 import { prisma } from '@ccc/db';
+import * as Sentry from '@sentry/node';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
@@ -64,19 +65,32 @@ export const runOrderExpiryTick = async (
 
   for (const order of stale) {
     try {
-      await prisma.$transaction(async (tx) => {
+      // `expiredNow.push` happens on the RETURN VALUE of the transaction,
+      // after `await` resolves — never inside the callback. The callback
+      // runs before the commit is durable; if the commit itself fails, the
+      // promise rejects and control never reaches the line below, so a
+      // failed commit can never be counted as expired or trigger a PI
+      // cancel while the row is still `pending` in the database.
+      const wasExpired = await prisma.$transaction(async (tx) => {
         // Guarda contra corrida: so libera reserva se esta transacao for
         // quem realmente tirou o pedido de `pending`. Ver nota de topo.
         const flipped = await tx.order.updateMany({
           where: { id: order.id, status: 'pending' },
           data: { status: 'expired' },
         });
-        if (flipped.count === 0) return; // ja resolvido por outra varredura/tick
+        if (flipped.count === 0) return false; // ja resolvido por outra varredura/tick
 
         await releaseAllReservationsForOrders(tx, [order.id]);
-        expiredNow.push(order);
+        return true;
       });
+      if (wasExpired) expiredNow.push(order);
     } catch (err) {
+      // A row stuck here (e.g. assertReservationReleased throwing because
+      // quantitySold already drifted below the reserved amount) sits at the
+      // head of the `expiresAt asc` window and would otherwise just re-log
+      // silently every minute forever. Capture it so it surfaces in Sentry
+      // instead of only being noisy in logs.
+      Sentry.captureException(err, { extra: { orderId: order.id, worker: 'order-expiry' } });
       deps.log?.error(
         { err, orderId: order.id },
         '[order-expiry] falha ao expirar pedido, seguindo para o proximo',

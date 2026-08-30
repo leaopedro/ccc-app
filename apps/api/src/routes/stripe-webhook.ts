@@ -111,6 +111,42 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     request: { log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void } },
     reply: { status: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
+    // Guarda de folha velha.
+    //
+    // O PaymentSheet segura um clientSecret. handleCartFailure reabre o
+    // carrinho incrementando `version` (:362-366), e um novo checkout minta
+    // uma PI nova. As duas PIs carregam o mesmo cartId. Sem esta guarda a
+    // segunda cobranca liquida contra pedidos que a primeira ja consumiu, ou
+    // nasce sem providerRef, ficando invisivel para charge.refunded e
+    // charge.dispute.created.
+    //
+    // Metadata sem cartVersion passa direto: sessoes hospedadas mintadas
+    // antes deste deploy nao carregam o campo, e recusar por ausencia
+    // reembolsaria compras legitimas em voo.
+    const paidVersionRaw = (webhookEvent.data.object as { metadata?: Record<string, string> })
+      .metadata?.cartVersion;
+    if (paidVersionRaw !== undefined) {
+      const paidVersion = Number(paidVersionRaw);
+      const cartRow = await prisma.cart.findUnique({
+        where: { id: cartId },
+        select: { version: true },
+      });
+      if (Number.isFinite(paidVersion) && cartRow && cartRow.version !== paidVersion) {
+        await app.stripe.refund(piId, 'stale-cart-version');
+        Sentry.captureMessage('stripe webhook: folha velha pagou apos reabertura, reembolsado', {
+          level: 'error',
+          tags: { kind: 'stripe-stale-cart-version', provider: 'stripe' },
+          extra: { cartId, paymentIntentId: piId, paidVersion, currentVersion: cartRow.version },
+        });
+        request.log.warn(
+          { cartId, piId, paidVersion, currentVersion: cartRow.version },
+          'stripe webhook: stale cart version, refunded',
+        );
+        await markProcessed(webhookEvent.id, webhookEvent);
+        return reply.status(200).send({ ok: true, refunded: true, reason: 'stale-cart-version' });
+      }
+    }
+
     const orders = await prisma.order.findMany({
       where: { cartId, status: 'pending' },
       select: { id: true, amountCents: true, kind: true },

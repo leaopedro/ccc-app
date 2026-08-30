@@ -479,7 +479,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       const anchor = disputedPi
         ? await prisma.order.findFirst({
             where: { provider: 'stripe', providerRef: disputedPi },
-            select: { id: true, cartId: true },
+            select: { id: true, cartId: true, status: true },
           })
         : null;
 
@@ -502,7 +502,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
 
       // Only `created` revokes. On `closed`, winning does not re-issue and
       // losing does not revoke twice — the operator decides what follows.
-      if (event.type === 'charge.dispute.created' && anchor) {
+      //
+      // Same anchor-status guard as the charge.refunded cascade above: a
+      // disputed PI whose order is NOT `paid` (e.g. a stale-sheet PI that
+      // failed and got superseded by a later cart-version retry) is not the
+      // live order for this cart, so it must not drag a genuinely paid
+      // sibling's ticket down with it.
+      if (event.type === 'charge.dispute.created' && anchor && anchor.status === 'paid') {
         const ids = anchor.cartId
           ? (
               await prisma.order.findMany({

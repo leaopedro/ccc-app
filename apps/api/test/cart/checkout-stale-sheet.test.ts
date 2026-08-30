@@ -343,4 +343,122 @@ describe('folha velha confirmando depois da reabertura do carrinho', () => {
     expect(ticketAfter).not.toBeNull();
     expect(ticketAfter!.status).toBe('valid');
   });
+
+  // Mesmo andar de 6 passos, mas o gatilho e um dispute do banco na PI velha
+  // em vez do nosso proprio reembolso de folha velha. charge.dispute.created
+  // (stripe-webhook.ts ~479-521) resolvia o anchor por providerRef sem olhar
+  // o status e cascateava a revogacao por cartId incondicionalmente -- pior
+  // que o F1 porque o pedido continua 'paid' com o ticket revogado: nenhum
+  // relatorio financeiro ou lista de pedidos mostra nada errado, o cliente so
+  // descobre na portaria.
+  it('charge.dispute.created na PI velha nao revoga o ticket do pedido pago por uma segunda tentativa', async () => {
+    const { user } = await createUser({ verified: true });
+    const token = bearer(env, user.id);
+    const { event, tier } = await seedPublishedEvent();
+    await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+    // 1. Checkout nativo -> O1 / PI-A.
+    stripe.nextPaymentIntent = { id: 'pi_A_dispute', clientSecret: 'pi_A_dispute_secret' };
+    const checkout1 = await app.inject({
+      method: 'POST',
+      url: '/cart/checkout',
+      headers: { authorization: token },
+      payload: { paymentMethod: 'card', flow: 'native' },
+    });
+    expect(checkout1.statusCode).toBe(201);
+    const body1 = checkout1.json() as {
+      checkoutId: string;
+      providerRef: string;
+      orderIds: string[];
+    };
+    expect(body1.providerRef).toBe('pi_A_dispute');
+    const cartId = body1.checkoutId;
+    const o1Id = body1.orderIds[0]!;
+
+    // 2. Cartao recusa.
+    stripe.nextEvent = {
+      id: 'evt_fail_A_dispute',
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: 'pi_A_dispute', metadata: { cartId } } },
+    };
+    const failRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(failRes.statusCode).toBe(200);
+
+    const o1AfterFail = await prisma.order.findUniqueOrThrow({ where: { id: o1Id } });
+    expect(o1AfterFail.status).toBe('failed');
+    expect(o1AfterFail.providerRef).toBe('pi_A_dispute');
+
+    // 3. Re-tentativa -> O2 / PI-B. O1 mantem PI-A (nao esta mais pending).
+    stripe.nextPaymentIntent = { id: 'pi_B_dispute', clientSecret: 'pi_B_dispute_secret' };
+    const checkout2 = await app.inject({
+      method: 'POST',
+      url: '/cart/checkout',
+      headers: { authorization: token },
+      payload: { paymentMethod: 'card', flow: 'native' },
+    });
+    expect(checkout2.statusCode).toBe(201);
+    const body2 = checkout2.json() as { providerRef: string; orderIds: string[] };
+    expect(body2.providerRef).toBe('pi_B_dispute');
+    const o2Id = body2.orderIds[0]!;
+
+    const o1AfterRetry = await prisma.order.findUniqueOrThrow({ where: { id: o1Id } });
+    expect(o1AfterRetry.providerRef).toBe('pi_A_dispute');
+
+    // 4. PI-B liquida: O2 pago, ticket emitido.
+    const cartAtV2 = await prisma.cart.findUniqueOrThrow({ where: { id: cartId } });
+    stripe.nextEvent = {
+      id: 'evt_pay_B_dispute',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: 'pi_B_dispute',
+          metadata: { cartId, cartVersion: String(cartAtV2.version) },
+        },
+      },
+    };
+    const payRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(payRes.statusCode).toBe(200);
+
+    const o2AfterPay = await prisma.order.findUniqueOrThrow({ where: { id: o2Id } });
+    expect(o2AfterPay.status).toBe('paid');
+
+    const ticketBefore = await prisma.ticket.findFirst({ where: { userId: user.id } });
+    expect(ticketBefore).not.toBeNull();
+    expect(ticketBefore!.status).toBe('valid');
+
+    // 5. O banco disputa a PI-A (a velha, ainda presa em O1 'failed'). O
+    // anchor resolvido por providerRef e O1, que NAO esta 'paid' -- o cascade
+    // por cartId nao pode tocar em O2 nem no ticket dele.
+    stripe.nextEvent = {
+      id: 'evt_dispute_A',
+      type: 'charge.dispute.created',
+      data: {
+        object: { id: 'dp_A_dispute', payment_intent: 'pi_A_dispute', amount: 5000 },
+      },
+    };
+    const disputeRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(disputeRes.statusCode).toBe(200);
+
+    const o2AfterDispute = await prisma.order.findUniqueOrThrow({ where: { id: o2Id } });
+    expect(o2AfterDispute.status).toBe('paid');
+
+    const ticketAfterDispute = await prisma.ticket.findFirst({ where: { userId: user.id } });
+    expect(ticketAfterDispute).not.toBeNull();
+    expect(ticketAfterDispute!.status).toBe('valid');
+  });
 });

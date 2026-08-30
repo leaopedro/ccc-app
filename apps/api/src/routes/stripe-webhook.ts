@@ -554,14 +554,23 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       // One PaymentIntent covers the whole cart, but only the canonical order
       // carries providerRef. Refunding just that row would leave every sibling
       // `paid` with a valid ticket after a full refund.
-      const affectedIds = order.cartId
-        ? (
-            await prisma.order.findMany({
-              where: { cartId: order.cartId },
-              select: { id: true },
-            })
-          ).map((o) => o.id)
-        : [order.id];
+      //
+      // Only cascade when the anchor itself is `paid`. A stale-sheet refund
+      // (Task 6's cartVersion guard) resolves to an order that failed and got
+      // superseded by a new providerRef on a later cart version — cascading by
+      // cartId there would flip the CURRENT paid order to `refunded` and
+      // revoke a ticket the customer actually holds, even though its own PI
+      // was never touched. Anchor not paid means this PI's order is not the
+      // live one for this cart; nothing else should move.
+      const affectedIds =
+        order.cartId && order.status === 'paid'
+          ? (
+              await prisma.order.findMany({
+                where: { cartId: order.cartId },
+                select: { id: true },
+              })
+            ).map((o) => o.id)
+          : [order.id];
 
       // Stripe partial refunds need separate handling (line-item attribution,
       // refundedCents partial accounting). Out of scope for JDMA-312; flag and

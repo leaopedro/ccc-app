@@ -192,4 +192,155 @@ describe('folha velha confirmando depois da reabertura do carrinho', () => {
     const paid = await prisma.order.count({ where: { cartId: body.checkoutId, status: 'paid' } });
     expect(paid).toBeGreaterThan(0);
   });
+
+  // O andar completo do bug F1: a folha velha nao so e um no-op, o
+  // charge.refunded que ELA MESMA gera nao pode revogar a compra seguinte.
+  //
+  //   1. Carrinho C v1, checkout nativo -> O1 com providerRef = PI-A.
+  //   2. Cartao recusa: handleCartFailure marca O1 'failed' (mantendo
+  //      providerRef = PI-A) e reabre o carrinho em v2.
+  //   3. O cancel best-effort da PI-A perde a corrida (nao simulado aqui, so
+  //      nao importa mais). Usuario re-tenta -> O2 com providerRef = PI-B. O
+  //      updateMany que zera providerRef antes de estampar so pega
+  //      status:'pending', entao O1 continua com PI-A.
+  //   4. PI-B liquida: O2 pago, ticket emitido.
+  //   5. A folha velha confirma PI-A. cartVersion da PI-A (v1) diverge da
+  //      atual (v2) -> guarda de folha velha reembolsa PI-A.
+  //   6. Stripe manda charge.refunded para PI-A. O anchor (O1) NAO esta
+  //      'paid' (esta 'failed'), entao o cascade por cartId nao deve tocar em
+  //      O2 nem no ticket que ele emitiu.
+  it('charge.refunded da folha velha nao revoga o pedido pago por uma segunda tentativa', async () => {
+    const { user } = await createUser({ verified: true });
+    const token = bearer(env, user.id);
+    const { event, tier } = await seedPublishedEvent();
+    await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+    // 1. Checkout nativo -> O1 / PI-A.
+    stripe.nextPaymentIntent = { id: 'pi_A', clientSecret: 'pi_A_secret' };
+    const checkout1 = await app.inject({
+      method: 'POST',
+      url: '/cart/checkout',
+      headers: { authorization: token },
+      payload: { paymentMethod: 'card', flow: 'native' },
+    });
+    expect(checkout1.statusCode).toBe(201);
+    const body1 = checkout1.json() as {
+      checkoutId: string;
+      providerRef: string;
+      orderIds: string[];
+    };
+    expect(body1.providerRef).toBe('pi_A');
+    const cartId = body1.checkoutId;
+    const o1Id = body1.orderIds[0]!;
+    const cartAtV1 = await prisma.cart.findUniqueOrThrow({ where: { id: cartId } });
+
+    // 2. Cartao recusa.
+    stripe.nextEvent = {
+      id: 'evt_fail_A',
+      type: 'payment_intent.payment_failed',
+      data: { object: { id: 'pi_A', metadata: { cartId } } },
+    };
+    const failRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(failRes.statusCode).toBe(200);
+
+    const o1AfterFail = await prisma.order.findUniqueOrThrow({ where: { id: o1Id } });
+    expect(o1AfterFail.status).toBe('failed');
+    expect(o1AfterFail.providerRef).toBe('pi_A');
+
+    // 3. Re-tentativa -> O2 / PI-B. O1 mantem PI-A (nao esta mais pending).
+    stripe.nextPaymentIntent = { id: 'pi_B', clientSecret: 'pi_B_secret' };
+    const checkout2 = await app.inject({
+      method: 'POST',
+      url: '/cart/checkout',
+      headers: { authorization: token },
+      payload: { paymentMethod: 'card', flow: 'native' },
+    });
+    expect(checkout2.statusCode).toBe(201);
+    const body2 = checkout2.json() as { providerRef: string; orderIds: string[] };
+    expect(body2.providerRef).toBe('pi_B');
+    const o2Id = body2.orderIds[0]!;
+
+    const o1AfterRetry = await prisma.order.findUniqueOrThrow({ where: { id: o1Id } });
+    expect(o1AfterRetry.providerRef).toBe('pi_A');
+
+    // 4. PI-B liquida: O2 pago, ticket emitido.
+    const cartAtV2 = await prisma.cart.findUniqueOrThrow({ where: { id: cartId } });
+    stripe.nextEvent = {
+      id: 'evt_pay_B',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_B', metadata: { cartId, cartVersion: String(cartAtV2.version) } },
+      },
+    };
+    const payRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(payRes.statusCode).toBe(200);
+
+    const o2AfterPay = await prisma.order.findUniqueOrThrow({ where: { id: o2Id } });
+    expect(o2AfterPay.status).toBe('paid');
+
+    const ticketBefore = await prisma.ticket.findFirst({ where: { userId: user.id } });
+    expect(ticketBefore).not.toBeNull();
+    expect(ticketBefore!.status).toBe('valid');
+
+    // 5. Folha velha confirma PI-A: cartVersion v1 diverge da atual (v2) ->
+    // reembolsada.
+    stripe.nextEvent = {
+      id: 'evt_stale_A',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: { id: 'pi_A', metadata: { cartId, cartVersion: String(cartAtV1.version) } },
+      },
+    };
+    const staleRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(staleRes.statusCode).toBe(200);
+    expect(staleRes.json()).toMatchObject({ refunded: true, reason: 'stale-cart-version' });
+
+    const refundCalls = stripe.calls.filter((c) => c.kind === 'refund');
+    expect(refundCalls).toHaveLength(1);
+    expect(refundCalls[0]!.payload).toMatchObject({ paymentIntentId: 'pi_A' });
+
+    // 6. charge.refunded chega para a PI-A que acabou de ser reembolsada. O1
+    // (o anchor resolvido por providerRef) esta 'failed', nao 'paid' -- o
+    // cascade por cartId NAO pode tocar em O2.
+    stripe.nextEvent = {
+      id: 'evt_charge_refunded_A',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          payment_intent: 'pi_A',
+          amount: o1AfterFail.amountCents,
+          amount_refunded: o1AfterFail.amountCents,
+        },
+      },
+    };
+    const chargeRes = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'stripe-signature': 'sig', 'content-type': 'application/json' },
+      payload: Buffer.from('{}'),
+    });
+    expect(chargeRes.statusCode).toBe(200);
+
+    const o2AfterRefundEvent = await prisma.order.findUniqueOrThrow({ where: { id: o2Id } });
+    expect(o2AfterRefundEvent.status).toBe('paid');
+
+    const ticketAfter = await prisma.ticket.findFirst({ where: { userId: user.id } });
+    expect(ticketAfter).not.toBeNull();
+    expect(ticketAfter!.status).toBe('valid');
+  });
 });

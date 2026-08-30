@@ -69,7 +69,11 @@ const ATTEMPT_TTL_MS = 23 * 60 * 60 * 1000;
  *
  * 15 minutos e uma folga confortavel acima de qualquer round-trip + retry
  * real (segundos), sem deixar a garagem presa por horas por causa de uma
- * falha ambigua rara. Nao resolve o cenario de UX levantado em review (usuario
+ * falha ambigua rara. Na pratica a janela real e 15-75 minutos, nao 15: esta
+ * funcao so roda dentro de `runReconcileTick`, chamada pelo cron HORARIO
+ * (`0 * * * *`, ver startBillingReconcileWorker abaixo) — uma linha que
+ * cruza o TTL logo depois de um tick so e reapada no proximo, ate quase uma
+ * hora depois. Nao resolve o cenario de UX levantado em review (usuario
  * troca de plano no meio do fluxo) — nesse caso o `providerSubRef` normalmente
  * ja foi gravado antes da resposta do request voltar ao cliente, entao a linha
  * cai no TTL de 23h de qualquer forma. Ver relatorio da tarefa.

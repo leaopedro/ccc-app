@@ -19,14 +19,12 @@
  * de fato fez a transicao pending -> expired. Isso segue o mesmo padrao de
  * `expireSingleOrderInTransaction` (apps/api/src/services/orders/expire.ts).
  *
- * Atencao: `sweepExpiredOrdersForTier` e `sweepExpiredOrdersForVariant` NAO
- * seguem esse padrao — o `updateMany` delas nao tem guarda de `status`, e a
- * liberacao de estoque roda incondicionalmente para todo id lido no `findMany`
- * inicial, mesmo que uma transacao concorrente ja tenha expirado e liberado o
- * mesmo pedido entre a leitura e a escrita. Rodando este worker em paralelo
- * com essas varreduras, um pedido que caia nas duas ao mesmo tempo pode ter o
- * estoque liberado duas vezes. Ver o relatorio da tarefa para detalhes — nao
- * corrigido aqui por ser código não relacionado a esta tarefa.
+ * `sweepExpiredOrdersForTier` e `sweepExpiredOrdersForVariant` (services/
+ * orders/expire.ts) seguem o MESMO padrao: cada pedido candidato do
+ * `findMany` inicial so e liberado se o `updateMany` guardado por
+ * `status: 'pending'` daquele pedido especifico realmente o tirou de
+ * pending, entao rodar este worker em paralelo com essas varreduras nao
+ * libera a mesma reserva duas vezes.
  */
 import { prisma } from '@ccc/db';
 import * as Sentry from '@sentry/node';

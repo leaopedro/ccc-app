@@ -823,9 +823,17 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (!result.clientSecret) {
+      // Deixa 'pending', nao 'abandoned': result.subscriptionId prova que a
+      // assinatura existe do lado da Stripe e pode cobrar mesmo sem
+      // confirmation_secret nenhuma. Marcar abandoned aqui libera o indice
+      // unico parcial por garageId WHERE status='pending', e um retry do
+      // cliente minta uma SEGUNDA assinatura viva — as duas chegam a
+      // handleActivated, onde a segunda bate um P2002 que derruba o webhook
+      // de billing. Mesma logica do catch acima (isDefinitiveSubscriptionRejection):
+      // o reaper de tentativa abandonada decide o caso raro que sobrar.
       await prisma.premiumSubscriptionAttempt.update({
         where: { id: attempt.id },
-        data: { status: 'abandoned', providerSubRef: result.subscriptionId, idempotencyKey },
+        data: { providerSubRef: result.subscriptionId, idempotencyKey },
       });
       request.log.error(
         { garageId: garage.id, subscriptionId: result.subscriptionId, status: result.status },

@@ -138,6 +138,9 @@ vi.mock('react-native', async () => {
     ActivityIndicator: make('span'),
     Modal,
     Share: { share: vi.fn().mockResolvedValue(undefined) },
+    // Not iOS: garage-slots.ts hides the buy tile there (final review I3),
+    // and this suite doesn't exercise that platform gate.
+    Platform: { OS: 'android' },
     StyleSheet: { create: <T,>(s: T): T => s, flatten: <T,>(s: T): T => s },
   };
 });

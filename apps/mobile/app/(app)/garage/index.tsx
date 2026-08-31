@@ -2,7 +2,7 @@ import type { GarageBadgesOwnerResponse } from '@ccc/shared/badges';
 import { BadgeRow, BadgesSheet, PremiumSheet, ProfileStats, type BadgesSheetCopy } from '@ccc/ui';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { getGarage, getMyBadges, togglePinBadge, type GarageReadResponse } from '~/api/garage';
 import { badgesCopy } from '~/copy/badges';
@@ -115,7 +115,10 @@ export default function GarageIndex() {
     return undefined;
   }, [params.highlight, router]);
 
-  const slots = useMemo(() => (garage ? buildGarageSlots(garage) : []), [garage]);
+  const slots = useMemo(
+    () => (garage ? buildGarageSlots(garage, { platform: Platform.OS }) : []),
+    [garage],
+  );
 
   // Chunk 19 — BadgeRow + BadgesSheet need the catalog (icon/rarity/category
   // per code) which is NOT spread onto GarageOwner.badges — that field carries

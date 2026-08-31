@@ -108,4 +108,22 @@ describe('buildGarageSlots', () => {
     const slots = buildGarageSlots(garageReadFixtureAllFilled);
     expect(slots.map((s) => s.index)).toEqual([1, 2, 3]);
   });
+
+  // Final review I3: a purchased spot is a virtual-variant cart item that
+  // routes/cart.ts always refuses on iOS (403 VIRTUAL_ITEM_IOS_BLOCKED,
+  // App Store 3.1.3(e)). The tile must not render there — it is a purchase
+  // affordance that always fails by design.
+  it('hides the buy card on iOS even with no available slots and a purchaseOption', () => {
+    const slots = buildGarageSlots(garageReadFixtureAllFilled, { platform: 'ios' });
+    expect(slots.map((s) => s.kind)).toEqual(['filled', 'filled']);
+  });
+
+  it('still shows the buy card on android and web', () => {
+    expect(
+      buildGarageSlots(garageReadFixtureAllFilled, { platform: 'android' }).map((s) => s.kind),
+    ).toEqual(['filled', 'filled', 'buy']);
+    expect(
+      buildGarageSlots(garageReadFixtureAllFilled, { platform: 'web' }).map((s) => s.kind),
+    ).toEqual(['filled', 'filled', 'buy']);
+  });
 });

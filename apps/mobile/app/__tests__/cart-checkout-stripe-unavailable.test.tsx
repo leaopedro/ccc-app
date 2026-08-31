@@ -14,6 +14,7 @@
 // and really opens the browser instead of the sheet.
 
 import { act } from 'react';
+import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -198,8 +199,8 @@ vi.mock('react-native', async () => {
     (
       props: {
         sections?: { key?: string; data: unknown[] }[];
-        renderItem?: (info: { item: unknown; index: number; section: unknown }) => unknown;
-        renderSectionHeader?: (info: { section: unknown }) => unknown;
+        renderItem?: (info: { item: unknown; index: number; section: unknown }) => ReactNode;
+        renderSectionHeader?: (info: { section: unknown }) => ReactNode;
         keyExtractor?: (item: unknown, index: number) => string;
       },
       ref: unknown,

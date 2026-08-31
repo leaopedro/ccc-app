@@ -529,10 +529,11 @@ export default function CartScreen() {
     // Final review C1: without a publishable key, native can't mount a
     // PaymentSheet at all — request the hosted flow instead, same as web.
     const nativeStripeAvailable = !isWeb && STRIPE_AVAILABLE;
+    const nativeFlow: 'native' | 'hosted' = nativeStripeAvailable ? 'native' : 'hosted';
     try {
       const result = await beginCheckout({
         paymentMethod,
-        ...(isWeb ? {} : { flow: (nativeStripeAvailable ? 'native' : 'hosted') as const }),
+        ...(isWeb ? {} : { flow: nativeFlow }),
         ...(selectedFulfillmentMethod ? { fulfillmentMethod: selectedFulfillmentMethod } : {}),
         ...(selectedShippingAddressId ? { shippingAddressId: selectedShippingAddressId } : {}),
         ...(needsEventPickup && eventPickupEnabled && selectedPickupEventId

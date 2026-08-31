@@ -24,4 +24,44 @@ describe('premium explainer sheet', () => {
       garageCopy.garage.premiumBenefits.length,
     );
   });
+
+  // Fix round 1: the exact titles, not just a substring, so a future edit
+  // can't silently reintroduce "Acesso ao clube" (no entitlement gate exists
+  // anywhere in the code) or drop the community-events benefit that replaced
+  // it.
+  it('lists exactly the audited PT benefit titles', () => {
+    const titles = garageCopy.garage.premiumBenefits.map((b) => b.title);
+    expect(titles).toEqual([
+      'Caixa física da Casa',
+      'Eventos abertos da comunidade',
+      'Capas personalizadas',
+      'Selo Premium',
+    ]);
+  });
+
+  it('lists exactly the audited EN benefit titles', () => {
+    const titles = garageCopyEn.garage.premiumBenefits.map((b) => b.title);
+    expect(titles).toEqual([
+      'The Casa box',
+      'Open community events',
+      'Custom covers',
+      'Premium badge',
+    ]);
+  });
+
+  // Fix round 1: the box's charge is overflow + addons + shipping
+  // (box/charge.ts), not something folded into the subscription price, so
+  // the sub-copy must not claim it's included.
+  it('does not claim the box is included in the subscription price', () => {
+    const sub = garageCopy.garage.premiumBenefits[0]?.sub ?? '';
+    expect(sub.toLowerCase()).not.toContain('incluída na assinatura');
+  });
+
+  // Fix round 1: there is no entitlement gate for club access anywhere in
+  // the code (fridge-unlock.ts authenticates on a shared API key, not a
+  // member/tier; check-in is ticket-scoped). Don't promise it.
+  it('does not claim club access', () => {
+    const titles = garageCopy.garage.premiumBenefits.map((b) => b.title).join(' | ');
+    expect(titles.toLowerCase()).not.toContain('clube');
+  });
 });

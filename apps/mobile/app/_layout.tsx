@@ -35,6 +35,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 
+import { shouldMountStripeProvider } from './stripe-provider-gate';
+
 import { AuthProvider, useAuth } from '~/auth/context';
 import {
   buildLoginHref,
@@ -213,13 +215,12 @@ export default function RootLayout() {
     </>
   );
 
-  // Canon §F8.16 — iOS bundle MUST NOT mount StripeProvider (Apple App Store
-  // Review Guideline 3.1.1 forbids external payment paths for digital goods).
-  // iOS users subscribe via Apple StoreKit through RevenueCat; ticket-order
-  // payments on iOS are deferred to Phase F8.1 (RC or in-app fallback).
+  // Canon §F8.16 superseded on 2026-08-29 — see the plan
+  // docs/superpowers/plans/2026-08-29-pagamentos-mobile-app.md, Task 1.
+  // iOS pays natively through Stripe; Apple Pay rides on the PaymentSheet.
   return (
     <ThemeProvider value={cccNavTheme}>
-      {Platform.OS !== 'ios' && stripeKey ? (
+      {shouldMountStripeProvider({ platform: Platform.OS, stripeKey }) ? (
         <StripeProvider
           publishableKey={stripeKey}
           {...(stripeMerchantIdentifier ? { merchantIdentifier: stripeMerchantIdentifier } : {})}

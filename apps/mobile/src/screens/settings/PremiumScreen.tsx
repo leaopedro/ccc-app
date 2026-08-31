@@ -1,7 +1,6 @@
 // F8.18 — PremiumScreen.
 //
-// iOS  → CTA calls purchasePackage from ~/lib/revenuecat (canon §F8.16: no Stripe).
-// Android → CTA opens WebBrowser to the web subscribe flow + deep-link return.
+// Subscribe CTA opens the hosted web checkout. Native migration is tracked as H4/Task 13.
 //
 // Feature-flag: when EXPO_PUBLIC_PREMIUM_BILLING_ENABLED is false,
 // show maintenance banner and return early (canon §F8.11).
@@ -18,7 +17,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,7 +28,6 @@ import { baseUrl } from '~/api/client';
 import type { PremiumStatusResponse } from '~/api/premium';
 import { getPremiumStatus } from '~/api/premium';
 import { PREMIUM_BILLING_ENABLED } from '~/lib/premium-runtime';
-import { fetchOfferings, purchasePackage } from '~/lib/revenuecat';
 import { theme } from '~/theme';
 
 // Deep-link return scheme for Android WebBrowser flow.
@@ -55,7 +52,6 @@ export default function PremiumScreen() {
   const [status, setStatus] = useState<PremiumStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [purchasing, setPurchasing] = useState(false);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -108,29 +104,6 @@ export default function PremiumScreen() {
   // Show manage link when active (includes cancel_scheduled).
   const showManageLink = status.active && !!status.manageUrl;
 
-  const onSubscribeIos = async () => {
-    setPurchasing(true);
-    try {
-      const offerings = await fetchOfferings();
-      const pkg = offerings?.current?.monthly;
-      if (!pkg) {
-        setError('Oferta não disponível no momento.');
-        return;
-      }
-      await purchasePackage(pkg);
-      // After purchase, the RC webhook fires server-side.
-      // Poll status after a short delay to reflect activation.
-      await new Promise<void>((r) => setTimeout(r, 2000));
-      await load();
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message !== 'purchaseCancelled') {
-        setError('Erro ao processar compra. Tente novamente.');
-      }
-    } finally {
-      setPurchasing(false);
-    }
-  };
-
   const onSubscribeAndroid = async () => {
     const url = `${baseUrl()}/premium`;
     const result = await WebBrowser.openAuthSessionAsync(url, DEEP_LINK_RETURN);
@@ -161,30 +134,20 @@ export default function PremiumScreen() {
         </Text>
       ) : null}
 
-      {/* Subscribe CTA — iOS: RC / Android: WebBrowser */}
+      {/* Subscribe CTA. The iOS branch used to call a RevenueCat SDK that is
+          never initialised (lib/revenuecat.ts has no caller), so the button did
+          nothing when tapped — an App Store 2.1 finding by itself. Removed on
+          2026-08-29; RevenueCat was deliberately NOT wired up. */}
       {showSubscribeCTA ? (
-        Platform.OS === 'ios' ? (
-          <Pressable
-            onPress={() => void onSubscribeIos()}
-            style={styles.cta}
-            disabled={purchasing}
-            accessibilityRole="button"
-            accessibilityLabel="Assinar Premium Gold"
-            testID="premium-cta-ios"
-          >
-            <Text style={styles.ctaText}>{purchasing ? 'Processando…' : 'Assinar Gold'}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => void onSubscribeAndroid()}
-            style={styles.cta}
-            accessibilityRole="button"
-            accessibilityLabel="Assinar Premium Gold"
-            testID="premium-cta-android"
-          >
-            <Text style={styles.ctaText}>Assinar Gold</Text>
-          </Pressable>
-        )
+        <Pressable
+          onPress={() => void onSubscribeAndroid()}
+          style={styles.cta}
+          accessibilityRole="button"
+          accessibilityLabel="Assinar Premium Gold"
+          testID="premium-cta-android"
+        >
+          <Text style={styles.ctaText}>Assinar Gold</Text>
+        </Pressable>
       ) : null}
 
       {/* Manage link */}

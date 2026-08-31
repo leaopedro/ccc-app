@@ -262,12 +262,25 @@ describe('status display', () => {
 });
 
 describe('CTA gating', () => {
-  it('shows iOS CTA on Platform.OS === "ios" when not active', async () => {
+  // A purchase button wired to an uninitialised SDK is an App Store 2.1
+  // rejection on its own: it does nothing when tapped, and the route is
+  // deep-linkable so a reviewer can reach it without a tab. The iOS CTA is
+  // gone entirely — iOS now falls through to the same hosted-checkout CTA
+  // as Android, so the screen is never a dead end.
+  it('never renders an iOS RevenueCat CTA, and shows the hosted-checkout CTA instead', async () => {
     platformMock.OS = 'ios';
     mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus);
     await mount();
-    expect(container.querySelector('[data-testid="premium-cta-ios"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="premium-cta-android"]')).toBeNull();
+    expect(container.querySelector('[data-testid="premium-cta-ios"]')).toBeNull();
+    expect(container.querySelector('[data-testid="premium-cta-android"]')).not.toBeNull();
+  });
+
+  it('never calls into the RevenueCat SDK on iOS', async () => {
+    platformMock.OS = 'ios';
+    mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus);
+    await mount();
+    expect(mockFetchOfferings).not.toHaveBeenCalled();
+    expect(mockPurchasePackage).not.toHaveBeenCalled();
   });
 
   it('shows Android CTA on Platform.OS === "android" when not active', async () => {
@@ -293,23 +306,24 @@ describe('CTA gating', () => {
   });
 });
 
-describe('Platform.OS branching — iOS calls RC, Android opens WebBrowser', () => {
-  it('calls fetchOfferings + purchasePackage on iOS CTA tap', async () => {
+describe('Subscribe CTA — hosted web checkout on both platforms (RevenueCat removed)', () => {
+  it('opens the hosted WebBrowser checkout on iOS tap too, without touching RevenueCat', async () => {
     platformMock.OS = 'ios';
-    mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus).mockResolvedValueOnce(activeStatus); // reload after purchase
-    mockFetchOfferings.mockResolvedValueOnce({
-      current: { monthly: { identifier: '$rc_monthly' } },
-    });
-    mockPurchasePackage.mockResolvedValueOnce({ transaction: { transactionIdentifier: 'txn_1' } });
+    mockGetPremiumStatus.mockResolvedValueOnce(inactiveStatus);
+    mockOpenAuthSession.mockResolvedValueOnce({ type: 'cancel' });
     await mount();
-    const cta = container.querySelector('[data-testid="premium-cta-ios"]') as HTMLElement;
+    const cta = container.querySelector('[data-testid="premium-cta-android"]') as HTMLElement;
     expect(cta).not.toBeNull();
     await act(async () => {
       cta.click();
-      for (let i = 0; i < 10; i++) await flush();
+      for (let i = 0; i < 6; i++) await flush();
     });
-    expect(mockFetchOfferings).toHaveBeenCalledOnce();
-    expect(mockPurchasePackage).toHaveBeenCalledWith({ identifier: '$rc_monthly' });
+    expect(mockOpenAuthSession).toHaveBeenCalledWith(
+      'http://localhost:4000/premium',
+      'ccc://premium/return',
+    );
+    expect(mockFetchOfferings).not.toHaveBeenCalled();
+    expect(mockPurchasePackage).not.toHaveBeenCalled();
   });
 
   it('does NOT call fetchOfferings on Android (opens WebBrowser instead)', async () => {

@@ -60,6 +60,9 @@ function Header() {
 
 export default function ContratarScreen({ slug }: { slug: string | undefined }) {
   const [plan, setPlan] = useState<PremiumPlan | null>(null);
+  // Platform gate from the same response — false (safe default) until the
+  // fetch resolves, so the CTA never flashes before disappearing.
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [loading, setLoading] = useState(Boolean(slug));
   const [error, setError] = useState(false);
   const { modules } = usePremiumAddonModules();
@@ -74,7 +77,13 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
     setLoading(true);
     setError(false);
     try {
-      setPlan(await getPremiumPlan(slug));
+      // Response is the plan fields FLATTENED with subscriptionsEnabled, not
+      // nested under `plan` (final review, Important 2) — old installed
+      // binaries parse the bare plan shape, so a nested envelope would have
+      // broken every one of them the moment the API deploys.
+      const response = await getPremiumPlan(slug);
+      setPlan(response);
+      setSubscriptionsEnabled(response.subscriptionsEnabled);
     } catch {
       setError(true);
     } finally {
@@ -313,7 +322,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
             <Text style={styles.iosTitle}>{copy.iosTitle}</Text>
             <Text style={styles.iosSubcopy}>{copy.iosSubcopy}</Text>
           </View>
-        ) : (
+        ) : subscriptionsEnabled ? (
           <TierCta
             tier={plan.tier}
             label={submitting ? copy.ctaLoading : copy.cta}
@@ -322,7 +331,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
             loading={submitting}
             testID="contratar-cta"
           />
-        )}
+        ) : null}
       </View>
     </View>
   );

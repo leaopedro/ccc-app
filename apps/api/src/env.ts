@@ -75,6 +75,24 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  // Platform gate. Default 'true' per platform: absent means enabled, so no
+  // existing environment changes behaviour on deploy. Flipping
+  // PREMIUM_SUBSCRIPTIONS_IOS to 'false' removes the iOS subscription entry
+  // point WITHOUT touching web, Android, or renewal webhook processing —
+  // which is what GROWTH_PREMIUM_BILLING_ENABLED cannot do, because it is
+  // global.
+  PREMIUM_SUBSCRIPTIONS_IOS: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  PREMIUM_SUBSCRIPTIONS_ANDROID: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  PREMIUM_SUBSCRIPTIONS_WEB: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   STRIPE_BILLING_WEBHOOK_SECRET: z.string().min(1).optional(),
   REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().min(1).optional(),
   REVENUECAT_REST_API_KEY: z.string().min(1).optional(),

@@ -4,6 +4,12 @@
 //
 // Polls the subscription because the webhook is asynchronous — landing here
 // does not prove the membership row exists yet.
+//
+// Deliberately NOT gated by useSubscriptionsGate. Landing here means a
+// hosted checkout already completed — redirecting the member away from their
+// own successful payment confirmation would be hostile, and the platform gate
+// (which blocks starting a NEW purchase) is irrelevant to one already in
+// flight.
 
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';

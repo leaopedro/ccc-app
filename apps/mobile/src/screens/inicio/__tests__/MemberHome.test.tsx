@@ -198,6 +198,12 @@ const routerMocks = vi.hoisted(() => ({ push: vi.fn() }));
 // silently kill badge polling in production while every bell test here
 // stayed green) has something to be caught by.
 const unreadCountArgs = vi.hoisted(() => ({ fn: vi.fn() }));
+// Fix (final review, Critical 1): MemberHome now also reads the platform
+// gate for the /inicio upsell pill. Mocked (rather than left real) for the
+// same reason every other data source here is mocked — the real hook pulls
+// in `~/api/client` -> `expo-constants`, which throws `__DEV__ is not
+// defined` under this file's jsdom environment.
+const premiumPlansState = vi.hoisted(() => ({ value: null as unknown }));
 
 vi.mock('~/screens/inicio/useMemberHomeData', () => ({
   useMemberHomeData: () => memberHomeDataState.value,
@@ -207,6 +213,9 @@ vi.mock('~/hooks/useHomeContent', () => ({
 }));
 vi.mock('~/hooks/useClubStats', () => ({
   useClubStats: () => clubStatsState.value,
+}));
+vi.mock('~/hooks/usePremiumPlans', () => ({
+  usePremiumPlans: () => premiumPlansState.value,
 }));
 vi.mock('~/hooks/useUnreadCount', () => ({
   useUnreadCount: (enabled: boolean) => {
@@ -412,6 +421,13 @@ beforeEach(() => {
   clubStatsState.value = { stats: CLUB_STATS, loading: false, error: false, refresh: vi.fn() };
   unreadCountState.value = { count: 0, refresh: vi.fn() };
   authState.value = { user: AUTH_USER, status: 'authenticated' };
+  premiumPlansState.value = {
+    plans: [],
+    loading: false,
+    error: false,
+    subscriptionsEnabled: true,
+    refresh: vi.fn(),
+  };
 });
 
 afterEach(() => {
@@ -609,6 +625,28 @@ describe('MemberHome — premium gate', () => {
     await renderMemberHome();
     expect(container.querySelector('[data-testid="inicio-box"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="inicio-subscription-active"]')).not.toBeNull();
+  });
+
+  // Fix (final review, Critical 1): /inicio is the platform gate's own
+  // redirect target, so the upsell pill (which pushes /assinaturas) must not
+  // render when the gate is off — it would bounce a gated member straight
+  // back to /inicio.
+  it('hides the upsell pill for a non-premium member when the platform gate is off', async () => {
+    memberHomeDataState.value = {
+      ...defaultMemberHomeData(),
+      garage: source(GARAGE_NON_PREMIUM),
+      premium: source(PREMIUM_INACTIVE),
+      box: source(null),
+    };
+    premiumPlansState.value = {
+      plans: [],
+      loading: false,
+      error: false,
+      subscriptionsEnabled: false,
+      refresh: vi.fn(),
+    };
+    await renderMemberHome();
+    expect(container.querySelector('[data-testid="inicio-subscription-upsell"]')).toBeNull();
   });
 
   it('hides the box block even with box data present, when premium.active is false', async () => {

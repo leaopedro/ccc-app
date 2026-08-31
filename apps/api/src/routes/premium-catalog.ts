@@ -9,7 +9,11 @@
  * premium-pricing.ts). Both admin + mobile render the catalog before sign-in.
  *
  * These endpoints are NOT gated on GROWTH_PREMIUM_BILLING_ENABLED — the catalog
- * is informational. That flag gates checkout/attach in a later phase.
+ * is informational. That flag gates checkout/attach in a later phase. They DO
+ * carry the per-platform subscriptions gate (`request.subscriptionsEnabled`,
+ * set by the platform-gate plugin): every response reports whether the caller's
+ * platform can subscribe, alongside `Vary: x-ccc-platform` so a shared cache
+ * never hands an iOS client the web answer.
  *
  * Provider price ids (stripePriceId/rcProductId) live on the DB rows but are
  * never serialized here; the response schemas do not carry them.
@@ -18,9 +22,11 @@
 import { prisma } from '@ccc/db';
 import {
   premiumAddonModuleListResponseSchema,
+  premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
   premiumPlanSchema,
 } from '@ccc/shared/premium-catalog';
+import rateLimit from '@fastify/rate-limit';
 import type {
   PremiumAddonModule as DbPremiumAddonModule,
   PremiumPlan as DbPremiumPlan,
@@ -68,9 +74,60 @@ const serializeAddonModule = (module: DbPremiumAddonModule) => ({
   sortOrder: module.sortOrder,
 });
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/api/plans', async () => {
+  // `trustProxy` is NOT set in app.ts, so behind Railway `req.ip` is the edge
+  // proxy's address for every caller — this key collapses to ONE GLOBAL
+  // BUCKET, not a per-client limit. Enabling trustProxy would fix that, but
+  // it changes every rate limit in the app and is its own task (final
+  // review, Important 3), not this one.
+  //
+  // Given that, this ceiling is not abuse protection — it is a
+  // database-protection backstop against a runaway client (a retry loop,
+  // a bad deploy). It must clear ordinary fleet-wide traffic on its own:
+  // `usePremiumSlot` refetches GET /api/plans on every app foreground, and
+  // the minha-assinatura path alone mounts three independent callers of
+  // `usePremiumPlans` (PlanosScreen, MinhaAssinaturaScreen,
+  // useSubscriptionsGate), each with its own fetch. A single push
+  // notification foregrounds the whole membership at once, so the bucket
+  // has to absorb every installed app's foreground burst inside the same
+  // one-minute window without tripping. 6000/min (100 req/s) clears that
+  // with wide margin for this club's membership size while still catching a
+  // genuine runaway loop.
+  await app.register(rateLimit, {
+    max: 6000,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `premium-catalog:${req.ip}`,
+  });
+
+  // The body varies on x-ccc-platform. Without both headers, any shared cache
+  // may hand an iOS client the web answer.
+  //
+  // `reply.header('Vary', ...)` REPLACES rather than appends. @fastify/cors is
+  // registered globally ahead of this plugin and may already have set
+  // `Vary: Origin` on the same response; overwriting it here would silently
+  // drop that entry. Append instead: read whatever Vary is already present
+  // (string, string[], or unset — `getHeader` can return any of those) and
+  // add x-ccc-platform only if it is not already listed.
+  app.addHook('onSend', async (_request, reply) => {
+    const existing = reply.getHeader('Vary');
+    const existingValues = Array.isArray(existing)
+      ? existing
+      : existing === undefined
+        ? []
+        : [String(existing)];
+    const parts = existingValues
+      .flatMap((value) => value.split(','))
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!parts.some((part) => part.toLowerCase() === 'x-ccc-platform')) {
+      parts.push('x-ccc-platform');
+    }
+    void reply.header('Vary', parts.join(', '));
+    void reply.header('Cache-Control', 'no-store');
+  });
+
+  app.get('/api/plans', async (request) => {
     const plans = await prisma.premiumPlan.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
@@ -78,6 +135,7 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     });
     return premiumPlanListResponseSchema.parse({
       plans: plans.map(serializePlan),
+      subscriptionsEnabled: request.subscriptionsEnabled,
     });
   });
 
@@ -88,16 +146,23 @@ export const premiumCatalogRoutes: FastifyPluginAsync = async (app) => {
       include: PLAN_INCLUDE,
     });
     if (!plan) return reply.status(404).send({ error: 'NotFound' });
-    return serializePlan(plan);
+    // Flattened (final review, Important 2), NOT nested under `plan` — see
+    // the schema comment in @ccc/shared/premium-catalog for why a nested
+    // envelope would break every already-installed binary.
+    return premiumPlanDetailResponseSchema.parse({
+      ...serializePlan(plan),
+      subscriptionsEnabled: request.subscriptionsEnabled,
+    });
   });
 
-  app.get('/api/addon-modules', async () => {
+  app.get('/api/addon-modules', async (request) => {
     const modules = await prisma.premiumAddonModule.findMany({
       where: { active: true },
       orderBy: { sortOrder: 'asc' },
     });
     return premiumAddonModuleListResponseSchema.parse({
       modules: modules.map(serializeAddonModule),
+      subscriptionsEnabled: request.subscriptionsEnabled,
     });
   });
 };

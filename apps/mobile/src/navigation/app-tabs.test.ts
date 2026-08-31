@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+// ./app-tabs pulls in ~/api/client, which imports react-native directly (for
+// the x-ccc-platform header), whose Flow-flavored `import typeof` syntax
+// vitest's SSR transform cannot parse. Mock it before importing.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName, tabTitle } = await import('./app-tabs');
 

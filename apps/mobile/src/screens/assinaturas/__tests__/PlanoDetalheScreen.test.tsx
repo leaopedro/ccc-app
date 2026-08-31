@@ -8,13 +8,13 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PremiumPlan } from '@ccc/shared/premium-catalog';
+import type { PremiumPlan, PremiumPlanDetailResponse } from '@ccc/shared/premium-catalog';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlan>>();
+const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
 const routerPush = vi.fn();
 
 vi.mock('~/api/premium-catalog', () => ({
@@ -129,7 +129,9 @@ describe('PlanoDetalheScreen', () => {
     root = createRoot(container);
     routerPush.mockClear();
     getPremiumPlan.mockReset();
-    getPremiumPlan.mockResolvedValue(SAMPLE);
+    // Flattened, not nested under `plan` (final review, Important 2) — the
+    // real route now returns the plan fields at the top level.
+    getPremiumPlan.mockResolvedValue({ ...SAMPLE, subscriptionsEnabled: true });
   });
 
   afterEach(async () => {
@@ -168,6 +170,14 @@ describe('PlanoDetalheScreen', () => {
     });
     expect(routerPush).toHaveBeenCalledTimes(1);
     expect(routerPush).toHaveBeenCalledWith('/assinaturas/contratar?slug=fundador');
+  });
+
+  it('does not render the Assinar CTA when the platform gate is off', async () => {
+    getPremiumPlan.mockResolvedValue({ ...SAMPLE, subscriptionsEnabled: false });
+    await renderScreen();
+    expect(container.querySelector('[data-testid="detalhe-assinar"]')).toBeNull();
+    // The rest of the plan detail still renders — only the CTA is gated.
+    expect(container.textContent ?? '').toContain('Fundador');
   });
 
   it('shows a not-found state when the plan is missing', async () => {

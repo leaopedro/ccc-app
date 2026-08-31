@@ -15,7 +15,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PremiumAddonModule, PremiumPlan } from '@ccc/shared/premium-catalog';
+import type {
+  PremiumAddonModule,
+  PremiumPlan,
+  PremiumPlanDetailResponse,
+} from '@ccc/shared/premium-catalog';
 import type { CheckoutOutcome } from '~/screens/assinaturas/checkout';
 import { assinaturasCopy } from '~/copy/assinaturas';
 
@@ -23,7 +27,7 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
-const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlan>>();
+const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
 const startPremiumCheckout = vi.fn<(input: unknown) => Promise<CheckoutOutcome>>();
 const pollSubscriptionActive = vi.fn<() => Promise<boolean>>();
 const showToast = vi.fn();
@@ -168,7 +172,9 @@ describe('ContratarScreen', () => {
 
     platform.OS = 'android';
     getPremiumPlan.mockReset();
-    getPremiumPlan.mockResolvedValue(PLAN);
+    // Flattened, not nested under `plan` (final review, Important 2) — the
+    // real route now returns the plan fields at the top level.
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: true });
     startPremiumCheckout.mockReset();
     pollSubscriptionActive.mockReset();
     showToast.mockReset();

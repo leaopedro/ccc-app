@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// `~/api/client` reads expo-constants at module load, which pulls react-native
-// into a plain node run. Same stub the cart mapper test uses.
+// `~/api/client` imports react-native directly (for the x-ccc-platform
+// header) and reads expo-constants at module load, which also pulls
+// react-native into a plain node run. Same stub the cart mapper test uses.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
 const { ApiError } = await import('~/api/client');
 const { resolveCheckoutError } = await import('./checkout-error');

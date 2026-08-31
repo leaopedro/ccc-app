@@ -64,6 +64,9 @@ function Header() {
 
 export default function PlanoDetalheScreen({ slug }: { slug: string | undefined }) {
   const [plan, setPlan] = useState<PremiumPlan | null>(null);
+  // Platform gate from the same response — false (safe default) until the
+  // fetch resolves, so the CTA never flashes before disappearing.
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [loading, setLoading] = useState(Boolean(slug));
   const [error, setError] = useState(false);
 
@@ -77,7 +80,13 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
     setLoading(true);
     setError(false);
     try {
-      setPlan(await getPremiumPlan(slug));
+      // Response is the plan fields FLATTENED with subscriptionsEnabled, not
+      // nested under `plan` (final review, Important 2) — old installed
+      // binaries parse the bare plan shape, so a nested envelope would have
+      // broken every one of them the moment the API deploys.
+      const response = await getPremiumPlan(slug);
+      setPlan(response);
+      setSubscriptionsEnabled(response.subscriptionsEnabled);
     } catch {
       setError(true);
     } finally {
@@ -170,15 +179,19 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
         </View>
       </ScrollView>
 
-      {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam). */}
-      <View style={styles.ctaBar}>
-        <TierCta
-          tier={plan.tier}
-          label={assinaturasCopy.detail.cta}
-          onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
-          testID="detalhe-assinar"
-        />
-      </View>
+      {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam).
+          Hidden when the platform gate is off; that screen would have no CTA
+          of its own to land on. */}
+      {subscriptionsEnabled ? (
+        <View style={styles.ctaBar}>
+          <TierCta
+            tier={plan.tier}
+            label={assinaturasCopy.detail.cta}
+            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
+            testID="detalhe-assinar"
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

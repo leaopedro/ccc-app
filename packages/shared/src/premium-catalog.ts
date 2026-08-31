@@ -47,12 +47,36 @@ export type PremiumPlan = z.infer<typeof premiumPlanSchema>;
 
 /**
  * GET /api/plans — full response.
+ *
+ * `subscriptionsEnabled` is the platform gate, resolved server-side from the
+ * caller's `x-ccc-platform` header. It rides on the catalog reads because
+ * those are the only premium routes that ALWAYS answer:
+ * GET /api/premium/pricing 503s whenever GROWTH_PREMIUM_BILLING_ENABLED is
+ * off, which is precisely when the gate would need to speak.
  */
 export const premiumPlanListResponseSchema = z.object({
   plans: z.array(premiumPlanSchema),
+  subscriptionsEnabled: z.boolean(),
 });
 
 export type PremiumPlanListResponse = z.infer<typeof premiumPlanListResponseSchema>;
+
+/**
+ * GET /api/plans/:slug — the plan fields FLATTENED with the gate, not
+ * nested under a `plan` key. Already-installed binaries call this route and
+ * parse the bare plan shape (`premiumPlanSchema`, which requires `tier`,
+ * `slug`, etc.) directly; a nested `{ plan, subscriptionsEnabled }` envelope
+ * would throw on every one of them the moment this deploys, since a bare
+ * plan object has none of the fields `premiumPlanSchema` requires. Old
+ * clients ignore the extra `subscriptionsEnabled` key; new clients read it.
+ * `premiumPlanSchema` has no field named `subscriptionsEnabled`, so the
+ * flatten cannot collide.
+ */
+export const premiumPlanDetailResponseSchema = premiumPlanSchema.extend({
+  subscriptionsEnabled: z.boolean(),
+});
+
+export type PremiumPlanDetailResponse = z.infer<typeof premiumPlanDetailResponseSchema>;
 
 /**
  * A recurring add-on module. `quotaPerCycle`/`quotaUnit` describe the per-cycle
@@ -76,6 +100,7 @@ export type PremiumAddonModule = z.infer<typeof premiumAddonModuleSchema>;
  */
 export const premiumAddonModuleListResponseSchema = z.object({
   modules: z.array(premiumAddonModuleSchema),
+  subscriptionsEnabled: z.boolean(),
 });
 
 export type PremiumAddonModuleListResponse = z.infer<typeof premiumAddonModuleListResponseSchema>;

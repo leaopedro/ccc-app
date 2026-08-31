@@ -67,6 +67,22 @@ runs `prisma migrate deploy`, then `startCommand` boots
 | `R2_DOCUMENTS_BUCKET`          | Sem default | Bucket R2 privado de documentos de identidade. Obrigatório sempre que o R2 está configurado. A API não sobe sem essa variável. |
 | `DOCUMENT_URL_TTL_SECONDS`     | `60`        | TTL do signed GET de documento.                                                                                                |
 
+## Variáveis do gate por plataforma
+
+| Variável                        | Default | Descrição                                                                                            |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `PREMIUM_SUBSCRIPTIONS_IOS`     | `true`  | Liga/desliga a entrada de assinatura premium para clientes iOS. `false` desativa só essa plataforma. |
+| `PREMIUM_SUBSCRIPTIONS_ANDROID` | `true`  | Mesmo gate para Android.                                                                             |
+| `PREMIUM_SUBSCRIPTIONS_WEB`     | `true`  | Mesmo gate para web.                                                                                 |
+
+**Ausente significa ligada.** As três variáveis são `optional` com default
+`'true'`, então não setar nenhuma delas em nenhum ambiente não muda
+comportamento nenhum no deploy. Use para desligar assinatura em uma única
+plataforma sem builar um binário novo, por exemplo durante uma rejeição da
+App Store — desligar `PREMIUM_SUBSCRIPTIONS_IOS` some com o CTA e devolve 403
+`PlatformNotSupported` nas rotas de compra (`checkout`, `checkout-precheck`,
+`addons`) só para iOS, sem afetar quem já assina.
+
 ## Deploy
 
 Push to `main` → Railway auto-deploys via the GitHub webhook. The

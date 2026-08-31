@@ -1,5 +1,6 @@
 import { ACCOUNT_DISABLED_ERROR } from '@ccc/shared/auth';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type { z } from 'zod';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string };
@@ -30,7 +31,10 @@ export const request = async <T>(
   schema: z.ZodType<T>,
   options: RequestOptions = {},
 ): Promise<T> => {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-ccc-platform': Platform.OS,
+  };
   if (options.token) headers.authorization = `Bearer ${options.token}`;
   const init: RequestInit = { method: options.method ?? 'GET', headers };
   if (options.body !== undefined) init.body = JSON.stringify(options.body);
@@ -75,7 +79,10 @@ export const authedRequest = async <T>(
 ): Promise<T> => {
   if (!provider) throw new Error('token provider not registered');
   const attempt = async (token: string): Promise<Response> => {
-    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${token}`,
+      'x-ccc-platform': Platform.OS,
+    };
     if (options.body !== undefined) headers['content-type'] = 'application/json';
     const init: RequestInit = { method: options.method ?? 'GET', headers };
     if (options.body !== undefined) init.body = JSON.stringify(options.body);

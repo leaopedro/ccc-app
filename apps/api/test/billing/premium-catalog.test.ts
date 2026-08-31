@@ -16,12 +16,13 @@
 import { prisma } from '@ccc/db';
 import {
   premiumAddonModuleListResponseSchema,
+  premiumPlanDetailResponseSchema,
   premiumPlanListResponseSchema,
-  premiumPlanSchema,
 } from '@ccc/shared/premium-catalog';
-import type { FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { premiumCatalogRoutes } from '../../src/routes/premium-catalog.js';
 import { makeApp, resetDatabase } from '../helpers.js';
 
 type PlanSeed = {
@@ -237,11 +238,15 @@ describe('GET /api/plans/:slug', () => {
 
     const res = await app.inject({ method: 'GET', url: '/api/plans/gold' });
     expect(res.statusCode).toBe(200);
-    const plan = premiumPlanSchema.parse(res.json());
+    // Flattened with the gate, NOT nested under a `plan` key (final review,
+    // Important 2) — an already-installed binary parses the bare plan shape
+    // directly, so a nested envelope would break every one of them.
+    const plan = premiumPlanDetailResponseSchema.parse(res.json());
     expect(plan.slug).toBe('gold');
     expect(plan.tier).toBe('gold');
     expect(plan.prices).toHaveLength(1);
     expect(plan.benefits).toHaveLength(1);
+    expect(res.json()).not.toHaveProperty('plan');
   });
 
   it('returns 404 for an unknown slug', async () => {
@@ -295,5 +300,143 @@ describe('GET /api/addon-modules', () => {
     const res = await app.inject({ method: 'GET', url: '/api/addon-modules' });
     expect(res.payload).not.toContain('price_secret_addon');
     expect(res.payload).not.toContain('stripePriceId');
+  });
+});
+
+describe('platform gate on the catalog reads', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await resetCatalog();
+    app = await makeApp();
+    await seedPlan({
+      tier: 'gold',
+      slug: 'fundador',
+      name: 'Fundador',
+      prices: [{ cadence: 'monthly', baseAmountCents: 24990 }],
+      benefits: [{ label: 'Acesso ao clube 24 horas', sortOrder: 1 }],
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('reports the gate as off for iOS and on for web', async () => {
+    process.env.PREMIUM_SUBSCRIPTIONS_IOS = 'false';
+    const gated = await makeApp();
+    try {
+      const ios = await gated.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'ios' },
+      });
+      expect(ios.json().subscriptionsEnabled).toBe(false);
+
+      const web = await gated.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'web' },
+      });
+      expect(web.json().subscriptionsEnabled).toBe(true);
+    } finally {
+      delete process.env.PREMIUM_SUBSCRIPTIONS_IOS;
+      await gated.close();
+    }
+  });
+
+  it('flattens the single-plan response with the gate, not nested under `plan`', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plans/fundador',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      slug: 'fundador',
+      subscriptionsEnabled: true,
+    });
+    expect(res.json()).not.toHaveProperty('plan');
+  });
+
+  it('carries the gate on the addon modules read', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/addon-modules',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.json()).toHaveProperty('subscriptionsEnabled', true);
+  });
+
+  // A cache in front of the API that ignores the header would serve a web body
+  // to an iOS client. That is the exact rejection the gate exists to prevent.
+  it('marks the response as varying on the platform header and uncacheable', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plans',
+      headers: { 'x-ccc-platform': 'web' },
+    });
+    expect(res.headers.vary).toContain('x-ccc-platform');
+    expect(res.headers['cache-control']).toContain('no-store');
+  });
+
+  // @fastify/cors is registered ahead of this plugin in app.ts and, when
+  // CORS_ORIGINS is non-empty, adds `Vary: Origin` via its own onRequest
+  // hook. `reply.header('Vary', ...)` REPLACES rather than appends, so a
+  // naive hook here would silently drop the CORS entry. This test forces
+  // CORS_ORIGINS on for one app instance (the default test env leaves it
+  // empty — see test/setup.ts — which disables CORS entirely and means it
+  // never sets Vary at all) and asserts both entries survive.
+  it('preserves an existing Vary: Origin set by CORS alongside x-ccc-platform', async () => {
+    process.env.CORS_ORIGINS = 'https://example.com';
+    const corsEnabled = await makeApp();
+    try {
+      const res = await corsEnabled.inject({
+        method: 'GET',
+        url: '/api/plans',
+        headers: { 'x-ccc-platform': 'web', origin: 'https://example.com' },
+      });
+      const vary = (res.headers.vary ?? '')
+        .toString()
+        .split(',')
+        .map((part) => part.trim().toLowerCase());
+      expect(vary).toContain('origin');
+      expect(vary).toContain('x-ccc-platform');
+      expect(res.headers['cache-control']).toContain('no-store');
+    } finally {
+      delete process.env.CORS_ORIGINS;
+      await corsEnabled.close();
+    }
+  });
+
+  // Guards the dedup branch of the onSend hook itself: if x-ccc-platform is
+  // already present on Vary by the time our hook runs, it must not be
+  // appended a second time. In production only CORS precedes this plugin's
+  // hook (covered above, and it only ever adds `Origin`), so a bare Fastify
+  // instance is used here to plant `Vary: x-ccc-platform` via an onSend hook
+  // registered ahead of the real premiumCatalogRoutes plugin — still a real
+  // request going through the real route/hook code, just without the rest of
+  // the app.ts stack.
+  it('does not duplicate x-ccc-platform when Vary already lists it', async () => {
+    const standalone = Fastify();
+    standalone.decorateRequest('subscriptionsEnabled', true);
+    standalone.addHook('onSend', async (_request, reply, payload) => {
+      reply.header('Vary', 'x-ccc-platform');
+      return payload;
+    });
+    await standalone.register(premiumCatalogRoutes);
+    try {
+      const res = await standalone.inject({ method: 'GET', url: '/api/plans' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers.vary).toBe('x-ccc-platform');
+    } finally {
+      await standalone.close();
+    }
+  });
+
+  it('still 404s an unknown slug', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/plans/nao-existe' });
+    expect(res.statusCode).toBe(404);
   });
 });

@@ -32,6 +32,7 @@ import { useAuth } from '~/auth/context';
 import { authCopy } from '~/copy/auth';
 import { notificationsCopy } from '~/copy/notifications';
 import { profileCopy } from '~/copy/profile';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { useUnreadCount } from '~/hooks/useUnreadCount';
 import { pickAndUpload } from '~/lib/upload-image';
@@ -93,6 +94,11 @@ export default function ProfileMenuScreen() {
   const router = useRouter();
   const { count: unreadCount } = useUnreadCount(true);
   const { subscription } = usePremiumSubscription();
+  // Platform gate (final review, Critical 1) — the same reasoning as
+  // SubscriptionSection on /inicio: this row leads to /assinaturas, a NEW
+  // purchase entry point, and /inicio is the gate's own redirect target. A
+  // gated build must not offer a second path back to itself.
+  const { subscriptionsEnabled } = usePremiumPlans();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -245,7 +251,7 @@ export default function ProfileMenuScreen() {
             billing is off, but this row was not, so the "Assinaturas em breve."
             placeholder stayed two taps from the Profile tab — placeholder content
             on a primary path is an App Store 2.1 rejection. */}
-        {PREMIUM_BILLING_ENABLED ? (
+        {PREMIUM_BILLING_ENABLED && subscriptionsEnabled ? (
           <MenuRow
             icon={<Gem color={theme.colors.fg} size={18} strokeWidth={1.75} />}
             label={profileCopy.menu.assinatura}

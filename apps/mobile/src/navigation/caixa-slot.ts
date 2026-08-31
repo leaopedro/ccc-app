@@ -1,9 +1,11 @@
-export type PremiumSlot = 'caixa' | 'assinaturas';
+export type PremiumSlot = 'caixa' | 'assinaturas' | 'none';
 
 export const resolveCaixaSlot = (args: {
   caixaEnabled: boolean;
   premiumActive: boolean;
+  subscriptionsEnabled: boolean;
 }): PremiumSlot => {
-  if (!args.caixaEnabled) return 'assinaturas';
-  return args.premiumActive ? 'caixa' : 'assinaturas';
+  if (args.caixaEnabled && args.premiumActive) return 'caixa';
+  if (args.subscriptionsEnabled) return 'assinaturas';
+  return 'none';
 };

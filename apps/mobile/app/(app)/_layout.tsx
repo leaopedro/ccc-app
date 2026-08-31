@@ -54,7 +54,9 @@ function AppTabs() {
   // The premium-gated slot: exactly one of caixa/assinaturas is visible here,
   // in whichever position the store ternaries below would have shown
   // `tickets` previously. The other one is registered hidden below so deep
-  // links still resolve.
+  // links still resolve. When the slot is 'none' (gated iOS, caixa off),
+  // neither is visible, but both stay registered with href: null so deep
+  // links still resolve — Task 10 redirects them.
   const premiumTabListeners = {
     tabPress: (e: { preventDefault: () => void }) => {
       e.preventDefault();
@@ -68,18 +70,23 @@ function AppTabs() {
         options={{ title: 'Caixa', tabBarIcon: CaixaIcon }}
         listeners={premiumTabListeners}
       />
-    ) : (
+    ) : slot === 'assinaturas' ? (
       <Tabs.Screen
         name="assinaturas"
         options={{ title: 'Assinatura' }}
         listeners={premiumTabListeners}
       />
-    );
+    ) : null;
   const hiddenPremiumTab =
     slot === 'caixa' ? (
       <Tabs.Screen name="assinaturas" options={{ href: null, title: 'Assinatura' }} />
-    ) : (
+    ) : slot === 'assinaturas' ? (
       <Tabs.Screen name="caixa" options={{ href: null, title: 'Caixa', tabBarIcon: CaixaIcon }} />
+    ) : (
+      <>
+        <Tabs.Screen name="caixa" options={{ href: null, title: 'Caixa', tabBarIcon: CaixaIcon }} />
+        <Tabs.Screen name="assinaturas" options={{ href: null, title: 'Assinatura' }} />
+      </>
     );
 
   return (

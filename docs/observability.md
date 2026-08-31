@@ -132,6 +132,19 @@ once that integration lands.
 > `payment-webhook-signature` tag is reused so rule 3 will already
 > cover both providers.
 
+> **Not wired yet: platform-gate write refusal.** The per-platform
+> subscription gate (`docs/railway.md#variáveis-do-gate-por-plataforma`)
+> refuses purchase-route writes with 403 `PlatformNotSupported` from
+> `apps/api/src/services/platform-gate/guard.ts`, but that guard does not
+> call Sentry today — no event is captured, so a rule on the tag
+> `platform-gate-write-refused` would never fire. Once the guard is
+> updated to call `Sentry.captureException` (or `captureMessage`) with
+> `tags: { kind: 'platform-gate-write-refused' }` before it sends the 403,
+> add a rule: condition `tags[kind]:platform-gate-write-refused`,
+> threshold ≥ 1. A sudden high volume means either a stale client still
+> hitting a disabled platform, or one of the `PREMIUM_SUBSCRIPTIONS_*`
+> variables flipped by mistake.
+
 ## Synthetic verification
 
 Run after any change to the Sentry wiring or alert rules.

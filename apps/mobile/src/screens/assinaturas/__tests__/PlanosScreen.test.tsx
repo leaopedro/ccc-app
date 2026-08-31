@@ -23,6 +23,7 @@ const hookState = vi.hoisted(() => ({
     plans: [] as PremiumPlan[],
     loading: false,
     error: false,
+    subscriptionsEnabled: true,
     refresh: () => Promise.resolve(),
   },
   modules: {
@@ -181,6 +182,7 @@ describe('PlanosScreen', () => {
       plans: SAMPLE_PLANS,
       loading: false,
       error: false,
+      subscriptionsEnabled: true,
       refresh: () => Promise.resolve(),
     };
     hookState.modules = {
@@ -220,14 +222,26 @@ describe('PlanosScreen', () => {
   };
 
   it('shows the loading state', async () => {
-    hookState.plans = { plans: [], loading: true, error: false, refresh: () => Promise.resolve() };
+    hookState.plans = {
+      plans: [],
+      loading: true,
+      error: false,
+      subscriptionsEnabled: true,
+      refresh: () => Promise.resolve(),
+    };
     await renderScreen();
     expect(container.textContent ?? '').toContain('Carregando');
   });
 
   it('shows the error state with a retry control', async () => {
     const refresh = vi.fn(() => Promise.resolve());
-    hookState.plans = { plans: [], loading: false, error: true, refresh };
+    hookState.plans = {
+      plans: [],
+      loading: false,
+      error: true,
+      subscriptionsEnabled: true,
+      refresh,
+    };
     await renderScreen();
     const text = container.textContent ?? '';
     expect(text).toContain('Não foi possível carregar os planos.');
@@ -241,7 +255,13 @@ describe('PlanosScreen', () => {
   });
 
   it('shows the empty state when there are no plans', async () => {
-    hookState.plans = { plans: [], loading: false, error: false, refresh: () => Promise.resolve() };
+    hookState.plans = {
+      plans: [],
+      loading: false,
+      error: false,
+      subscriptionsEnabled: true,
+      refresh: () => Promise.resolve(),
+    };
     await renderScreen();
     expect(container.textContent ?? '').toContain('Nenhum plano disponível');
   });
@@ -270,6 +290,21 @@ describe('PlanosScreen', () => {
     expect(text).toContain('MÓDULOS ADICIONAIS');
     expect(text).toContain('Detailing');
     expect(text).toContain('150,00');
+  });
+
+  it('does not render per-plan Assinar CTAs when the platform gate is off', async () => {
+    hookState.plans = {
+      plans: SAMPLE_PLANS,
+      loading: false,
+      error: false,
+      subscriptionsEnabled: false,
+      refresh: () => Promise.resolve(),
+    };
+    await renderScreen();
+    expect(container.querySelector('[data-testid="assinar-gold"]')).toBeNull();
+    expect(container.querySelector('[data-testid="assinar-bronze"]')).toBeNull();
+    // Cards themselves still render — browsing plans is unaffected.
+    expect(container.textContent ?? '').toContain('Fundador');
   });
 
   it('navigates to the plan detail when a plan CTA is tapped', async () => {

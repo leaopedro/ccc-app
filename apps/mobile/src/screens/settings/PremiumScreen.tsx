@@ -91,7 +91,7 @@ export default function PremiumScreen() {
   if (!enabled) {
     return (
       <View style={styles.center} testID="premium-maintenance">
-        <Text style={styles.maintenanceText}>Premium em breve</Text>
+        <Text style={styles.maintenanceText}>Assinaturas indisponíveis no momento.</Text>
       </View>
     );
   }

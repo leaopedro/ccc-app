@@ -1,17 +1,19 @@
-// Bumped 2026-08-14: the payment section claimed we do not collect CPF, while
-// the legal-basis table two sections below already listed CPF for subscription
-// identity validation, and the code encrypts and stores it at signup. The
-// document contradicted itself and the iOS privacy manifest.
+// Bumped 2026-08-29: subscription billing moved from RevenueCat to Stripe. The
+// published document named RevenueCat as an Operador in both the payment prose
+// and the subprocessor table, while the code charges through Stripe. Naming a
+// processor that does not process is an LGPD accuracy defect, and it is a
+// visible contradiction to an App Review reviewer once iOS charges via Stripe.
 //
-// This constant is NOT inert: apps/admin/src/components/cookie-banner.tsx
-// compares it against the stored consent version, so bumping it re-shows the
-// cookie banner to every admin user. That is arguably the right behaviour for a
-// policy change, but it IS a user-visible effect — an earlier version of this
-// comment claimed the bump was purely documentary, which was wrong (the check
-// missed apps/admin). The mobile app and the API do not read it. Whether this
-// correction requires fresh consent from existing users is a legal call, tracked
-// in the payments roadmap.
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
+// This constant is NOT inert. Two consumers:
+//   1. apps/admin/src/components/cookie-banner.tsx:39 compares it against the
+//      stored consent version, so this bump re-shows the cookie banner to every
+//      admin user. Intended for a policy change, and user-visible.
+//   2. apps/mobile/app/(auth)/privacidade.tsx:2 bundles this module into the
+//      iOS binary. That is why this change must land BEFORE submission, not in
+//      parallel with it.
+// The API does not read it. Whether existing users need fresh consent is a
+// legal call, tracked in the payments roadmap.
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-29' as const;
 
 /**
  * The version this one replaced. Interpolated into section 12 instead of being
@@ -22,7 +24,7 @@ export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
  * section. The date is gone entirely because the version string already carries
  * it; one source, not three.
  */
-export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
+export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
 
 export type PolicySection = {
   id: string;
@@ -83,7 +85,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 - Dados de cartão de crédito/débito: processados pela **Stripe** nos EUA — nunca armazenados por nós
 - Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação e **não** enviamos seu CPF ao processador de Pix
 - CPF: coletado no seu perfil e armazenado de forma criptografada. Usado para validar sua identidade na contratação de assinatura e para obrigações fiscais. Ver a tabela de bases legais abaixo
-- Assinaturas premium: gerenciadas pela **RevenueCat**, que recebe apenas um identificador interno da sua conta
+- Assinaturas premium: gerenciadas pela **Stripe** (EUA), que recebe apenas o e-mail da conta e um identificador interno da garagem
 
 **Notificações**
 - Token de dispositivo para notificações push (Expo Push / APNs / FCM)
@@ -118,9 +120,8 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 | Fornecedor | Finalidade | País | Papel LGPD |
 |---|---|---|---|
-| Stripe | Processamento de pagamentos com cartão | EUA | Operador |
+| Stripe | Processamento de pagamentos com cartão e gestão de assinaturas | EUA | Operador |
 | AbacatePay | Processamento de Pix | Brasil | Operador |
-| RevenueCat | Gestão de assinaturas premium | EUA | Operador |
 | Expo / Apple / Google | Envio de notificações push | EUA | Operador |
 | Sentry | Monitoramento de erros | EUA | Operador |
 | Cloudflare R2 | Armazenamento de fotos e mídia | EUA | Operador |

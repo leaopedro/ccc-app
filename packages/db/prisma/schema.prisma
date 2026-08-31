@@ -443,6 +443,7 @@ model PremiumMembershipInvoice {
   refundedAt             DateTime?
   refundedAmountCents    Int?
   status                 String          @db.VarChar(20)
+  livemode               Boolean         @default(true)
   createdAt              DateTime        @default(now())
 
   membership PremiumMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
@@ -450,6 +451,7 @@ model PremiumMembershipInvoice {
   @@unique([provider, providerInvoiceRef])
   @@index([membershipId, periodStart])
   @@index([paidAt])
+  @@index([livemode, paidAt])
 }
 
 model SubscriptionWebhookEvent {
@@ -1313,6 +1315,7 @@ model Order {
   fulfillmentMethod FulfillmentMethod @default(pickup)
   notes             String?           @db.Text
   status            OrderStatus       @default(pending)
+  livemode          Boolean           @default(true)
   paidAt            DateTime?
   failedAt          DateTime?
   refundedAt        DateTime?
@@ -1342,6 +1345,7 @@ model Order {
   @@index([shippingAddressId])
   @@index([pickupEventId])
   @@index([pickupTicketId])
+  @@index([livemode, status, paidAt])
 }
 
 model OrderExtra {

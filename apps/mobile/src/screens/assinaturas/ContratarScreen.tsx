@@ -308,7 +308,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         ) : null}
       </ScrollView>
 
-      {/* Fixed footer — summary + CTA (or the iOS web-contract notice). */}
+      {/* Fixed footer — summary + CTA. */}
       <View style={styles.ctaBar}>
         <View style={styles.summary}>
           <View style={styles.summaryRow}>

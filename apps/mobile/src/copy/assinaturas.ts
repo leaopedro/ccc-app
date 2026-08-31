@@ -70,8 +70,8 @@ export const assinaturasCopy = {
     errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
     errorPlanNotFound: 'Esse plano não está mais disponível.',
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
-    iosTitle: 'Contratação pelo site.',
-    iosSubcopy: 'No iPhone a contratação é feita pelo site da Casa Car Club.',
+    errorAttemptInFlight:
+      'Já existe uma tentativa de pagamento em andamento. Aguarde um instante e tente de novo.',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -97,9 +97,11 @@ export const assinaturasCopy = {
     emptyTitle: 'Você ainda não é assinante.',
     emptySubcopy: 'Escolha um plano e faça parte da Casa.',
     emptyCta: 'VER PLANOS',
-    // Billing switched off (flag / 503).
-    unavailableTitle: 'Assinaturas em breve.',
-    unavailableSubcopy: 'A contratação de planos ainda não está disponível. Volte em breve.',
+    // Billing switched off (flag / 503). Not "coming soon": the feature
+    // exists and is momentarily unavailable. Saying "em breve" to a member
+    // who already pays reads as the product having been withdrawn.
+    unavailableTitle: 'Assinaturas indisponíveis no momento.',
+    unavailableSubcopy: 'Estamos em manutenção. Tente de novo em alguns minutos.',
     benefitsTitle: 'O QUE ESTÁ INCLUÍDO',
     seeAllPlans: 'VER TODOS OS PLANOS',
     historico: {

@@ -376,7 +376,10 @@ describe('ContratarScreen', () => {
   // 6. iOS now subscribes natively like every other platform: the CTA
   // mounts and tapping it reaches startPremiumCheckout. Fails if the iOS
   // web-contract notice (pre-2026-08-29) comes back and hides the CTA again.
-  it('renders the CTA and calls startPremiumCheckout on iOS', async () => {
+  // That notice was in-app steering to an external purchase method on the
+  // Brazil storefront, which the App Store 3.1.3 chapeau forbids outright —
+  // so its strings must not render either.
+  it('renders the CTA on iOS like every other platform', async () => {
     platform.OS = 'ios';
     startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_x' });
     pay.mockResolvedValue({ kind: 'paid' });
@@ -385,6 +388,8 @@ describe('ContratarScreen', () => {
 
     const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
     if (!cta) throw new Error('CTA not rendered on iOS');
+    expect(text()).not.toContain('pelo site');
+    expect(text()).not.toContain('No iPhone');
 
     await act(async () => {
       cta.click();

@@ -111,12 +111,11 @@ describe('startPremiumCheckout', () => {
 
   // The endpoint can also answer 409 SubscriptionAttemptInFlight (a pending
   // native attempt or an open hosted Checkout Session for the same garage).
-  // Known gap, not fixed here (see checkout-error.ts and the task report):
-  // resolveCheckoutError's 409 switch only special-cases StaleBillingReference
-  // and otherwise falls through to already_subscribed, so this currently
-  // reads as "you already have a subscription" rather than "try again in a
-  // moment". Pinned so the behavior is visible, not silently assumed.
-  it('maps a SubscriptionAttemptInFlight 409 from checkout-native to an error outcome', async () => {
+  // That is a conflicting-attempt fact, not "you already have a
+  // subscription" — resolveCheckoutError gives it its own reason so the
+  // member is told to wait/retry instead of being pointed at a `manageUrl`
+  // for a subscription that does not exist.
+  it('maps a SubscriptionAttemptInFlight 409 from checkout-native to its own reason, not already_subscribed', async () => {
     platform.OS = 'ios';
     const { ApiError } = await import('~/api/client');
     createPremiumSubscriptionNative.mockRejectedValue(
@@ -129,7 +128,9 @@ describe('startPremiumCheckout', () => {
 
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
 
-    expect(out.kind).toBe('error');
+    if (out.kind !== 'error') throw new Error('expected an error outcome');
+    expect(out.error.reason).toBe('attempt_in_flight');
+    expect(out.error.manageUrl).toBeUndefined();
   });
 
   // 422: annual cadence + add-ons is a combination error, not an

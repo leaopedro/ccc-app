@@ -18,6 +18,7 @@ export type CheckoutErrorReason =
   | 'unavailable'
   | 'addon_unavailable'
   | 'already_subscribed'
+  | 'attempt_in_flight'
   | 'stale_billing'
   | 'incomplete_profile'
   | 'rate_limited'
@@ -65,6 +66,14 @@ export function resolveCheckoutError(error: unknown): CheckoutError {
     case 409: {
       if (b.error === 'StaleBillingReference') {
         return { reason: 'stale_billing', message: copy.errorStaleBilling };
+      }
+      // A conflicting attempt already running (a pending native attempt or an
+      // open hosted Checkout Session) is not the same fact as "you already
+      // subscribe" — the member has no active subscription to manage, so
+      // `manageUrl` (kept only on `already_subscribed`) would point nowhere
+      // useful here.
+      if (b.error === 'SubscriptionAttemptInFlight') {
+        return { reason: 'attempt_in_flight', message: copy.errorAttemptInFlight };
       }
       return {
         reason: 'already_subscribed',

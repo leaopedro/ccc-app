@@ -59,12 +59,13 @@ export const runVendorFanout = async (
 
   // AbacatePay: named Operador in the published privacy policy, so it must
   // appear in the deletion log even when the answer is "nothing to purge".
-  // The client (services/abacatepay/index.ts) exposes createPixBilling,
-  // getPixBilling and verifyWebhookSignature — no deletion API exists, and
-  // AbacatePay documents none. We send no CPF (PixBillingCustomer.taxId has no
-  // caller today), so what the vendor holds for a Pix charge is the charge
-  // itself, retained by them under their own fiscal obligation. Recorded as
-  // `skipped` with this reason rather than omitted.
+  // Our client (services/abacatepay/index.ts) implements no erasure method
+  // (only createPixBilling, getPixBilling, verifyWebhookSignature), and the
+  // public docs reviewed on 2026-08-29 describe none either — we did not
+  // obtain vendor-side confirmation that no such endpoint exists. We send no
+  // CPF (PixBillingCustomer.taxId has no caller today), so what the vendor
+  // holds for a Pix charge is the charge itself. Recorded as `skipped` with
+  // this reason rather than omitted.
   steps.push({ step: 'abacatepay_customer_delete', status: 'skipped', at: now() });
 
   return steps;

@@ -7,10 +7,12 @@
 // "contract on the website" notice. That notice was in-app steering to an
 // external purchase method on the Brazil storefront, which the 3.1.3 chapeau
 // forbids outright (the exception is US-storefront only). iOS now pays through
-// the native PaymentSheet like every other native platform, and Android moves
-// off the hosted browser flow onto the same sheet (below).
+// the native PaymentSheet.
 //
-// Histórico: caminho hospedado no Android.
+// Android stays on the hosted browser flow below, same as before this
+// branch and same as PremiumScreen.tsx's onSubscribeAndroid — whether
+// Android also migrates to the sheet is a product decision parked on a
+// human (final review I1), not something to decide in code.
 //
 // Stripe's success_url is a fixed https URL (apps/api me-premium.ts), never
 // a deep link, so the "did it come back via deep link?" signal
@@ -32,14 +34,8 @@
 // need to polyfill it with AppState"). Using it directly here previously
 // caused polling to start immediately, racing the poller's budget against
 // a member who hasn't finished paying yet. Do not reintroduce that call.
-//
-// If H4 decides to keep Android hosted after all, this comment (and
-// `import * as WebBrowser from 'expo-web-browser'; await
-// WebBrowser.openAuthSessionAsync(url);` in place of the native branch below)
-// are the reason it comes back cheaply in Task 13. The import itself is
-// dropped here — eslint's no-unused-vars fails an unused import, and nothing
-// in this file calls WebBrowser anymore.
 
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { createPremiumCheckout, createPremiumSubscriptionNative } from '~/api/premium';
@@ -56,12 +52,12 @@ export async function startPremiumCheckout(input: {
   planSlug: string;
   addonKeys: string[];
 }): Promise<CheckoutOutcome> {
-  // Native (iOS + Android): create the subscription server-side and drive
-  // Task 4's PaymentSheet with its first invoice's client secret. The
-  // subscription is `payment_behavior: 'default_incomplete'` — nothing is
-  // charged and no membership exists until the sheet confirms and the
-  // `invoice.paid` webhook lands.
-  if (Platform.OS !== 'web') {
+  // iOS only: create the subscription server-side and drive Task 4's
+  // PaymentSheet with its first invoice's client secret. The subscription is
+  // `payment_behavior: 'default_incomplete'` — nothing is charged and no
+  // membership exists until the sheet confirms and the `invoice.paid`
+  // webhook lands.
+  if (Platform.OS === 'ios') {
     try {
       const intent = await createPremiumSubscriptionNative(input);
       return { kind: 'sheet', clientSecret: intent.clientSecret };
@@ -85,6 +81,12 @@ export async function startPremiumCheckout(input: {
     return { kind: 'error', error: resolveCheckoutError(err) };
   }
 
-  window.location.href = url;
-  return { kind: 'redirected' };
+  if (Platform.OS === 'web') {
+    window.location.href = url;
+    return { kind: 'redirected' };
+  }
+
+  // Android: hosted browser flow, restored to its pre-branch behaviour.
+  await WebBrowser.openAuthSessionAsync(url);
+  return { kind: 'returned' };
 }

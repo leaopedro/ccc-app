@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createPremiumCheckout = vi.fn();
 const createPremiumSubscriptionNative = vi.fn();
+const openAuthSessionAsync = vi.fn();
 const platform = { OS: 'android' as string };
 
 vi.mock('react-native', () => ({ Platform: platform }));
 // checkout.ts imports ./checkout-error, which reaches ~/api/client and
 // therefore expo-constants. Stub it so this stays a plain node run.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
-vi.mock('expo-web-browser', () => ({ openAuthSessionAsync: vi.fn() }));
+vi.mock('expo-web-browser', () => ({
+  openAuthSessionAsync: (url: string) => openAuthSessionAsync(url),
+}));
 vi.mock('~/api/premium', () => ({ createPremiumCheckout, createPremiumSubscriptionNative }));
 
 const load = async () => import('./checkout');
@@ -18,6 +21,7 @@ describe('startPremiumCheckout', () => {
     vi.resetModules();
     createPremiumCheckout.mockReset();
     createPremiumSubscriptionNative.mockReset();
+    openAuthSessionAsync.mockReset();
     platform.OS = 'android';
   });
 
@@ -42,21 +46,26 @@ describe('startPremiumCheckout', () => {
     expect(createPremiumCheckout).not.toHaveBeenCalled();
   });
 
-  // Android also moves off the hosted-browser flow onto the sheet — the
-  // point of Task 4/5's single PaymentSheet seam is that every native
-  // platform goes through it, not just iOS.
-  it('returns a sheet outcome on Android too', async () => {
+  // Final review I1: Android stays on the hosted browser flow, matching
+  // PremiumScreen.tsx's onSubscribeAndroid and the pre-branch behaviour.
+  // Whether Android migrates to the sheet is a product decision parked on a
+  // human, not something the iOS PaymentSheet seam should decide as a
+  // side effect.
+  it('still opens the hosted checkout on Android, not the sheet', async () => {
     platform.OS = 'android';
-    createPremiumSubscriptionNative.mockResolvedValue({ clientSecret: 'pi_sub_secret_y' });
+    createPremiumCheckout.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_android',
+    });
+    openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' });
     const { startPremiumCheckout } = await load();
 
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
 
-    expect(out).toEqual({ kind: 'sheet', clientSecret: 'pi_sub_secret_y' });
-    expect(createPremiumSubscriptionNative).toHaveBeenCalledWith({
-      planSlug: 'fundador',
-      addonKeys: [],
-    });
+    expect(out).toEqual({ kind: 'returned' });
+    expect(openAuthSessionAsync).toHaveBeenCalledWith(
+      'https://checkout.stripe.com/c/pay/cs_android',
+    );
+    expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
   });
 
   // Web has no native SDK; it keeps the hosted Checkout Session. A suite that

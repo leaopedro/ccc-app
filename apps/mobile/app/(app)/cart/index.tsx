@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -26,7 +25,13 @@ import { useCart } from '~/cart/context';
 import { redirectToStripeCheckout } from '~/cart/web-stripe-redirect';
 import { cartCopy } from '~/copy/cart';
 import { useShippingAddresses } from '~/hooks/useShippingAddresses';
+import { showMessage } from '~/lib/confirm';
 import { formatBRL, formatEventDateRange } from '~/lib/format';
+import {
+  resolveCartPaymentAction,
+  resolveCartSheetOutcomeAction,
+} from '~/payments/cart-payment-flow';
+import { usePaymentSheet } from '~/payments/payment-sheet';
 import { ExtrasDrawer } from '~/screens/cart/ExtrasDrawer';
 import {
   buildCartSections,
@@ -351,6 +356,7 @@ export default function CartScreen() {
   const [loadingExtras, setLoadingExtras] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix'>('card');
+  const { pay } = usePaymentSheet();
   const [selectedShippingAddressId, setSelectedShippingAddressId] = useState<string | null>(null);
   const [eventPickupEnabled, setEventPickupEnabled] = useState(false);
   const [pickupOptions, setPickupOptions] = useState<PickupEventOption[]>([]);
@@ -512,6 +518,7 @@ export default function CartScreen() {
     try {
       const result = await beginCheckout({
         paymentMethod,
+        ...(isWeb ? {} : { flow: 'native' as const }),
         ...(selectedFulfillmentMethod ? { fulfillmentMethod: selectedFulfillmentMethod } : {}),
         ...(selectedShippingAddressId ? { shippingAddressId: selectedShippingAddressId } : {}),
         ...(needsEventPickup && eventPickupEnabled && selectedPickupEventId
@@ -520,37 +527,58 @@ export default function CartScreen() {
         ...getCheckoutReturnUrls(),
       });
 
-      if (paymentMethod === 'pix') {
-        const firstOrderId = result.orderIds[0];
-        if (!result.brCode || !result.reservationExpiresAt || !firstOrderId) {
-          showError(cartCopy.errors.checkout);
-          return;
-        }
+      const action = resolveCartPaymentAction({
+        paymentMethod,
+        isWeb,
+        clientSecret: result.clientSecret,
+        checkoutUrl: result.checkoutUrl,
+        brCode: result.brCode,
+        reservationExpiresAt: result.reservationExpiresAt,
+        firstOrderId: result.orderIds[0],
+      });
+
+      if (action.kind === 'error') {
+        showError(cartCopy.errors.checkout);
+        return;
+      }
+      if (action.kind === 'pix') {
         router.push({
           pathname: '/(app)/events/buy/checkout-pix',
           params: {
-            orderId: firstOrderId,
-            brCode: result.brCode,
-            expiresAt: result.reservationExpiresAt,
+            orderId: action.orderId,
+            brCode: action.brCode,
+            expiresAt: action.expiresAt,
             amountCents: String(result.cart.totals.amountCents),
             currency: result.cart.totals.currency,
           },
         } as never);
         return;
       }
-
-      if (!result.checkoutUrl) {
-        showError(cartCopy.errors.checkout);
+      if (action.kind === 'redirect') {
+        if (typeof window !== 'undefined') {
+          redirectToStripeCheckout({ checkoutUrl: action.url, orderIds: result.orderIds });
+        }
         return;
       }
-      if (isWeb && typeof window !== 'undefined') {
-        redirectToStripeCheckout({
-          checkoutUrl: result.checkoutUrl,
-          orderIds: result.orderIds,
-        });
-      } else {
-        await Linking.openURL(result.checkoutUrl);
+
+      // action.kind === 'sheet': native card checkout, drive the PaymentSheet.
+      const outcome = await pay(action.clientSecret);
+      const sheetAction = resolveCartSheetOutcomeAction(outcome);
+      if (sheetAction.kind === 'message') {
+        // A closed sheet is a choice, not a failure — no error toast.
+        showMessage(sheetAction.text);
+        return;
       }
+      if (sheetAction.kind === 'error') {
+        showError(sheetAction.text);
+        return;
+      }
+      // Paid on the sheet. The order only flips to `paid` once the Stripe
+      // webhook lands, so send the member to the order list rather than
+      // claiming success here — same rule the hosted/web return flow follows
+      // (apps/mobile/app/(app)/events/buy/checkout-return.tsx polls `getOrder`
+      // and never writes order state from the client).
+      router.replace('/profile/orders' as never);
     } catch {
       showError(cartCopy.errors.checkout);
     } finally {
@@ -559,6 +587,7 @@ export default function CartScreen() {
   }, [
     eventPickupEnabled,
     needsEventPickup,
+    pay,
     paymentMethod,
     router,
     selectedFulfillmentMethod,

@@ -537,6 +537,7 @@ export const financeQs = (q?: AdminFinanceQuery) => {
   if (q.provider) sp.set('provider', q.provider);
   if (q.method) sp.set('method', q.method);
   if (q.statuses) q.statuses.forEach((s) => sp.append('statuses', s));
+  if (q.livemode) sp.set('livemode', q.livemode);
   const str = sp.toString();
   return str ? `?${str}` : '';
 };

@@ -78,3 +78,37 @@ describe('KpiRow — membership tiles (chunk 15)', () => {
     expect(html).toContain('Membros Ativos');
   });
 });
+
+describe('KpiRow — livemode backfill warning (task 5)', () => {
+  it('shows the backfill warning when livemodeBackfillPending is true', () => {
+    const html = renderToStaticMarkup(
+      <KpiRow summary={{ ...baseSummary, livemodeBackfillPending: true }} />,
+    );
+    expect(html).toContain('pré-corte');
+  });
+
+  it('does not show the backfill warning when livemodeBackfillPending is false', () => {
+    const html = renderToStaticMarkup(
+      <KpiRow summary={{ ...baseSummary, livemodeBackfillPending: false }} />,
+    );
+    expect(html).not.toContain('pré-corte');
+  });
+});
+
+describe('KpiRow — membership counts not filtered by revenue mode (task 5)', () => {
+  it('marks "Membros Ativos" and "MRR" as not filtered when membershipCountsLivemodeFiltered is false', () => {
+    const html = renderToStaticMarkup(
+      <KpiRow summary={{ ...baseSummary, membershipCountsLivemodeFiltered: false }} />,
+    );
+    expect(html).toContain('Não filtra por modo');
+  });
+
+  it('does not mark those tiles when membershipCountsLivemodeFiltered is true (field-driven, not hardcoded)', () => {
+    const filteredSummary = {
+      ...baseSummary,
+      membershipCountsLivemodeFiltered: true,
+    } as unknown as AdminFinanceSummary;
+    const html = renderToStaticMarkup(<KpiRow summary={filteredSummary} />);
+    expect(html).not.toContain('Não filtra por modo');
+  });
+});

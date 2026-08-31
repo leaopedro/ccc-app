@@ -17,6 +17,7 @@ type Filters = {
   cadence?: string | null;
   tier?: string | null;
   membershipStatus?: string | null;
+  livemode?: string | null;
 };
 
 type EventOption = { id: string; title: string };
@@ -65,6 +66,14 @@ const membershipStatusOptions = [
   { value: 'expired', label: 'Expirado' },
 ];
 
+// Pre-cutover rows are Stripe test mode. `live` is the default everywhere,
+// including the API, so the operator has to opt IN to seeing test money.
+const livemodeOptions = [
+  { value: 'live', label: 'Receita real' },
+  { value: 'test', label: 'Somente modo teste' },
+  { value: 'all', label: 'Real + teste' },
+];
+
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -107,6 +116,21 @@ export function FilterBar({ filters, events, onFilterChange, onClear, isPending 
         aria-label="Tipo de receita"
       >
         {kindOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+
+      <select
+        value={filters.livemode ?? 'live'}
+        onChange={(e) =>
+          onFilterChange('livemode', e.target.value === 'live' ? null : e.target.value)
+        }
+        className="rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-xs"
+        aria-label="Modo de receita"
+      >
+        {livemodeOptions.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>

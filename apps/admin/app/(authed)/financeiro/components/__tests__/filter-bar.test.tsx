@@ -268,3 +268,92 @@ describe('FilterBar — kind dropdown + membership sub-filters (chunk 15)', () =
     expect(onChange).toHaveBeenCalledWith('kind', null);
   });
 });
+
+describe('FilterBar — revenue-mode selector (chunk 16, task 5)', () => {
+  it('renders a revenue-mode select defaulting to "live"', async () => {
+    await act(async () => {
+      root.render(
+        <FilterBar
+          filters={baseFilters}
+          events={[]}
+          onFilterChange={vi.fn()}
+          onClear={vi.fn()}
+          isPending={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const select = document.querySelector('[aria-label="Modo de receita"]') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('live');
+  });
+
+  it('emits null when the operator picks "live" back again', async () => {
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(
+        <FilterBar
+          filters={{ ...baseFilters, livemode: 'test' }}
+          events={[]}
+          onFilterChange={onChange}
+          onClear={vi.fn()}
+          isPending={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const select = document.querySelector('[aria-label="Modo de receita"]') as HTMLSelectElement;
+    await act(async () => {
+      select.value = 'live';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('livemode', null);
+  });
+
+  it('emits the raw value for "test"', async () => {
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(
+        <FilterBar
+          filters={baseFilters}
+          events={[]}
+          onFilterChange={onChange}
+          onClear={vi.fn()}
+          isPending={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const select = document.querySelector('[aria-label="Modo de receita"]') as HTMLSelectElement;
+    await act(async () => {
+      select.value = 'test';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('livemode', 'test');
+  });
+
+  it('emits the raw value for "all"', async () => {
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(
+        <FilterBar
+          filters={baseFilters}
+          events={[]}
+          onFilterChange={onChange}
+          onClear={vi.fn()}
+          isPending={false}
+        />,
+      );
+      await Promise.resolve();
+    });
+    const select = document.querySelector('[aria-label="Modo de receita"]') as HTMLSelectElement;
+    await act(async () => {
+      select.value = 'all';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('livemode', 'all');
+  });
+});

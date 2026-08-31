@@ -23,6 +23,7 @@ import {
   TIER_VISUAL,
   tierStyle,
 } from '~/screens/assinaturas/tier-visual';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 
 function onBack() {
   if (router.canGoBack()) router.back();
@@ -178,11 +179,13 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
           ))}
         </View>
 
-        <View style={styles.caixaCard}>
-          <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
-          <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
-          <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
-        </View>
+        {isCaixaBuildEnabled() ? (
+          <View style={styles.caixaCard}>
+            <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
+            <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
+            <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam).

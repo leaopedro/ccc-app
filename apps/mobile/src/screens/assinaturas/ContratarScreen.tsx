@@ -42,6 +42,7 @@ import {
   TIER_VISUAL,
   tierStyle,
 } from '~/screens/assinaturas/tier-visual';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 
 const copy = assinaturasCopy.contratar;
 
@@ -294,11 +295,13 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
           </View>
         ) : null}
 
-        <View style={styles.caixaCard}>
-          <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
-          <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
-          <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
-        </View>
+        {isCaixaBuildEnabled() ? (
+          <View style={styles.caixaCard}>
+            <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
+            <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
+            <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
+          </View>
+        ) : null}
 
         {modules.length > 0 ? (
           <View style={styles.modulesSection}>

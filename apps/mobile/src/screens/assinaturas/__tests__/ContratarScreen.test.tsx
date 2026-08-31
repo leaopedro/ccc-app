@@ -42,6 +42,14 @@ const routerBack = vi.fn();
 // time, so mutating this object before `renderScreen()` is enough).
 const platform = { OS: 'android' as string };
 
+// Final review C2 — the caixa paywall copy must not promise a box the build
+// can't assemble. Mutable so a single test can flip it off, same technique
+// as `platform` above (read at render time, not import time).
+const caixaFlag = { enabled: true };
+vi.mock('~/screens/caixa/caixa-enabled', () => ({
+  isCaixaBuildEnabled: () => caixaFlag.enabled,
+}));
+
 const hookState = vi.hoisted(() => ({
   modules: {
     modules: [] as PremiumAddonModule[],
@@ -178,6 +186,7 @@ describe('ContratarScreen', () => {
     root = createRoot(container);
 
     platform.OS = 'android';
+    caixaFlag.enabled = true;
     getPremiumPlan.mockReset();
     // Flattened, not nested under `plan` (final review, Important 2) — the
     // real route now returns the plan fields at the top level.
@@ -492,11 +501,27 @@ describe('ContratarScreen', () => {
   // 11. Decision 6: the physical box has to be visible BEFORE the purchase,
   // framed as a physical good delivered to an address. Guideline 3.1.3(e)
   // turns on the word "physical", and a reviewer only sees what the paywall
-  // renders.
-  it('states the physical box and its delivery cadence before purchase', async () => {
+  // renders. Only true, though, when the build can actually assemble the
+  // box — see the next test.
+  it('states the physical box and its delivery cadence before purchase, when the caixa build flag is on', async () => {
+    caixaFlag.enabled = true;
     await renderScreen();
     const body = text();
     expect(body).toContain(assinaturasCopy.caixa.title);
     expect(body).toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  // Final review C2 — EXPO_PUBLIC_CAIXA_ENABLED is absent from both the
+  // preview and production eas.json profiles, so a shipped binary cannot
+  // assemble the box at all. Promising it anyway (the box copy rendering
+  // unconditionally) is exactly the 2.3.1 exposure this branch exists to
+  // close: no title, no body, no stray empty container either.
+  it('renders no caixa copy at all when the caixa build flag is off', async () => {
+    caixaFlag.enabled = false;
+    await renderScreen();
+    const body = text();
+    expect(body).not.toContain(assinaturasCopy.caixa.title);
+    expect(body).not.toContain(assinaturasCopy.caixa.body);
+    expect(body).not.toContain(assinaturasCopy.caixa.delivery);
   });
 });

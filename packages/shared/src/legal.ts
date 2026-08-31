@@ -113,6 +113,24 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Sobre o interesse legítimo:** realizamos o balanço de interesses (teste LIA) antes de usar esta base. Você pode opor-se a tratamentos baseados em interesse legítimo enviando mensagem ao Encarregado.`,
   },
+  // RevenueCat removed from the table below on 2026-08-29: no live path sends
+  // data to it today. This is NOT "dead code" — verify before trusting this
+  // comment:
+  //   - apps/api/src/routes/revenuecat-webhook.ts is registered unconditionally
+  //     at apps/api/src/app.ts:183 (POST /webhooks/revenuecat exists in prod).
+  //   - apps/api/src/services/revenuecat/client.ts#buildRevenueCatClient calls
+  //     GET https://api.revenuecat.com/v1/subscribers/{app_user_id}, sending
+  //     garageId as app_user_id.
+  //   - apps/api/src/workers/billing-reconcile.ts#reconcileRcRow calls that
+  //     client, once per hour, for every PremiumMembership row with
+  //     provider: 'apple_revenuecat'. Today there are none, and the sweep is
+  //     gated by env GROWTH_PREMIUM_BILLING_ENABLED (apps/api/src/env.ts),
+  //     which is off pending F8.19 smoke.
+  // The precise condition that makes this comment wrong: GROWTH_PREMIUM_
+  // BILLING_ENABLED flips to true WHILE any PremiumMembership row carries
+  // provider: 'apple_revenuecat'. At that point garageId starts flowing to
+  // RevenueCat's API again, and this table must re-add a RevenueCat row and
+  // PRIVACY_POLICY_VERSION must bump BEFORE that flag flips, not after.
   {
     id: 'compartilhamento',
     title: '5. Com quem compartilhamos seus dados',

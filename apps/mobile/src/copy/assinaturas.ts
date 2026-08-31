@@ -92,8 +92,16 @@ export const assinaturasCopy = {
     errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
     errorPlanNotFound: 'Esse plano não está mais disponível.',
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+    // Reachable only when the member switches to a DIFFERENT package after a
+    // decline: the previous attempt is still locked (up to the reaper's TTL —
+    // billing-reconcile.ts) and cannot be reused for a new package digest.
+    // Same-package retries reuse the pending attempt instead of hitting this
+    // 409 at all (final review I2) — "wait an instant" is false here, since
+    // the lock can outlive far more than an instant. There is no in-app way
+    // to cancel the pending attempt, so the honest advice is to retry the
+    // same plan (which reuses it) or wait for it to clear on its own.
     errorAttemptInFlight:
-      'Já existe uma tentativa de pagamento em andamento. Aguarde um instante e tente de novo.',
+      'Você tem uma tentativa de assinatura de outro plano em andamento. Tente novamente com o mesmo plano de antes, ou aguarde essa tentativa expirar.',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',

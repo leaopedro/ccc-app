@@ -5,7 +5,7 @@ vi.mock('~/api/client', () => ({
   authedRequest: vi.fn(),
 }));
 
-import { getPremiumStatus } from '../premium';
+import { createPremiumSubscriptionNative, getPremiumStatus } from '../premium';
 
 import { authedRequest } from '~/api/client';
 
@@ -24,5 +24,28 @@ describe('getPremiumStatus', () => {
     });
     await getPremiumStatus();
     expect(mockAuthedRequest).toHaveBeenCalledWith('/api/me/premium/status', expect.anything());
+  });
+});
+
+describe('createPremiumSubscriptionNative', () => {
+  it('posts to checkout-native with the plan and add-ons', async () => {
+    mockAuthedRequest.mockResolvedValueOnce({
+      subscriptionId: 'sub_1',
+      clientSecret: 'pi_sub_secret_x',
+      attemptId: 'attempt_1',
+    });
+    const result = await createPremiumSubscriptionNative({
+      planSlug: 'fundador',
+      addonKeys: ['detailing'],
+    });
+    expect(mockAuthedRequest).toHaveBeenCalledWith(
+      '/api/me/premium/checkout-native',
+      expect.anything(),
+      {
+        method: 'POST',
+        body: { cadence: 'monthly', planSlug: 'fundador', addonKeys: ['detailing'] },
+      },
+    );
+    expect(result.clientSecret).toBe('pi_sub_secret_x');
   });
 });

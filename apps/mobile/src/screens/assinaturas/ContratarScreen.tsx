@@ -2,9 +2,12 @@
 //
 // Member picks the plan's optional add-on modules and sees the total
 // recalculate live; the CTA hands off to the real checkout seam (checkout.ts).
-// The webhook that flips a subscription active is asynchronous, so after the
-// checkout browser returns we poll (poll-subscription.ts) before navigating —
-// a closed browser does not prove payment.
+// Native platforms (iOS/Android) get a `sheet` outcome and drive Task 4's
+// PaymentSheet here; web gets a hosted Checkout Session redirect. Either way
+// the webhook that flips a subscription active is asynchronous, so after the
+// sheet resolves or the checkout browser returns we poll
+// (poll-subscription.ts) before navigating — neither a closed sheet nor a
+// closed browser proves payment, only `invoice.paid` does.
 
 import type { PremiumPlan } from '@ccc/shared/premium-catalog';
 import { ArrowLeft } from 'lucide-react-native';
@@ -13,7 +16,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,9 +25,11 @@ import {
 
 import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { paymentsCopy } from '~/copy/payments';
 import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
+import { usePaymentSheet } from '~/payments/payment-sheet';
 import { startPremiumCheckout } from '~/screens/assinaturas/checkout';
 import type { CheckoutError } from '~/screens/assinaturas/checkout-error';
 import { packageTotalCents } from '~/screens/assinaturas/package-total';
@@ -66,6 +70,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
   const [loading, setLoading] = useState(Boolean(slug));
   const [error, setError] = useState(false);
   const { modules } = usePremiumAddonModules();
+  const { pay } = usePaymentSheet();
 
   const refresh = useCallback(async () => {
     if (!slug) {
@@ -211,9 +216,33 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         } else {
           setPhase('pending');
         }
+        return;
+      }
+      if (outcome.kind === 'sheet') {
+        const sheet = await pay(outcome.clientSecret);
+        if (sheet.kind === 'cancelled') {
+          // A closed sheet is a choice, not a failure — never the error path.
+          showToast(paymentsCopy.sheet.cancelled);
+          return;
+        }
+        if (sheet.kind === 'failed') {
+          setCheckoutError({ reason: 'generic', message: paymentsCopy.sheet.failed });
+          return;
+        }
+        // Paid on the sheet. The subscription is not active yet — only the
+        // `invoice.paid` webhook flips membership, same as the hosted
+        // 'returned' path above, so poll before navigating instead of
+        // granting entitlement here.
+        setPhase('confirming');
+        const active = await pollSubscriptionActive();
+        if (active) {
+          showToast(copy.successToast);
+          router.replace('/assinaturas/minha-assinatura');
+        } else {
+          setPhase('pending');
+        }
       }
       // 'redirected' → the web page is already navigating away.
-      // 'ios_unsupported' → unreachable, the CTA is not rendered on iOS.
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -317,12 +346,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
           </View>
         ) : null}
 
-        {Platform.OS === 'ios' ? (
-          <View style={styles.iosNotice}>
-            <Text style={styles.iosTitle}>{copy.iosTitle}</Text>
-            <Text style={styles.iosSubcopy}>{copy.iosSubcopy}</Text>
-          </View>
-        ) : subscriptionsEnabled ? (
+        {subscriptionsEnabled ? (
           <TierCta
             tier={plan.tier}
             label={submitting ? copy.ctaLoading : copy.cta}
@@ -522,23 +546,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textDecorationLine: 'underline',
     marginTop: 6,
-  },
-
-  // iOS notice (no Stripe on iOS)
-  iosNotice: {
-    borderRadius: 11,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: c.tileBorder,
-    alignItems: 'center',
-    gap: 4,
-  },
-  iosTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: c.cream, textAlign: 'center' },
-  iosSubcopy: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 12,
-    color: c.muted55,
-    textAlign: 'center',
   },
 });

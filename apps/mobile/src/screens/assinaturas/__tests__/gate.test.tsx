@@ -44,6 +44,10 @@ vi.mock('~/screens/assinaturas/checkout', () => ({
   startPremiumCheckout: vi.fn(),
 }));
 
+vi.mock('~/payments/payment-sheet', () => ({
+  usePaymentSheet: () => ({ pay: vi.fn() }),
+}));
+
 vi.mock('~/screens/assinaturas/poll-subscription', () => ({
   pollSubscriptionActive: vi.fn(),
 }));

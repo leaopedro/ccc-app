@@ -4,8 +4,10 @@
 
 import {
   premiumCheckoutResponseSchema,
+  premiumNativeCheckoutResponseSchema,
   premiumStatusSchema,
   type PremiumCheckoutResponse,
+  type PremiumNativeCheckoutResponse,
 } from '@ccc/shared/premium';
 import { z } from 'zod';
 
@@ -22,6 +24,21 @@ export const createPremiumCheckout = (input: {
   addonKeys: string[];
 }): Promise<PremiumCheckoutResponse> =>
   authedRequest('/api/me/premium/checkout', premiumCheckoutResponseSchema, {
+    method: 'POST',
+    body: { cadence: 'monthly', planSlug: input.planSlug, addonKeys: input.addonKeys },
+  });
+
+/**
+ * POST /api/me/premium/checkout-native — server creates the Stripe
+ * subscription with `payment_behavior: 'default_incomplete'` and returns the
+ * first invoice's client secret for the PaymentSheet to confirm. Membership
+ * activation still comes only from the `invoice.paid` webhook.
+ */
+export const createPremiumSubscriptionNative = (input: {
+  planSlug: string;
+  addonKeys: string[];
+}): Promise<PremiumNativeCheckoutResponse> =>
+  authedRequest('/api/me/premium/checkout-native', premiumNativeCheckoutResponseSchema, {
     method: 'POST',
     body: { cadence: 'monthly', planSlug: input.planSlug, addonKeys: input.addonKeys },
   });

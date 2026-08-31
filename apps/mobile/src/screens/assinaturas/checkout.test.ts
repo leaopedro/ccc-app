@@ -1,23 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const openAuthSessionAsync = vi.fn();
 const createPremiumCheckout = vi.fn();
+const createPremiumSubscriptionNative = vi.fn();
 const platform = { OS: 'android' as string };
 
 vi.mock('react-native', () => ({ Platform: platform }));
-// checkout.ts now imports ./checkout-error, which reaches ~/api/client and
+// checkout.ts imports ./checkout-error, which reaches ~/api/client and
 // therefore expo-constants. Stub it so this stays a plain node run.
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
-vi.mock('expo-web-browser', () => ({ openAuthSessionAsync }));
-vi.mock('~/api/premium', () => ({ createPremiumCheckout }));
+vi.mock('expo-web-browser', () => ({ openAuthSessionAsync: vi.fn() }));
+vi.mock('~/api/premium', () => ({ createPremiumCheckout, createPremiumSubscriptionNative }));
 
 const load = async () => import('./checkout');
 
 describe('startPremiumCheckout', () => {
   beforeEach(() => {
     vi.resetModules();
-    openAuthSessionAsync.mockReset();
     createPremiumCheckout.mockReset();
+    createPremiumSubscriptionNative.mockReset();
     platform.OS = 'android';
   });
 
@@ -27,78 +27,43 @@ describe('startPremiumCheckout', () => {
     Reflect.deleteProperty(globalThis, 'window');
   });
 
-  it('never touches the API on iOS', async () => {
+  // Task 6: iOS now subscribes natively through the same PaymentSheet as
+  // every other native platform. The old `ios_unsupported` outcome (in-app
+  // steering to an external purchase method, forbidden by the 3.1.3
+  // chapeau) is gone.
+  it('returns a sheet outcome on iOS instead of the old ios_unsupported', async () => {
     platform.OS = 'ios';
+    createPremiumSubscriptionNative.mockResolvedValue({ clientSecret: 'pi_sub_secret_x' });
     const { startPremiumCheckout } = await load();
+
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
-    expect(out).toEqual({ kind: 'ios_unsupported' });
+
+    expect(out).toEqual({ kind: 'sheet', clientSecret: 'pi_sub_secret_x' });
     expect(createPremiumCheckout).not.toHaveBeenCalled();
   });
 
-  // Regression test for the original bug. Stripe's success_url is a fixed
-  // https URL, never a deep link, so on real Android devices
-  // openAuthSessionAsync's `result.type` is never actually 'success',
-  // nothing ever produces it. This test deliberately mocks 'success' anyway
-  // and asserts the outcome is 'returned' regardless: it goes RED if the
-  // implementation is changed back to `result.type === 'success' ?
-  // 'returned' : 'dismissed'`, which is the exact original bug (a check
-  // that can pass in a test double but is dead on every real device).
-  it('returns "returned" once openAuthSessionAsync resolves, even with type "success"', async () => {
-    createPremiumCheckout.mockResolvedValue({ url: 'https://stripe.test/s', sessionId: 'cs_1' });
-    openAuthSessionAsync.mockResolvedValue({ type: 'success' });
+  // Android also moves off the hosted-browser flow onto the sheet — the
+  // point of Task 4/5's single PaymentSheet seam is that every native
+  // platform goes through it, not just iOS.
+  it('returns a sheet outcome on Android too', async () => {
+    platform.OS = 'android';
+    createPremiumSubscriptionNative.mockResolvedValue({ clientSecret: 'pi_sub_secret_y' });
     const { startPremiumCheckout } = await load();
-    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: ['detailing'] });
-    expect(createPremiumCheckout).toHaveBeenCalledWith({
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(out).toEqual({ kind: 'sheet', clientSecret: 'pi_sub_secret_y' });
+    expect(createPremiumSubscriptionNative).toHaveBeenCalledWith({
       planSlug: 'fundador',
-      addonKeys: ['detailing'],
+      addonKeys: [],
     });
-    expect(openAuthSessionAsync).toHaveBeenCalledWith('https://stripe.test/s');
-    expect(out).toEqual({ kind: 'returned' });
   });
 
-  // Same call, the result.type Android's AppState polyfill actually produces
-  // once the tab is closed without a matching redirect ('dismiss'), must
-  // still map to the identical outcome. Fails if the code branches on
-  // `result.type` at all, in either direction.
-  it('returns "returned" regardless of which result.type openAuthSessionAsync resolves with', async () => {
-    createPremiumCheckout.mockResolvedValue({ url: 'https://stripe.test/s', sessionId: 'cs_1' });
-    openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' });
-    const { startPremiumCheckout } = await load();
-    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
-    expect(out).toEqual({ kind: 'returned' });
-  });
-
-  it('maps an API failure to an error outcome', async () => {
-    createPremiumCheckout.mockRejectedValue(new Error('boom'));
-    const { startPremiumCheckout } = await load();
-    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
-    expect(out.kind).toBe('error');
-  });
-
-  // The seam used to keep only `err.message`, which is the literal string
-  // 'request failed' for every non-2xx, so the screen could not tell 409 from
-  // 503. Goes RED if the status is discarded again.
-  it('keeps the status so an AlreadySubscribed 409 stays distinguishable', async () => {
-    const { ApiError } = await import('~/api/client');
-    createPremiumCheckout.mockRejectedValue(
-      new ApiError(409, 'request failed', {
-        error: 'AlreadySubscribed',
-        manageUrl: 'https://billing.stripe.com/session/abc',
-      }),
-    );
-    const { startPremiumCheckout } = await load();
-    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
-    if (out.kind !== 'error') throw new Error('expected an error outcome');
-    expect(out.error.reason).toBe('already_subscribed');
-    expect(out.error.manageUrl).toBe('https://billing.stripe.com/session/abc');
-  });
-
-  it('returns "redirected" and navigates when Platform.OS is web, checked at call time', async () => {
-    createPremiumCheckout.mockResolvedValue({ url: 'https://stripe.test/s', sessionId: 'cs_1' });
-    // A false negative here would also pass a module-scope `const OS = Platform.OS`
-    // read: import happens while OS is still 'android' (the beforeEach default),
-    // then the flip to 'web' below happens strictly after import. Only a read
-    // done inside the function body, at call time, observes 'web'.
+  // Web has no native SDK; it keeps the hosted Checkout Session. A suite that
+  // only proved the native path would pass against an implementation that
+  // broke web subscribing, so this direction is pinned too.
+  it('still redirects on web', async () => {
+    createPremiumCheckout.mockResolvedValue({ url: 'https://checkout.stripe.com/c/pay/cs_x' });
     const win = { location: { href: '' } };
     Object.defineProperty(globalThis, 'window', { value: win, configurable: true });
     const { startPremiumCheckout } = await load();
@@ -107,7 +72,100 @@ describe('startPremiumCheckout', () => {
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
 
     expect(out).toEqual({ kind: 'redirected' });
-    expect(win.location.href).toBe('https://stripe.test/s');
-    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(win.location.href).toBe('https://checkout.stripe.com/c/pay/cs_x');
+    expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
+  });
+
+  it('maps a native checkout-native failure to an error outcome', async () => {
+    platform.OS = 'ios';
+    createPremiumSubscriptionNative.mockRejectedValue(new Error('boom'));
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(out.kind).toBe('error');
+  });
+
+  // The seam used to keep only `err.message`, which is the literal string
+  // 'request failed' for every non-2xx, so the screen could not tell 409 from
+  // 503. checkout-native shares resolveSubscriptionPackage with the hosted
+  // checkoutHandler on the API side, so it returns the identical error
+  // shapes — the same mapper (resolveCheckoutError) handles both.
+  it('keeps the status so an AlreadySubscribed 409 from checkout-native stays distinguishable', async () => {
+    platform.OS = 'ios';
+    const { ApiError } = await import('~/api/client');
+    createPremiumSubscriptionNative.mockRejectedValue(
+      new ApiError(409, 'request failed', {
+        error: 'AlreadySubscribed',
+        manageUrl: 'https://billing.stripe.com/session/abc',
+      }),
+    );
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    if (out.kind !== 'error') throw new Error('expected an error outcome');
+    expect(out.error.reason).toBe('already_subscribed');
+    expect(out.error.manageUrl).toBe('https://billing.stripe.com/session/abc');
+  });
+
+  // The endpoint can also answer 409 SubscriptionAttemptInFlight (a pending
+  // native attempt or an open hosted Checkout Session for the same garage).
+  // Known gap, not fixed here (see checkout-error.ts and the task report):
+  // resolveCheckoutError's 409 switch only special-cases StaleBillingReference
+  // and otherwise falls through to already_subscribed, so this currently
+  // reads as "you already have a subscription" rather than "try again in a
+  // moment". Pinned so the behavior is visible, not silently assumed.
+  it('maps a SubscriptionAttemptInFlight 409 from checkout-native to an error outcome', async () => {
+    platform.OS = 'ios';
+    const { ApiError } = await import('~/api/client');
+    createPremiumSubscriptionNative.mockRejectedValue(
+      new ApiError(409, 'request failed', {
+        error: 'SubscriptionAttemptInFlight',
+        message: 'ja existe uma tentativa de assinatura em andamento',
+      }),
+    );
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(out.kind).toBe('error');
+  });
+
+  // 422: annual cadence + add-ons is a combination error, not an
+  // availability error — checkAnnualCadenceAddonRejection on the API side.
+  it('maps a 422 annual+add-on rejection from checkout-native to an error outcome', async () => {
+    platform.OS = 'ios';
+    const { ApiError } = await import('~/api/client');
+    createPremiumSubscriptionNative.mockRejectedValue(
+      new ApiError(422, 'request failed', {
+        error: 'PremiumCheckoutRejected',
+        code: 'ANNUAL_CADENCE_ADDON_UNSUPPORTED',
+        message: 'Modulos adicionais sao mensais e nao podem ser contratados no plano anual.',
+        addonKeys: ['detailing'],
+      }),
+    );
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({
+      planSlug: 'fundador',
+      addonKeys: ['detailing'],
+    });
+
+    expect(out.kind).toBe('error');
+  });
+
+  // 403: requireSubscriptionsEnabled closes the platform gate.
+  it('maps a 403 platform-gate-off response from checkout-native to an error outcome', async () => {
+    platform.OS = 'ios';
+    const { ApiError } = await import('~/api/client');
+    createPremiumSubscriptionNative.mockRejectedValue(
+      new ApiError(403, 'request failed', { error: 'SubscriptionsDisabled' }),
+    );
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(out.kind).toBe('error');
   });
 });

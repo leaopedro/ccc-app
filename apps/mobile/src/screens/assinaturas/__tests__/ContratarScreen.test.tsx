@@ -20,8 +20,10 @@ import type {
   PremiumPlan,
   PremiumPlanDetailResponse,
 } from '@ccc/shared/premium-catalog';
+import type { PaymentSheetOutcome } from '~/payments/payment-sheet';
 import type { CheckoutOutcome } from '~/screens/assinaturas/checkout';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { paymentsCopy } from '~/copy/payments';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -30,6 +32,7 @@ declare global {
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
 const startPremiumCheckout = vi.fn<(input: unknown) => Promise<CheckoutOutcome>>();
 const pollSubscriptionActive = vi.fn<() => Promise<boolean>>();
+const pay = vi.fn<(clientSecret: string) => Promise<PaymentSheetOutcome>>();
 const showToast = vi.fn();
 const routerReplace = vi.fn();
 const routerBack = vi.fn();
@@ -58,6 +61,10 @@ vi.mock('~/hooks/usePremiumAddonModules', () => ({
 
 vi.mock('~/screens/assinaturas/checkout', () => ({
   startPremiumCheckout: (input: unknown) => startPremiumCheckout(input),
+}));
+
+vi.mock('~/payments/payment-sheet', () => ({
+  usePaymentSheet: () => ({ pay: (clientSecret: string) => pay(clientSecret) }),
 }));
 
 vi.mock('~/screens/assinaturas/poll-subscription', () => ({
@@ -177,6 +184,7 @@ describe('ContratarScreen', () => {
     getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: true });
     startPremiumCheckout.mockReset();
     pollSubscriptionActive.mockReset();
+    pay.mockReset();
     showToast.mockReset();
     routerReplace.mockClear();
     routerBack.mockClear();
@@ -365,16 +373,85 @@ describe('ContratarScreen', () => {
     expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
   });
 
-  // 6. On iOS the CTA never mounts and startPremiumCheckout is never
-  // reachable. Fails if `Platform.OS === 'ios'` is typo'd or inverted —
-  // Stripe would become reachable from an iOS build.
-  it('never renders the CTA and never calls startPremiumCheckout on iOS', async () => {
+  // 6. iOS now subscribes natively like every other platform: the CTA
+  // mounts and tapping it reaches startPremiumCheckout. Fails if the iOS
+  // web-contract notice (pre-2026-08-29) comes back and hides the CTA again.
+  it('renders the CTA and calls startPremiumCheckout on iOS', async () => {
     platform.OS = 'ios';
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_x' });
+    pay.mockResolvedValue({ kind: 'paid' });
+    pollSubscriptionActive.mockResolvedValue(true);
     await renderScreen();
 
-    expect(container.querySelector('[data-testid="contratar-cta"]')).toBeNull();
-    expect(text()).toContain(assinaturasCopy.contratar.iosTitle);
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered on iOS');
 
-    expect(startPremiumCheckout).not.toHaveBeenCalled();
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(startPremiumCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  // 7. A `sheet` outcome drives the PaymentSheet via `pay`. When it resolves
+  // 'paid', the screen polls before navigating — same rule as the hosted
+  // 'returned' path — instead of granting entitlement off the sheet result
+  // alone.
+  it('drives the PaymentSheet on a sheet outcome and polls before navigating on paid', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'paid' });
+    pollSubscriptionActive.mockResolvedValue(true);
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(pay).toHaveBeenCalledWith('pi_sub_secret');
+    expect(pollSubscriptionActive).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.successToast);
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+  });
+
+  // 8. Cancel is not an error: a closed sheet shows the neutral copy via
+  // showToast, never the red inline error banner. Fails if 'cancelled' is
+  // routed through setCheckoutError.
+  it('shows a neutral toast, not an error, when the sheet is cancelled', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'cancelled' });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(showToast).toHaveBeenCalledWith(paymentsCopy.sheet.cancelled);
+    expect(text()).not.toContain(paymentsCopy.sheet.cancelled);
+    expect(pollSubscriptionActive).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  // 9. A failed sheet IS an error: shown inline, unlike cancelled.
+  it('shows the inline error message when the sheet fails', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'failed', code: 'card_declined' });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(text()).toContain(paymentsCopy.sheet.failed);
+    expect(pollSubscriptionActive).not.toHaveBeenCalled();
   });
 });

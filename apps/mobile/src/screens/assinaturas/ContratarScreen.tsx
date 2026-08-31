@@ -10,7 +10,7 @@
 // closed browser proves payment, only `invoice.paid` does.
 
 import type { PremiumPlan } from '@ccc/shared/premium-catalog';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -35,7 +35,13 @@ import type { CheckoutError } from '~/screens/assinaturas/checkout-error';
 import { packageTotalCents } from '~/screens/assinaturas/package-total';
 import { pollSubscriptionActive } from '~/screens/assinaturas/poll-subscription';
 import { TierCta } from '~/screens/assinaturas/TierCta';
-import { c, monthlyPriceCents, TIER_VISUAL, tierStyle } from '~/screens/assinaturas/tier-visual';
+import {
+  c,
+  monthlyPriceCents,
+  orderedBenefits,
+  TIER_VISUAL,
+  tierStyle,
+} from '~/screens/assinaturas/tier-visual';
 
 const copy = assinaturasCopy.contratar;
 
@@ -192,6 +198,7 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
   const t = tierStyle(plan.tier);
   const priceCents = monthlyPriceCents(plan);
   const totals = packageTotalCents(priceCents, modules, selected);
+  const benefits = orderedBenefits(plan);
 
   const onSubmit = async () => {
     if (submittingRef.current) return;
@@ -267,6 +274,25 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
           <Text style={styles.planName}>{plan.name}</Text>
           <Text style={styles.planPrice}>{priceCents === null ? '—' : formatBRL(priceCents)}</Text>
         </View>
+
+        {benefits.length > 0 ? (
+          <View style={styles.benefitsSection}>
+            <Text style={styles.benefitsTitle}>{assinaturasCopy.detail.benefitsTitle}</Text>
+            <View style={styles.benefits}>
+              {benefits.map((benefit) => (
+                <View key={benefit} style={styles.benefitRow}>
+                  <Check
+                    color={visual.accent}
+                    size={18}
+                    strokeWidth={2}
+                    style={styles.benefitIcon}
+                  />
+                  <Text style={styles.benefitText}>{benefit}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {modules.length > 0 ? (
           <View style={styles.modulesSection}>
@@ -454,6 +480,25 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: c.cream,
     marginTop: 8,
+  },
+
+  // Benefits
+  benefitsSection: { marginTop: 28 },
+  benefitsTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 2.8,
+    color: c.goldDeep,
+  },
+  benefits: { marginTop: 16, gap: 13 },
+  benefitRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  benefitIcon: { marginTop: 1 },
+  benefitText: {
+    flex: 1,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    lineHeight: 19,
+    color: c.cream,
   },
 
   // Modules

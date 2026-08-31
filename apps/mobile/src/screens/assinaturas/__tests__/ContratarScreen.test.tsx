@@ -141,7 +141,7 @@ vi.mock('expo-linear-gradient', async () => {
 vi.mock('lucide-react-native', async () => {
   const ReactMod = await import('react');
   const icon = () => ReactMod.createElement('span');
-  return { ArrowLeft: icon };
+  return { ArrowLeft: icon, Check: icon };
 });
 
 const PLAN: PremiumPlan = {
@@ -458,5 +458,45 @@ describe('ContratarScreen', () => {
 
     expect(text()).toContain(paymentsCopy.sheet.failed);
     expect(pollSubscriptionActive).not.toHaveBeenCalled();
+  });
+
+  // 10. The last screen before payment must show what the money buys.
+  // Decision 6: the physical box has to be visible BEFORE the purchase, and
+  // the box lives in these DB-backed benefit labels, not in any copy file.
+  it('renders the plan benefits, in sortOrder', async () => {
+    getPremiumPlan.mockResolvedValue({
+      ...PLAN,
+      benefits: [
+        { label: 'Caixa física trimestral na sua casa', sortOrder: 2 },
+        { label: 'Acesso ao clube 24 horas', sortOrder: 1 },
+      ],
+      subscriptionsEnabled: true,
+    });
+    await renderScreen();
+
+    const body = text();
+    expect(body).toContain('Acesso ao clube 24 horas');
+    expect(body).toContain('Caixa física trimestral na sua casa');
+    expect(body.indexOf('Acesso ao clube 24 horas')).toBeLessThan(
+      body.indexOf('Caixa física trimestral na sua casa'),
+    );
+  });
+
+  // 10b. `PLAN` ships `benefits: []` — today's real production data. Nothing
+  // benefit-related may render: no heading, no empty box.
+  it('renders nothing benefit-related when the plan has no benefits', async () => {
+    await renderScreen();
+    expect(text()).not.toContain(assinaturasCopy.detail.benefitsTitle);
+  });
+
+  // 11. Decision 6: the physical box has to be visible BEFORE the purchase,
+  // framed as a physical good delivered to an address. Guideline 3.1.3(e)
+  // turns on the word "physical", and a reviewer only sees what the paywall
+  // renders.
+  it('states the physical box and its delivery cadence before purchase', async () => {
+    await renderScreen();
+    const body = text();
+    expect(body).toContain(assinaturasCopy.contratar.caixa.title);
+    expect(body).toContain(assinaturasCopy.contratar.caixa.delivery);
   });
 });

@@ -1,6 +1,12 @@
 // F8.18 — PremiumScreen.
 //
-// Subscribe CTA opens the hosted web checkout. Native migration is tracked as H4/Task 13.
+// iOS  → CTA routes into the `assinaturas` flow (native PaymentSheet, Task 6).
+//         Opening a web checkout from inside the app is an App Store 3.1.3
+//         violation on the Brazil storefront — no US-storefront exception
+//         applies — so iOS must not use WebBrowser here.
+// Android → CTA opens WebBrowser to the web subscribe flow + deep-link return.
+//         Untouched by this fix; migrating Android is a separate Task 13
+//         decision blocked on a human.
 //
 // Feature-flag: when EXPO_PUBLIC_PREMIUM_BILLING_ENABLED is false,
 // show maintenance banner and return early (canon §F8.11).
@@ -12,11 +18,13 @@
 //   default / inactive           → "Inativo"
 
 import { brand } from '@ccc/design';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,6 +35,7 @@ import {
 import { baseUrl } from '~/api/client';
 import type { PremiumStatusResponse } from '~/api/premium';
 import { getPremiumStatus } from '~/api/premium';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { PREMIUM_BILLING_ENABLED } from '~/lib/premium-runtime';
 import { theme } from '~/theme';
 
@@ -52,6 +61,12 @@ export default function PremiumScreen() {
   const [status, setStatus] = useState<PremiumStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Platform gate from the same source as `useSubscriptionsGate` /
+  // `usePremiumSlot` (Task 6/9/10) — server-driven, refetched fresh here
+  // rather than invented locally, so ops can kill iOS purchasing without a
+  // new binary and this screen honors it the same way the assinaturas
+  // routes do.
+  const { subscriptionsEnabled } = usePremiumPlans();
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -112,6 +127,11 @@ export default function PremiumScreen() {
     }
   };
 
+  // No WebBrowser here on purpose — see header comment.
+  const onSubscribeIos = () => {
+    router.push('/assinaturas');
+  };
+
   const onManage = () => {
     if (status.manageUrl) void Linking.openURL(status.manageUrl);
   };
@@ -137,17 +157,39 @@ export default function PremiumScreen() {
       {/* Subscribe CTA. The iOS branch used to call a RevenueCat SDK that is
           never initialised (lib/revenuecat.ts has no caller), so the button did
           nothing when tapped — an App Store 2.1 finding by itself. Removed on
-          2026-08-29; RevenueCat was deliberately NOT wired up. */}
+          2026-08-29; RevenueCat was deliberately NOT wired up.
+
+          iOS does NOT fall back to the Android WebBrowser CTA either: opening
+          a web checkout inside the app is an App Store 3.1.3 violation on
+          the Brazil storefront. iOS routes into the `assinaturas` flow
+          instead (native PaymentSheet, Task 6), and only when the platform
+          gate (subscriptionsEnabled) allows it — otherwise no purchase-shaped
+          affordance renders at all, matching how the assinaturas routes
+          themselves react to the same gate. */}
       {showSubscribeCTA ? (
-        <Pressable
-          onPress={() => void onSubscribeAndroid()}
-          style={styles.cta}
-          accessibilityRole="button"
-          accessibilityLabel="Assinar Premium Gold"
-          testID="premium-cta-android"
-        >
-          <Text style={styles.ctaText}>Assinar Gold</Text>
-        </Pressable>
+        Platform.OS === 'ios' ? (
+          subscriptionsEnabled ? (
+            <Pressable
+              onPress={onSubscribeIos}
+              style={styles.cta}
+              accessibilityRole="button"
+              accessibilityLabel="Assinar Premium Gold"
+              testID="premium-cta-ios-native"
+            >
+              <Text style={styles.ctaText}>Assinar Gold</Text>
+            </Pressable>
+          ) : null
+        ) : (
+          <Pressable
+            onPress={() => void onSubscribeAndroid()}
+            style={styles.cta}
+            accessibilityRole="button"
+            accessibilityLabel="Assinar Premium Gold"
+            testID="premium-cta-android"
+          >
+            <Text style={styles.ctaText}>Assinar Gold</Text>
+          </Pressable>
+        )
       ) : null}
 
       {/* Manage link */}

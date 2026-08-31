@@ -37,6 +37,14 @@ export const buildPaymentSheetConfig = (args: {
   // flow (AbacatePay), so delayed methods would only add ways to be told
   // "paid" before the money exists.
   allowsDelayedPaymentMethods: false,
+  // Declaring `applePay` here is necessary but not sufficient: the wallet row
+  // only renders once `merchantIdentifier` also reaches `StripeProvider`.
+  // app.config.ts currently sets that identifier only for the `production`
+  // variant (`variant === 'production' ? brand.app.stripeMerchantId : undefined`),
+  // so `.dev` and `.preview` builds will show no Apple Pay row regardless of
+  // this config being correct. That gap is Task 2 of this plan, itself blocked
+  // on a human enabling the merchant id on the `.dev`/`.preview` App IDs in the
+  // Apple portal. Do not "fix" it here.
   ...(args.platform === 'ios' ? { applePay: { merchantCountryCode: 'BR' } } : {}),
 });
 

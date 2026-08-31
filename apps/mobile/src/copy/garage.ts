@@ -102,7 +102,28 @@ const ptBR = {
     // promocional para esconder. Prometer benefício não implementado é exposição
     // na regra 2.3.1 da App Store, e o spec de Apple Pay depende desta lista ser
     // verdadeira. Reintroduzir só junto da implementação.
+    //
+    // 2026-08-31: a caixa física e o acesso ao clube entram aqui por causa da
+    // Decisão 6 (3.1.3(e) exige que o app venda algo consumido fora dele; um
+    // sheet "O que é Premium?" com só dois desbloqueios digitais argumenta
+    // contra a própria posição de compliance). Esta lista não sabe o tier de
+    // quem está lendo, então só entra o que TODO tier tem: caixa e clube
+    // (verificado em seed.ts, benefícios do plano Bronze). Convidados,
+    // descontos com parceiros e concierge ficam de fora — são só a partir da
+    // Prata/Ouro (seed.ts), e mostrar para um Bronze seria a mesma exposição
+    // 2.3.1 que a advertência acima cobre. Módulos como Detailing também
+    // ficam de fora: são add-on pago à parte, não um benefício incluso, e
+    // Oficina nem está ativo no catálogo. A advertência acima continua
+    // valendo para qualquer item novo que ainda não exista no produto.
     premiumBenefits: [
+      {
+        title: 'Caixa física da Casa',
+        sub: 'Você monta e confirma sua caixa a cada ciclo, incluída na assinatura.',
+      },
+      {
+        title: 'Acesso ao clube',
+        sub: 'Horário varia por plano — comercial ou 24 horas.',
+      },
       { title: 'Capas personalizadas', sub: 'Escolha entre 9 cenários ou envie a sua.' },
       { title: 'Selo Premium', sub: 'Aparece nos seus carros em todo o app.' },
     ],
@@ -216,9 +237,20 @@ const en = {
     premiumTierLabel: (tier: 'gold' | 'silver' | 'bronze') => `${tier.toUpperCase()} TIER`,
     premiumNearExpiry: (n: number) =>
       `Expires in ${n} ${n === 1 ? 'day' : 'days'} · Renew to keep your cover.`,
-    // Same removal as the PT list above. This is the one an English-speaking
-    // reviewer reads.
+    // Kept in lockstep with the PT list above — see that comment for why the
+    // box and club access are there and why guests/discounts/concierge/addon
+    // modules are not. Note: `garageCopyEn` has no importers in this app; PT
+    // is the copy an App Store reviewer actually sees, whatever language they
+    // read in. This EN block only exists as an i18n scaffold.
     premiumBenefits: [
+      {
+        title: 'The Casa box',
+        sub: 'You curate and confirm your box every cycle, included in your membership.',
+      },
+      {
+        title: 'Club access',
+        sub: 'Hours depend on your plan — business hours or 24/7.',
+      },
       { title: 'Custom covers', sub: 'Pick from 9 scenes or upload your own.' },
       { title: 'Premium badge', sub: 'Appears on your cars across the app.' },
     ],

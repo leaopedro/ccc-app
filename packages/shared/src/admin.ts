@@ -628,6 +628,27 @@ export const adminFinanceQuerySchema = z.object({
   tier: z.enum(['gold', 'all']).optional(),
   membershipStatus: z.enum(['active', 'past_due', 'cancel_scheduled', 'expired', 'all']).optional(),
   statuses: z.array(orderStatusSchema).min(1).optional(),
+  /**
+   * Revenue-mode scope. Absent means `live`.
+   *
+   * Before the live cutover, production ran entirely in Stripe test mode. Rows
+   * from that period are marked `livemode = false` by
+   * apps/api/src/scripts/mark-pre-cutover-orders.ts. Defaulting to `live` here
+   * is what keeps the first real revenue report from silently including test
+   * money; making the operator remember a parameter to be correct would not.
+   *
+   * Coverage: filters `Order` and `PremiumMembershipInvoice` rows (and every
+   * figure derived from them — totalRevenueCents, netRevenueCents,
+   * membershipRevenueCents, membershipNetRevenueCents,
+   * membershipDevFeeCollectedCents, membershipRefundedCents). It does NOT
+   * filter activeMembershipsCount, membershipMRRCents, membershipARPUCents,
+   * newMembershipsCount or churnedMembershipsCount — those read directly from
+   * `PremiumMembership`, which has no `livemode` column. That table's
+   * test-mode exclusion is a different mechanism entirely:
+   * apps/api/src/scripts/purge-test-mode.ts flips `status` to `expired`. See
+   * `membershipCountsLivemodeFiltered` on `adminFinanceSummarySchema`.
+   */
+  livemode: z.enum(['live', 'test', 'all']).optional(),
 });
 export type AdminFinanceQuery = z.infer<typeof adminFinanceQuerySchema>;
 
@@ -662,6 +683,22 @@ export const adminFinanceSummarySchema = z.object({
   // Net (and therefore ARPU) can be negative in windows where refunds exceed
   // gross — keep the sign so the dashboard can render the loss period.
   membershipARPUCents: z.number().int(),
+  // Always `false`. Documents, in the response itself and not just in a
+  // schema comment, that activeMembershipsCount, membershipMRRCents,
+  // membershipARPUCents, newMembershipsCount and churnedMembershipsCount are
+  // NOT scoped by the `livemode` query parameter — they read `PremiumMembership`
+  // directly, which has no `livemode` column. A reader must not infer full
+  // livemode coverage from the presence of the `livemode` filter elsewhere in
+  // this same response.
+  membershipCountsLivemodeFiltered: z.literal(false),
+  // True when neither `Order` nor `PremiumMembershipInvoice` has ANY row with
+  // `livemode = false` yet — i.e. `mark-pre-cutover-orders` has apparently
+  // never been run. Until it runs, every pre-cutover test-mode row still
+  // defaults to `livemode = true`, so the `live` (default) scope of this very
+  // response may silently include test money. This is a purely evidence-based
+  // check (did any row ever get flipped) — it does NOT know or guess a cutover
+  // instant, and it says nothing once a partial backfill has happened.
+  livemodeBackfillPending: z.boolean(),
 });
 export type AdminFinanceSummary = z.infer<typeof adminFinanceSummarySchema>;
 

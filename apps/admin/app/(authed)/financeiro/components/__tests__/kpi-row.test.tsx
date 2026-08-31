@@ -26,6 +26,8 @@ const baseSummary: AdminFinanceSummary = {
   churnedMembershipsCount: 0,
   membershipMRRCents: 30000,
   membershipARPUCents: 12000,
+  membershipCountsLivemodeFiltered: false,
+  livemodeBackfillPending: false,
 };
 
 describe('KpiRow — membership tiles (chunk 15)', () => {

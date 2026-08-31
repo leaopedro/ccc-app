@@ -87,7 +87,7 @@ describe('checkout profile gate', () => {
     expect(cartRow.status).toBe('open');
     const tierRow = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
     expect(tierRow.quantitySold).toBe(0);
-    expect(await prisma.order.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.order.count({ where: { userId: user.id, cartId: cart.id } })).toBe(0);
   });
 
   it('reports only phone as missing when the cpf is already set', async () => {

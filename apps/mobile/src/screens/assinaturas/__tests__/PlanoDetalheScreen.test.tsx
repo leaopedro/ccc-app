@@ -9,6 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PremiumPlan, PremiumPlanDetailResponse } from '@ccc/shared/premium-catalog';
+import { assinaturasCopy } from '~/copy/assinaturas';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -16,6 +17,14 @@ declare global {
 
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
 const routerPush = vi.fn();
+
+// Final review C2 — the caixa paywall copy must not promise a box the build
+// can't assemble. Mutable so a single test can flip it off (read at render
+// time, not import time).
+const caixaFlag = { enabled: true };
+vi.mock('~/screens/caixa/caixa-enabled', () => ({
+  isCaixaBuildEnabled: () => caixaFlag.enabled,
+}));
 
 vi.mock('~/api/premium-catalog', () => ({
   getPremiumPlan: (slug: string) => getPremiumPlan(slug),
@@ -128,6 +137,7 @@ describe('PlanoDetalheScreen', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     routerPush.mockClear();
+    caixaFlag.enabled = true;
     getPremiumPlan.mockReset();
     // Flattened, not nested under `plan` (final review, Important 2) — the
     // real route now returns the plan fields at the top level.
@@ -184,5 +194,25 @@ describe('PlanoDetalheScreen', () => {
     getPremiumPlan.mockRejectedValue(new Error('404'));
     await renderScreen();
     expect(container.textContent ?? '').toContain('Não foi possível carregar');
+  });
+
+  // Final review C2 — same caixa gate as ContratarScreen. Both directions
+  // pinned here: renders when the build can assemble the box, renders
+  // nothing at all (no stray heading, no empty container) when it can't.
+  it('renders the caixa copy when the caixa build flag is on', async () => {
+    caixaFlag.enabled = true;
+    await renderScreen();
+    const text = container.textContent ?? '';
+    expect(text).toContain(assinaturasCopy.caixa.title);
+    expect(text).toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  it('renders no caixa copy at all when the caixa build flag is off', async () => {
+    caixaFlag.enabled = false;
+    await renderScreen();
+    const text = container.textContent ?? '';
+    expect(text).not.toContain(assinaturasCopy.caixa.title);
+    expect(text).not.toContain(assinaturasCopy.caixa.body);
+    expect(text).not.toContain(assinaturasCopy.caixa.delivery);
   });
 });

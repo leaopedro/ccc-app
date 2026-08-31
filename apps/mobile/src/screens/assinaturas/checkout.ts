@@ -3,27 +3,71 @@
 // The SINGLE place that talks to a payment provider from the assinaturas
 // module. Platform branching lives here so no screen has to know about it.
 //
-// iOS App Store rule: Stripe purchase must NOT run on iOS. The screen shows a
-// "contract on the web" notice instead. Enforced by eslint-rules/no-stripe-on-ios.cjs.
+// Until 2026-08-29 iOS returned `ios_unsupported` and the screen rendered a
+// "contract on the website" notice. That notice was in-app steering to an
+// external purchase method on the Brazil storefront, which the 3.1.3 chapeau
+// forbids outright (the exception is US-storefront only). iOS now pays through
+// the native PaymentSheet.
+//
+// Android stays on the hosted browser flow below, same as before this
+// branch and same as PremiumScreen.tsx's onSubscribeAndroid — whether
+// Android also migrates to the sheet is a product decision parked on a
+// human (final review I1), not something to decide in code.
+//
+// Stripe's success_url is a fixed https URL (apps/api me-premium.ts), never
+// a deep link, so the "did it come back via deep link?" signal
+// openAuthSessionAsync is built around can never fire here; `result.type`
+// is therefore never 'success' and must not be branched on.
+//
+// openAuthSessionAsync is still the right call to make, though: on
+// Android, expo-web-browser implements it as a Promise.race between (a)
+// waiting for the deep-link redirect (never resolves, see above) and (b)
+// _openBrowserAndWaitAndroidAsync, which opens the tab and does not
+// resolve until AppState returns to 'active', meaning the tab has actually
+// been closed. (See node_modules/expo-web-browser/src/WebBrowser.ts,
+// `_openAuthSessionPolyfillAsync`.) That AppState wait is exactly the
+// "block until the tab closes" behavior this flow needs before polling.
+//
+// openBrowserAsync does NOT provide that: on Android it resolves the
+// instant the tab opens ({type: 'opened'}), per that same file's own
+// comment ("openBrowserAsync on Android doesn't wait until closed, so we
+// need to polyfill it with AppState"). Using it directly here previously
+// caused polling to start immediately, racing the poller's budget against
+// a member who hasn't finished paying yet. Do not reintroduce that call.
 
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
-import { createPremiumCheckout } from '~/api/premium';
+import { createPremiumCheckout, createPremiumSubscriptionNative } from '~/api/premium';
 
 import { resolveCheckoutError, type CheckoutError } from './checkout-error';
 
 export type CheckoutOutcome =
   | { kind: 'redirected' }
   | { kind: 'returned' }
-  | { kind: 'ios_unsupported' }
+  | { kind: 'sheet'; clientSecret: string }
   | { kind: 'error'; error: CheckoutError };
 
 export async function startPremiumCheckout(input: {
   planSlug: string;
   addonKeys: string[];
 }): Promise<CheckoutOutcome> {
-  if (Platform.OS === 'ios') return { kind: 'ios_unsupported' };
+  // iOS only: create the subscription server-side and drive Task 4's
+  // PaymentSheet with its first invoice's client secret. The subscription is
+  // `payment_behavior: 'default_incomplete'` — nothing is charged and no
+  // membership exists until the sheet confirms and the `invoice.paid`
+  // webhook lands.
+  if (Platform.OS === 'ios') {
+    try {
+      const intent = await createPremiumSubscriptionNative(input);
+      return { kind: 'sheet', clientSecret: intent.clientSecret };
+    } catch (err) {
+      // Same mapper as the hosted path below: checkout-native shares
+      // resolveSubscriptionPackage with checkoutHandler on the API side, so
+      // it returns the identical 503/409/422/403/404 shapes.
+      return { kind: 'error', error: resolveCheckoutError(err) };
+    }
+  }
 
   let url: string;
   try {
@@ -42,26 +86,7 @@ export async function startPremiumCheckout(input: {
     return { kind: 'redirected' };
   }
 
-  // Stripe's success_url is a fixed https URL (apps/api me-premium.ts), never
-  // a deep link, so the "did it come back via deep link?" signal
-  // openAuthSessionAsync is built around can never fire here; `result.type`
-  // is therefore never 'success' and must not be branched on.
-  //
-  // openAuthSessionAsync is still the right call to make, though: on
-  // Android, expo-web-browser implements it as a Promise.race between (a)
-  // waiting for the deep-link redirect (never resolves, see above) and (b)
-  // _openBrowserAndWaitAndroidAsync, which opens the tab and does not
-  // resolve until AppState returns to 'active', meaning the tab has actually
-  // been closed. (See node_modules/expo-web-browser/src/WebBrowser.ts,
-  // `_openAuthSessionPolyfillAsync`.) That AppState wait is exactly the
-  // "block until the tab closes" behavior this flow needs before polling.
-  //
-  // openBrowserAsync does NOT provide that: on Android it resolves the
-  // instant the tab opens ({type: 'opened'}), per that same file's own
-  // comment ("openBrowserAsync on Android doesn't wait until closed, so we
-  // need to polyfill it with AppState"). Using it directly here previously
-  // caused polling to start immediately, racing the poller's budget against
-  // a member who hasn't finished paying yet. Do not reintroduce that call.
+  // Android: hosted browser flow, restored to its pre-branch behaviour.
   await WebBrowser.openAuthSessionAsync(url);
   return { kind: 'returned' };
 }

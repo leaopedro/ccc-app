@@ -2,6 +2,7 @@ import type { CartItem, FulfillmentMethod } from '@ccc/shared/cart';
 import type { EventExtraPublic } from '@ccc/shared/extras';
 import type { ShippingAddressRecord } from '@ccc/shared/store';
 import { Button } from '@ccc/ui';
+import Constants from 'expo-constants';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Car as CarIcon, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
@@ -22,11 +23,18 @@ import { beginCheckout } from '~/api/cart';
 import { getEventById, getEventCommerceById } from '~/api/events';
 import { getStoreSettings } from '~/api/store';
 import { listMyTickets } from '~/api/tickets';
+import { getApiErrorCode } from '~/api/errors';
 import { useCart } from '~/cart/context';
 import { redirectToStripeCheckout } from '~/cart/web-stripe-redirect';
 import { cartCopy } from '~/copy/cart';
 import { useShippingAddresses } from '~/hooks/useShippingAddresses';
+import { showMessage } from '~/lib/confirm';
 import { formatBRL, formatEventDateRange } from '~/lib/format';
+import {
+  resolveCartPaymentAction,
+  resolveCartSheetOutcomeAction,
+} from '~/payments/cart-payment-flow';
+import { usePaymentSheet } from '~/payments/payment-sheet';
 import { ExtrasDrawer } from '~/screens/cart/ExtrasDrawer';
 import {
   buildCartSections,
@@ -42,6 +50,14 @@ import { formatShippingAddress } from '~/shipping/format-address';
 import { theme } from '~/theme';
 
 const isWeb = Platform.OS === 'web';
+
+// Whether the native publishable key is actually present in this build.
+// Mirrors STRIPE_AVAILABLE in app/(app)/profile/orders.tsx — final review C1:
+// a keyless production build must fall back to the hosted checkout instead
+// of opening a PaymentSheet that can never mount.
+const STRIPE_AVAILABLE = !!(
+  Constants.expoConfig?.extra as { stripePublishableKey?: string } | undefined
+)?.stripePublishableKey;
 
 type ShippingAddressRowProps = {
   loading: boolean;
@@ -351,6 +367,7 @@ export default function CartScreen() {
   const [loadingExtras, setLoadingExtras] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix'>('card');
+  const { pay } = usePaymentSheet();
   const [selectedShippingAddressId, setSelectedShippingAddressId] = useState<string | null>(null);
   const [eventPickupEnabled, setEventPickupEnabled] = useState(false);
   const [pickupOptions, setPickupOptions] = useState<PickupEventOption[]>([]);
@@ -509,9 +526,14 @@ export default function CartScreen() {
 
   const handlePay = useCallback(async () => {
     setCheckingOut(true);
+    // Final review C1: without a publishable key, native can't mount a
+    // PaymentSheet at all — request the hosted flow instead, same as web.
+    const nativeStripeAvailable = !isWeb && STRIPE_AVAILABLE;
+    const nativeFlow: 'native' | 'hosted' = nativeStripeAvailable ? 'native' : 'hosted';
     try {
       const result = await beginCheckout({
         paymentMethod,
+        ...(isWeb ? {} : { flow: nativeFlow }),
         ...(selectedFulfillmentMethod ? { fulfillmentMethod: selectedFulfillmentMethod } : {}),
         ...(selectedShippingAddressId ? { shippingAddressId: selectedShippingAddressId } : {}),
         ...(needsEventPickup && eventPickupEnabled && selectedPickupEventId
@@ -520,38 +542,76 @@ export default function CartScreen() {
         ...getCheckoutReturnUrls(),
       });
 
-      if (paymentMethod === 'pix') {
-        const firstOrderId = result.orderIds[0];
-        if (!result.brCode || !result.reservationExpiresAt || !firstOrderId) {
-          showError(cartCopy.errors.checkout);
-          return;
-        }
+      const action = resolveCartPaymentAction({
+        paymentMethod,
+        isWeb,
+        nativeStripeAvailable,
+        clientSecret: result.clientSecret,
+        checkoutUrl: result.checkoutUrl,
+        brCode: result.brCode,
+        reservationExpiresAt: result.reservationExpiresAt,
+        firstOrderId: result.orderIds[0],
+      });
+
+      if (action.kind === 'error') {
+        showError(cartCopy.errors.checkout);
+        return;
+      }
+      if (action.kind === 'pix') {
         router.push({
           pathname: '/(app)/events/buy/checkout-pix',
           params: {
-            orderId: firstOrderId,
-            brCode: result.brCode,
-            expiresAt: result.reservationExpiresAt,
+            orderId: action.orderId,
+            brCode: action.brCode,
+            expiresAt: action.expiresAt,
             amountCents: String(result.cart.totals.amountCents),
             currency: result.cart.totals.currency,
           },
         } as never);
         return;
       }
-
-      if (!result.checkoutUrl) {
-        showError(cartCopy.errors.checkout);
+      if (action.kind === 'redirect') {
+        if (isWeb) {
+          if (typeof window !== 'undefined') {
+            redirectToStripeCheckout({ checkoutUrl: action.url, orderIds: result.orderIds });
+          }
+        } else {
+          // Native, no publishable key: open the hosted Checkout Session in
+          // the system browser, same as before this branch introduced the
+          // PaymentSheet seam.
+          await Linking.openURL(action.url);
+        }
         return;
       }
-      if (isWeb && typeof window !== 'undefined') {
-        redirectToStripeCheckout({
-          checkoutUrl: result.checkoutUrl,
-          orderIds: result.orderIds,
-        });
-      } else {
-        await Linking.openURL(result.checkoutUrl);
+
+      // action.kind === 'sheet': native card checkout, drive the PaymentSheet.
+      const outcome = await pay(action.clientSecret);
+      const sheetAction = resolveCartSheetOutcomeAction(outcome);
+      if (sheetAction.kind === 'message') {
+        // A closed sheet is a choice, not a failure — no error toast.
+        showMessage(sheetAction.text);
+        return;
       }
-    } catch {
+      if (sheetAction.kind === 'error') {
+        showError(sheetAction.text);
+        return;
+      }
+      // Paid on the sheet. The order only flips to `paid` once the Stripe
+      // webhook lands, so send the member to the order list rather than
+      // claiming success here — same rule the hosted/web return flow follows
+      // (apps/mobile/app/(app)/events/buy/checkout-return.tsx polls `getOrder`
+      // and never writes order state from the client).
+      router.replace('/profile/orders' as never);
+    } catch (err) {
+      // Final review I3: a virtual (digital) item refused at checkout on iOS
+      // stays in the cart — tell the member so they can remove it, instead of
+      // the generic message that leaves them stuck retrying forever. The
+      // buy-a-spot tile is hidden on iOS (garage-slots.ts) so this should
+      // only fire for a cart that already held the item before that fix.
+      if (getApiErrorCode(err) === 'VIRTUAL_ITEM_IOS_BLOCKED') {
+        showError(cartCopy.errors.virtualItemIosBlocked);
+        return;
+      }
       showError(cartCopy.errors.checkout);
     } finally {
       setCheckingOut(false);
@@ -559,6 +619,7 @@ export default function CartScreen() {
   }, [
     eventPickupEnabled,
     needsEventPickup,
+    pay,
     paymentMethod,
     router,
     selectedFulfillmentMethod,

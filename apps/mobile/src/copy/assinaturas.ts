@@ -37,6 +37,28 @@ export const assinaturasCopy = {
     cta: 'ASSINAR',
     notFound: 'Plano não encontrado.',
   },
+  // Shared between ContratarScreen and PlanoDetalheScreen — not owned by
+  // either, so it lives at the top level rather than under `contratar`.
+  //
+  // Decisão 6 — the physical side of the membership, stated before purchase.
+  // The per-plan contents come from the DB benefit labels (registered by hand
+  // in /premium/catalogo, prerequisite H3); this block is the framing that
+  // makes them read as a physical delivery rather than an app feature.
+  //
+  // Fix round 1 (Criticals 1+2): the box is opt-in per cycle, curated and
+  // confirmed by the member before a cutoff (`box-cutoff.ts`) — not something
+  // that simply arrives. A box with no confirmation, no items, or no
+  // auto-send address is skipped entirely (`box-cutoff.ts:137-143`), so this
+  // copy must not promise automatic delivery. Freight is also never
+  // mentioned: only one seeded region ships free (`seed.ts:694`), everywhere
+  // else pays `shippingFeeCents`, and an unpaid-shipping box outside that
+  // region is skipped rather than sent (`box-cutoff.ts:28-31`) — any single
+  // blanket claim about freight is false somewhere, so the paywall makes none.
+  caixa: {
+    title: 'A CAIXA CASA CAR CLUB',
+    body: 'Todo ciclo, você monta sua caixa com curadoria da Casa e confirma antes do fechamento.',
+    delivery: 'Uma caixa por ciclo mensal, mediante sua confirmação.',
+  },
   contratar: {
     header: 'CONTRATAR',
     back: 'Voltar',
@@ -70,8 +92,16 @@ export const assinaturasCopy = {
     errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
     errorPlanNotFound: 'Esse plano não está mais disponível.',
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
-    iosTitle: 'Contratação pelo site.',
-    iosSubcopy: 'No iPhone a contratação é feita pelo site da Casa Car Club.',
+    // Reachable only when the member switches to a DIFFERENT package after a
+    // decline: the previous attempt is still locked (up to the reaper's TTL —
+    // billing-reconcile.ts) and cannot be reused for a new package digest.
+    // Same-package retries reuse the pending attempt instead of hitting this
+    // 409 at all (final review I2) — "wait an instant" is false here, since
+    // the lock can outlive far more than an instant. There is no in-app way
+    // to cancel the pending attempt, so the honest advice is to retry the
+    // same plan (which reuses it) or wait for it to clear on its own.
+    errorAttemptInFlight:
+      'Você tem uma tentativa de assinatura de outro plano em andamento. Tente novamente com o mesmo plano de antes, ou aguarde essa tentativa expirar.',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -97,9 +127,15 @@ export const assinaturasCopy = {
     emptyTitle: 'Você ainda não é assinante.',
     emptySubcopy: 'Escolha um plano e faça parte da Casa.',
     emptyCta: 'VER PLANOS',
-    // Billing switched off (flag / 503).
-    unavailableTitle: 'Assinaturas em breve.',
-    unavailableSubcopy: 'A contratação de planos ainda não está disponível. Volte em breve.',
+    // Billing switched off (flag / 503) — the screen cannot tell which. Not
+    // "coming soon": the feature exists and "em breve" reads as it having
+    // been withdrawn to a member who already pays. But the flag-off case is
+    // a deliberate pre-launch rollout gate (see apps/api/src/env.ts), not a
+    // malfunction, and its resolution is a multi-step smoke-test signoff,
+    // not minutes — so this copy must not assert a cause ("manutenção") or a
+    // timeline ("minutos") that only holds for the 503 case. State only.
+    unavailableTitle: 'Assinaturas indisponíveis no momento.',
+    unavailableSubcopy: 'Tente novamente mais tarde.',
     benefitsTitle: 'O QUE ESTÁ INCLUÍDO',
     seeAllPlans: 'VER TODOS OS PLANOS',
     historico: {
@@ -123,6 +159,22 @@ export const assinaturasCopy = {
       appleBody: 'Esta assinatura foi contratada pela App Store. O cancelamento é feito por lá.',
       appleCta: 'ABRIR APP STORE',
     },
+  },
+} as const;
+
+/**
+ * EN scaffold. This file was PT-only until 2026-08-29; only the keys added from
+ * that date on carry an EN twin, so the eventual move to a shared locale package
+ * is mechanical instead of a rewrite.
+ */
+export const assinaturasCopyEn = {
+  // Mirrors the top-level `caixa` key in `assinaturasCopy` — keep both in
+  // sync (fix round 1, Criticals 1+2: opt-in/curated per cycle, no freight
+  // claim; see the comment on `assinaturasCopy.caixa` for why).
+  caixa: {
+    title: 'THE CASA CAR CLUB BOX',
+    body: 'Every cycle, you curate your box and confirm it before the cutoff.',
+    delivery: 'One box per monthly cycle, on your confirmation.',
   },
 } as const;
 

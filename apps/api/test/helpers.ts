@@ -75,6 +75,10 @@ export const resetDatabase = async (): Promise<void> => {
   await prisma.monthlyBoxPartnerItem.deleteMany();
   await prisma.boxCatalogItemCycleStock.deleteMany();
   await prisma.monthlyBox.deleteMany();
+  // PremiumSubscriptionAttempt only FKs to Garage (no relation to
+  // PremiumMembership), so it just needs to precede garage.deleteMany() below.
+  // Placed here to stay with the other premium-billing cleanup.
+  await prisma.premiumSubscriptionAttempt.deleteMany();
   await prisma.premiumMembership.deleteMany();
   await prisma.premiumTicketBackfillJob.deleteMany();
   await prisma.subscriptionWebhookEvent.deleteMany();

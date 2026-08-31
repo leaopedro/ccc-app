@@ -25,6 +25,74 @@ const STALE_STATUSES: Array<'active' | 'past_due' | 'cancel_scheduled'> = [
   'cancel_scheduled',
 ];
 const QUERY_LIMIT = 200;
+
+/**
+ * TTL da tentativa de assinatura nativa (2026-08-29, Task 11).
+ *
+ * 23h, nao 24h, e nao e arredondamento. A Stripe transiciona uma assinatura
+ * `incomplete` para `incomplete_expired` em 24h. Reapar depois disso deixaria
+ * a tentativa apontando para uma assinatura ja morta, e o membro travado no
+ * intervalo. Reapar antes devolve a garagem ao estado limpo enquanto ainda ha
+ * chance de o pagamento chegar.
+ *
+ * Sem reaping nenhum, quem toca em assinar e fecha o app fica travado para
+ * sempre: o indice unico parcial recusa toda tentativa nova.
+ *
+ * Aplica-se a linhas com `providerSubRef` PREENCHIDO — subscriptions.create
+ * ja voltou, entao existe uma assinatura Stripe de verdade que ainda pode
+ * confirmar.
+ */
+const ATTEMPT_TTL_MS = 23 * 60 * 60 * 1000;
+
+/**
+ * TTL curto para tentativas cujo `providerSubRef` nunca chegou a ser gravado.
+ *
+ * Duas origens possiveis para essa linha, ambas em me-premium.ts:
+ *   1. Falha ANTES de chamar createNativeSubscription (rede fora do ar ao
+ *      consultar checkout hospedado aberto, etc) — nesse caso a rota ja marca
+ *      `abandoned` no mesmo request (abandonIfJustCreated); nao chega ate aqui.
+ *   2. Falha AMBIGUA da propria Stripe (timeout, 5xx, corrida de
+ *      idempotency_error) — a rota deixa a linha 'pending' de proposito,
+ *      porque a assinatura PODE ter sido criada do lado da Stripe mesmo sem
+ *      confirmar o id aqui (ver comentario em me-premium.ts junto do catch de
+ *      createNativeSubscription).
+ *
+ * Mesmo no caso 2, esta linha e inerte para fins de cobranca: o webhook
+ * `invoice.paid`/`subscription.activated` casa a tentativa por
+ * `providerSubRef` (apply-membership-event.ts:162-165), e essa linha nunca
+ * tem um `providerSubRef` para casar. Se a Stripe de fato criou a assinatura,
+ * o `PremiumMembership` e criado do mesmo jeito via o id que vem no proprio
+ * evento — esta linha so existe para o guard local de "uma tentativa pendente
+ * por garagem", e reapa-la cedo nao apaga nem esconde nenhuma cobranca real.
+ * Por isso pode (e deve) ser reapada bem antes do TTL de 23h: nada esta "em
+ * voo" do ponto de vista desta tabela.
+ *
+ * 15 minutos e uma folga confortavel acima de qualquer round-trip + retry
+ * real (segundos), sem deixar a garagem presa por horas por causa de uma
+ * falha ambigua rara. Na pratica a janela real e 15-75 minutos, nao 15: esta
+ * funcao so roda dentro de `runReconcileTick`, chamada pelo cron HORARIO
+ * (`0 * * * *`, ver startBillingReconcileWorker abaixo) — uma linha que
+ * cruza o TTL logo depois de um tick so e reapada no proximo, ate quase uma
+ * hora depois. Nao resolve o cenario de UX levantado em review (usuario
+ * troca de plano no meio do fluxo) — nesse caso o `providerSubRef` normalmente
+ * ja foi gravado antes da resposta do request voltar ao cliente, entao a linha
+ * cai no TTL de 23h de qualquer forma. Ver relatorio da tarefa.
+ *
+ * TRADE-OFF ACEITO (revisao 2026-08-30): Task 9 deriva a idempotency key de
+ * `attempt.id` justamente para que um novo toque no MESMO pending row (branch
+ * `reuse`) replique a mesma chave e a Stripe devolva a assinatura ORIGINAL
+ * (recuperando o orfao em vez de mintar uma segunda). Reapar em 15min mata
+ * essa recuperacao no caso 2 acima: o novo toque cria uma tentativa nova, uma
+ * chave nova, e a Stripe abre uma segunda assinatura de verdade enquanto a
+ * primeira so expira sozinha em ~24h. Aceito de qualquer forma porque os
+ * casos 1 e 2 sao INDISTINGUIVEIS por esta query — ambos so tem `pending` +
+ * `providerSubRef` nulo — e o caso 1 (crash antes de qualquer chamada a
+ * Stripe, nada la fora) e puro dano se travado por 23h. Perder a reutilizacao
+ * do caso 2 custa uma assinatura `incomplete` a mais que se autoexpira sem
+ * cobrar nada; manter o caso 1 preso por 23h e dano real ao usuario. Ganho
+ * rapido vence.
+ */
+const ATTEMPT_TTL_NO_SUBREF_MS = 15 * 60 * 1000;
 const STRIPE_EXPIRED_STATUSES = new Set(['canceled', 'incomplete_expired', 'unpaid']);
 const RC_PREMIUM_ENTITLEMENT_KEY = 'premium_gold';
 // Synthetic invoice period used for reconcile-synthesised renewals. Real
@@ -200,6 +268,61 @@ const reconcileRcRow = async (
 };
 
 // ---------------------------------------------------------------------------
+// Attempt reaping (Task 11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reapa `PremiumSubscriptionAttempt` rows presas em `pending` alem do TTL
+ * (canon: schema.prisma comment on the model, "RISCO CONHECIDO").
+ *
+ * So toca em `status: 'pending'` — nunca em `succeeded`, `abandoned` ou
+ * `failed`. Uma linha `succeeded` e uma assinatura real e paga; corrompe-la
+ * corromperia o registro de um assinante de verdade.
+ *
+ * Duas janelas (ver ATTEMPT_TTL_MS / ATTEMPT_TTL_NO_SUBREF_MS acima):
+ *   - `providerSubRef` preenchido: 23h — pode haver uma assinatura Stripe
+ *     `incomplete` ainda confirmavel.
+ *   - `providerSubRef` nulo: 15min — nada foi criado do lado da Stripe que
+ *     esta linha consiga rastrear; nao ha nada "em voo" para essa tabela.
+ *
+ * NAO faz nenhuma chamada a Stripe. So marca a linha; uma assinatura
+ * `incomplete` nao confirmada expira sozinha na Stripe em ~24h. Cancelar
+ * daqui arriscaria atingir uma assinatura que na verdade ja confirmou e cujo
+ * webhook so esta atrasado.
+ *
+ * Idempotente e seguro a reinicio: um `updateMany` condicionado a
+ * `status: 'pending'`, sem estado em memoria. Rodar de novo so re-avalia as
+ * linhas que ainda estao pending e vencidas; nada e reprocessado.
+ */
+export const reapAbandonedAttempts = async (
+  now: Date,
+  log?: FastifyBaseLogger,
+): Promise<number> => {
+  const subRefCutoff = new Date(now.getTime() - ATTEMPT_TTL_MS);
+  const noSubRefCutoff = new Date(now.getTime() - ATTEMPT_TTL_NO_SUBREF_MS);
+
+  const result = await prisma.premiumSubscriptionAttempt.updateMany({
+    where: {
+      status: 'pending',
+      OR: [
+        { providerSubRef: null, createdAt: { lt: noSubRefCutoff } },
+        { providerSubRef: { not: null }, createdAt: { lt: subRefCutoff } },
+      ],
+    },
+    data: { status: 'abandoned' },
+  });
+
+  if (result.count > 0) {
+    log?.info(
+      { kind: 'reconcile.attempts_reaped', count: result.count },
+      'billing-reconcile: tentativas de assinatura abandonadas reapadas',
+    );
+  }
+
+  return result.count;
+};
+
+// ---------------------------------------------------------------------------
 // Main tick
 // ---------------------------------------------------------------------------
 
@@ -240,6 +363,8 @@ export const runReconcileTick = async (deps: ReconcileTickDeps): Promise<void> =
 
   const now = deps.now ?? new Date();
   const log = deps.log;
+
+  await reapAbandonedAttempts(now, log);
 
   const staleRows = await prisma.premiumMembership.findMany({
     where: {

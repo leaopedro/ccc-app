@@ -67,6 +67,7 @@ import { startDataExportWorker } from './workers/data-export.js';
 import { startEventRemindersWorker } from './workers/event-reminders.js';
 import { startBoxCutoffWorker } from './workers/box-cutoff.js';
 import { startNotificationDeliveryWorker } from './workers/notification-delivery.js';
+import { startOrderExpiryWorker } from './workers/order-expiry.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
 import { startRetentionWorker } from './workers/retention.js';
 
@@ -221,6 +222,15 @@ export const buildApp = async (
     });
     app.addHook('onClose', () => {
       void deletionWorker.stop();
+    });
+
+    // Gatilho de expiracao de pedidos: varre pedidos pendentes vencidos,
+    // libera a reserva de estoque e cancela a PaymentIntent. Nao e gated por
+    // GROWTH_PREMIUM_BILLING_ENABLED porque expiracao de pedido de loja/ticket
+    // nao e assinatura.
+    const orderExpiryWorker = startOrderExpiryWorker({ stripe: app.stripe, log: app.log });
+    app.addHook('onClose', () => {
+      orderExpiryWorker.stop();
     });
 
     // F8.12: hourly reconciliation sweep — feature-flagged off by default

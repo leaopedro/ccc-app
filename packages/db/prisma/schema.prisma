@@ -302,11 +302,12 @@ model Garage {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  garageBadges              GarageBadge[]
-  xpEvents                  XpEvent[]
-  premiumMemberships        PremiumMembership[]
-  premiumTicketBackfillJobs PremiumTicketBackfillJob[]
+  user                        User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  garageBadges                GarageBadge[]
+  xpEvents                    XpEvent[]
+  premiumMemberships          PremiumMembership[]
+  premiumTicketBackfillJobs   PremiumTicketBackfillJob[]
+  premiumSubscriptionAttempts PremiumSubscriptionAttempt[]
 
   @@index([slug])
   @@index([premiumTier, premiumUntil])
@@ -494,6 +495,62 @@ model PremiumTicketBackfillJob {
 
   @@index([status, createdAt])
   @@index([garageId])
+}
+
+enum PremiumSubscriptionAttemptStatus {
+  pending
+  succeeded
+  abandoned
+  /// Stripe recusou (cartao, 3DS, etc). Distinto de `abandoned` (usuario
+  /// desistiu) para observabilidade e handling separados.
+  failed
+}
+
+/// Registro PRE-pagamento de uma tentativa de assinatura premium.
+///
+/// Existe para que a guarda de duplicidade nao encoste em PremiumMembership.
+/// premiumMembership.create roda so dentro do webhook invoice.paid
+/// (services/billing/apply-membership-event.ts), entao uma restricao la
+/// impediria o BANCO de registrar uma assinatura que a Stripe JA COBROU, e o
+/// P2002 resultante escaparia do $transaction, viraria 500, e o evento se
+/// perderia depois de ~3 dias de reentrega. Cobranca recorrente sem membership,
+/// sem entitlement e sem reembolso. Esta tabela MITIGA esse cenario ao tornar
+/// dificil abrir uma segunda assinatura Stripe viva para a mesma garagem; ela
+/// nao o elimina (checkout hospedado concorrente, criacao pelo dashboard da
+/// Stripe, ou re-assinatura sequencial apos `succeeded` seguem possiveis).
+///
+/// O indice unico parcial por garageId onde status = 'pending' esta na
+/// migracao em SQL cru; o Prisma nao suporta indice unico parcial no DSL.
+/// Mesmo padrao de Cart_userId_open_unique.
+///
+/// RISCO CONHECIDO: um crash entre subscriptions.create e a troca de status
+/// deixa a linha presa em `pending` para sempre, e o indice parcial entao
+/// bloqueia QUALQUER nova tentativa para aquela garagem. A Task 11 (TTL
+/// reaper) e quem limpa isso — Tasks 8-10 nao devem ir para producao sem a
+/// Task 11.
+model PremiumSubscriptionAttempt {
+  id             String                           @id @default(cuid())
+  garageId       String
+  cadence        PremiumCadence
+  planTier       GaragePremiumTier
+  /// sha1 truncado dos price ids resolvidos, plano primeiro. Mesmo digest da
+  /// chave de idempotencia do checkout hospedado em me-premium.ts.
+  packageDigest  String                           @db.VarChar(24)
+  /// sub_${garageId}_${cadence}_${digest}_${attemptId}. Guardada para o log de
+  /// auditoria e para o replay de idempotencia da Stripe.
+  idempotencyKey String                           @db.VarChar(200)
+  /// Preenchida assim que subscriptions.create devolve. Null enquanto a
+  /// chamada nao voltou.
+  providerSubRef String?                          @db.VarChar(120)
+  status         PremiumSubscriptionAttemptStatus @default(pending)
+  createdAt      DateTime                         @default(now())
+  updatedAt      DateTime                         @updatedAt
+
+  garage Garage @relation(fields: [garageId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([garageId, status])
+  @@index([providerSubRef])
 }
 
 // Premium plan catalog — one plan per tier. Prices/benefits are display-facing;

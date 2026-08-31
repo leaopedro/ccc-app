@@ -507,6 +507,27 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
         .send({ error: 'ServiceUnavailable', message: 'store is currently disabled' });
     }
 
+    // Diretriz 3.1.3(e) da Apple isenta bens FISICOS consumidos fora do app.
+    // Um produto `virtual: true` e desbloqueio digital, e vender desbloqueio
+    // digital fora do IAP e rejeicao 3.1.1. Aposentar um SKU resolve a
+    // instancia de hoje; recusar aqui resolve a proxima.
+    //
+    // Recusa antes de reserveAndCreateOrders: abaixo desta linha o carrinho vai
+    // para `checking_out` e o estoque e reservado.
+    if (request.clientPlatform === 'ios') {
+      const virtualVariantIds = cart.items
+        .filter((item) => item.kind === 'product' && item.variant?.product.virtual === true)
+        .map((item) => item.variant!.id);
+      if (virtualVariantIds.length > 0) {
+        return reply.status(403).send({
+          error: 'PlatformNotSupported',
+          code: 'VIRTUAL_ITEM_IOS_BLOCKED',
+          message: 'Itens digitais nao podem ser comprados pelo aplicativo iOS.',
+          variantIds: virtualVariantIds,
+        });
+      }
+    }
+
     if (cart.status !== 'open') {
       return reply.status(409).send({
         error: 'Conflict',
@@ -614,12 +635,26 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       shippingAddressId = shippingAddress.id;
     }
 
+    // Reservas de checkout hospedado (Stripe Checkout Session) tem que durar
+    // pelo menos o TTL da sessao (STRIPE_MIN_SESSION_MS, 30 min), senao o
+    // worker de expiracao (order-expiry.ts, roda a cada minuto) mata o pedido
+    // enquanto o cliente ainda esta na pagina da Stripe (banco, 3DS, ligacao),
+    // com o estoque ja liberado para outro comprador. O checkout nativo e uma
+    // interacao rapida dentro do app — 15 min (ORDER_EXPIRY_MS) e o certo ali,
+    // e manter a PI nativa confirmavel so por esse tanto e o motivo do worker
+    // existir. Pix usa ORDER_EXPIRY_MS tambem, sem mudanca.
+    const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
+    const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
+    const expiresInMs =
+      input.paymentMethod === 'card' && input.flow === 'hosted' ? sessionExpiryMs : ORDER_EXPIRY_MS;
+
     const reserveResult = await reserveAndCreateOrders(cart, sub, {
       method: input.paymentMethod,
       shippingAddressId,
       pickupEventId: pickupEventIdToUse,
       fulfillmentMethod: resolvedFulfillmentMethod,
       devFeePercent: app.env.DEV_FEE_PERCENT,
+      expiresInMs,
     });
     if (!reserveResult.ok) {
       return reply.status(reserveResult.status).send({
@@ -686,7 +721,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
             clientSecret: null,
             checkoutUrl: null,
             brCode: billing.brCode,
-            reservationExpiresAt: new Date(Date.now() + ORDER_EXPIRY_MS).toISOString(),
+            reservationExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
           }),
         );
       } catch (err) {
@@ -705,8 +740,6 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const STRIPE_MIN_SESSION_MS = 30 * 60 * 1000;
-    const sessionExpiryMs = Math.max(ORDER_EXPIRY_MS, STRIPE_MIN_SESSION_MS);
     const expiresAtUnix = Math.floor((Date.now() + sessionExpiryMs) / 1000);
 
     const productName = data.orders.map((o) => o.description).join(' + ');
@@ -719,20 +752,85 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       ? withOrderIdParam(baseSuccessUrl, firstOrderId)
       : baseSuccessUrl;
 
+    // Mesma metadata nos dois ramos. handleCartPaymentSucceeded le cartId
+    // (stripe-webhook.ts:401) e settlePaidOrder le o resto. Divergir aqui deixa
+    // a PI nativa paga sem carrinho resolvivel.
+    //
+    // cartVersion e lido por handleCartPaymentSucceeded (stripe-webhook.ts) para
+    // detectar folha velha: um clientSecret confirmado depois que o carrinho foi
+    // reaberto (version incrementada por handleCartFailure). Quando a versao paga
+    // diverge da versao atual, aquele handler reembolsa a PI e emite a tag de
+    // Sentry stripe-stale-cart-version em vez de liquidar contra pedidos ja
+    // consumidos pela tentativa anterior.
+    const stripeMetadata: Record<string, string> = {
+      cartId: cart.id,
+      userId: sub,
+      orderIds: JSON.stringify(data.orders.map((o) => o.id)),
+      orderKinds: JSON.stringify(data.orders.map((o) => o.kind)),
+      hasShippableItems: requiresShipping ? 'true' : 'false',
+      cartVersion: String(cart.version),
+      ...(shippingAddressId ? { shippingAddressId } : {}),
+    };
+
+    if (input.flow === 'native') {
+      const buyer = await prisma.user.findUnique({
+        where: { id: sub },
+        select: { email: true },
+      });
+
+      try {
+        const intent = await app.stripe.createPaymentIntent({
+          amountCents: data.totalAmountCents,
+          currency: data.currency,
+          metadata: stripeMetadata,
+          idempotencyKey: `cart_native_${cart.id}_v${cart.version}`,
+          // Derivado do sub. Nunca do corpo.
+          ...(buyer?.email ? { receiptEmail: buyer.email } : {}),
+        });
+
+        await prisma.order.updateMany({
+          where: { cartId: cart.id, status: 'pending' },
+          data: { providerRef: null },
+        });
+        await prisma.order.update({
+          where: { id: data.orders[0]!.id },
+          data: { providerRef: intent.id },
+        });
+
+        const updatedCart = await prisma.cart.findUniqueOrThrow({
+          where: { id: cart.id },
+          include: CART_INCLUDE_FOR_SERIALIZE,
+        });
+
+        return reply.status(201).send(
+          beginCheckoutResponseSchema.parse({
+            checkoutId: cart.id,
+            status: 'pending',
+            cart: serializeCart(updatedCart, fulfillmentContext, {
+              devFeePercent: app.env.DEV_FEE_PERCENT,
+            }),
+            orderIds: data.orders.map((o) => o.id),
+            provider: 'stripe',
+            providerRef: intent.id,
+            clientSecret: intent.clientSecret,
+            checkoutUrl: null,
+            brCode: null,
+            reservationExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
+          }),
+        );
+      } catch (err) {
+        await rollbackCartCheckout(cart.id, data.orders);
+        throw err;
+      }
+    }
+
     try {
       const session = await app.stripe.createCheckoutSession({
         amountCents: data.totalAmountCents,
         currency: data.currency,
         productName,
         idempotencyKey: `cart_checkout_${cart.id}_v${cart.version}`,
-        metadata: {
-          cartId: cart.id,
-          userId: sub,
-          orderIds: JSON.stringify(data.orders.map((o) => o.id)),
-          orderKinds: JSON.stringify(data.orders.map((o) => o.kind)),
-          hasShippableItems: requiresShipping ? 'true' : 'false',
-          ...(shippingAddressId ? { shippingAddressId } : {}),
-        },
+        metadata: stripeMetadata,
         successUrl,
         cancelUrl,
         expiresAt: expiresAtUnix,
@@ -754,7 +852,7 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
         include: CART_INCLUDE_FOR_SERIALIZE,
       });
 
-      const reservationExpiresAt = new Date(Date.now() + ORDER_EXPIRY_MS);
+      const reservationExpiresAt = new Date(Date.now() + expiresInMs);
 
       return reply.status(201).send(
         beginCheckoutResponseSchema.parse({

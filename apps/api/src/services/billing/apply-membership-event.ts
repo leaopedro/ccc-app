@@ -1,3 +1,4 @@
+import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import type { Prisma, PremiumProvider, PrismaClient } from '@prisma/client';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
@@ -151,6 +152,17 @@ async function handleActivated(
       },
     });
   }
+
+  // Task 9's native checkout (POST /checkout-native) leaves the originating
+  // PremiumSubscriptionAttempt row 'pending' until the subscription is
+  // actually confirmed paid — this event is that confirmation. updateMany
+  // (not update): a hosted-checkout membership has no matching attempt row
+  // at all, and a replay of this same event finds the row already
+  // 'succeeded'; both must be a no-op, not a thrown "record not found".
+  await tx.premiumSubscriptionAttempt.updateMany({
+    where: { providerSubRef, status: 'pending' },
+    data: { status: 'succeeded' },
+  });
 
   // Insert invoice — idempotent on (provider, providerInvoiceRef).
   // P2002 = replay; silently skip (the invoice already landed).
@@ -458,7 +470,7 @@ async function handleExpired(
   const hasActiveLiveMembership = await tx.premiumMembership.findFirst({
     where: {
       garageId,
-      status: { in: ['active', 'past_due', 'cancel_scheduled'] },
+      status: { in: [...LIVE_MEMBERSHIP_STATUSES] },
       id: { not: membership.id },
     },
   });

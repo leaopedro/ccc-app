@@ -32,16 +32,38 @@ export type PremiumCheckoutResponse = z.infer<typeof premiumCheckoutResponseSche
 
 /**
  * GET /api/me/premium/checkout-precheck — response.
- * Two discriminants: available=true (no live membership) or available=false
- * (AlreadySubscribed). See spec §5.
+ *
+ * Three shapes, discriminated by `available` + `error` together (both `false`
+ * branches share `available: false`, which is why this is a plain `z.union`
+ * rather than a `z.discriminatedUnion('available', ...)` — the latter
+ * requires the discriminant literal to be unique per branch):
+ *   - available=true — no live membership, no in-flight attempt. See spec §5.
+ *   - available=false, error=AlreadySubscribed — a live PremiumMembership
+ *     already covers this garage (any provider).
+ *   - available=false, error=SubscriptionAttemptInFlight — no live
+ *     membership, but a native checkout-native call (Task 9) left a
+ *     `pending` PremiumSubscriptionAttempt for this garage. No `provider`/
+ *     `manageUrl`: there is no live subscription to manage yet, only an
+ *     attempt that has not resolved. Reported the same way regardless of
+ *     which package the pending attempt is for — this precheck has no
+ *     client-supplied package to compare against (GET, no body), and the
+ *     hosted checkout that consults this same shape inline cannot safely
+ *     reuse a native attempt's subscription even when the package matches
+ *     (unlike checkout-native's own same-package reuse, hosted checkout has
+ *     no idempotency-key link back to that attempt), so blocking is
+ *     unconditional either way.
  */
-export const premiumCheckoutPrecheckResponseSchema = z.discriminatedUnion('available', [
+export const premiumCheckoutPrecheckResponseSchema = z.union([
   z.object({ available: z.literal(true) }),
   z.object({
     available: z.literal(false),
     error: z.literal('AlreadySubscribed'),
     provider: z.enum(['stripe', 'apple_revenuecat']),
     manageUrl: z.string().url(),
+  }),
+  z.object({
+    available: z.literal(false),
+    error: z.literal('SubscriptionAttemptInFlight'),
   }),
 ]);
 
@@ -131,3 +153,58 @@ export const premiumPricingResponseSchema = z.object({
 });
 
 export type PremiumPricingResponse = z.infer<typeof premiumPricingResponseSchema>;
+
+/**
+ * Estados de membership que bloqueiam uma nova assinatura.
+ *
+ * Fonte unica. Antes disto a lista estava copiada em tres lugares
+ * (me-premium.ts, me-premium-addons.ts e apply-membership-event.ts) e as tres
+ * copias omitiam `trialing` e `paused`: um membro em trial ou com a cobranca
+ * pausada abria uma segunda assinatura sem nada objetar.
+ *
+ * `expired` fica de fora de proposito. E o unico estado que libera recontratacao.
+ */
+export const LIVE_MEMBERSHIP_STATUSES = [
+  'trialing',
+  'active',
+  'past_due',
+  'cancel_scheduled',
+  'paused',
+] as const;
+
+export type LiveMembershipStatus = (typeof LIVE_MEMBERSHIP_STATUSES)[number];
+
+export const isLiveMembershipStatus = (status: string): status is LiveMembershipStatus =>
+  (LIVE_MEMBERSHIP_STATUSES as readonly string[]).includes(status);
+
+/**
+ * Rejeicoes de checkout premium que o cliente consegue tratar. Sao erros de
+ * combinacao, nao de disponibilidade: repetir a mesma requisicao nunca
+ * funciona, entao 503 e a resposta errada.
+ */
+export const PREMIUM_CHECKOUT_ERROR_CODES = ['ANNUAL_CADENCE_ADDON_UNSUPPORTED'] as const;
+
+export type PremiumCheckoutErrorCode = (typeof PREMIUM_CHECKOUT_ERROR_CODES)[number];
+
+export const premiumCheckoutRejectionSchema = z.object({
+  error: z.literal('PremiumCheckoutRejected'),
+  code: z.enum(PREMIUM_CHECKOUT_ERROR_CODES),
+  message: z.string().min(1),
+  addonKeys: z.array(z.string()),
+});
+
+export type PremiumCheckoutRejection = z.infer<typeof premiumCheckoutRejectionSchema>;
+
+/**
+ * POST /api/me/premium/checkout-native — resposta.
+ *
+ * clientSecret e obrigatorio: uma resposta 201 sem segredo daria ao app uma
+ * folha de pagamento que nao pode cobrar nada.
+ */
+export const premiumNativeCheckoutResponseSchema = z.object({
+  subscriptionId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  attemptId: z.string().min(1),
+});
+
+export type PremiumNativeCheckoutResponse = z.infer<typeof premiumNativeCheckoutResponseSchema>;

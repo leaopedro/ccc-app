@@ -51,12 +51,28 @@ describe('premiumCheckoutPrecheckResponseSchema', () => {
     });
     expect(result.available).toBe(false);
     if (result.available === false) {
+      // Asserted here, outside the narrowing below: folding this into the
+      // `if` condition makes it vacuous — a schema regression that flips
+      // `error` to something else would silently skip the block below
+      // instead of failing.
       expect(result.error).toBe('AlreadySubscribed');
-      expect(result.provider).toBe('stripe');
+      if (result.error === 'AlreadySubscribed') {
+        expect(result.provider).toBe('stripe');
+      }
     }
   });
   it('rejects missing available field', () => {
     expect(() => premiumCheckoutPrecheckResponseSchema.parse({})).toThrow();
+  });
+  it('accepts SubscriptionAttemptInFlight shape, no provider/manageUrl required', () => {
+    const result = premiumCheckoutPrecheckResponseSchema.parse({
+      available: false,
+      error: 'SubscriptionAttemptInFlight',
+    });
+    expect(result.available).toBe(false);
+    if (result.available === false) {
+      expect(result.error).toBe('SubscriptionAttemptInFlight');
+    }
   });
 });
 

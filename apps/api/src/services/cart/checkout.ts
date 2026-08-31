@@ -188,6 +188,13 @@ export async function reserveAndCreateOrders(
     pickupEventId?: string | null;
     fulfillmentMethod?: 'pickup' | 'ship' | null;
     devFeePercent: number;
+    /**
+     * TTL for the reservation. Callers pick this per-provider/flow: a hosted
+     * Stripe Checkout Session needs a window at least as long as the session
+     * itself (see STRIPE_MIN_SESSION_MS in cart.ts), while native PaymentSheet
+     * and pix are fine at ORDER_EXPIRY_MS. Defaults to ORDER_EXPIRY_MS.
+     */
+    expiresInMs?: number;
   },
 ): Promise<
   | { ok: true; data: CheckoutResult }
@@ -291,7 +298,7 @@ export async function reserveAndCreateOrders(
         });
       }
 
-      const expiresAt = new Date(Date.now() + ORDER_EXPIRY_MS);
+      const expiresAt = new Date(Date.now() + (options.expiresInMs ?? ORDER_EXPIRY_MS));
       const order = await tx.order.create({
         data: {
           userId,

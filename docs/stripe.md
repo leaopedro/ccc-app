@@ -201,7 +201,41 @@ Qualquer validade futura, qualquer CVC.
 
 ---
 
-## 6. Impostos: o que este documento NÃO diz
+## 6. Checkout nativo (PaymentSheet)
+
+Duas rotas mintam um `clientSecret` para o app confirmar direto no
+`PaymentSheet`, sem redirecionar para uma Checkout Session hospedada.
+
+| Rota                                                | Mint                                                                              | Ativa quando                                     |
+| --------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `POST /cart/checkout` com `flow: 'native'` no corpo | `createPaymentIntent` (avulso, multi-pedido)                                      | `payment_intent.succeeded` no endpoint de avulso |
+| `POST /api/me/premium/checkout-native`              | `createNativeSubscription` (assinatura, `payment_behavior: 'default_incomplete'`) | `invoice.paid` no endpoint de billing            |
+
+`flow` é `z.enum(['hosted', 'native']).default('hosted')`
+(`packages/shared/src/cart.ts`); omitir o campo preserva o comportamento
+hospedado de sempre. A resposta troca `checkoutUrl` por `clientSecret` quando
+`flow: 'native'`, mas usa a mesma metadata do ramo hospedado — inclusive
+`cartVersion`, que `handleCartPaymentSucceeded` (`stripe-webhook.ts`) lê para
+recusar um PaymentSheet velho confirmado depois que o carrinho reabriu (ver
+`docs/observability.md`, regra 2f).
+
+**`receipt_email` é derivado do servidor, nunca do corpo da requisição.** O
+checkout nativo de carrinho busca o e-mail do `sub` autenticado
+(`prisma.user.findUnique`) e só inclui `receiptEmail` na PaymentIntent quando
+esse e-mail existe — o cliente não pode informar (nem sobrescrever) o
+destinatário do recibo Stripe. A assinatura nativa não recebe esse mesmo
+parâmetro: o e-mail já foi fixado no Customer por `findOrCreateCustomer` na
+criação, e a fatura da assinatura herda dali.
+
+A assinatura nativa nunca cria `PremiumMembership` — só a Task de webhook
+(`invoice.paid`) faz isso, preservando a invariante de que o estado de
+assinatura só muda por webhook verificado. Antes de mintar, a rota grava um
+`PremiumSubscriptionAttempt` (`pending`) sob lock de `Garage` (mesmo padrão de
+`stripe-billing-webhook.ts:754`) para colapsar toques concorrentes numa única
+assinatura Stripe; ver `docs/observability.md` regra 2g para o alerta de
+assinatura criada sem `confirmation_secret`.
+
+## 7. Impostos: o que este documento NÃO diz
 
 A versão anterior mandava configurar tax code `txcd_20030000` (SaaS) com tax
 behavior inclusive, e afirmava que o Stripe Tax funcionaria porque o Checkout

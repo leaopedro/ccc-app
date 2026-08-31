@@ -81,6 +81,22 @@ const seedMembership = async (
     },
   });
 
+const seedAttempt = async (
+  garageId: string,
+  status: 'pending' | 'succeeded' | 'abandoned' | 'failed',
+  overrides: { cadence?: 'monthly' | 'annual'; packageDigest?: string } = {},
+) =>
+  prisma.premiumSubscriptionAttempt.create({
+    data: {
+      garageId,
+      cadence: overrides.cadence ?? 'monthly',
+      planTier: 'gold',
+      packageDigest: overrides.packageDigest ?? 'digest_test_abc',
+      idempotencyKey: `sub_${garageId}_${status}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      status,
+    },
+  });
+
 const originalFlag = process.env.GROWTH_PREMIUM_BILLING_ENABLED;
 const originalMonthly = process.env.STRIPE_PRICE_PREMIUM_GOLD_MONTHLY;
 const originalAnnual = process.env.STRIPE_PRICE_PREMIUM_GOLD_ANNUAL;
@@ -213,6 +229,71 @@ describe('GET /api/me/premium/checkout-precheck', () => {
     expect(res.json()).toEqual({ available: true });
   });
 
+  it('returns 409 SubscriptionAttemptInFlight when a pending native attempt exists', async () => {
+    ({ app } = await buildPremiumApp(true));
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'native_pending@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedAttempt(garage.id, 'pending');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/me/premium/checkout-precheck',
+      headers: { authorization: bearer(env, user.id, 'user') },
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = json(res);
+    expect(body.available).toBe(false);
+    expect(body.error).toBe('SubscriptionAttemptInFlight');
+    expect(body.provider).toBeUndefined();
+    expect(body.manageUrl).toBeUndefined();
+  });
+
+  it('returns 409 AlreadySubscribed (not in-flight) when both a live membership and a pending attempt exist', async () => {
+    ({ app } = await buildPremiumApp(true));
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'both_live_and_pending@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id, 'active', 'stripe', 'cus_both');
+    await seedAttempt(garage.id, 'pending');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/me/premium/checkout-precheck',
+      headers: { authorization: bearer(env, user.id, 'user') },
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = json(res);
+    expect(body.error).toBe('AlreadySubscribed');
+    expect(body.provider).toBe('stripe');
+    expect(body.manageUrl).toBe(PORTAL_URL);
+  });
+
+  it.each(['succeeded', 'abandoned'] as const)(
+    'returns 200 available=true when the only attempt row is %s, not pending',
+    async (status) => {
+      ({ app } = await buildPremiumApp(true));
+      const env = loadEnv();
+      const { user } = await createUser({
+        email: `native_${status}@jdm.test`,
+        verified: true,
+      });
+      const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+      await seedAttempt(garage.id, status);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/me/premium/checkout-precheck',
+        headers: { authorization: bearer(env, user.id, 'user') },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ available: true });
+    },
+  );
+
   it('returns 503 when feature flag disabled', async () => {
     ({ app } = await buildPremiumApp(false));
     const env = loadEnv();
@@ -328,6 +409,55 @@ describe('POST /api/me/premium/checkout', () => {
     expect(res.statusCode).toBe(409);
     expect(json(res).error).toBe('AlreadySubscribed');
   });
+
+  it('returns 409 SubscriptionAttemptInFlight when a pending native attempt exists, before calling Stripe', async () => {
+    ({ app, stripe } = await buildPremiumApp(true));
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'hosted_blocked_native@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    // Same cadence as requested below — proves the block is unconditional
+    // (hosted checkout cannot safely reuse a native attempt's subscription
+    // even when the package matches), not just a cross-package guard.
+    await seedAttempt(garage.id, 'pending', { cadence: 'monthly' });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout',
+      headers: { authorization: bearer(env, user.id, 'user') },
+      payload: { cadence: 'monthly' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = json(res);
+    expect(body.available).toBe(false);
+    expect(body.error).toBe('SubscriptionAttemptInFlight');
+    expect(stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession')).toHaveLength(
+      0,
+    );
+  });
+
+  it.each(['succeeded', 'abandoned'] as const)(
+    'proceeds to checkout when the only attempt row is %s, not pending',
+    async (status) => {
+      ({ app, stripe } = await buildPremiumApp(true));
+      const env = loadEnv();
+      const { user } = await createUser({
+        email: `hosted_resolved_${status}@jdm.test`,
+        verified: true,
+      });
+      const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+      await seedAttempt(garage.id, status, { cadence: 'monthly' });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/me/premium/checkout',
+        headers: { authorization: bearer(env, user.id, 'user') },
+        payload: { cadence: 'monthly' },
+      });
+
+      expect(res.statusCode).toBe(201);
+    },
+  );
 
   it('returns 422 for invalid cadence', async () => {
     ({ app } = await buildPremiumApp(true));

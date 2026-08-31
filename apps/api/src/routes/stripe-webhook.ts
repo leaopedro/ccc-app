@@ -111,6 +111,42 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     request: { log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void } },
     reply: { status: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
+    // Guarda de folha velha.
+    //
+    // O PaymentSheet segura um clientSecret. handleCartFailure reabre o
+    // carrinho incrementando `version` (:362-366), e um novo checkout minta
+    // uma PI nova. As duas PIs carregam o mesmo cartId. Sem esta guarda a
+    // segunda cobranca liquida contra pedidos que a primeira ja consumiu, ou
+    // nasce sem providerRef, ficando invisivel para charge.refunded e
+    // charge.dispute.created.
+    //
+    // Metadata sem cartVersion passa direto: sessoes hospedadas mintadas
+    // antes deste deploy nao carregam o campo, e recusar por ausencia
+    // reembolsaria compras legitimas em voo.
+    const paidVersionRaw = (webhookEvent.data.object as { metadata?: Record<string, string> })
+      .metadata?.cartVersion;
+    if (paidVersionRaw !== undefined) {
+      const paidVersion = Number(paidVersionRaw);
+      const cartRow = await prisma.cart.findUnique({
+        where: { id: cartId },
+        select: { version: true },
+      });
+      if (Number.isFinite(paidVersion) && cartRow && cartRow.version !== paidVersion) {
+        await app.stripe.refund(piId, 'stale-cart-version');
+        Sentry.captureMessage('stripe webhook: folha velha pagou apos reabertura, reembolsado', {
+          level: 'error',
+          tags: { kind: 'stripe-stale-cart-version', provider: 'stripe' },
+          extra: { cartId, paymentIntentId: piId, paidVersion, currentVersion: cartRow.version },
+        });
+        request.log.warn(
+          { cartId, piId, paidVersion, currentVersion: cartRow.version },
+          'stripe webhook: stale cart version, refunded',
+        );
+        await markProcessed(webhookEvent.id, webhookEvent);
+        return reply.status(200).send({ ok: true, refunded: true, reason: 'stale-cart-version' });
+      }
+    }
+
     const orders = await prisma.order.findMany({
       where: { cartId, status: 'pending' },
       select: { id: true, amountCents: true, kind: true },
@@ -298,12 +334,18 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     request: { log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void } },
     reply: { status: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
+    const refsToCancel: string[] = [];
+
     await prisma.$transaction(async (tx) => {
       const cartOrders = await tx.order.findMany({
         where: { cartId, status: 'pending' },
       });
 
       for (const order of cartOrders) {
+        if (order.provider === 'stripe' && order.providerRef) {
+          refsToCancel.push(order.providerRef);
+        }
+
         await tx.order.update({
           where: { id: order.id },
           data: { status: 'failed', failedAt: new Date() },
@@ -366,6 +408,28 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       });
     });
 
+    // Cancel the PI AFTER the commit, and never let the error escape.
+    //
+    // Without this the PaymentSheet stays mounted on the same PI, and a
+    // second successful attempt hits the `dead` branch below (~:161-183):
+    // charge followed by a refund, with the stock already resold to someone
+    // else. A 3DS decline is the most common failure mode on Brazilian cards.
+    //
+    // Deliberately best-effort: Stripe 400s the cancel of a PI it has already
+    // closed itself, and letting that error escape would put this event into
+    // Stripe's ~3-day redelivery loop against a cart that already reopened
+    // correctly.
+    for (const ref of [...new Set(refsToCancel)]) {
+      try {
+        await app.stripe.cancelPaymentIntent(ref);
+      } catch (cancelErr) {
+        request.log.warn(
+          { err: cancelErr, cartId, providerRef: ref },
+          'stripe webhook: failed to cancel the PI of the reopened cart',
+        );
+      }
+    }
+
     const firstTime = await markProcessed(webhookEvent.id, webhookEvent);
     request.log.info({ cartId, firstTime }, 'stripe webhook: cart checkout failed/expired');
     return reply.status(200).send({ ok: true, deduped: !firstTime });
@@ -415,7 +479,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       const anchor = disputedPi
         ? await prisma.order.findFirst({
             where: { provider: 'stripe', providerRef: disputedPi },
-            select: { id: true, cartId: true },
+            select: { id: true, cartId: true, status: true },
           })
         : null;
 
@@ -438,7 +502,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
 
       // Only `created` revokes. On `closed`, winning does not re-issue and
       // losing does not revoke twice — the operator decides what follows.
-      if (event.type === 'charge.dispute.created' && anchor) {
+      //
+      // Same anchor-status guard as the charge.refunded cascade above: a
+      // disputed PI whose order is NOT `paid` (e.g. a stale-sheet PI that
+      // failed and got superseded by a later cart-version retry) is not the
+      // live order for this cart, so it must not drag a genuinely paid
+      // sibling's ticket down with it.
+      if (event.type === 'charge.dispute.created' && anchor && anchor.status === 'paid') {
         const ids = anchor.cartId
           ? (
               await prisma.order.findMany({
@@ -490,14 +560,23 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       // One PaymentIntent covers the whole cart, but only the canonical order
       // carries providerRef. Refunding just that row would leave every sibling
       // `paid` with a valid ticket after a full refund.
-      const affectedIds = order.cartId
-        ? (
-            await prisma.order.findMany({
-              where: { cartId: order.cartId },
-              select: { id: true },
-            })
-          ).map((o) => o.id)
-        : [order.id];
+      //
+      // Only cascade when the anchor itself is `paid`. A stale-sheet refund
+      // (Task 6's cartVersion guard) resolves to an order that failed and got
+      // superseded by a new providerRef on a later cart version — cascading by
+      // cartId there would flip the CURRENT paid order to `refunded` and
+      // revoke a ticket the customer actually holds, even though its own PI
+      // was never touched. Anchor not paid means this PI's order is not the
+      // live one for this cart; nothing else should move.
+      const affectedIds =
+        order.cartId && order.status === 'paid'
+          ? (
+              await prisma.order.findMany({
+                where: { cartId: order.cartId },
+                select: { id: true },
+              })
+            ).map((o) => o.id)
+          : [order.id];
 
       // Stripe partial refunds need separate handling (line-item attribution,
       // refundedCents partial accounting). Out of scope for JDMA-312; flag and

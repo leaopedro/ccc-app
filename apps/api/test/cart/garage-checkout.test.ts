@@ -84,7 +84,11 @@ describe('cart checkout — virtual garage product (JDMA TASK-C)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/cart/checkout',
-      headers: { authorization: token, 'content-type': 'application/json' },
+      headers: {
+        authorization: token,
+        'content-type': 'application/json',
+        'x-ccc-platform': 'web',
+      },
       payload: { paymentMethod: 'card' },
     });
 
@@ -102,7 +106,11 @@ describe('cart checkout — virtual garage product (JDMA TASK-C)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/cart/checkout',
-      headers: { authorization: token, 'content-type': 'application/json' },
+      headers: {
+        authorization: token,
+        'content-type': 'application/json',
+        'x-ccc-platform': 'web',
+      },
       payload: { paymentMethod: 'card' },
     });
     expect(res.statusCode).toBe(201);
@@ -119,7 +127,11 @@ describe('cart checkout — virtual garage product (JDMA TASK-C)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/cart/checkout',
-      headers: { authorization: token, 'content-type': 'application/json' },
+      headers: {
+        authorization: token,
+        'content-type': 'application/json',
+        'x-ccc-platform': 'web',
+      },
       payload: { paymentMethod: 'card' },
     });
     expect(res.statusCode).toBe(201);
@@ -205,7 +217,11 @@ describe('cart checkout — virtual garage product (JDMA TASK-C)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/cart/checkout',
-      headers: { authorization: token, 'content-type': 'application/json' },
+      headers: {
+        authorization: token,
+        'content-type': 'application/json',
+        'x-ccc-platform': 'web',
+      },
       payload: { paymentMethod: 'card', fulfillmentMethod: 'ship' },
     });
 
@@ -272,7 +288,11 @@ describe('cart checkout — virtual garage product (JDMA TASK-C)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/cart/checkout',
-      headers: { authorization: token, 'content-type': 'application/json' },
+      headers: {
+        authorization: token,
+        'content-type': 'application/json',
+        'x-ccc-platform': 'web',
+      },
       payload: { paymentMethod: 'card' },
     });
 

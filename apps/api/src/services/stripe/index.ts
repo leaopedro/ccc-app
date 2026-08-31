@@ -10,6 +10,13 @@ export type CreatePaymentIntentInput = {
   currency: string;
   metadata: Record<string, string>;
   idempotencyKey: string;
+  /**
+   * Destinatario do recibo da Stripe. SEMPRE derivado do usuario autenticado
+   * no servidor. Aceitar este valor do corpo da requisicao transformaria a
+   * rota numa primitiva de e-mail para destinatario arbitrario, assinada pela
+   * nossa conta Stripe.
+   */
+  receiptEmail?: string;
 };
 
 export type CheckoutSessionResult = {
@@ -76,6 +83,25 @@ export type SubscriptionCheckoutSessionResult = {
    * for a Stripe response that omits it.
    */
   status: 'open' | 'complete' | 'expired' | null;
+};
+
+export type CreateNativeSubscriptionInput = {
+  customerId: string;
+  /** Todos os prices recorrentes, plano primeiro. Mesmo intervalo e moeda. */
+  priceIds: string[];
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+};
+
+export type NativeSubscriptionResult = {
+  subscriptionId: string;
+  /**
+   * client_secret da confirmation_secret da latest_invoice. Null quando a
+   * Stripe finaliza a fatura sem exigir confirmacao (valor zero, credito),
+   * caso em que nao ha nada para o PaymentSheet apresentar.
+   */
+  clientSecret: string | null;
+  status: Stripe.Subscription.Status;
 };
 
 export type FindOrCreateCustomerInput = {
@@ -212,6 +238,21 @@ export type StripeClient = {
   createSubscriptionCheckoutSession: (
     input: CreateSubscriptionCheckoutSessionInput,
   ) => Promise<SubscriptionCheckoutSessionResult>;
+  /**
+   * Assinatura nativa para o PaymentSheet. payment_behavior
+   * 'default_incomplete' faz a Stripe criar a assinatura em `incomplete` e
+   * deixar a primeira fatura aguardando confirmacao no cliente.
+   *
+   * O segredo sai de `latest_invoice.confirmation_secret.client_secret`. Na SDK
+   * 22.1.0 com apiVersion 2026-04-22.dahlia, `Invoice` NAO tem `payment_intent`
+   * no topo (Invoices.d.ts:207 e :472-481); o unico `payment_intent` do arquivo
+   * esta dentro de LastFinalizationError. `invoice.payment_intent` nao compila.
+   *
+   * `confirmation_secret` so vem preenchida com expand explicito.
+   */
+  createNativeSubscription: (
+    input: CreateNativeSubscriptionInput,
+  ) => Promise<NativeSubscriptionResult>;
   findOrCreateCustomer: (input: FindOrCreateCustomerInput) => Promise<FindOrCreateCustomerResult>;
   /**
    * Delete (Stripe-side "forget") every live customer matching this email.
@@ -270,6 +311,32 @@ export type OpenSubscriptionCheckoutSession = {
   url: string | null;
 };
 
+/**
+ * True only when the error PROVES the Stripe API rejected the request without
+ * creating anything — safe for a caller to mark a pre-payment record (e.g.
+ * PremiumSubscriptionAttempt) as abandoned.
+ *
+ * False for everything else, on purpose:
+ *  - StripeIdempotencyError: a concurrent call reused the SAME key while the
+ *    first call is still in flight ("request outstanding"). The subscription
+ *    may be created any moment by that first call.
+ *  - StripeConnectionError: the request may never have reached Stripe, or it
+ *    reached Stripe and the response was lost in transit. Either way, the
+ *    subscription may exist.
+ *  - StripeAPIError (Stripe 5xx) and anything unrecognised: Stripe's own
+ *    infrastructure failed after receiving the request — no guarantee the
+ *    resource was not created.
+ *
+ * Callers MUST treat a false result as "outcome unknown", not "succeeded":
+ * leave the pre-payment record alone (do not flip it to a terminal status)
+ * and let a slower path (retry, reconciliation) resolve it later.
+ */
+export const isDefinitiveSubscriptionRejection = (err: unknown): boolean =>
+  err instanceof Stripe.errors.StripeInvalidRequestError ||
+  err instanceof Stripe.errors.StripeCardError ||
+  err instanceof Stripe.errors.StripeAuthenticationError ||
+  err instanceof Stripe.errors.StripePermissionError;
+
 type StripeEnv = {
   readonly STRIPE_SECRET_KEY: string;
   readonly STRIPE_WEBHOOK_SECRET: string;
@@ -282,13 +349,20 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2026-04-22.dahlia' });
 
   return {
-    createPaymentIntent: async ({ amountCents, currency, metadata, idempotencyKey }) => {
+    createPaymentIntent: async ({
+      amountCents,
+      currency,
+      metadata,
+      idempotencyKey,
+      receiptEmail,
+    }) => {
       const pi = await stripe.paymentIntents.create(
         {
           amount: amountCents,
           currency: currency.toLowerCase(),
           metadata,
           automatic_payment_methods: { enabled: true },
+          ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
         },
         { idempotencyKey },
       );
@@ -462,6 +536,25 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       );
       if (!session.url) throw new Error('stripe subscription checkout session missing url');
       return { id: session.id, url: session.url, status: session.status };
+    },
+    createNativeSubscription: async ({ customerId, priceIds, metadata, idempotencyKey }) => {
+      const sub = await stripe.subscriptions.create(
+        {
+          customer: customerId,
+          items: priceIds.map((price) => ({ price, quantity: 1 })),
+          payment_behavior: 'default_incomplete',
+          payment_settings: { save_default_payment_method: 'on_subscription' },
+          metadata,
+          expand: ['latest_invoice.confirmation_secret'],
+        },
+        { idempotencyKey },
+      );
+      const invoice = typeof sub.latest_invoice === 'string' ? null : sub.latest_invoice;
+      return {
+        subscriptionId: sub.id,
+        clientSecret: invoice?.confirmation_secret?.client_secret ?? null,
+        status: sub.status,
+      };
     },
     findOrCreateCustomer: async ({ email, garageId }) => {
       // Email-based dedup; matches Stripe's own customer-by-email convention.

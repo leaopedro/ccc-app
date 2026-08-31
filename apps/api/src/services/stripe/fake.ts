@@ -9,10 +9,12 @@ import type {
   CheckoutSessionResult,
   CreateBillingPortalSessionInput,
   CreateCheckoutSessionInput,
+  CreateNativeSubscriptionInput,
   CreatePaymentIntentInput,
   CreateSubscriptionCheckoutSessionInput,
   FindOrCreateCustomerInput,
   FindOrCreateCustomerResult,
+  NativeSubscriptionResult,
   OpenSubscriptionCheckoutSession,
   PauseSubscriptionCollectionInput,
   PaymentIntentResult,
@@ -35,6 +37,7 @@ type FakeCall = {
     | 'retrievePaymentIntent'
     | 'retrieveSubscription'
     | 'createSubscriptionCheckoutSession'
+    | 'createNativeSubscription'
     | 'findOrCreateCustomer'
     | 'deleteCustomersByEmail'
     | 'createBillingPortalSession'
@@ -74,6 +77,10 @@ export type FakeStripe = StripeClient & {
    * an already-expired session and the retry returns an open one.
    */
   subscriptionCheckoutSessionQueue: SubscriptionCheckoutSessionResult[];
+  /** Next payload returned by createNativeSubscription. */
+  nextNativeSubscription: NativeSubscriptionResult;
+  /** When set, createNativeSubscription throws this error. */
+  nextCreateNativeSubscriptionError: Error | null;
   /** Next customer payload returned by findOrCreateCustomer. */
   nextFoundOrCreatedCustomer: FindOrCreateCustomerResult;
   /** Count returned by deleteCustomersByEmail. Defaults to 0. */
@@ -88,6 +95,8 @@ export type FakeStripe = StripeClient & {
   nextBillingPortalError: Error | null;
   /** Next list returned by listOpenSubscriptionCheckoutSessions. Defaults to []. */
   nextOpenSubscriptionCheckoutSessions: OpenSubscriptionCheckoutSession[];
+  /** When set, listOpenSubscriptionCheckoutSessions throws this error (provider-failure path). */
+  nextListOpenSubscriptionCheckoutSessionsError: Error | null;
   /** When set, createSubscriptionCheckoutSession throws this error. */
   nextCreateSubscriptionCheckoutSessionError: Error | null;
   /** When set, expireCheckoutSession throws this error (provider-failure path). */
@@ -142,11 +151,18 @@ export const buildFakeStripe = (): FakeStripe => {
       status: 'open',
     },
     subscriptionCheckoutSessionQueue: [],
+    nextNativeSubscription: {
+      subscriptionId: 'sub_native_fake_1',
+      clientSecret: 'pi_sub_secret_fake',
+      status: 'incomplete',
+    },
+    nextCreateNativeSubscriptionError: null,
     nextFoundOrCreatedCustomer: { customerId: 'cus_test_sub_1' },
     nextDeletedCustomerCount: 0,
     nextBillingPortalSession: { url: 'https://billing.stripe.com/session/test_1' },
     nextBillingPortalError: null,
     nextOpenSubscriptionCheckoutSessions: [],
+    nextListOpenSubscriptionCheckoutSessionsError: null,
     nextCreateSubscriptionCheckoutSessionError: null,
     nextExpireCheckoutSessionError: null,
     nextRetrievedPrice: null,
@@ -237,6 +253,14 @@ export const buildFakeStripe = (): FakeStripe => {
       return fake.subscriptionCheckoutSessionQueue.shift() ?? fake.nextSubscriptionCheckoutSession;
     },
 
+    createNativeSubscription: async (
+      input: CreateNativeSubscriptionInput,
+    ): Promise<NativeSubscriptionResult> => {
+      fake.calls.push({ kind: 'createNativeSubscription', payload: input });
+      if (fake.nextCreateNativeSubscriptionError) throw fake.nextCreateNativeSubscriptionError;
+      return fake.nextNativeSubscription;
+    },
+
     findOrCreateCustomer: async (
       input: FindOrCreateCustomerInput,
     ): Promise<FindOrCreateCustomerResult> => {
@@ -261,6 +285,9 @@ export const buildFakeStripe = (): FakeStripe => {
       customerId: string,
     ): Promise<OpenSubscriptionCheckoutSession[]> => {
       fake.calls.push({ kind: 'listOpenSubscriptionCheckoutSessions', payload: { customerId } });
+      if (fake.nextListOpenSubscriptionCheckoutSessionsError) {
+        throw fake.nextListOpenSubscriptionCheckoutSessionsError;
+      }
       return fake.nextOpenSubscriptionCheckoutSessions;
     },
 

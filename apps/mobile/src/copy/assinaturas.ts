@@ -72,6 +72,15 @@ export const assinaturasCopy = {
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
     errorAttemptInFlight:
       'Já existe uma tentativa de pagamento em andamento. Aguarde um instante e tente de novo.',
+    // Decisão 6 — the physical side of the membership, stated before purchase.
+    // The per-plan contents come from the DB benefit labels (registered by hand
+    // in /premium/catalogo, prerequisite H3); this block is the framing that
+    // makes them read as a physical delivery rather than an app feature.
+    caixa: {
+      title: 'A CAIXA CASA CAR CLUB',
+      body: 'Sua assinatura inclui uma caixa física com curadoria da Casa, entregue no endereço cadastrado na sua conta.',
+      delivery: 'Entrega mensal, sem custo adicional de frete.',
+    },
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -128,6 +137,21 @@ export const assinaturasCopy = {
       appleTitle: 'Assinatura pela App Store',
       appleBody: 'Esta assinatura foi contratada pela App Store. O cancelamento é feito por lá.',
       appleCta: 'ABRIR APP STORE',
+    },
+  },
+} as const;
+
+/**
+ * EN scaffold. This file was PT-only until 2026-08-29; only the keys added from
+ * that date on carry an EN twin, so the eventual move to a shared locale package
+ * is mechanical instead of a rewrite.
+ */
+export const assinaturasCopyEn = {
+  contratar: {
+    caixa: {
+      title: 'THE CASA CAR CLUB BOX',
+      body: 'Your membership includes a physical box curated by the Casa, delivered to the address on your account.',
+      delivery: 'Delivered monthly, shipping included.',
     },
   },
 } as const;

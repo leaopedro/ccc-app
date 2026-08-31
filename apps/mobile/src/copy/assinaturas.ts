@@ -97,11 +97,15 @@ export const assinaturasCopy = {
     emptyTitle: 'Você ainda não é assinante.',
     emptySubcopy: 'Escolha um plano e faça parte da Casa.',
     emptyCta: 'VER PLANOS',
-    // Billing switched off (flag / 503). Not "coming soon": the feature
-    // exists and is momentarily unavailable. Saying "em breve" to a member
-    // who already pays reads as the product having been withdrawn.
+    // Billing switched off (flag / 503) — the screen cannot tell which. Not
+    // "coming soon": the feature exists and "em breve" reads as it having
+    // been withdrawn to a member who already pays. But the flag-off case is
+    // a deliberate pre-launch rollout gate (see apps/api/src/env.ts), not a
+    // malfunction, and its resolution is a multi-step smoke-test signoff,
+    // not minutes — so this copy must not assert a cause ("manutenção") or a
+    // timeline ("minutos") that only holds for the 503 case. State only.
     unavailableTitle: 'Assinaturas indisponíveis no momento.',
-    unavailableSubcopy: 'Estamos em manutenção. Tente de novo em alguns minutos.',
+    unavailableSubcopy: 'Tente novamente mais tarde.',
     benefitsTitle: 'O QUE ESTÁ INCLUÍDO',
     seeAllPlans: 'VER TODOS OS PLANOS',
     historico: {

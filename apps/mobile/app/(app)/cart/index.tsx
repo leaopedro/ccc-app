@@ -2,12 +2,14 @@ import type { CartItem, FulfillmentMethod } from '@ccc/shared/cart';
 import type { EventExtraPublic } from '@ccc/shared/extras';
 import type { ShippingAddressRecord } from '@ccc/shared/store';
 import { Button } from '@ccc/ui';
+import Constants from 'expo-constants';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Car as CarIcon, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -21,6 +23,7 @@ import { beginCheckout } from '~/api/cart';
 import { getEventById, getEventCommerceById } from '~/api/events';
 import { getStoreSettings } from '~/api/store';
 import { listMyTickets } from '~/api/tickets';
+import { getApiErrorCode } from '~/api/errors';
 import { useCart } from '~/cart/context';
 import { redirectToStripeCheckout } from '~/cart/web-stripe-redirect';
 import { cartCopy } from '~/copy/cart';
@@ -47,6 +50,14 @@ import { formatShippingAddress } from '~/shipping/format-address';
 import { theme } from '~/theme';
 
 const isWeb = Platform.OS === 'web';
+
+// Whether the native publishable key is actually present in this build.
+// Mirrors STRIPE_AVAILABLE in app/(app)/profile/orders.tsx — final review C1:
+// a keyless production build must fall back to the hosted checkout instead
+// of opening a PaymentSheet that can never mount.
+const STRIPE_AVAILABLE = !!(
+  Constants.expoConfig?.extra as { stripePublishableKey?: string } | undefined
+)?.stripePublishableKey;
 
 type ShippingAddressRowProps = {
   loading: boolean;
@@ -515,10 +526,13 @@ export default function CartScreen() {
 
   const handlePay = useCallback(async () => {
     setCheckingOut(true);
+    // Final review C1: without a publishable key, native can't mount a
+    // PaymentSheet at all — request the hosted flow instead, same as web.
+    const nativeStripeAvailable = !isWeb && STRIPE_AVAILABLE;
     try {
       const result = await beginCheckout({
         paymentMethod,
-        ...(isWeb ? {} : { flow: 'native' as const }),
+        ...(isWeb ? {} : { flow: (nativeStripeAvailable ? 'native' : 'hosted') as const }),
         ...(selectedFulfillmentMethod ? { fulfillmentMethod: selectedFulfillmentMethod } : {}),
         ...(selectedShippingAddressId ? { shippingAddressId: selectedShippingAddressId } : {}),
         ...(needsEventPickup && eventPickupEnabled && selectedPickupEventId
@@ -530,6 +544,7 @@ export default function CartScreen() {
       const action = resolveCartPaymentAction({
         paymentMethod,
         isWeb,
+        nativeStripeAvailable,
         clientSecret: result.clientSecret,
         checkoutUrl: result.checkoutUrl,
         brCode: result.brCode,
@@ -555,8 +570,15 @@ export default function CartScreen() {
         return;
       }
       if (action.kind === 'redirect') {
-        if (typeof window !== 'undefined') {
-          redirectToStripeCheckout({ checkoutUrl: action.url, orderIds: result.orderIds });
+        if (isWeb) {
+          if (typeof window !== 'undefined') {
+            redirectToStripeCheckout({ checkoutUrl: action.url, orderIds: result.orderIds });
+          }
+        } else {
+          // Native, no publishable key: open the hosted Checkout Session in
+          // the system browser, same as before this branch introduced the
+          // PaymentSheet seam.
+          await Linking.openURL(action.url);
         }
         return;
       }
@@ -579,7 +601,16 @@ export default function CartScreen() {
       // (apps/mobile/app/(app)/events/buy/checkout-return.tsx polls `getOrder`
       // and never writes order state from the client).
       router.replace('/profile/orders' as never);
-    } catch {
+    } catch (err) {
+      // Final review I3: a virtual (digital) item refused at checkout on iOS
+      // stays in the cart — tell the member so they can remove it, instead of
+      // the generic message that leaves them stuck retrying forever. The
+      // buy-a-spot tile is hidden on iOS (garage-slots.ts) so this should
+      // only fire for a cart that already held the item before that fix.
+      if (getApiErrorCode(err) === 'VIRTUAL_ITEM_IOS_BLOCKED') {
+        showError(cartCopy.errors.virtualItemIosBlocked);
+        return;
+      }
       showError(cartCopy.errors.checkout);
     } finally {
       setCheckingOut(false);

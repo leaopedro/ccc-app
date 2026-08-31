@@ -93,6 +93,8 @@ export const cartCopy = {
     remove: 'Erro ao remover item do carrinho.',
     clear: 'Erro ao limpar o carrinho.',
     checkout: 'Erro ao iniciar o pagamento.',
+    virtualItemIosBlocked:
+      'Este item não pode ser comprado pelo aplicativo iOS. Remova-o do carrinho para continuar.',
     retry: 'Tentar novamente',
     maxTicketsExceeded: (max: number) =>
       `Você já atingiu o limite de ${max} ingresso${max === 1 ? '' : 's'} por pessoa neste evento.`,

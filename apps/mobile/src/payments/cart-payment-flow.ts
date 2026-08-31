@@ -14,6 +14,10 @@ export type CartPaymentAction =
 export const resolveCartPaymentAction = (args: {
   paymentMethod: 'card' | 'pix';
   isWeb: boolean;
+  // False when the native publishable key is absent (production regression,
+  // final review C1): the caller must have requested `flow: 'hosted'` in that
+  // case, so `checkoutUrl` — not `clientSecret` — is what comes back.
+  nativeStripeAvailable: boolean;
   clientSecret: string | null;
   checkoutUrl: string | null;
   brCode: string | null;
@@ -29,12 +33,16 @@ export const resolveCartPaymentAction = (args: {
       expiresAt: args.reservationExpiresAt,
     };
   }
-  if (args.isWeb) {
+  // Hosted checkout: always on web, or on native when there is no
+  // publishable key to mount a PaymentSheet with. The caller requests the
+  // matching `flow` up front, so this never mixes with a live clientSecret.
+  if (args.isWeb || !args.nativeStripeAvailable) {
     return args.checkoutUrl ? { kind: 'redirect', url: args.checkoutUrl } : { kind: 'error' };
   }
-  // Native card. Falling back to checkoutUrl here would open a hosted session
-  // for a cart that already has a PaymentIntent — two payment paths, one cart,
-  // and the second charge invisible to charge.refunded.
+  // Native card with Stripe available. Falling back to checkoutUrl here
+  // would open a hosted session for a cart that already has a PaymentIntent
+  // — two payment paths, one cart, and the second charge invisible to
+  // charge.refunded.
   return args.clientSecret ? { kind: 'sheet', clientSecret: args.clientSecret } : { kind: 'error' };
 };
 

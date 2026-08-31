@@ -8,6 +8,7 @@ describe('resolveCartPaymentAction', () => {
       resolveCartPaymentAction({
         paymentMethod: 'pix',
         isWeb: false,
+        nativeStripeAvailable: true,
         clientSecret: null,
         checkoutUrl: null,
         brCode: '000201...',
@@ -29,6 +30,7 @@ describe('resolveCartPaymentAction', () => {
       resolveCartPaymentAction({
         paymentMethod: 'pix',
         isWeb: true,
+        nativeStripeAvailable: false,
         clientSecret: null,
         checkoutUrl: null,
         brCode: '000201...',
@@ -43,11 +45,12 @@ describe('resolveCartPaymentAction', () => {
     });
   });
 
-  it('routes a native card checkout to the payment sheet', () => {
+  it('routes a native card checkout to the payment sheet when Stripe is available', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
         isWeb: false,
+        nativeStripeAvailable: true,
         clientSecret: 'pi_1_secret_x',
         checkoutUrl: null,
         brCode: null,
@@ -63,6 +66,7 @@ describe('resolveCartPaymentAction', () => {
       resolveCartPaymentAction({
         paymentMethod: 'card',
         isWeb: true,
+        nativeStripeAvailable: false,
         clientSecret: null,
         checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_x',
         brCode: null,
@@ -70,6 +74,40 @@ describe('resolveCartPaymentAction', () => {
         firstOrderId: 'ord_1',
       }),
     ).toEqual({ kind: 'redirect', url: 'https://checkout.stripe.com/c/pay/cs_test_x' });
+  });
+
+  // Final review C1: a keyless production build must not try to open a
+  // PaymentSheet that can never mount. The caller requests `flow: 'hosted'`
+  // in that case, so a hosted checkoutUrl comes back instead of a
+  // clientSecret — same redirect path web already uses.
+  it('falls back to the hosted checkout url on native when Stripe is unavailable', () => {
+    expect(
+      resolveCartPaymentAction({
+        paymentMethod: 'card',
+        isWeb: false,
+        nativeStripeAvailable: false,
+        clientSecret: null,
+        checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_y',
+        brCode: null,
+        reservationExpiresAt: null,
+        firstOrderId: 'ord_1',
+      }),
+    ).toEqual({ kind: 'redirect', url: 'https://checkout.stripe.com/c/pay/cs_test_y' });
+  });
+
+  it('errors when the native hosted fallback has no checkoutUrl either', () => {
+    expect(
+      resolveCartPaymentAction({
+        paymentMethod: 'card',
+        isWeb: false,
+        nativeStripeAvailable: false,
+        clientSecret: null,
+        checkoutUrl: null,
+        brCode: null,
+        reservationExpiresAt: null,
+        firstOrderId: 'ord_1',
+      }),
+    ).toEqual({ kind: 'error' });
   });
 
   // A native card checkout with no client secret is a server contract break,
@@ -80,6 +118,7 @@ describe('resolveCartPaymentAction', () => {
       resolveCartPaymentAction({
         paymentMethod: 'card',
         isWeb: false,
+        nativeStripeAvailable: true,
         clientSecret: null,
         checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_x',
         brCode: null,
@@ -94,6 +133,7 @@ describe('resolveCartPaymentAction', () => {
       resolveCartPaymentAction({
         paymentMethod: 'pix',
         isWeb: false,
+        nativeStripeAvailable: true,
         clientSecret: null,
         checkoutUrl: null,
         brCode: null,

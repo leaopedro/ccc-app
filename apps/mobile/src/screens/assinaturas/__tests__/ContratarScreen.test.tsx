@@ -496,7 +496,7 @@ describe('ContratarScreen', () => {
   it('states the physical box and its delivery cadence before purchase', async () => {
     await renderScreen();
     const body = text();
-    expect(body).toContain(assinaturasCopy.contratar.caixa.title);
-    expect(body).toContain(assinaturasCopy.contratar.caixa.delivery);
+    expect(body).toContain(assinaturasCopy.caixa.title);
+    expect(body).toContain(assinaturasCopy.caixa.delivery);
   });
 });

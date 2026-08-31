@@ -37,6 +37,28 @@ export const assinaturasCopy = {
     cta: 'ASSINAR',
     notFound: 'Plano não encontrado.',
   },
+  // Shared between ContratarScreen and PlanoDetalheScreen — not owned by
+  // either, so it lives at the top level rather than under `contratar`.
+  //
+  // Decisão 6 — the physical side of the membership, stated before purchase.
+  // The per-plan contents come from the DB benefit labels (registered by hand
+  // in /premium/catalogo, prerequisite H3); this block is the framing that
+  // makes them read as a physical delivery rather than an app feature.
+  //
+  // Fix round 1 (Criticals 1+2): the box is opt-in per cycle, curated and
+  // confirmed by the member before a cutoff (`box-cutoff.ts`) — not something
+  // that simply arrives. A box with no confirmation, no items, or no
+  // auto-send address is skipped entirely (`box-cutoff.ts:137-143`), so this
+  // copy must not promise automatic delivery. Freight is also never
+  // mentioned: only one seeded region ships free (`seed.ts:694`), everywhere
+  // else pays `shippingFeeCents`, and an unpaid-shipping box outside that
+  // region is skipped rather than sent (`box-cutoff.ts:28-31`) — any single
+  // blanket claim about freight is false somewhere, so the paywall makes none.
+  caixa: {
+    title: 'A CAIXA CASA CAR CLUB',
+    body: 'Todo ciclo, você monta sua caixa com curadoria da Casa e confirma antes do fechamento.',
+    delivery: 'Uma caixa por ciclo mensal, mediante sua confirmação.',
+  },
   contratar: {
     header: 'CONTRATAR',
     back: 'Voltar',
@@ -72,15 +94,6 @@ export const assinaturasCopy = {
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
     errorAttemptInFlight:
       'Já existe uma tentativa de pagamento em andamento. Aguarde um instante e tente de novo.',
-    // Decisão 6 — the physical side of the membership, stated before purchase.
-    // The per-plan contents come from the DB benefit labels (registered by hand
-    // in /premium/catalogo, prerequisite H3); this block is the framing that
-    // makes them read as a physical delivery rather than an app feature.
-    caixa: {
-      title: 'A CAIXA CASA CAR CLUB',
-      body: 'Sua assinatura inclui uma caixa física com curadoria da Casa, entregue no endereço cadastrado na sua conta.',
-      delivery: 'Entrega mensal, sem custo adicional de frete.',
-    },
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -147,12 +160,13 @@ export const assinaturasCopy = {
  * is mechanical instead of a rewrite.
  */
 export const assinaturasCopyEn = {
-  contratar: {
-    caixa: {
-      title: 'THE CASA CAR CLUB BOX',
-      body: 'Your membership includes a physical box curated by the Casa, delivered to the address on your account.',
-      delivery: 'Delivered monthly, shipping included.',
-    },
+  // Mirrors the top-level `caixa` key in `assinaturasCopy` — keep both in
+  // sync (fix round 1, Criticals 1+2: opt-in/curated per cycle, no freight
+  // claim; see the comment on `assinaturasCopy.caixa` for why).
+  caixa: {
+    title: 'THE CASA CAR CLUB BOX',
+    body: 'Every cycle, you curate your box and confirm it before the cutoff.',
+    delivery: 'One box per monthly cycle, on your confirmation.',
   },
 } as const;
 

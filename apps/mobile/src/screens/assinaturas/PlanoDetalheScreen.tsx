@@ -24,8 +24,6 @@ import {
   tierStyle,
 } from '~/screens/assinaturas/tier-visual';
 
-const copy = assinaturasCopy.contratar;
-
 function onBack() {
   if (router.canGoBack()) router.back();
   else router.replace('/assinaturas');
@@ -181,9 +179,9 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
         </View>
 
         <View style={styles.caixaCard}>
-          <Text style={styles.caixaTitle}>{copy.caixa.title}</Text>
-          <Text style={styles.caixaBody}>{copy.caixa.body}</Text>
-          <Text style={styles.caixaDelivery}>{copy.caixa.delivery}</Text>
+          <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
+          <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
+          <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
         </View>
       </ScrollView>
 

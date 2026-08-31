@@ -295,9 +295,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         ) : null}
 
         <View style={styles.caixaCard}>
-          <Text style={styles.caixaTitle}>{copy.caixa.title}</Text>
-          <Text style={styles.caixaBody}>{copy.caixa.body}</Text>
-          <Text style={styles.caixaDelivery}>{copy.caixa.delivery}</Text>
+          <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
+          <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
+          <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
         </View>
 
         {modules.length > 0 ? (

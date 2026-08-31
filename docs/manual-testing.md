@@ -270,8 +270,8 @@ Use this when an installed iPhone build never gets past the native splash.
 2. Open `Console.app`.
 3. In the left sidebar, select the iPhone under **Devices**.
 4. Filter by the bundle id in use:
-   - Preview: `com.jdmexperience.app.preview`
-   - Production: `com.jdmexperience.app`
+   - Preview: `com.casacarclub.app.preview`
+   - Production: `com.casacarclub.app`
 5. Launch the app and watch for:
    - `EXC_CRASH`
    - `Termination Reason`
@@ -1011,7 +1011,7 @@ curl -s -X POST \
       "id": "test-non-br-01",
       "app_user_id": "garage-smoke-001",
       "country_code": "US",
-      "product_id": "com.jdmexperience.app.premium.monthly",
+      "product_id": "com.casacarclub.app.premium.monthly",
       "currency": "USD",
       "price_in_purchased_currency": 9.99,
       "period_type": "NORMAL"

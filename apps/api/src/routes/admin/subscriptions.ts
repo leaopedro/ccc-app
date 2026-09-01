@@ -13,9 +13,12 @@
  * Modelo hibrido: as mutacoes chamam a Stripe e NAO escrevem status. Quem escreve
  * e o webhook verificado. Assinatura apple_revenuecat e somente leitura.
  *
- * A excecao e /grant: admin-autenticada, auditada, usada so depois que o dinheiro
- * ja entrou pela Stripe e o webhook nao produziu a membership. Detalhe no
- * comentario da propria rota.
+ * A excecao e /grant: escreve entitlement paga direto no banco, sem passar pela
+ * Stripe. Por isso ela NAO mora em `adminSubscriptionRoutes` — vive no plugin
+ * separado `adminSubscriptionGrantRoutes`, registrado no bloco
+ * requireRole('admin') com bucket proprio de rate limit (routes/admin/index.ts).
+ * Todas as rotas acima dela continuam organizer/admin. Detalhe no comentario do
+ * proprio plugin.
  *
  * A LISTA nao mora aqui: ela reusa GET /admin/finance/memberships.
  */
@@ -51,6 +54,20 @@ import {
 } from '../../services/billing/subscription-actions.js';
 import type { BillingEvent } from '../../services/billing/types.js';
 import { requireUser } from '../../plugins/auth.js';
+
+/**
+ * Traduz BillingActionError para o corpo de resposta desta superficie.
+ *
+ * Em escopo de modulo (nao mais dentro de adminSubscriptionRoutes) porque o
+ * grant passou a viver em outro plugin — ver adminSubscriptionGrantRoutes.
+ */
+const sendBillingError = (err: unknown, reply: FastifyReply): boolean => {
+  if (!isBillingActionError(err)) return false;
+  const errorName =
+    err.code === 'MembershipNotFound' || err.code === 'ModuleNotFound' ? 'NotFound' : err.code;
+  void reply.status(err.httpStatus).send({ error: errorName, message: err.message });
+  return true;
+};
 
 export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
   /**
@@ -208,15 +225,6 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
       return null;
     }
     return membership;
-  };
-
-  /** Traduz BillingActionError para o corpo de resposta desta superficie. */
-  const sendBillingError = (err: unknown, reply: FastifyReply): boolean => {
-    if (!isBillingActionError(err)) return false;
-    const errorName =
-      err.code === 'MembershipNotFound' || err.code === 'ModuleNotFound' ? 'NotFound' : err.code;
-    void reply.status(err.httpStatus).send({ error: errorName, message: err.message });
-    return true;
   };
 
   app.post('/subscriptions/:id/plan', async (request, reply) => {
@@ -426,7 +434,26 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
       .status(200)
       .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
   });
+};
 
+/**
+ * Grant de recuperacao (Runbook 5), num plugin separado DE PROPOSITO.
+ *
+ * Fix round 2, IMPORTANT (buraco de autorizacao): esta rota vivia dentro de
+ * adminSubscriptionRoutes, registrado no escopo requireRole('organizer',
+ * 'admin') em routes/admin/index.ts — ou seja, qualquer organizer podia
+ * cunhar uma PremiumMembership paga, sua invoice, o snapshot
+ * Garage.premiumTier/premiumUntil, o XP e o backfill de ingressos. E a
+ * escrita mais poderosa desta branch, e era a menos protegida: a rota de
+ * reembolso, estritamente mais fraca, ja estava atras de requireRole('admin')
+ * com bucket proprio de rate limit.
+ *
+ * Separar em outro plugin e o que permite registrar so ele no bloco
+ * admin-only, com bucket de rate limit proprio. O resto do arquivo (leitura e
+ * mutacoes que passam pela Stripe e nao escrevem status) continua
+ * organizer/admin.
+ */
+export const adminSubscriptionGrantRoutes: FastifyPluginAsync = async (app) => {
   /**
    * POST /admin/subscriptions/grant
    *
@@ -437,11 +464,12 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
    *
    * This is NOT a hole in "memberships only ever come from a verified
    * webhook". That invariant exists to stop a CLIENT from minting
-   * entitlement. This route is admin-authenticated, role-gated (same
-   * organizer/admin scope as the rest of this file), audited in AdminAudit,
-   * and only ever used after the provider already took the money — every
-   * amount here is transcribed by the operator from the real Stripe invoice,
-   * never guessed or defaulted from env.
+   * entitlement. This route is admin-authenticated, gated by
+   * requireRole('admin') — NOT the organizer/admin scope the rest of this
+   * file uses — rate-limited in its own bucket, audited in AdminAudit, and
+   * only ever used after the provider already took the money; every amount
+   * here is transcribed by the operator from the real Stripe invoice, never
+   * guessed or defaulted from env.
    *
    * It goes through applyMembershipEvent, the exact function the Stripe/RC
    * webhooks call, with a synthetic `subscription.activated` BillingEvent —

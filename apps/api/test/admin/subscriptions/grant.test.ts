@@ -290,6 +290,26 @@ describe('POST /admin/subscriptions/grant', () => {
     expect(res.statusCode).toBe(403);
   });
 
+  // Fix round 2, IMPORTANT (auth hole). This route used to sit inside
+  // adminSubscriptionRoutes, registered under requireRole('organizer',
+  // 'admin'), so any organizer could mint paid entitlement — a stronger write
+  // than the refund route, which was already admin-only.
+  it('rejects an organizer caller (grant is admin-only)', async () => {
+    const { user: organizer } = await createUser({
+      email: 'organizer-grant@jdm.test',
+      role: 'organizer',
+      verified: true,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/subscriptions/grant',
+      headers: { authorization: bearer(env, organizer.id, 'organizer') },
+      payload: payload(),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.premiumMembership.count()).toBe(0);
+  });
+
   it('404s an unknown garage', async () => {
     const res = await app.inject({
       method: 'POST',

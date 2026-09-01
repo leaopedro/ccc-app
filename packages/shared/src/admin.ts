@@ -1228,6 +1228,22 @@ export const adminStoreOrderAuditEntrySchema = z.object({
 });
 export type AdminStoreOrderAuditEntry = z.infer<typeof adminStoreOrderAuditEntrySchema>;
 
+/**
+ * Blast radius of refunding THIS order, from the `charge.refunded` cascade in
+ * stripe-webhook.ts: one PaymentIntent can cover a whole cart, so refunding
+ * the order that carries `providerRef` flips every OTHER order sharing its
+ * `cartId` to `refunded` too (when this order is `paid` at cascade time) and
+ * revokes their tickets. `siblingOrderCount`/`siblingTicketCount` count only
+ * those OTHER orders and their currently-valid tickets — never this order's
+ * own line, which the operator is already choosing to refund on purpose.
+ * Both are 0 when the order has no `cartId` (solo checkout).
+ */
+export const adminOrderRefundImpactSchema = z.object({
+  siblingOrderCount: z.number().int().nonnegative(),
+  siblingTicketCount: z.number().int().nonnegative(),
+});
+export type AdminOrderRefundImpact = z.infer<typeof adminOrderRefundImpactSchema>;
+
 export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   provider: z.enum(['stripe', 'abacatepay']),
   providerRef: z.string().nullable(),
@@ -1243,6 +1259,7 @@ export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   pickupTicketId: z.string().nullable(),
   items: z.array(adminStoreOrderItemSchema),
   history: z.array(adminStoreOrderAuditEntrySchema),
+  refundImpact: adminOrderRefundImpactSchema,
 });
 export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
 

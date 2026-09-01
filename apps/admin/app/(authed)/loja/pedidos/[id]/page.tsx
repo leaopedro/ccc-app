@@ -10,6 +10,7 @@ import {
 } from '../status-labels';
 
 import { FulfillmentForm } from './fulfillment-form';
+import { RefundOrderForm } from './refund-order-form';
 
 import { getAdminStoreOrder } from '~/lib/admin-api';
 import { ApiError } from '~/lib/api';
@@ -261,6 +262,19 @@ export default async function PedidoDetailPage({ params }: { params: Promise<{ i
             ) : (
               <FulfillmentForm order={order} allowedTransitions={transitions} />
             )}
+          </section>
+
+          <section>
+            <h2 className="mb-2 text-sm font-semibold uppercase text-[color:var(--color-muted)]">
+              Reembolso
+            </h2>
+            <RefundOrderForm
+              orderId={order.id}
+              status={order.paymentStatus}
+              provider={order.provider}
+              siblingOrderCount={order.refundImpact.siblingOrderCount}
+              siblingTicketCount={order.refundImpact.siblingTicketCount}
+            />
           </section>
         </aside>
       </div>

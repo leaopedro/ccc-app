@@ -1,10 +1,11 @@
 'use server';
 
+import { adminOrderRefundSchema, type AdminOrderRefund } from '@ccc/shared/admin';
 import { adminStoreFulfillmentUpdateSchema } from '@ccc/shared/store';
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 
-import { updateAdminStoreOrderFulfillment } from './admin-api';
+import { requestAdminOrderRefund, updateAdminStoreOrderFulfillment } from './admin-api';
 import { ApiError } from './api';
 import type { StoreFormState } from './store-actions';
 
@@ -39,4 +40,61 @@ export const updateOrderFulfillmentAction = async (
   revalidatePath('/loja/pedidos');
   revalidatePath(`/loja/pedidos/${orderId}`);
   return { error: null };
+};
+
+export type RequestOrderRefundResult = { ok: true; requested: true } | { ok: false; error: string };
+
+// Maps POST /admin/orders/:id/refund's error codes (task 8) to copy the
+// operator can act on. Every branch names the next concrete step, not just
+// "something failed" — see task-9-report.md for why each wording was chosen.
+const errFromRefundApi = (err: unknown): string => {
+  if (err instanceof ApiError) {
+    if (err.code === 'NotFound') return 'Pedido não encontrado.';
+    if (err.code === 'OrderNotRefundable') {
+      return 'Este pedido não pode ser reembolsado agora: precisa estar pago e ter uma referência da Stripe.';
+    }
+    if (err.code === 'RefundNotSupported') {
+      return 'Reembolso de Pix não é possível por aqui. Use o dashboard da AbacatePay, manualmente.';
+    }
+    if (err.code === 'PartialRefundNotSupported') {
+      return 'Reembolso parcial não é suportado por este formulário: o valor precisaria ser atribuído linha a linha, e o webhook de reembolso da Stripe não faz isso hoje. Use o dashboard da Stripe diretamente para um valor parcial.';
+    }
+    if (err.code === 'RefundAlreadyRequested') {
+      return 'Já existe um pedido de reembolso em andamento para este pedido. Aguarde o webhook confirmar antes de tentar de novo.';
+    }
+    if (err.code === 'RefundFailed' || err.status === 502) {
+      return 'A Stripe recusou a solicitação de reembolso. Tente de novo em instantes ou reembolse pelo dashboard da Stripe.';
+    }
+    if (err.status === 403) return 'Você não tem permissão para reembolsar pedidos.';
+    if (err.status === 429) {
+      return 'Muitas solicitações de reembolso em pouco tempo. Aguarde um minuto e tente de novo.';
+    }
+    return err.message || 'Falha ao solicitar reembolso.';
+  }
+  return 'Falha ao solicitar reembolso.';
+};
+
+export const requestOrderRefundAction = async (
+  orderId: string,
+  input: AdminOrderRefund,
+): Promise<RequestOrderRefundResult> => {
+  const parsed = adminOrderRefundSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+    };
+  }
+  try {
+    await requestAdminOrderRefund(orderId, parsed.data);
+  } catch (e) {
+    unstable_rethrow(e);
+    return { ok: false, error: errFromRefundApi(e) };
+  }
+  // 202 means Stripe accepted the REQUEST, not that the order is refunded —
+  // Order.status only flips later, when the charge.refunded webhook lands.
+  // Revalidating here is still correct: it picks up the new
+  // 'order.refund_requested' audit row in history, not a status change.
+  revalidatePath(`/loja/pedidos/${orderId}`);
+  return { ok: true, requested: true };
 };

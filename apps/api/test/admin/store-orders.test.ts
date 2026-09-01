@@ -303,6 +303,120 @@ describe('Admin store orders queue', () => {
       expect(body.customer.email).toBe('detail@jdm.test');
     });
 
+    // Task 9: the refund screen needs to know, before the operator presses
+    // the button, how many OTHER orders and tickets a full Stripe refund of
+    // THIS order would take down via the charge.refunded cartId cascade
+    // (stripe-webhook.ts). refundImpact carries that count.
+    describe('refundImpact (cart-fanout blast radius)', () => {
+      it('is zero for a solo order with no cartId', async () => {
+        const buyer = await createUser({ email: 'solo@jdm.test', verified: true });
+        const order = await seedPaidProductOrder(buyer.user.id);
+        const { header } = await orgAuth();
+        const res = await app.inject({
+          method: 'GET',
+          url: `/admin/store/orders/${order.id}`,
+          headers: { authorization: header },
+        });
+        const body = adminStoreOrderDetailSchema.parse(res.json());
+        expect(body.refundImpact).toEqual({ siblingOrderCount: 0, siblingTicketCount: 0 });
+      });
+
+      it('counts sibling orders and their valid tickets sharing the same cartId', async () => {
+        const buyer = await createUser({ email: 'cart-sib@jdm.test', verified: true });
+        const cart = await prisma.cart.create({
+          data: { userId: buyer.user.id, status: 'converted' },
+        });
+
+        const order = await seedPaidProductOrder(buyer.user.id);
+        await prisma.order.update({ where: { id: order.id }, data: { cartId: cart.id } });
+
+        const event = await prisma.event.create({
+          data: {
+            slug: `evt-sib-${Math.random().toString(36).slice(2, 6)}`,
+            title: 'Evento Sibling',
+            description: 'd',
+            startsAt: new Date(Date.now() + 86_400_000),
+            endsAt: new Date(Date.now() + 90_000_000),
+            city: 'SP',
+            stateCode: 'SP',
+            type: 'meeting',
+            status: 'published',
+            capacity: 10,
+            maxTicketsPerUser: 5,
+          },
+        });
+        const tier = await prisma.ticketTier.create({
+          data: {
+            eventId: event.id,
+            name: 'Geral',
+            priceCents: 5000,
+            quantityTotal: 10,
+            sortOrder: 0,
+          },
+        });
+        const siblingOrder = await prisma.order.create({
+          data: {
+            userId: buyer.user.id,
+            eventId: event.id,
+            tierId: tier.id,
+            cartId: cart.id,
+            kind: 'ticket',
+            amountCents: 5000,
+            quantity: 1,
+            currency: 'BRL',
+            method: 'card',
+            provider: 'stripe',
+            status: 'paid',
+            paidAt: new Date(),
+          },
+        });
+        await prisma.ticket.create({
+          data: {
+            orderId: siblingOrder.id,
+            userId: buyer.user.id,
+            eventId: event.id,
+            tierId: tier.id,
+            status: 'valid',
+          },
+        });
+        // A revoked ticket on another sibling must NOT be counted.
+        const revokedSiblingOrder = await prisma.order.create({
+          data: {
+            userId: buyer.user.id,
+            eventId: event.id,
+            tierId: tier.id,
+            cartId: cart.id,
+            kind: 'ticket',
+            amountCents: 5000,
+            quantity: 1,
+            currency: 'BRL',
+            method: 'card',
+            provider: 'stripe',
+            status: 'refunded',
+            paidAt: new Date(),
+          },
+        });
+        await prisma.ticket.create({
+          data: {
+            orderId: revokedSiblingOrder.id,
+            userId: buyer.user.id,
+            eventId: event.id,
+            tierId: tier.id,
+            status: 'revoked',
+          },
+        });
+
+        const { header } = await orgAuth();
+        const res = await app.inject({
+          method: 'GET',
+          url: `/admin/store/orders/${order.id}`,
+          headers: { authorization: header },
+        });
+        const body = adminStoreOrderDetailSchema.parse(res.json());
+        expect(body.refundImpact).toEqual({ siblingOrderCount: 2, siblingTicketCount: 1 });
+      });
+    });
+
     it('returns 404 for ticket-only orders', async () => {
       const buyer = await createUser({ email: 'tk@jdm.test', verified: true });
       const event = await prisma.event.create({

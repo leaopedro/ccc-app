@@ -145,6 +145,25 @@ const extractEventTimestamp = (data: Record<string, unknown>): Date | undefined 
 // stale-replay attacks where a captured signed payload is delivered weeks later.
 const REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * What `Order.livemode` means for Pix (fix round 2, IMPORTANT — decided here
+ * rather than left to default silently).
+ *
+ * AbacatePay exposes exactly one mode signal to this integration:
+ * `AbacateWebhookEvent.devMode`. There is no `livemode` field on the charge,
+ * and GET /transparents/:id (AbacatePayClient.getPixBilling) returns only
+ * id/status/updatedAt. So: livemode := NOT devMode, read off the webhook
+ * event that settles the order.
+ *
+ * The one gap, stated rather than hidden: workers/pix-reconcile.ts recovers a
+ * Pix whose webhook never arrived, and it has no devMode signal to read. Such
+ * a row keeps the column default (`true`). That gap cannot open in production
+ * anyway — a devMode event is REJECTED outright in production unless
+ * ABACATEPAY_DEV_WEBHOOK_ENABLED is on (see the M-9 branch below), so a
+ * production devMode Pix never settles through either path to begin with.
+ */
+const livemodeFromEvent = (event: AbacateWebhookEvent): boolean => !event.devMode;
+
 const constantTimeEquals = (a: string, b: string): boolean => {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
@@ -387,6 +406,7 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
           cartId: metadataCartId,
           providerRef: billingId,
           env: app.env,
+          livemode: livemodeFromEvent(event),
         });
         const issuedAnyTicket = settlement.issuedAnyTicket;
 
@@ -470,7 +490,13 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
       }
 
       try {
-        const settled = await settlePaidOrder(order.id, billingId, app.env);
+        const settled = await settlePaidOrder(
+          order.id,
+          billingId,
+          app.env,
+          undefined,
+          livemodeFromEvent(event),
+        );
         const firstTime = await markProcessed(event.id, event);
         request.log.info(
           { orderId: order.id, billingId, firstTime },

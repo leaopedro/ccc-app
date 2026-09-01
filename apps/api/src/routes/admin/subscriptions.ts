@@ -519,12 +519,14 @@ export const adminSubscriptionGrantRoutes: FastifyPluginAsync = async (app) => {
    * applyMembershipEvent and refuses with 409 if it exists under a
    * different garageId.
    *
-   * livemode (fix round 1, IMPORTANT): required input, not a default.
-   * applyMembershipEvent never sets PremiumMembershipInvoice.livemode, so it
-   * would otherwise always land on the schema default (`true`) — silently
-   * wrong for a grant transcribed from a test-mode invoice, and invisible
-   * to the finance surfaces that filter on it. Only the admin reading the
-   * real invoice knows which it was.
+   * livemode (fix round 1, IMPORTANT): required input, not a default. There
+   * is no event to read it off here — a grant is transcribed by hand from an
+   * invoice the webhook never delivered — so the admin reading that real
+   * Stripe invoice is the only source. (Fix round 2 gave applyMembershipEvent
+   * a livemode of its own, fed by `event.livemode` through
+   * normalize-stripe.ts, but that only covers invoices that arrive as events.
+   * This route still writes it explicitly, which also re-asserts it on a
+   * replay where the invoice row already existed.)
    *
    * The audit row (fix round 1, IMPORTANT) is written inside the SAME
    * transaction as the grant, not after it commits — recordAudit accepts a
@@ -635,14 +637,16 @@ export const adminSubscriptionGrantRoutes: FastifyPluginAsync = async (app) => {
           select: { id: true },
         });
 
-        // Fix round 1, IMPORTANT: livemode has no source in BillingEvent —
-        // applyMembershipEvent never sets it, so the invoice row lands on
-        // the schema default (`true`) regardless of what the operator
-        // transcribed. The admin reading the real Stripe invoice is the
-        // only one who knows whether the underlying charge was test-mode or
-        // live, so it is a required input here, not a guess or a default.
-        // Written inside this same transaction, after the invoice insert
-        // (or its idempotent-replay no-op) above.
+        // Fix round 1, IMPORTANT: a grant has no event to read livemode off —
+        // it exists precisely because the webhook never delivered one. The
+        // admin reading the real Stripe invoice is the only one who knows
+        // whether the underlying charge was test-mode or live, so it is a
+        // required input here, not a guess or a default. Fix round 2 taught
+        // applyMembershipEvent to honour BillingInvoice.livemode (fed by
+        // event.livemode through normalize-stripe.ts), which does NOT cover
+        // this route; this explicit write also re-asserts the value on a
+        // replay where the invoice row already existed and the insert above
+        // was a no-op. Written inside this same transaction.
         await tx.premiumMembershipInvoice.update({
           where: {
             provider_providerInvoiceRef: {

@@ -39,6 +39,24 @@ export type CreateCheckoutSessionInput = {
 export type WebhookEvent = {
   id: string;
   type: string;
+  /**
+   * Stripe's own `event.livemode`. Optional only so the ~115 test fixtures
+   * that build a WebhookEvent by hand keep compiling; `constructWebhookEvent`
+   * always populates it in production.
+   *
+   * Load-bearing (fix round 2, IMPORTANT). `Order.livemode` and
+   * `PremiumMembershipInvoice.livemode` both default to `true`, and before
+   * this field existed NOTHING read Stripe's mode at settlement — the only
+   * two writers were the one-shot scripts/mark-pre-cutover-orders.ts and the
+   * admin grant's explicit operator input. So every row created after the
+   * migration landed `true` regardless of the mode it was charged in, and the
+   * finance screen's "exclude test mode" filter really only excluded
+   * pre-cutover rows a human had retro-marked. That matters right now:
+   * production points at a Stripe SANDBOX account, so today's traffic is all
+   * test mode and would otherwise be counted as live revenue with no way to
+   * filter it back out.
+   */
+  livemode?: boolean;
   data: {
     object: Record<string, unknown>;
     /**
@@ -435,6 +453,7 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         return {
           id: event.id,
           type: event.type,
+          livemode: event.livemode,
           data: {
             object: event.data.object as unknown as Record<string, unknown>,
             ...(previousAttributes ? { previous_attributes: previousAttributes } : {}),
@@ -457,11 +476,23 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
         ? notification.type.slice(3)
         : notification.type;
 
+      // `livemode` is read defensively here: the v2 notification/event shapes
+      // are not typed with it across SDK versions, and guessing wrong would
+      // mis-stamp real revenue. Absent ⇒ the field is simply not written and
+      // the column keeps its `true` default.
+      const livemodeOf = (value: unknown): boolean | undefined => {
+        if (typeof value !== 'object' || value === null) return undefined;
+        const raw = (value as { livemode?: unknown }).livemode;
+        return typeof raw === 'boolean' ? raw : undefined;
+      };
+
       // Pings and other control-plane notifications don't carry webhook payload data.
       if (normalizedType === 'v2.core.event_destination.ping') {
+        const pingLivemode = livemodeOf(notification);
         return {
           id: notification.id,
           type: normalizedType,
+          ...(pingLivemode !== undefined ? { livemode: pingLivemode } : {}),
           data: { object: notification as unknown as Record<string, unknown> },
         };
       }
@@ -480,9 +511,11 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
             ? (relatedObject as Record<string, unknown>)
             : {};
 
+      const livemode = livemodeOf(fetched) ?? livemodeOf(notification);
       return {
         id: fetched.id,
         type: normalizedType,
+        ...(livemode !== undefined ? { livemode } : {}),
         data: { object },
       };
     },

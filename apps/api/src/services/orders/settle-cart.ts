@@ -71,8 +71,10 @@ export const settleAbacatePayCart = async (params: {
   cartId: string;
   providerRef: string;
   env: IssueEnv;
+  /** See settlePaidOrder's `livemode` param. Omitted ⇒ column keeps its default. */
+  livemode?: boolean;
 }): Promise<CartSettlementResult> => {
-  const { cartId, providerRef, env } = params;
+  const { cartId, providerRef, env, livemode } = params;
 
   const cartOrders = await prisma.order.findMany({
     where: { cartId, provider: 'abacatepay', status: 'pending' },
@@ -99,7 +101,7 @@ export const settleAbacatePayCart = async (params: {
   let issuedAnyTicket = false;
   for (const order of ordered) {
     try {
-      const settled = await settlePaidOrder(order.id, providerRef, env, { cartId });
+      const settled = await settlePaidOrder(order.id, providerRef, env, { cartId }, livemode);
       if (
         settled.kind === 'ticket' ||
         settled.kind === 'extras_only' ||

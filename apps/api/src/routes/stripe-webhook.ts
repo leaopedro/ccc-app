@@ -107,7 +107,12 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
   const handleCartPaymentSucceeded = async (
     cartId: string,
     piId: string,
-    webhookEvent: { id: string; type: string; data: { object: Record<string, unknown> } },
+    webhookEvent: {
+      id: string;
+      type: string;
+      livemode?: boolean;
+      data: { object: Record<string, unknown> };
+    },
     request: { log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void } },
     reply: { status: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
@@ -232,7 +237,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     let issuedAnyTicket = false;
     for (const order of orders) {
       try {
-        const settled = await settlePaidOrder(order.id, piId, app.env, { cartId });
+        const settled = await settlePaidOrder(
+          order.id,
+          piId,
+          app.env,
+          { cartId },
+          webhookEvent.livemode,
+        );
         if (
           settled.kind === 'ticket' ||
           settled.kind === 'extras_only' ||
@@ -630,7 +641,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
 
     if (event.type === 'payment_intent.succeeded' && orderId && intent.id) {
       try {
-        const settled = await settlePaidOrder(orderId, intent.id, app.env, intent.metadata);
+        const settled = await settlePaidOrder(
+          orderId,
+          intent.id,
+          app.env,
+          intent.metadata,
+          event.livemode,
+        );
         const firstTime = await markProcessed(event.id, event);
         request.log.info(
           { orderId, paymentIntentId: intent.id, firstTime },
@@ -770,7 +787,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(200).send({ ok: true, ignored: true });
       }
       try {
-        const settled = await settlePaidOrder(sessionOrderId, piId, app.env, session.metadata);
+        const settled = await settlePaidOrder(
+          sessionOrderId,
+          piId,
+          app.env,
+          session.metadata,
+          event.livemode,
+        );
         const firstTime = await markProcessed(event.id, event);
         request.log.info(
           { orderId: sessionOrderId, sessionId: session.id, firstTime },

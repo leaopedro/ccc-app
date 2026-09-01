@@ -133,6 +133,58 @@ describe('POST /stripe/webhook', () => {
     expect(ticket).not.toBeNull();
   });
 
+  // Fix round 2, IMPORTANT. Order.livemode defaults to `true` and had only
+  // two writers — the one-shot mark-pre-cutover-orders script and the admin
+  // grant's operator input — so every row created after the migration read as
+  // live revenue whatever mode charged it, and the finance screen could not
+  // filter it back out. Production points at a Stripe SANDBOX account today,
+  // so this is current traffic, not a hypothetical.
+  it('stamps Order.livemode from the Stripe event at settlement', async () => {
+    const { user } = await createUser({ verified: true });
+    const { order } = await seedEventTierOrder(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_livemode_false',
+      type: 'payment_intent.succeeded',
+      livemode: false,
+      data: { object: { id: order.providerRef, metadata: { orderId: order.id } } },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const reloaded = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(reloaded.status).toBe('paid');
+    expect(reloaded.livemode).toBe(false);
+  });
+
+  it('leaves Order.livemode true for a live-mode event', async () => {
+    const { user } = await createUser({ verified: true });
+    const { order } = await seedEventTierOrder(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_livemode_true',
+      type: 'payment_intent.succeeded',
+      livemode: true,
+      data: { object: { id: order.providerRef, metadata: { orderId: order.id } } },
+    };
+
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    const reloaded = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(reloaded.livemode).toBe(true);
+  });
+
   it('is idempotent: redelivery of the same event does not re-issue a ticket', async () => {
     const { user } = await createUser({ verified: true });
     const { order } = await seedEventTierOrder(user.id);

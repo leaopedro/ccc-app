@@ -636,6 +636,36 @@ describe('POST /webhooks/stripe-billing', () => {
     expect(garage.premiumUntil).not.toBeNull();
   });
 
+  // Fix round 2, IMPORTANT. PremiumMembershipInvoice.livemode defaults to
+  // `true` and applyMembershipEvent never set it, so every membership invoice
+  // landed as live revenue whatever mode charged it — while production points
+  // at a Stripe sandbox account. It now rides the event through
+  // normalize-stripe.ts's BillingInvoice.
+  it('invoice.paid: stamps PremiumMembershipInvoice.livemode from the event', async () => {
+    ({ app, stripe } = await buildBillingApp(true));
+    const { garageId } = await seedGarageWithStripeCustomer(stripe, 'cus_test_001');
+    stripe.nextEvent = {
+      ...invoicePaidEvent('subscription_create', 'evt_activated_livemode'),
+      livemode: false,
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/stripe-billing',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=ok' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const membership = await prisma.premiumMembership.findFirstOrThrow({
+      where: { garageId, providerSubRef: 'sub_test_001' },
+    });
+    const invoice = await prisma.premiumMembershipInvoice.findFirstOrThrow({
+      where: { membershipId: membership.id },
+    });
+    expect(invoice.livemode).toBe(false);
+  });
+
   // -------------------------------------------------------------------------
   // Test 5: invoice.paid (subscription_cycle) → renewed
   // -------------------------------------------------------------------------

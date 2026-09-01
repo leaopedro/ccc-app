@@ -19,17 +19,44 @@ export type SettledOrderResult =
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
   | { kind: 'box' };
 
+/**
+ * @param livemode Provider mode this charge really happened in, when the
+ * caller knows it. Stamped on `Order.livemode` here, in ONE place, because it
+ * is the only column no other settlement writer touches and the branches below
+ * flip `status` in four different modules.
+ *
+ * Fix round 2, IMPORTANT. `Order.livemode` defaults to `true` and had exactly
+ * two writers — the one-shot scripts/mark-pre-cutover-orders.ts and the admin
+ * grant's operator input — so every row created after the migration landed
+ * `true` no matter which mode charged it. The finance screen's "exclude test
+ * mode" filter therefore excluded pre-cutover rows a human had marked, not
+ * test-mode revenue. Production currently points at a Stripe SANDBOX account,
+ * so that is not hypothetical.
+ *
+ * Written unconditionally rather than only on a successful settle: the mode
+ * the charge happened in is a fact about the order, not about whether issuing
+ * a ticket worked. Omitted ⇒ nothing is written and the column keeps its
+ * default.
+ */
 export const settlePaidOrder = async (
   orderId: string,
   providerRef: string,
   env: IssueEnv,
   intentMetadata?: Record<string, string>,
+  livemode?: boolean,
 ): Promise<SettledOrderResult> => {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: { kind: true, status: true, cartId: true },
   });
   if (!order) throw new OrderNotFoundError(orderId);
+
+  if (livemode !== undefined) {
+    await prisma.order.updateMany({
+      where: { id: orderId, livemode: { not: livemode } },
+      data: { livemode },
+    });
+  }
 
   if (order.kind === 'mixed') {
     if (order.status === 'paid') {

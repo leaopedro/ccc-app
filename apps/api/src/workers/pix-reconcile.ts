@@ -7,34 +7,54 @@
  *
  * The failure it closes: a lost `transparent.completed` leaves the Pix paid at
  * the provider and the Order `pending` locally. The only settlement path is
- * routes/abacatepay-webhook.ts, and the expiry sweep is lazy — triggered by
- * another checkout on the same tier/variant, or by GET /orders/:id — and it
- * EXPIRES the order rather than settling it. So the customer pays, the stock
- * goes back on the shelf, no ticket is issued and no refund happens.
+ * routes/abacatepay-webhook.ts, and the expiry sweep (order-expiry.ts) runs
+ * EVERY MINUTE with no provider check and flips `pending -> expired` the
+ * moment `Order.expiresAt` (ORDER_EXPIRY_MS = 15min after creation) passes.
+ *
+ * Cadence (review fix round 1, 2026-09-01): a pending Pix order is only
+ * visible to this sweep once it clears GRACE_MS, and becomes permanently
+ * invisible (query only selects `pending`) the instant order-expiry flips it
+ * to `expired`. GRACE_MS = ORDER_EXPIRY_MS / 5 = 3min, so the pending window
+ * is [3min, 15min) after creation — 12 minutes wide. Ticking every 1 minute
+ * (matching order-expiry's own cadence) gives >= 12 real chances to catch a
+ * given order inside that window, instead of the old 15-minute cron racing a
+ * 15-minute TTL with often zero aligned opportunities.
  *
  * Per row:
  *   1. Ask AbacatePay for the authoritative status (`getPixBilling`).
- *   2. If PAID, run the same `settlePaidOrder` the webhook runs.
- *   3. Anything else (PENDING, EXPIRED, FAILED, ...): leave it alone. The
- *      worker never expires and never refunds — both are other code's job
- *      (order-expiry.ts and the webhook's failure-event branch), and
- *      guessing here loses money in the other direction. Expiring a Pix that
- *      the provider still considers open would release stock a late payment
- *      could still land on top of; refunding is a human decision this
- *      worker has no context to make.
+ *   2. Not PAID (PENDING, EXPIRED, FAILED, ...): leave it alone. The worker
+ *      never itself expires or fails an order — that is order-expiry.ts's
+ *      and the webhook's failure-event branch's job.
+ *   3. PAID + order still `pending` locally: settle through the exact same
+ *      `settlePaidOrder` the webhook calls, then send the same
+ *      `ticket.confirmed` push the webhook sends — a customer recovered
+ *      hours later must still find out their order is ready.
+ *   4. PAID + order already `expired` locally: order-expiry already RELEASED
+ *      THE STOCK for this row. Settling now would oversell (same class of
+ *      bug flagged in the Stripe cart path). Refunding is not possible —
+ *      AbacatePayClient exposes no refund call. The only honest move is a
+ *      loud, deduplicated Sentry alert for manual handling; the order is
+ *      left `expired` and untouched.
  *
  * A row error never crashes the tick.
  */
 import { prisma } from '@ccc/db';
+import type { OrderStatus } from '@prisma/client';
+import * as Sentry from '@sentry/node';
 import type { FastifyBaseLogger } from 'fastify';
 import cron from 'node-cron';
 
 import type { Env } from '../env.js';
+import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacatePayClient } from '../services/abacatepay/index.js';
-import { settlePaidOrder } from '../services/orders/settle.js';
+import { ORDER_EXPIRY_MS } from '../services/orders/expire.js';
+import { settlePaidOrder, type SettledOrderResult } from '../services/orders/settle.js';
+import { sendTransactionalPush } from '../services/push/transactional.js';
+import type { PushSender } from '../services/push/types.js';
 
 export type PixReconcileTickDeps = {
   abacatepay: AbacatePayClient;
+  push: PushSender;
   env: Env;
   alertDepth: number;
   now?: Date;
@@ -47,23 +67,128 @@ const QUERY_LIMIT = 200;
  * Grace window. A Pix created seconds ago is not drift, it is a customer who
  * has not paid yet. Sweeping it would burn a provider call per tick per open
  * checkout for no reason.
+ *
+ * Derived from ORDER_EXPIRY_MS (see cadence note above) rather than a bare
+ * constant, so the two stay proportional if the order TTL ever changes.
  */
-const GRACE_MS = 10 * 60 * 1000;
+const GRACE_MS = ORDER_EXPIRY_MS / 5;
+
+type StaleRow = {
+  id: string;
+  providerRef: string | null;
+  cartId: string | null;
+  status: OrderStatus;
+  amountCents: number;
+};
+
+/**
+ * Deterministic id for the "this order settled PAID after local expiry"
+ * alert, stored in PaymentWebhookEvent (provider, eventId unique) exactly
+ * like the webhook's own `markProcessed` dedup — same table, same idiom,
+ * no schema change. Guarantees the loud alert fires ONCE per order, not
+ * once per tick forever while a human resolves it manually.
+ */
+const expiredButPaidAlertEventId = (orderId: string): string =>
+  `pix-reconcile:expired-but-paid:${orderId}`;
+
+const flagExpiredButPaid = async (
+  row: StaleRow,
+  providerRef: string,
+  log?: FastifyBaseLogger,
+): Promise<void> => {
+  try {
+    await prisma.paymentWebhookEvent.create({
+      data: {
+        provider: 'abacatepay',
+        eventId: expiredButPaidAlertEventId(row.id),
+        payload: {
+          orderId: row.id,
+          providerRef,
+          amountCents: row.amountCents,
+          reason: 'expired-but-paid',
+        },
+      },
+    });
+  } catch (err) {
+    if (isUniqueConstraintError(err)) return; // already alerted, do not re-fire
+    throw err;
+  }
+
+  Sentry.withScope((scope) => {
+    scope.setTag('kind', 'pix-manual-refund-needed');
+    scope.setTag('provider', 'abacatepay');
+    scope.setTag('reason', 'expired-but-paid');
+    scope.setExtras({ orderId: row.id, providerRef, amountCents: row.amountCents });
+    Sentry.captureMessage('abacatepay: manual refund needed (expired-but-paid)', 'error');
+  });
+  log?.error(
+    {
+      kind: 'pix-reconcile.expired_but_paid',
+      orderId: row.id,
+      providerRef,
+      amountCents: row.amountCents,
+    },
+    'pix-reconcile: order expired locally but provider reports PAID — stock already released, cannot auto-settle, manual refund needed',
+  );
+};
+
+/** Same `ticket.confirmed` push the webhook's single-order branch sends. */
+const notifyRecoveredOrder = async (
+  orderId: string,
+  settled: SettledOrderResult,
+  push: PushSender,
+  log?: FastifyBaseLogger,
+): Promise<void> => {
+  if (settled.kind !== 'ticket' && settled.kind !== 'extras_only') return;
+  try {
+    await sendTransactionalPush(
+      {
+        userId: settled.issued.userId,
+        kind: 'ticket.confirmed',
+        dedupeKey: orderId,
+        title: 'Pagamento confirmado',
+        body: `Seu ingresso para ${settled.issued.eventTitle} está pronto.`,
+        data: {
+          orderId,
+          ticketId: settled.issued.ticketId,
+          eventId: settled.issued.eventId,
+        },
+      },
+      { sender: push },
+    );
+  } catch (pushErr) {
+    log?.warn(
+      { err: pushErr, orderId },
+      'pix-reconcile: ticket-confirmed push failed after recovered settlement',
+    );
+    Sentry.withScope((scope) => {
+      scope.setTag('kind', 'push-send-failure');
+      scope.setTag('push_kind', 'ticket.confirmed');
+      scope.setLevel('warning');
+      scope.setExtras({ orderId });
+      Sentry.captureException(pushErr);
+    });
+  }
+};
 
 export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<void> => {
   const now = deps.now ?? new Date();
   const log = deps.log;
 
-  const staleRows = await prisma.order.findMany({
+  // Sweep BOTH pending and already-locally-expired rows: the provider is the
+  // source of truth for whether money moved, and local status must not
+  // decide whether we even look (that is exactly how a lost webhook +
+  // order-expiry combine to hide a paid order forever).
+  const staleRows: StaleRow[] = await prisma.order.findMany({
     where: {
       provider: 'abacatepay',
-      status: 'pending',
+      status: { in: ['pending', 'expired'] },
       providerRef: { not: null },
       createdAt: { lt: new Date(now.getTime() - GRACE_MS) },
     },
     orderBy: { createdAt: 'asc' },
     take: QUERY_LIMIT,
-    select: { id: true, providerRef: true, cartId: true },
+    select: { id: true, providerRef: true, cartId: true, status: true, amountCents: true },
   });
 
   if (staleRows.length >= deps.alertDepth) {
@@ -77,15 +202,42 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
     );
   }
 
+  // Batch-check which already-expired rows were already alerted, so a
+  // manual-refund incident that takes days to resolve does not cost a fresh
+  // provider call every single minute in the meantime.
+  const expiredIds = staleRows.filter((r) => r.status === 'expired').map((r) => r.id);
+  const alreadyFlagged =
+    expiredIds.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await prisma.paymentWebhookEvent.findMany({
+              where: {
+                provider: 'abacatepay',
+                eventId: { in: expiredIds.map(expiredButPaidAlertEventId) },
+              },
+              select: { eventId: true },
+            })
+          ).map((r) => r.eventId),
+        );
+
   for (const row of staleRows) {
     const providerRef = row.providerRef;
     if (!providerRef) continue;
+    if (row.status === 'expired' && alreadyFlagged.has(expiredButPaidAlertEventId(row.id))) {
+      continue;
+    }
 
     try {
       const upstream = await deps.abacatepay.getPixBilling(providerRef);
       if (upstream.status !== 'PAID') continue;
 
-      await settlePaidOrder(
+      if (row.status === 'expired') {
+        await flagExpiredButPaid(row, providerRef, log);
+        continue;
+      }
+
+      const settled = await settlePaidOrder(
         row.id,
         providerRef,
         deps.env,
@@ -100,7 +252,12 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
         },
         'pix-reconcile: settled a Pix the webhook never delivered',
       );
+
+      await notifyRecoveredOrder(row.id, settled, deps.push, log);
     } catch (err) {
+      Sentry.captureException(err, {
+        extra: { orderId: row.id, providerRef, worker: 'pix-reconcile' },
+      });
       log?.error(
         { err, orderId: row.id, providerRef },
         'pix-reconcile: failed to reconcile row, continuing to next',
@@ -112,12 +269,18 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
 
 export const startPixReconcileWorker = (deps: {
   abacatepay: AbacatePayClient;
+  push: PushSender;
   env: Env;
   log: FastifyBaseLogger;
 }): { stop: () => void } => {
-  const task = cron.schedule('*/15 * * * *', () => {
+  // Every minute, same cadence as order-expiry.ts. See the cadence note atop
+  // this file for the arithmetic: at GRACE_MS = 3min and ORDER_EXPIRY_MS =
+  // 15min, a 1-minute tick gets >= 12 chances to catch a pending order before
+  // it becomes locally `expired`.
+  const task = cron.schedule('* * * * *', () => {
     void runPixReconcileTick({
       abacatepay: deps.abacatepay,
+      push: deps.push,
       env: deps.env,
       alertDepth: deps.env.RECONCILE_ALERT_DEPTH,
       log: deps.log,

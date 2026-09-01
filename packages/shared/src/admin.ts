@@ -1288,6 +1288,11 @@ export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
  * a full refund returns — indistinguishable "done" vs. "drifted, needs a
  * human". Kept in the schema anyway (cleaner than an amount-less shape) but
  * effectively a no-partial field: omit it, or pass the full amount.
+ *
+ * Fix round 2, MINOR: no UI sends it any more either. RefundOrderForm used to
+ * render a "Valor parcial em centavos (opcional)" input, which after the 422
+ * above could only produce an error or a redundant full refund; that input is
+ * gone and the form always omits the key.
  */
 export const adminOrderRefundSchema = z.object({
   reason: z.string().min(10).max(500),

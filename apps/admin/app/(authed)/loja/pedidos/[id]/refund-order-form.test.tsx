@@ -90,6 +90,28 @@ describe('RefundOrderForm', () => {
     expect(button.disabled).toBe(false);
   });
 
+  // Fix round 2, MINOR. O formulario oferecia "Valor parcial em centavos
+  // (opcional)", comportamento removido em 96205f7: a rota recusa com 422
+  // qualquer amountCents diferente do total. O campo so podia dar erro ou um
+  // reembolso total redundante.
+  it('nao oferece campo de valor parcial e nao envia amountCents', async () => {
+    confirmSpy.mockReturnValue(true);
+    requestOrderRefundAction.mockResolvedValue({ ok: true, requested: true });
+    act(() => {
+      root.render(<RefundOrderForm orderId="ord_1" status="paid" provider="stripe" />);
+    });
+    expect(container.querySelector('input')).toBeNull();
+    // A copy que sobrou aponta o parcial para fora do formulario, nao oferece.
+    expect(container.textContent).toMatch(/só faz reembolso total/i);
+
+    await setReason('cliente desistiu dentro dos sete dias');
+    await submit();
+
+    expect(requestOrderRefundAction).toHaveBeenCalledWith('ord_1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+  });
+
   it('exige confirmacao antes de disparar a solicitacao', async () => {
     confirmSpy.mockReturnValue(false);
     act(() => {

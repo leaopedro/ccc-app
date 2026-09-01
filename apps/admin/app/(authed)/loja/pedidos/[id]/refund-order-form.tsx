@@ -26,7 +26,6 @@ export const RefundOrderForm = ({
   onDone,
 }: Props) => {
   const [reason, setReason] = useState('');
-  const [amountCents, setAmountCents] = useState('');
   const [isPending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<
     { kind: 'requested' } | { kind: 'error'; message: string } | null
@@ -64,13 +63,13 @@ export const RefundOrderForm = ({
     // for destructive actions exists elsewhere in this app.
     if (!window.confirm(confirmMessage)) return;
 
-    const trimmedAmount = amountCents.trim();
-    // exactOptionalPropertyTypes: omit the key entirely for a full refund
-    // rather than setting it to `undefined` explicitly.
-    const input: AdminOrderRefund =
-      trimmedAmount === ''
-        ? { reason: reason.trim() }
-        : { reason: reason.trim(), amountCents: Number(trimmedAmount) };
+    // Always a full refund, so `amountCents` is never sent. The route
+    // (apps/api/src/routes/admin/refunds.ts) 422s any value other than the
+    // order's exact total since commit 96205f7, so the partial-amount input
+    // this form used to render could only produce an error or a redundant
+    // full refund. exactOptionalPropertyTypes: the key is omitted entirely,
+    // not set to undefined.
+    const input: AdminOrderRefund = { reason: reason.trim() };
     startTransition(async () => {
       setOutcome(null);
       const result = await requestOrderRefundAction(orderId, input);
@@ -110,23 +109,10 @@ export const RefundOrderForm = ({
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-[color:var(--color-muted)]">
-          Valor parcial em centavos (opcional)
-        </span>
-        <input
-          aria-label="Valor parcial em centavos"
-          value={amountCents}
-          onChange={(e) => setAmountCents(e.target.value)}
-          inputMode="numeric"
-          placeholder="Deixe em branco para reembolso total"
-          className="rounded border border-[color:var(--color-border)] bg-transparent px-3 py-1.5"
-        />
-        <span className="text-xs text-[color:var(--color-muted)]">
-          Reembolso parcial hoje <strong>não</strong> vira status de reembolsado. O webhook só
-          alerta. Use total, a menos que saiba o que está fazendo.
-        </span>
-      </label>
+      <p className="text-xs text-[color:var(--color-muted)]">
+        Este formulário só faz reembolso <strong>total</strong>. Para um valor parcial, use o
+        dashboard da Stripe diretamente.
+      </p>
 
       <button
         type="submit"

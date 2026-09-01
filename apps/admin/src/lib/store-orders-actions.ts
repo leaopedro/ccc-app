@@ -60,7 +60,13 @@ const errFromRefundApi = (err: unknown): string => {
       return 'Reembolso parcial não é suportado por este formulário: o valor precisaria ser atribuído linha a linha, e o webhook de reembolso da Stripe não faz isso hoje. Use o dashboard da Stripe diretamente para um valor parcial.';
     }
     if (err.code === 'RefundAlreadyRequested') {
-      return 'Já existe um pedido de reembolso em andamento para este pedido. Aguarde o webhook confirmar antes de tentar de novo.';
+      return 'Já existe um pedido de reembolso em andamento para este pedido. Aguarde o webhook confirmar. Se ele não chegar, confira o reembolso no dashboard da Stripe antes de qualquer nova tentativa.';
+    }
+    // Distinto de RefundFailed de propósito: aqui a solicitação nem saiu daqui,
+    // então dizer que "a Stripe recusou" seria mentira — e uma mentira cara,
+    // porque o próximo passo do operador é reembolsar na mão no dashboard.
+    if (err.code === 'RefundNotAttempted' || err.status === 503) {
+      return 'Não deu para registrar a solicitação aqui, então nada foi enviado à Stripe e nenhum dinheiro se moveu. Tente de novo.';
     }
     if (err.code === 'RefundFailed' || err.status === 502) {
       return 'A Stripe recusou a solicitação de reembolso. Tente de novo em instantes ou reembolse pelo dashboard da Stripe.';

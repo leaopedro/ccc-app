@@ -214,11 +214,100 @@ describe('POST /admin/orders/:id/refund', () => {
 
     expect(res.statusCode).toBe(502);
     expect(res.json()).toMatchObject({ error: 'RefundFailed' });
-    // A failed Stripe call must not leave an audit row claiming it happened.
+    // Fix round 2: the claim row now survives the failure, but it must say so
+    // — `stripeStatus: 'failed'` is what stops it from reading as "a refund
+    // was requested" and what allows a retry.
     const audit = await prisma.adminAudit.findFirst({
       where: { action: 'order.refund_requested', entityId: orderId },
+      select: { metadata: true },
     });
-    expect(audit).toBeNull();
+    expect(audit).not.toBeNull();
+    expect((audit?.metadata as { stripeStatus?: string })?.stripeStatus).toBe('failed');
+  });
+
+  // Fix round 2, IMPORTANT. A Stripe failure leaves the order refundable: the
+  // deterministic idempotency key collapses a retry into the same refund at
+  // Stripe for 24h, and past that window `charge.refunded` has already moved
+  // Order.status off `paid`, which the precondition above refuses.
+  it('allows a retry after Stripe answered with an error', async () => {
+    ctx.stripe.nextRefundError = new Error('stripe: transient 500');
+    const first = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'primeira tentativa que a stripe rejeita' },
+    });
+    ctx.stripe.nextRefundError = null;
+    expect(first.statusCode).toBe(502);
+
+    const second = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'segunda tentativa depois da falha da stripe' },
+    });
+    expect(second.statusCode).toBe(202);
+    expect(ctx.stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(1);
+  });
+
+  // Fix round 2, IMPORTANT — the regression. The Stripe call used to run
+  // INSIDE the claim transaction. Prisma's default interaction timeout is 5s
+  // and packages/db sets no transactionOptions, so a refund Stripe ACCEPTED
+  // but answered slowly aborted with P2028, rolled the audit row back and
+  // answered 502 — which the admin renders as "a Stripe recusou a
+  // solicitação". False: the money had already moved, and the operator's
+  // documented next step (a manual refund on the dashboard, with no
+  // idempotency key) double-refunds. A refund slower than the 5s default must
+  // now still succeed.
+  it('survives a Stripe call slower than the default 5s transaction timeout', async () => {
+    const original = ctx.stripe.refund;
+    ctx.stripe.refund = async (...args: Parameters<typeof original>) => {
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      return original(...args);
+    };
+    try {
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/admin/orders/${orderId}/refund`,
+        headers: { authorization: adminAuth },
+        payload: { reason: 'stripe demora mais que o timeout do prisma' },
+      });
+      expect(res.statusCode).toBe(202);
+    } finally {
+      ctx.stripe.refund = original;
+    }
+
+    const audit = await prisma.adminAudit.findFirst({
+      where: { action: 'order.refund_requested', entityId: orderId },
+      select: { metadata: true },
+    });
+    expect((audit?.metadata as { stripeStatus?: string })?.stripeStatus).toBe('accepted');
+  }, 30_000);
+
+  // Proves the claim really committed before the external call: an
+  // independent connection can see the audit row WHILE Stripe is still
+  // answering. Inside a transaction it would be invisible.
+  it('commits the claim before calling Stripe, not inside the same transaction', async () => {
+    const original = ctx.stripe.refund;
+    let visibleDuringCall = -1;
+    ctx.stripe.refund = async (...args: Parameters<typeof original>) => {
+      visibleDuringCall = await prisma.adminAudit.count({
+        where: { action: 'order.refund_requested', entityId: orderId },
+      });
+      return original(...args);
+    };
+    try {
+      const res = await ctx.app.inject({
+        method: 'POST',
+        url: `/admin/orders/${orderId}/refund`,
+        headers: { authorization: adminAuth },
+        payload: { reason: 'claim precisa estar commitado antes da stripe' },
+      });
+      expect(res.statusCode).toBe(202);
+    } finally {
+      ctx.stripe.refund = original;
+    }
+    expect(visibleDuringCall).toBe(1);
   });
 
   it('404s an order that does not exist', async () => {

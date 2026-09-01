@@ -131,6 +131,30 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
   // provider: 'apple_revenuecat'. At that point garageId starts flowing to
   // RevenueCat's API again, and this table must re-add a RevenueCat row and
   // PRIVACY_POLICY_VERSION must bump BEFORE that flag flips, not after.
+  //
+  // MOBILE (added in review fix round 2 — the enumeration above only covered
+  // apps/api, and a reader could reasonably have taken it as exhaustive):
+  //   - apps/mobile/src/screens/settings/PremiumScreen.tsx:113-120 still calls
+  //     fetchOfferings() and purchasePackage() from ~/lib/revenuecat on the
+  //     iOS subscribe CTA (Platform.OS === 'ios' branch, behind
+  //     EXPO_PUBLIC_PREMIUM_BILLING_ENABLED). Both go straight into the
+  //     react-native-purchases SDK.
+  //   - Nothing reaches RevenueCat from there today for ONE reason only:
+  //     apps/mobile/src/lib/revenuecat.ts#initRevenueCat — the sole caller of
+  //     Purchases.configure({ apiKey, appUserID: garageId }) — has NO caller
+  //     outside its own unit test. The SDK is never configured, so the CTA is
+  //     BROKEN, not privacy-safe by design. That distinction is the whole
+  //     point of this note.
+  //   - Nothing on the DEVICE identifies the user to RevenueCat either, since
+  //     appUserID (garageId) only ever leaves via that same configure() call.
+  // The precise condition that makes THIS paragraph wrong: any caller of
+  // initRevenueCat lands (an app/_layout.tsx startup call is the documented
+  // intent in that file's own comment) while the iOS CTA still exists. From
+  // that commit on, garageId goes to RevenueCat from the device on every
+  // launch, and this table must re-add a RevenueCat row with
+  // PRIVACY_POLICY_VERSION bumped BEFORE the build ships, not after.
+  // Removing the CTA instead is owned by a separate plan; do not treat this
+  // comment as a decision about which way that goes.
   {
     id: 'compartilhamento',
     title: '5. Com quem compartilhamos seus dados',

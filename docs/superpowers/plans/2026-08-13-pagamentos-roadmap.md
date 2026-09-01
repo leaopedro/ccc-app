@@ -268,9 +268,13 @@ do Spec A.
 
 ### Configuração de build
 
-- [ ] **DEV** `eas.json` perfil `production`: chave `pk_live`, domínio próprio em
-      vez de `ccc-app-production.up.railway.app`, `EXPO_PUBLIC_CAIXA_ENABLED` e
-      `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED`.
+- [ ] **DEV** `eas.json` perfil `production`: chave `pk_live`,
+      `EXPO_PUBLIC_CAIXA_ENABLED`.
+      Corrigido em 2026-09-01: o domínio próprio já está feito, `preview` e
+      `production` apontam para `https://api.casacar.club` desde o commit
+      `76cd32a` (2026-08-12). `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` também já
+      está ligado nos dois perfis (`cc606ae`). Sobra a chave `pk_live` e a flag
+      da caixa, que espera QA.
 - [ ] **DEV** `docs/eas-credentials.md` ainda diz `com.jdmexperience.app`.
 - [x] **DEV** Remover o SKU virtual "Vaga de Garagem Adicional". Decidido em
       2026-08-13: sai de todo lugar.

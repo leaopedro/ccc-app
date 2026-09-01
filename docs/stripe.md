@@ -104,13 +104,22 @@ agora revoga ingresso automaticamente.
 
 ## 2. Webhooks
 
-**Contra qual host.** Confirmar o domínio que a API atende **antes** de registrar
-qualquer endpoint. O perfil `production` do `apps/mobile/eas.json` aponta
-`EXPO_PUBLIC_API_BASE_URL` para `https://ccc-app-production.up.railway.app`, que
-é o host gerado pelo Railway, não `api.casacar.club`. Registrar os webhooks no
-host gerado significa que uma troca de serviço no Railway derruba as três
-entregas de uma vez, sem aviso. Registrar no domínio próprio exige que ele esteja
-apontado e servindo. Escolher um, e registrar os três no mesmo.
+**Contra qual host.** Registrar os três no domínio próprio,
+`https://api.casacar.club`. É o host que o app já usa: os perfis `preview` e
+`production` do `apps/mobile/eas.json` apontam `EXPO_PUBLIC_API_BASE_URL` para
+ele desde 2026-08-12. O host gerado pelo Railway
+(`ccc-app-production.up.railway.app`) continua respondendo, mas não serve para
+webhook: uma troca de serviço no Railway muda esse hostname e derruba as três
+entregas de uma vez, sem aviso.
+
+**Antes de registrar, conferir a porta do domínio.** A API escuta na porta
+**4000**, e o Railway cria todo domínio customizado apontando para a 8080. Foi o
+que aconteceu com `api.casacar.club` em 2026-08-12: a Stripe receberia 502 com o
+header `x-railway-fallback: true` enquanto o container estava saudável. Conferir
+com `railway domain status api.casacar.club` e, se preciso,
+`railway domain update api.casacar.club --port 4000`. Esse header é ambíguo, quer
+dizer só que a borda não roteou o hostname, o que cobre tanto container fora do
+ar quanto porta errada.
 
 Os caminhos não seguem um padrão único. Foram conferidos no código, e nenhum tem
 prefixo (`apps/api/src/app.ts` registra os três sem `prefix`).

@@ -404,19 +404,34 @@ time for the fix. Do not ask them to retry.
 
 **Reembolso assistido.** `POST /admin/orders/:id/refund`, executado pelo
 fundador no admin, com papel `admin`. Corpo: `reason` (obrigatório, vai para o
-`AdminAudit`) e `amountCents` opcional para parcial.
+`AdminAudit`) e `amountCents` opcional — mas só aceita o valor cheio do
+pedido; qualquer outro valor é 422 (ver reembolso parcial abaixo).
 
 A rota pede o reembolso à Stripe e responde 202. Ela **não** escreve
 `Order.status`: quem escreve é o webhook `charge.refunded` verificado, que
 também revoga os ingressos e propaga para todos os pedidos do carrinho. 202
 significa "pedimos", não "pronto". Confirmar no banco, não no dashboard.
 
+Duas chamadas concorrentes para o mesmo pedido são serializadas por um lock
+consultivo do Postgres (`pg_advisory_xact_lock`, escopo por order id) segurado
+durante toda a transação, inclusive a chamada à Stripe. A chamada à Stripe
+carrega uma idempotency key determinística (`providerRef` + valor). O guard
+de "já foi pedido" é a própria linha em `AdminAudit`, escrita na mesma
+transação: `Order.status` não muda aqui, então não serve como sinal. Uma
+segunda chamada que chegue depois da primeira já ter confirmado o audit
+recebe 409, sem tocar a Stripe de novo. Falha na Stripe vira 502, não 500.
+
 - **Pix, via AbacatePay:** a rota responde 501. Não existe API de reembolso
   documentada (ver `plans/jdma-260-abacatepay-refund-api-path.md`). Vai pelo
   suporte do fornecedor, manualmente.
-- **Reembolso parcial:** ver a nota no handler de `charge.refunded`. Hoje o
-  webhook recusa virar o status num reembolso parcial e só alerta no Sentry com
-  a tag `payment-webhook-partial-refund`.
+- **Reembolso parcial: recusado, 422.** A rota existe para eliminar a ida ao
+  dashboard no caso comum (reembolso total). Um parcial de fato move dinheiro
+  na Stripe, mas o handler de `charge.refunded` deliberadamente mantém
+  `Order.status` intacto quando `amount_refunded < amount` (só alerta no
+  Sentry com a tag `payment-webhook-partial-refund`) — então o 202 desta rota
+  ficaria idêntico para "pronto" e "dinheiro moveu, pedido vai ficar
+  desalinhado até alguém ler o Sentry". Reembolso parcial continua uma ação
+  deliberada no dashboard da Stripe.
 - **Quem:** o fundador. Operador único, alertas por email, sem paging e sem
   rotação de plantão. Falha que começa às 02:00 é vista de manhã. Para
   pagamentos essa é a exposição aceita hoje; vale revisitar quando o volume

@@ -1250,9 +1250,15 @@ export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
  * Assisted refund. Executed by the founder from the admin, never by the
  * customer and never automatically.
  *
- * `amountCents` is optional and means partial. Read the note in
- * apps/api/src/routes/stripe-webhook.ts before using it: the webhook currently
- * REFUSES to flip status on a partial refund and only flags Sentry.
+ * `amountCents` is optional but, as of fix round 1, may ONLY equal the
+ * order's full `amountCents` — the route (apps/api/src/routes/admin/refunds.ts)
+ * rejects any other value with 422. Partial refunds are refused, not
+ * supported: stripe-webhook.ts's `charge.refunded` handler deliberately
+ * leaves `Order.status` untouched on `amount_refunded < amount`, so a
+ * partial here would move real money at Stripe while returning the same 202
+ * a full refund returns — indistinguishable "done" vs. "drifted, needs a
+ * human". Kept in the schema anyway (cleaner than an amount-less shape) but
+ * effectively a no-partial field: omit it, or pass the full amount.
  */
 export const adminOrderRefundSchema = z.object({
   reason: z.string().min(10).max(500),

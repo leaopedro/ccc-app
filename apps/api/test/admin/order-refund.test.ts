@@ -133,6 +133,94 @@ describe('POST /admin/orders/:id/refund', () => {
     expect(ctx.stripe.calls.some((c) => c.kind === 'refund')).toBe(false);
   });
 
+  it('422s an order with no providerRef', async () => {
+    await prisma.order.update({ where: { id: orderId }, data: { providerRef: null } });
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'pedido sem providerRef para testar 422' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({ error: 'OrderNotRefundable' });
+    expect(ctx.stripe.calls.some((c) => c.kind === 'refund')).toBe(false);
+  });
+
+  // Fix round 1, IMPORTANT. A partial refund really moves money at Stripe,
+  // but charge.refunded leaves Order.status untouched below the full amount,
+  // so the 202 this route would otherwise return is indistinguishable from
+  // "done". Refuse instead of returning a misleading 202.
+  it('422s a partial amount and does not call Stripe', async () => {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'tentativa de reembolso parcial', amountCents: 6_000 },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({ error: 'PartialRefundNotSupported' });
+    expect(ctx.stripe.calls.some((c) => c.kind === 'refund')).toBe(false);
+  });
+
+  it('accepts an explicit amountCents equal to the full order total', async () => {
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'valor cheio explicito', amountCents: 12_000 },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(ctx.stripe.calls.some((c) => c.kind === 'refund')).toBe(true);
+  });
+
+  // Fix round 1, CRITICAL. No idempotency key, no lock and no local status
+  // flip meant two concurrent requests for the same order passed identical
+  // preconditions. The advisory lock plus the AdminAudit dedup check must
+  // let exactly one of the two reach Stripe.
+  it('serializes two concurrent requests into exactly one Stripe call', async () => {
+    const [res1, res2] = await Promise.all([
+      ctx.app.inject({
+        method: 'POST',
+        url: `/admin/orders/${orderId}/refund`,
+        headers: { authorization: adminAuth },
+        payload: { reason: 'primeira chamada concorrente' },
+      }),
+      ctx.app.inject({
+        method: 'POST',
+        url: `/admin/orders/${orderId}/refund`,
+        headers: { authorization: adminAuth },
+        payload: { reason: 'segunda chamada concorrente' },
+      }),
+    ]);
+
+    const refundCalls = ctx.stripe.calls.filter((c) => c.kind === 'refund');
+    expect(refundCalls).toHaveLength(1);
+
+    const statuses = [res1.statusCode, res2.statusCode].sort();
+    expect(statuses).toEqual([202, 409]);
+  });
+
+  // Stripe rejecting the call (network error, already-refunded PI, etc.)
+  // must surface as a clean status the admin screen can render, not a 500.
+  it('maps a Stripe refund failure to a clean response instead of a 500', async () => {
+    ctx.stripe.nextRefundError = new Error('stripe: charge already refunded');
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'stripe vai rejeitar esta chamada' },
+    });
+    ctx.stripe.nextRefundError = null;
+
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toMatchObject({ error: 'RefundFailed' });
+    // A failed Stripe call must not leave an audit row claiming it happened.
+    const audit = await prisma.adminAudit.findFirst({
+      where: { action: 'order.refund_requested', entityId: orderId },
+    });
+    expect(audit).toBeNull();
+  });
+
   it('404s an order that does not exist', async () => {
     const res = await ctx.app.inject({
       method: 'POST',

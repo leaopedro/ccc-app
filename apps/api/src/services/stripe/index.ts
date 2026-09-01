@@ -222,7 +222,20 @@ export type StripeClient = {
   retrieveCustomer: (
     customerId: string,
   ) => Promise<{ id: string; metadata: Record<string, string> }>;
-  refund: (paymentIntentId: string, reason: string, amountCents?: number) => Promise<void>;
+  /**
+   * `idempotencyKey` is optional so the automatic webhook branches (which
+   * call this with no key today) keep compiling unchanged. Any NEW caller —
+   * the admin-assisted refund route is the first — must pass one: this is
+   * the only mutating method on this client that ever shipped without an
+   * idempotency key, and a caller with no local status flip to guard against
+   * a retry needs Stripe's own dedup as the backstop.
+   */
+  refund: (
+    paymentIntentId: string,
+    reason: string,
+    amountCents?: number,
+    idempotencyKey?: string,
+  ) => Promise<void>;
   cancelPaymentIntent: (paymentIntentId: string) => Promise<void>;
   retrievePaymentIntent: (paymentIntentId: string) => Promise<PaymentIntentResult>;
   /**
@@ -475,14 +488,15 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     },
     // Stripe's refund.reason is a constrained enum; callers pass free-form text
     // which we persist in metadata, not in the enum field.
-    refund: async (paymentIntentId, reason, amountCents) => {
+    refund: async (paymentIntentId, reason, amountCents, idempotencyKey) => {
       const params: Stripe.RefundCreateParams = {
         payment_intent: paymentIntentId,
         reason: 'requested_by_customer',
         metadata: { reason },
       };
       if (amountCents !== undefined) params.amount = amountCents;
-      await stripe.refunds.create(params);
+      const options: Stripe.RequestOptions = idempotencyKey ? { idempotencyKey } : {};
+      await stripe.refunds.create(params, options);
     },
     cancelPaymentIntent: async (paymentIntentId) => {
       await stripe.paymentIntents.cancel(paymentIntentId);

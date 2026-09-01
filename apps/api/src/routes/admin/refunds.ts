@@ -92,6 +92,14 @@ import { requireUser } from '../../plugins/auth.js';
  *   'failed'   — Stripe answered with an error. Does NOT block; see the
  *                claim-then-call note in the file header for why a retry
  *                cannot double-refund.
+ *
+ * One residual window, deliberately accepted. If Stripe ACCEPTS the refund but
+ * the connection drops before we read the answer, we record 'failed', and the
+ * operator retries more than 24h later, Stripe's idempotency key has expired
+ * and the second call is a real second refund. It needs all four conditions at
+ * once, and every alternative (blocking the retry outright) strands legitimate
+ * refunds far more often. `charge.refunded` normally closes this within
+ * seconds by flipping the order out of `paid`.
  */
 type ClaimStripeStatus = 'pending' | 'accepted' | 'failed';
 
@@ -145,7 +153,9 @@ export const adminRefundRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // ---- Phase 1: claim. Short, locked, no external call inside. ----
-    let claim: { kind: 'already_requested' } | { kind: 'claimed'; auditId: string };
+    let claim:
+      | { kind: 'already_requested'; stripeStatus: ClaimStripeStatus | undefined }
+      | { kind: 'claimed'; auditId: string };
     try {
       claim = await prisma.$transaction(async (tx) => {
         // Serialize concurrent refund requests for this exact order. Scope
@@ -164,7 +174,11 @@ export const adminRefundRoutes: FastifyPluginAsync = async (app) => {
         // 'pending' (unknown outcome), 'accepted' (done), and legacy rows
         // written before this field existed (no status ⇒ treat as done).
         const blocking = previous.find((row) => stripeStatusOf(row.metadata) !== 'failed');
-        if (blocking) return { kind: 'already_requested' as const };
+        if (blocking)
+          return {
+            kind: 'already_requested' as const,
+            stripeStatus: stripeStatusOf(blocking.metadata),
+          };
 
         // Written with the client directly rather than through recordAudit
         // because the outcome write below needs this row's id. Same action /
@@ -200,9 +214,18 @@ export const adminRefundRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (claim.kind === 'already_requested') {
+      // 'pending' and 'accepted' are NOT the same operator situation, and
+      // collapsing them into one message strands people. 'accepted' means
+      // Stripe took it and the webhook is the thing to wait for. 'pending'
+      // means we never recorded an outcome, so this route is permanently
+      // closed for this order and waiting accomplishes nothing — only the
+      // Stripe dashboard can resolve it.
+      const stuck = claim.stripeStatus === 'pending';
       return reply.status(409).send({
-        error: 'RefundAlreadyRequested',
-        message: 'a refund has already been requested for this order',
+        error: stuck ? 'RefundStuck' : 'RefundAlreadyRequested',
+        message: stuck
+          ? 'uma solicitacao anterior ficou sem desfecho registrado; esta rota nao vai reenviar, resolva no dashboard da Stripe'
+          : 'a refund has already been requested for this order',
       });
     }
 

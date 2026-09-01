@@ -9,6 +9,7 @@ const env = loadEnv();
 describe('POST /admin/orders/:id/refund', () => {
   let ctx: Awaited<ReturnType<typeof makeAppWithFakeStripe>>;
   let adminAuth: string;
+  let adminId: string;
   let orderId: string;
 
   beforeAll(async () => {
@@ -30,6 +31,7 @@ describe('POST /admin/orders/:id/refund', () => {
       verified: true,
     });
     adminAuth = bearer(env, admin.id, 'admin');
+    adminId = admin.id;
 
     const { user: buyer } = await createUser({ email: 'refund-buyer@jdm.test', verified: true });
     const order = await prisma.order.create({
@@ -198,6 +200,37 @@ describe('POST /admin/orders/:id/refund', () => {
 
     const statuses = [res1.statusCode, res2.statusCode].sort();
     expect(statuses).toEqual([202, 409]);
+  });
+
+  // Re-review, Minor 1. A claim stuck at 'pending' and a claim already
+  // 'accepted' are both 409, but they are NOT the same operator situation.
+  // 'accepted' means wait for the webhook. 'pending' means no outcome was ever
+  // recorded, this route will never resend for this order, and waiting is
+  // futile — only the Stripe dashboard resolves it. Collapsing the two into
+  // "aguarde o webhook" strands the operator on an order that is stuck forever.
+  it('distinguishes a stuck claim from one Stripe already accepted', async () => {
+    await prisma.adminAudit.create({
+      data: {
+        actorId: adminId,
+        action: 'order.refund_requested',
+        entityType: 'order',
+        entityId: orderId,
+        metadata: { reason: 'travou antes de registrar o desfecho', stripeStatus: 'pending' },
+      },
+    });
+
+    const res = await ctx.app.inject({
+      method: 'POST',
+      url: `/admin/orders/${orderId}/refund`,
+      headers: { authorization: adminAuth },
+      payload: { reason: 'tentativa depois do travamento' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'RefundStuck' });
+    expect(res.json().message).toContain('dashboard');
+    // Blocked means blocked: nothing may reach Stripe.
+    expect(ctx.stripe.calls.some((c) => c.kind === 'refund')).toBe(false);
   });
 
   // Stripe rejecting the call (network error, already-refunded PI, etc.)

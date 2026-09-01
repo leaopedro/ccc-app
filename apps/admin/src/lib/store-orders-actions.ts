@@ -62,6 +62,12 @@ const errFromRefundApi = (err: unknown): string => {
     if (err.code === 'RefundAlreadyRequested') {
       return 'Já existe um pedido de reembolso em andamento para este pedido. Aguarde o webhook confirmar. Se ele não chegar, confira o reembolso no dashboard da Stripe antes de qualquer nova tentativa.';
     }
+    // Não é "aguarde": uma tentativa anterior ficou sem desfecho registrado, e
+    // esta tela não vai reenviar nunca mais para este pedido. Dizer "aguarde"
+    // aqui faria o operador esperar por um webhook que não vem.
+    if (err.code === 'RefundStuck') {
+      return 'Uma tentativa anterior de reembolso ficou sem desfecho registrado, então esta tela não vai reenviar. Não espere pelo webhook: confira no dashboard da Stripe se o reembolso saiu e, se não saiu, faça por lá.';
+    }
     // Distinto de RefundFailed de propósito: aqui a solicitação nem saiu daqui,
     // então dizer que "a Stripe recusou" seria mentira — e uma mentira cara,
     // porque o próximo passo do operador é reembolsar na mão no dashboard.

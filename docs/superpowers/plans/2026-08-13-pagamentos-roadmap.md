@@ -345,9 +345,14 @@ do Spec A.
 
 - Webhook da RevenueCat tem o mesmo padrão de descarte que a Fase 0 corrigiu no
   de billing. Mantido porque a RevenueCat está dormente.
-- Reembolso parcial continua ignorado. Hoje funciona por acidente, porque
-  carrinho gera um único `Order`, então o refund parcial acaba sendo integral.
-  Confirmar antes do go-live.
+- Reembolso parcial é **recusado**, não ignorado por acidente. Uma versão
+  anterior desta linha dizia que carrinho gera um único `Order` e que por isso o
+  parcial acaba integral. É falso: `stripe-webhook.ts` compara
+  `amount_refunded < amount`, deixa o status intacto, marca o evento processado
+  e alerta com `payment-webhook-partial-refund`. Comportamento fixado em
+  `apps/api/test/stripe/webhook.test.ts` ("partial refund on a multi-order
+  cart"). Atribuição por linha e coluna de valor reembolsado parcial seguem
+  fora de escopo.
 - Google Pay no Android sai quase de graça junto do `PaymentSheet`, mas não foi
   pedido.
 - Remover a RevenueCat do repositório fica para depois da primeira aprovação.

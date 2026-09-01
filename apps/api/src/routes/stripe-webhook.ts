@@ -578,9 +578,15 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             ).map((o) => o.id)
           : [order.id];
 
-      // Stripe partial refunds need separate handling (line-item attribution,
-      // refundedCents partial accounting). Out of scope for JDMA-312; flag and
-      // skip status flip so finance is not misled.
+      // Partial refunds are refused here, deliberately, and this is asserted
+      // by test/stripe/webhook.test.ts ("partial refund on a multi-order
+      // cart"). Flipping the order to `refunded` would revoke a ticket the
+      // buyer only partially got money back for; not flipping but writing a
+      // partial amount would need line-item attribution and a refundedCents
+      // column that does not exist. So: leave the row alone, mark the event
+      // processed, and put a human on it via Sentry
+      // (`payment-webhook-partial-refund`). Do not "fix" this by flipping the
+      // status.
       if (amountRefunded < amount) {
         request.log.warn(
           { orderId: order.id, paymentIntentId: piId, amount, amountRefunded },

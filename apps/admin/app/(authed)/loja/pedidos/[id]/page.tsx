@@ -272,8 +272,8 @@ export default async function PedidoDetailPage({ params }: { params: Promise<{ i
               orderId={order.id}
               status={order.paymentStatus}
               provider={order.provider}
-              siblingOrderCount={order.refundImpact.siblingOrderCount}
-              siblingTicketCount={order.refundImpact.siblingTicketCount}
+              siblingOrderCount={order.refundImpact?.siblingOrderCount ?? 0}
+              siblingTicketCount={order.refundImpact?.siblingTicketCount ?? 0}
             />
           </section>
         </aside>

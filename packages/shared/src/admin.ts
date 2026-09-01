@@ -692,7 +692,12 @@ export const adminFinanceSummarySchema = z.object({
   // directly, which has no `livemode` column. A reader must not infer full
   // livemode coverage from the presence of the `livemode` filter elsewhere in
   // this same response.
-  membershipCountsLivemodeFiltered: z.literal(false),
+  // .optional() for deploy skew, not because the API ever omits it: admin ships
+  // on Vercel and the API on Railway, independently, so the admin can be live
+  // against an API that predates this field. Required here would make the whole
+  // finance dashboard throw on parse during that window. Absent is read as
+  // 'unknown, assume unfiltered' at the call site.
+  membershipCountsLivemodeFiltered: z.literal(false).optional(),
   // True when neither `Order` nor `PremiumMembershipInvoice` has ANY row with
   // `livemode = false` yet — i.e. `mark-pre-cutover-orders` has apparently
   // never been run. Until it runs, every pre-cutover test-mode row still
@@ -700,7 +705,10 @@ export const adminFinanceSummarySchema = z.object({
   // response may silently include test money. This is a purely evidence-based
   // check (did any row ever get flipped) — it does NOT know or guess a cutover
   // instant, and it says nothing once a partial backfill has happened.
-  livemodeBackfillPending: z.boolean(),
+  // .optional() for the same deploy-skew reason as
+  // membershipCountsLivemodeFiltered above. Absent ⇒ the warning banner simply
+  // does not render, which is the same as false.
+  livemodeBackfillPending: z.boolean().optional(),
 });
 export type AdminFinanceSummary = z.infer<typeof adminFinanceSummarySchema>;
 
@@ -1259,7 +1267,11 @@ export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   pickupTicketId: z.string().nullable(),
   items: z.array(adminStoreOrderItemSchema),
   history: z.array(adminStoreOrderAuditEntrySchema),
-  refundImpact: adminOrderRefundImpactSchema,
+  // .optional() for deploy skew: the admin (Vercel) and the API (Railway)
+  // deploy independently, and this field is new. Required here would make the
+  // order-detail page throw on parse whenever the admin ships first. The refund
+  // form degrades to no sibling warning when it is absent.
+  refundImpact: adminOrderRefundImpactSchema.optional(),
 });
 export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
 

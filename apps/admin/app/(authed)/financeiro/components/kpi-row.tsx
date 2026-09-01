@@ -20,6 +20,9 @@ function buildTileGroups(s: AdminFinanceSummary): TileGroup[] {
   // mechanism (purge-test-mode.ts) excludes test rows there. Driven by the
   // API field, not a hardcoded list, so the marker disappears on its own if
   // the API ever starts filtering these too.
+  // Absent (an API that predates the field — admin and API deploy separately)
+  // reads the same as `false`: the counts are NOT livemode-filtered. Claiming
+  // they were would be the dangerous direction.
   const countsUnfiltered = !s.membershipCountsLivemodeFiltered;
 
   return [
@@ -77,7 +80,8 @@ export function KpiRow({ summary }: { summary: AdminFinanceSummary }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {summary.livemodeBackfillPending ? (
+      {/* Absent ⇒ no banner, same as false. See the schema comment. */}
+      {summary.livemodeBackfillPending === true ? (
         <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-panel)]/40 p-3 text-xs text-[color:var(--color-muted)]">
           Nenhuma marcação de pré-corte foi registrada. Os valores abaixo podem incluir receita de
           modo teste do Stripe.

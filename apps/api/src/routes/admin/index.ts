@@ -22,6 +22,7 @@ import { adminBoxPartnersRoutes } from './box-partners-admin.js';
 import { adminBoxSettingsRoutes } from './box-settings-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
 import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
+import { adminRefundRoutes } from './refunds.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
 import { adminStoreOrderRoutes } from './store/orders.js';
 import { adminStorePhotoRoutes } from './store/photos.js';
@@ -190,5 +191,25 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminGarageXpAdjustmentRoutes);
+  });
+
+  // Refunds: admin-only, moves real money at the provider. Isolated 30/min
+  // bucket, same shape as admin-xp-adj/admin-user-mut above, so a burst here
+  // cannot starve or be starved by unrelated admin mutations.
+  // hook: 'preHandler' so the rate-limit keyGenerator runs AFTER auth
+  // populates `request.user` — without it the plugin runs on the earlier
+  // `onRequest` hook and falls through to an IP-shared bucket.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-refund:${auth.sub}` : `admin-refund-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminRefundRoutes);
   });
 };

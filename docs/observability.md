@@ -402,22 +402,25 @@ time for the fix. Do not ask them to retry.
 
 ## Refunds and support
 
-There is no refund tooling in the product. `app.stripe.refund` is only
-called from automatic branches inside the webhook handlers (duplicate
-ticket, revoked ticket, unavailable pickup, order expired, cart paid
-after expiry). There is no admin endpoint and no admin screen.
+**Reembolso assistido.** `POST /admin/orders/:id/refund`, executado pelo
+fundador no admin, com papel `admin`. Corpo: `reason` (obrigatório, vai para o
+`AdminAudit`) e `amountCents` opcional para parcial.
 
-- **Card, via Stripe:** refund from the Stripe dashboard. The
-  `charge.refunded` webhook then flips every order in the cart to
-  `refunded` and revokes the tickets. Verify in the DB, not just the
-  dashboard.
-- **Pix, via AbacatePay:** no documented refund API exists (see
-  `plans/jdma-260-abacatepay-refund-api-path.md`). It goes through the
-  vendor's support, manually.
-- **Who:** the founder. Single operator, alerts by email, no paging and
-  no on-call rotation. A failure that starts at 02:00 is seen in the
-  morning. For payments that is the accepted exposure today; it is worth
-  revisiting once volume makes a missed night expensive.
+A rota pede o reembolso à Stripe e responde 202. Ela **não** escreve
+`Order.status`: quem escreve é o webhook `charge.refunded` verificado, que
+também revoga os ingressos e propaga para todos os pedidos do carrinho. 202
+significa "pedimos", não "pronto". Confirmar no banco, não no dashboard.
+
+- **Pix, via AbacatePay:** a rota responde 501. Não existe API de reembolso
+  documentada (ver `plans/jdma-260-abacatepay-refund-api-path.md`). Vai pelo
+  suporte do fornecedor, manualmente.
+- **Reembolso parcial:** ver a nota no handler de `charge.refunded`. Hoje o
+  webhook recusa virar o status num reembolso parcial e só alerta no Sentry com
+  a tag `payment-webhook-partial-refund`.
+- **Quem:** o fundador. Operador único, alertas por email, sem paging e sem
+  rotação de plantão. Falha que começa às 02:00 é vista de manhã. Para
+  pagamentos essa é a exposição aceita hoje; vale revisitar quando o volume
+  tornar uma noite perdida cara.
 
 ## Where to find things
 

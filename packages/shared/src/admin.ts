@@ -120,6 +120,7 @@ export const adminAuditActionSchema = z.enum([
   'document_approved',
   'document_rejected',
   'user.pii_viewed',
+  'order.refund_requested',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 
@@ -1244,6 +1245,26 @@ export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   history: z.array(adminStoreOrderAuditEntrySchema),
 });
 export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
+
+/**
+ * Assisted refund. Executed by the founder from the admin, never by the
+ * customer and never automatically.
+ *
+ * `amountCents` is optional and means partial. Read the note in
+ * apps/api/src/routes/stripe-webhook.ts before using it: the webhook currently
+ * REFUSES to flip status on a partial refund and only flags Sentry.
+ */
+export const adminOrderRefundSchema = z.object({
+  reason: z.string().min(10).max(500),
+  amountCents: z.number().int().positive().optional(),
+});
+export type AdminOrderRefund = z.infer<typeof adminOrderRefundSchema>;
+
+export const adminOrderRefundResponseSchema = z.object({
+  requested: z.literal(true),
+  provider: z.literal('stripe'),
+});
+export type AdminOrderRefundResponse = z.infer<typeof adminOrderRefundResponseSchema>;
 
 // adminStoreFulfillmentUpdateSchema is exported from ./store.js — re-exported via index.
 

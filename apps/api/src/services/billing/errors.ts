@@ -18,7 +18,8 @@ export type BillingActionCode =
   | 'ProviderNotMutable'
   | 'NoChange'
   | 'PlanPriceMissing'
-  | 'AmbiguousPlanItem';
+  | 'AmbiguousPlanItem'
+  | 'GarageAlreadyPremium';
 
 const HTTP_STATUS: Record<BillingActionCode, number> = {
   MembershipNotFound: 404,
@@ -30,6 +31,7 @@ const HTTP_STATUS: Record<BillingActionCode, number> = {
   NoChange: 409,
   AmbiguousPlanItem: 409,
   PlanPriceMissing: 422,
+  GarageAlreadyPremium: 409,
 };
 
 export class BillingActionError extends Error {

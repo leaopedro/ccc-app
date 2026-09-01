@@ -8,9 +8,14 @@
  *   POST   /admin/subscriptions/:id/cancel             cancela ao fim do periodo
  *   POST   /admin/subscriptions/:id/resume             retoma cancelamento OU cobranca
  *   POST   /admin/subscriptions/:id/pause              pausa cobranca
+ *   POST   /admin/subscriptions/grant                  recuperacao manual (Runbook 5)
  *
  * Modelo hibrido: as mutacoes chamam a Stripe e NAO escrevem status. Quem escreve
  * e o webhook verificado. Assinatura apple_revenuecat e somente leitura.
+ *
+ * A excecao e /grant: admin-autenticada, auditada, usada so depois que o dinheiro
+ * ja entrou pela Stripe e o webhook nao produziu a membership. Detalhe no
+ * comentario da propria rota.
  *
  * A LISTA nao mora aqui: ela reusa GET /admin/finance/memberships.
  */
@@ -24,12 +29,19 @@ import {
   adminSubscriptionAddonMutationResponseSchema,
   adminSubscriptionChangePlanSchema,
   adminSubscriptionDetailSchema,
+  adminSubscriptionGrantResponseSchema,
+  adminSubscriptionGrantSchema,
 } from '@ccc/shared/admin-subscription';
+import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 
 import { recordAudit } from '../../services/admin-audit.js';
 import { attachAddon, detachAddon } from '../../services/billing/addons.js';
-import { isBillingActionError } from '../../services/billing/errors.js';
+import {
+  applyMembershipEvent,
+  enqueuePremiumTicketBackfillIfActivated,
+} from '../../services/billing/apply-membership-event.js';
+import { BillingActionError, isBillingActionError } from '../../services/billing/errors.js';
 import {
   changePlan,
   pauseCollection,
@@ -37,6 +49,7 @@ import {
   resumeCollection,
   scheduleCancel,
 } from '../../services/billing/subscription-actions.js';
+import type { BillingEvent } from '../../services/billing/types.js';
 import { requireUser } from '../../plugins/auth.js';
 
 export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
@@ -412,5 +425,162 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
     return reply
       .status(200)
       .send(adminSubscriptionActionResponseSchema.parse({ ok: true, pending: true }));
+  });
+
+  /**
+   * POST /admin/subscriptions/grant
+   *
+   * Mechanises Runbook 5 of docs/observability.md ("Money in, nothing out"):
+   * the member paid, the webhook did not produce a membership
+   * (unknown-plan-price, or an event marked processed before the catalog
+   * existed), and someone has to put the row in by hand.
+   *
+   * This is NOT a hole in "memberships only ever come from a verified
+   * webhook". That invariant exists to stop a CLIENT from minting
+   * entitlement. This route is admin-authenticated, role-gated (same
+   * organizer/admin scope as the rest of this file), audited in AdminAudit,
+   * and only ever used after the provider already took the money — every
+   * amount here is transcribed by the operator from the real Stripe invoice,
+   * never guessed or defaulted from env.
+   *
+   * It goes through applyMembershipEvent, the exact function the Stripe/RC
+   * webhooks call, with a synthetic `subscription.activated` BillingEvent —
+   * so the membership row, invoice row, Garage snapshot, XP award and ticket
+   * backfill enqueue all happen exactly as they would for a real activation.
+   * Idempotency on a replayed grant comes from the same place a replayed
+   * webhook gets it: applyMembershipEvent's existing-row branch on
+   * (provider, providerSubRef).
+   *
+   * Provider is hardcoded to 'stripe': Runbook 5 exists for the Stripe
+   * "invoice.paid succeeded, membership never landed" case. Apple/RevenueCat
+   * memberships are provisioned by Apple itself; there is no equivalent gap
+   * to recover from here.
+   *
+   * Distinguishable from a genuine activation: normalize-stripe.ts never
+   * sets BillingInvoice.providerTransactionRef for a Stripe invoice (that
+   * field only ever carries Apple's original_transaction_id — see
+   * services/billing/types.ts). This route sets it to the literal
+   * 'admin-grant', so any `stripe` PremiumMembershipInvoice row with a
+   * non-null providerTransactionRef is unambiguously a manual recovery,
+   * visible straight off that row without cross-referencing AdminAudit.
+   * The AdminAudit row remains the record of WHO granted it and WHY.
+   *
+   * Live-membership guard: handleActivated's `premiumMembership.create` runs
+   * against the pre-existing partial unique index
+   * `premium_membership_live_per_garage`, and there is NO P2002 handling
+   * anywhere in the billing webhook path (deliberately not touched by this
+   * change — separately tracked). Calling applyMembershipEvent for a garage
+   * that already has a live membership under a DIFFERENT subscription would
+   * let that unique-violation escape uncaught. So this route checks for an
+   * existing live membership under a different (provider, providerSubRef)
+   * BEFORE calling applyMembershipEvent, inside the same locked transaction,
+   * and refuses with a clean 409 instead of a 500. A replay of the SAME
+   * (provider, providerSubRef) is excluded from that check on purpose, so
+   * re-running the same recovery stays idempotent.
+   */
+  app.post('/subscriptions/grant', async (request, reply) => {
+    const { sub: actorId } = requireUser(request);
+    const input = adminSubscriptionGrantSchema.parse(request.body);
+
+    const targetGarage = await prisma.garage.findUnique({
+      where: { id: input.garageId },
+      select: { id: true },
+    });
+    if (!targetGarage) {
+      return reply.status(404).send({ error: 'NotFound', message: 'garage not found' });
+    }
+
+    const devFeeAmountCents = Math.round((input.baseAmountCents * input.devFeePercent) / 100);
+    const currentPeriodStart = new Date(input.currentPeriodStart);
+    const currentPeriodEnd = new Date(input.currentPeriodEnd);
+
+    const evt: BillingEvent = {
+      kind: 'subscription.activated',
+      provider: 'stripe',
+      providerCustomerRef: input.providerCustomerRef,
+      providerSubRef: input.providerSubRef,
+      garageId: input.garageId,
+      tier: input.tier,
+      cadence: input.cadence,
+      currentPeriodStart,
+      currentPeriodEnd,
+      pricing: {
+        baseAmountCents: input.baseAmountCents,
+        devFeePercent: input.devFeePercent,
+        devFeeAmountCents,
+        grossAmountCents: input.baseAmountCents + devFeeAmountCents,
+        currency: 'BRL',
+      },
+      invoice: {
+        providerInvoiceRef: input.providerInvoiceRef,
+        // Marker, not Apple data — see the handler doc comment above.
+        providerTransactionRef: 'admin-grant',
+        periodStart: currentPeriodStart,
+        periodEnd: currentPeriodEnd,
+        paidAt: new Date(),
+      },
+      // Genuinely empty, not a placeholder: the operator transcribed the
+      // amounts from the provider invoice, so there is no multi-line payload
+      // here for the route to decompose. Add-ons are attached separately via
+      // POST /admin/subscriptions/:id/addons.
+      lines: [],
+      addons: [],
+      addonsAmountCents: 0,
+    };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Canon §F8.5: hold SELECT FOR UPDATE on the Garage row before
+        // calling applyMembershipEvent — same lock the webhook takes.
+        await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${input.garageId} FOR UPDATE`;
+
+        const conflicting = await tx.premiumMembership.findFirst({
+          where: {
+            garageId: input.garageId,
+            status: { in: [...LIVE_MEMBERSHIP_STATUSES] },
+            NOT: { provider: 'stripe', providerSubRef: input.providerSubRef },
+          },
+          select: { id: true, status: true },
+        });
+        if (conflicting) {
+          throw new BillingActionError(
+            'GarageAlreadyPremium',
+            `garage already has a live membership (${conflicting.id}, status ${conflicting.status}); cancel or expire it before granting a new one`,
+          );
+        }
+
+        await applyMembershipEvent(tx, evt);
+      });
+    } catch (err) {
+      if (sendBillingError(err, reply)) return reply;
+      throw err;
+    }
+
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: {
+        provider_providerSubRef: { provider: 'stripe', providerSubRef: input.providerSubRef },
+      },
+      select: { id: true },
+    });
+
+    await recordAudit({
+      actorId,
+      action: 'premium.subscription.granted',
+      entityType: 'premium_membership',
+      entityId: membership.id,
+      metadata: {
+        garageId: input.garageId,
+        providerInvoiceRef: input.providerInvoiceRef,
+        reason: input.reason,
+      },
+    });
+
+    // Post-commit, exactly like the webhook (canon §F8.06): ticket backfill
+    // must never run inside the activation transaction.
+    await enqueuePremiumTicketBackfillIfActivated(prisma, evt);
+
+    return reply
+      .status(201)
+      .send(adminSubscriptionGrantResponseSchema.parse({ membershipId: membership.id }));
   });
 };

@@ -359,15 +359,34 @@ admin at `/premium/catalogo`, verify with `GET /api/plans`, then note
 that the event is already marked processed and will NOT re-run. The
 membership has to be created by hand.
 
-**Creating a membership by hand.** There is no admin endpoint for this —
-`/admin/subscriptions` exposes plan, add-ons, cancel, resume and pause,
-but not create. Tickets have `POST /admin/tickets/grant`; memberships do
-not. Until one exists, a developer inserts the `PremiumMembership` row
-plus its `PremiumMembershipInvoice`, matching tier, cadence,
-`baseAmountCents`, `devFeePercent` and period bounds to the Stripe
-invoice, and updates `Garage.premiumTier` / `premiumUntil`. Do this
-inside a transaction holding `SELECT id FROM "Garage" ... FOR UPDATE`,
-the same lock the webhook takes.
+**Creating a membership by hand.** `POST /admin/subscriptions/grant`
+exists for this. Body: `garageId`, `tier`, `cadence`,
+`providerCustomerRef`, `providerSubRef`, `providerInvoiceRef`,
+`baseAmountCents`, `devFeePercent`, `currentPeriodStart`,
+`currentPeriodEnd` and `reason`. Every value comes from the real Stripe
+invoice in the dashboard, never a guess — the invoice line is the
+source of truth forever and `devFeePercent` is never re-derived later.
+
+The route calls the same `applyMembershipEvent` the webhook calls, with
+a synthetic `subscription.activated` event, inside the same
+`SELECT ... FOR UPDATE` lock on `Garage`. That means the membership row,
+its invoice, the `Garage.premiumTier` / `premiumUntil` snapshot, the XP
+award and the ticket-backfill enqueue all happen exactly as a real
+activation would. Provider is always `stripe` — this runbook is the
+Stripe gap; Apple/RevenueCat memberships are provisioned by Apple
+itself.
+
+Re-running the same `providerSubRef` is safe (idempotent, same as a
+replayed webhook) and does not duplicate the invoice. Granting to a
+garage that already has a live membership under a **different**
+subscription is refused with `409 GarageAlreadyPremium` — resolve that
+membership first.
+
+The grant is auditable (`AdminAudit`, action
+`premium.subscription.granted`, actor + reason) and distinguishable
+from a genuine webhook activation: its `PremiumMembershipInvoice.providerTransactionRef`
+is set to the literal `admin-grant`, a value the real Stripe webhook
+path never writes.
 
 **Tell the member.** Their payment is safe and kept. Give a concrete
 time for the fix. Do not ask them to retry.

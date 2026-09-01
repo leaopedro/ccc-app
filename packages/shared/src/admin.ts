@@ -115,6 +115,7 @@ export const adminAuditActionSchema = z.enum([
   'premium.subscription.cancel_scheduled',
   'premium.subscription.resumed',
   'premium.subscription.paused',
+  'premium.subscription.granted',
   'document_viewed',
   'document_approved',
   'document_rejected',

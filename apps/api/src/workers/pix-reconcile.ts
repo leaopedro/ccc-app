@@ -26,9 +26,20 @@
  *      never itself expires or fails an order — that is order-expiry.ts's
  *      and the webhook's failure-event branch's job.
  *   3. PAID + order still `pending` locally: settle through the exact same
- *      `settlePaidOrder` the webhook calls, then send the same
- *      `ticket.confirmed` push the webhook sends — a customer recovered
- *      hours later must still find out their order is ready.
+ *      code the webhook runs, then send the same `ticket.confirmed` push the
+ *      webhook sends — a customer recovered hours later must still find out
+ *      their order is ready. "The same code" is literal, and it has two
+ *      shapes, because the webhook has two:
+ *        - order with a `cartId` -> `settleAbacatePayCart`
+ *          (services/orders/settle-cart.ts), which settles every pending order
+ *          of the cart AND writes `Cart.status = 'converted'`, then the
+ *          cart-level push. Fix round 2, IMPORTANT: this worker used to call
+ *          `settlePaidOrder` directly here. Same function as the webhook, but
+ *          not the same path — it skipped the `converted` write, so a
+ *          recovered payment left the cart at `checking_out` and every later
+ *          checkout by that customer failed with CART_ALREADY_CHECKING_OUT,
+ *          silently and forever.
+ *        - standalone order -> `settlePaidOrder` and the per-order push.
  *   4. PAID + order already `expired` locally: order-expiry already RELEASED
  *      THE STOCK for this row. Settling now would oversell (same class of
  *      bug flagged in the Stripe cart path). Refunding is not possible —
@@ -48,6 +59,7 @@ import type { Env } from '../env.js';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacatePayClient } from '../services/abacatepay/index.js';
 import { ORDER_EXPIRY_MS } from '../services/orders/expire.js';
+import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
 import { settlePaidOrder, type SettledOrderResult } from '../services/orders/settle.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import type { PushSender } from '../services/push/types.js';
@@ -160,6 +172,40 @@ const flagExpiredButPaid = async (
     },
     'pix-reconcile: order expired locally but provider reports PAID — stock already released, cannot auto-settle, manual refund needed',
   );
+};
+
+/** Same cart-level `ticket.confirmed` push the webhook's cart branch sends. */
+const notifyRecoveredCart = async (
+  cartId: string,
+  userId: string,
+  push: PushSender,
+  log?: FastifyBaseLogger,
+): Promise<void> => {
+  try {
+    await sendTransactionalPush(
+      {
+        userId,
+        kind: 'ticket.confirmed',
+        dedupeKey: `cart_${cartId}`,
+        title: 'Ingressos confirmados',
+        body: 'Seus ingressos estão prontos.',
+        data: { cartId },
+      },
+      { sender: push },
+    );
+  } catch (pushErr) {
+    log?.warn(
+      { err: pushErr, cartId },
+      'pix-reconcile: cart ticket-confirmed push failed after recovered settlement',
+    );
+    Sentry.withScope((scope) => {
+      scope.setTag('kind', 'push-send-failure');
+      scope.setTag('push_kind', 'ticket.confirmed');
+      scope.setLevel('warning');
+      scope.setExtras({ cartId });
+      Sentry.captureException(pushErr);
+    });
+  }
 };
 
 /** Same `ticket.confirmed` push the webhook's single-order branch sends. */
@@ -282,10 +328,18 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
           ).map((r) => r.eventId),
         );
 
+  // A cart Pix is ONE billing across N orders, so N rows of this sweep share a
+  // cartId. The first one settles the whole cart; the rest would only burn a
+  // provider call to find nothing pending.
+  const settledCartIds = new Set<string>();
+
   for (const row of staleRows) {
     const providerRef = row.providerRef;
     if (!providerRef) continue;
     if (row.status === 'expired' && alreadyFlagged.has(expiredButPaidAlertEventId(row.id))) {
+      continue;
+    }
+    if (row.status === 'pending' && row.cartId && settledCartIds.has(row.cartId)) {
       continue;
     }
 
@@ -298,12 +352,39 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
         continue;
       }
 
-      const settled = await settlePaidOrder(
-        row.id,
-        providerRef,
-        deps.env,
-        row.cartId ? { cartId: row.cartId } : undefined,
-      );
+      // Cart order: go through the SAME settle path the webhook goes through
+      // (services/orders/settle-cart.ts), not just the same settlePaidOrder.
+      // Calling settlePaidOrder alone settles the orders but leaves the Cart
+      // at `checking_out`, and getOrCreateCart keeps returning that cart with
+      // the already-paid items in it — CART_ALREADY_CHECKING_OUT on every
+      // later checkout, forever, with no error the customer can act on.
+      if (row.cartId) {
+        const cartId = row.cartId;
+        settledCartIds.add(cartId);
+        const settlement = await settleAbacatePayCart({
+          cartId,
+          providerRef,
+          env: deps.env,
+        });
+        if (settlement.orders.length === 0) continue;
+
+        log?.warn(
+          {
+            kind: 'pix-reconcile.recovered',
+            cartId,
+            orderIds: settlement.orders.map((o) => o.id),
+            providerRef,
+          },
+          'pix-reconcile: settled a cart Pix the webhook never delivered',
+        );
+
+        if (settlement.issuedAnyTicket && settlement.userId) {
+          await notifyRecoveredCart(cartId, settlement.userId, deps.push, log);
+        }
+        continue;
+      }
+
+      const settled = await settlePaidOrder(row.id, providerRef, deps.env);
 
       log?.warn(
         {

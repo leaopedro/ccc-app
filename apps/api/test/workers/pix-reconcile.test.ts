@@ -256,6 +256,103 @@ describe('runPixReconcileTick', () => {
     expect(row.status).toBe('expired');
   });
 
+  // One cart, one Pix billing, one pending product order — the shape a web
+  // store checkout produces. The cart is left at `checking_out`, exactly as
+  // reserveAndCreateOrders leaves it.
+  const makePendingPixCart = async (providerRef: string, createdAt = OLD) => {
+    const { user } = await createUser({ email: `pix-cart-${providerRef}@jdm.test` });
+    const productType = await prisma.productType.create({
+      data: { name: `Tipo ${Math.random().toString(36).slice(2, 6)}` },
+    });
+    const product = await prisma.product.create({
+      data: {
+        slug: `p-${Math.random().toString(36).slice(2, 8)}`,
+        title: 'Camiseta JDM',
+        description: 'Algodão premium',
+        productTypeId: productType.id,
+        basePriceCents: 9000,
+        currency: 'BRL',
+        status: 'active',
+      },
+    });
+    const variant = await prisma.variant.create({
+      data: {
+        productId: product.id,
+        name: 'Preto — M',
+        sku: `SKU-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+        priceCents: 9000,
+        quantityTotal: 10,
+        quantitySold: 1,
+        attributes: { size: 'M' },
+        active: true,
+      },
+    });
+    const cart = await prisma.cart.create({
+      data: {
+        userId: user.id,
+        status: 'checking_out',
+        expiresAt: new Date(NOW.getTime() + 600_000),
+      },
+    });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        cartId: cart.id,
+        kind: 'product',
+        amountCents: 9000,
+        quantity: 1,
+        method: 'pix',
+        provider: 'abacatepay',
+        providerRef,
+        status: 'pending',
+        createdAt,
+        items: {
+          create: {
+            kind: 'product',
+            variantId: variant.id,
+            quantity: 1,
+            unitPriceCents: 9000,
+            subtotalCents: 9000,
+          },
+        },
+      },
+      select: { id: true },
+    });
+    return { user, cart, order };
+  };
+
+  // Fix round 2, IMPORTANT. The worker called the same settlePaidOrder the
+  // webhook calls, but not the same PATH: the webhook's cart branch also
+  // writes Cart.status = 'converted'. Without it the cart stays
+  // `checking_out`, getOrCreateCart keeps handing that same cart (holding the
+  // already-paid items) back, and the next checkout dies on
+  // CART_ALREADY_CHECKING_OUT — the customer pays, gets the goods, and can
+  // never check out again, with no error they can act on.
+  it('leaves the cart converted after recovering a cart order', async () => {
+    const { cart, order } = await makePendingPixCart('pix_char_cart_recover');
+    const abacatepay = buildFakeAbacatePay();
+    abacatepay.nextStatus = {
+      id: 'pix_char_cart_recover',
+      status: 'PAID',
+      paidAt: NOW.toISOString(),
+    };
+    const push = new DevPushSender();
+
+    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 150, now: NOW });
+
+    const settledOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { status: true },
+    });
+    expect(settledOrder.status).toBe('paid');
+
+    const settledCart = await prisma.cart.findUniqueOrThrow({
+      where: { id: cart.id },
+      select: { status: true },
+    });
+    expect(settledCart.status).toBe('converted');
+  });
+
   // Fix round 2, CRITICAL. Nothing ever moves a row OUT of `expired`, so
   // before the lower bound every abandoned Pix checkout ever made was
   // permanent sweep input: ordered oldest-first and capped at 200, the window

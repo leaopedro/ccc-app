@@ -477,6 +477,32 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
    * and refuses with a clean 409 instead of a 500. A replay of the SAME
    * (provider, providerSubRef) is excluded from that check on purpose, so
    * re-running the same recovery stays idempotent.
+   *
+   * Cross-garage hijack guard (fix round 1, CRITICAL): handleActivated's
+   * `findUnique({ provider_providerSubRef })` has no garageId check at all,
+   * and its update branch never rewrites garageId either. Pasting a
+   * providerSubRef that belongs to a DIFFERENT garage's membership — an
+   * easy mistake copying ids out of the Stripe dashboard under incident
+   * pressure — would otherwise silently advance that other member's period
+   * and pricing while this route's Garage snapshot write still targets
+   * input.garageId, leaving the target garage "premium" with no membership
+   * row and a stranger's subscription quietly mutated. This route looks the
+   * membership up by (provider, providerSubRef) BEFORE calling
+   * applyMembershipEvent and refuses with 409 if it exists under a
+   * different garageId.
+   *
+   * livemode (fix round 1, IMPORTANT): required input, not a default.
+   * applyMembershipEvent never sets PremiumMembershipInvoice.livemode, so it
+   * would otherwise always land on the schema default (`true`) — silently
+   * wrong for a grant transcribed from a test-mode invoice, and invisible
+   * to the finance surfaces that filter on it. Only the admin reading the
+   * real invoice knows which it was.
+   *
+   * The audit row (fix round 1, IMPORTANT) is written inside the SAME
+   * transaction as the grant, not after it commits — recordAudit accepts a
+   * Prisma.TransactionClient, so there is no reason to risk paid
+   * entitlement landing with no actor/reason/row if something fails between
+   * commit and an out-of-band audit insert.
    */
   app.post('/subscriptions/grant', async (request, reply) => {
     const { sub: actorId } = requireUser(request);
@@ -528,11 +554,34 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
       addonsAmountCents: 0,
     };
 
+    let membershipId: string;
     try {
-      await prisma.$transaction(async (tx) => {
+      membershipId = await prisma.$transaction(async (tx) => {
         // Canon §F8.5: hold SELECT FOR UPDATE on the Garage row before
         // calling applyMembershipEvent — same lock the webhook takes.
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${input.garageId} FOR UPDATE`;
+
+        // Fix round 1, CRITICAL: handleActivated's lookup keys purely on
+        // (provider, providerSubRef) and never checks — or rewrites —
+        // garageId. Pasting a providerSubRef that already belongs to
+        // ANOTHER garage's membership would otherwise silently advance that
+        // victim membership's period/pricing/invoice while this route's
+        // Garage snapshot write still targets input.garageId: the target
+        // garage becomes "premium" with no membership row of its own, and
+        // the victim's real membership is mutated out from under them. Catch
+        // that here, before applyMembershipEvent ever runs.
+        const existingBySubRef = await tx.premiumMembership.findUnique({
+          where: {
+            provider_providerSubRef: { provider: 'stripe', providerSubRef: input.providerSubRef },
+          },
+          select: { id: true, garageId: true },
+        });
+        if (existingBySubRef && existingBySubRef.garageId !== input.garageId) {
+          throw new BillingActionError(
+            'SubscriptionBelongsToAnotherGarage',
+            `providerSubRef ${input.providerSubRef} already belongs to membership ${existingBySubRef.id} on garage ${existingBySubRef.garageId}, not ${input.garageId}; refusing to avoid mutating the wrong member's subscription`,
+          );
+        }
 
         const conflicting = await tx.premiumMembership.findFirst({
           where: {
@@ -550,37 +599,64 @@ export const adminSubscriptionRoutes: FastifyPluginAsync = async (app) => {
         }
 
         await applyMembershipEvent(tx, evt);
+
+        const membership = await tx.premiumMembership.findUniqueOrThrow({
+          where: {
+            provider_providerSubRef: { provider: 'stripe', providerSubRef: input.providerSubRef },
+          },
+          select: { id: true },
+        });
+
+        // Fix round 1, IMPORTANT: livemode has no source in BillingEvent —
+        // applyMembershipEvent never sets it, so the invoice row lands on
+        // the schema default (`true`) regardless of what the operator
+        // transcribed. The admin reading the real Stripe invoice is the
+        // only one who knows whether the underlying charge was test-mode or
+        // live, so it is a required input here, not a guess or a default.
+        // Written inside this same transaction, after the invoice insert
+        // (or its idempotent-replay no-op) above.
+        await tx.premiumMembershipInvoice.update({
+          where: {
+            provider_providerInvoiceRef: {
+              provider: 'stripe',
+              providerInvoiceRef: input.providerInvoiceRef,
+            },
+          },
+          data: { livemode: input.livemode },
+        });
+
+        // Fix round 1, IMPORTANT: recordAudit used to run after this
+        // transaction committed. A crash or DB error in the gap between
+        // commit and the audit insert would leave paid entitlement granted
+        // with no actor, no reason and no row. recordAudit accepts a
+        // Prisma.TransactionClient, so there is no reason not to make the
+        // audit row atomic with the grant itself.
+        await recordAudit(
+          {
+            actorId,
+            action: 'premium.subscription.granted',
+            entityType: 'premium_membership',
+            entityId: membership.id,
+            metadata: {
+              garageId: input.garageId,
+              providerInvoiceRef: input.providerInvoiceRef,
+              reason: input.reason,
+            },
+          },
+          tx,
+        );
+
+        return membership.id;
       });
     } catch (err) {
       if (sendBillingError(err, reply)) return reply;
       throw err;
     }
 
-    const membership = await prisma.premiumMembership.findUniqueOrThrow({
-      where: {
-        provider_providerSubRef: { provider: 'stripe', providerSubRef: input.providerSubRef },
-      },
-      select: { id: true },
-    });
-
-    await recordAudit({
-      actorId,
-      action: 'premium.subscription.granted',
-      entityType: 'premium_membership',
-      entityId: membership.id,
-      metadata: {
-        garageId: input.garageId,
-        providerInvoiceRef: input.providerInvoiceRef,
-        reason: input.reason,
-      },
-    });
-
     // Post-commit, exactly like the webhook (canon §F8.06): ticket backfill
     // must never run inside the activation transaction.
     await enqueuePremiumTicketBackfillIfActivated(prisma, evt);
 
-    return reply
-      .status(201)
-      .send(adminSubscriptionGrantResponseSchema.parse({ membershipId: membership.id }));
+    return reply.status(201).send(adminSubscriptionGrantResponseSchema.parse({ membershipId }));
   });
 };

@@ -181,6 +181,13 @@ export const adminSubscriptionGrantSchema = z
     devFeePercent: z.number().int().min(0).max(100),
     currentPeriodStart: z.string().datetime(),
     currentPeriodEnd: z.string().datetime(),
+    /**
+     * Required, not defaulted. applyMembershipEvent never sets this column,
+     * so it would otherwise silently land on the schema default (`true`)
+     * even for a grant transcribed from a test-mode Stripe invoice. Only
+     * the operator reading the real invoice knows which it was.
+     */
+    livemode: z.boolean(),
     /** Free text, stored in the audit row. Required: a grant without a reason is unreviewable. */
     reason: z.string().min(10).max(500),
   })

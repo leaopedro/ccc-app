@@ -49,6 +49,7 @@ describe('POST /admin/subscriptions/grant', () => {
     devFeePercent: 10,
     currentPeriodStart: '2026-09-01T00:00:00.000Z',
     currentPeriodEnd: '2026-10-01T00:00:00.000Z',
+    livemode: true,
     reason: 'invoice.paid caiu em unknown-plan-price, evento ja marcado processado',
   });
 
@@ -139,6 +140,94 @@ describe('POST /admin/subscriptions/grant', () => {
     // non-null value on a `stripe`-provider invoice is therefore unambiguous
     // proof the row came from this endpoint, not from invoice.paid.
     expect(invoice.providerTransactionRef).toBe('admin-grant');
+  });
+
+  // livemode has no source anywhere in applyMembershipEvent — the operator
+  // states it explicitly because a wrong guess here means test-mode money
+  // is counted as live revenue with no way for the cutover script to find
+  // it (it keys on createdAt, and this row is created after cutover).
+  it('records livemode: true when the operator says the invoice was live', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/admin/subscriptions/grant',
+      headers: { authorization: adminAuth },
+      payload: { ...payload(), livemode: true },
+    });
+    const invoice = await prisma.premiumMembershipInvoice.findFirstOrThrow({
+      where: { providerInvoiceRef: 'in_live_recovery' },
+      select: { livemode: true },
+    });
+    expect(invoice.livemode).toBe(true);
+  });
+
+  it('records livemode: false when the operator says the invoice was test-mode', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/admin/subscriptions/grant',
+      headers: { authorization: adminAuth },
+      payload: { ...payload(), livemode: false },
+    });
+    const invoice = await prisma.premiumMembershipInvoice.findFirstOrThrow({
+      where: { providerInvoiceRef: 'in_live_recovery' },
+      select: { livemode: true },
+    });
+    expect(invoice.livemode).toBe(false);
+  });
+
+  // The exact paste-under-pressure mistake this endpoint exists to
+  // eliminate: an operator copies a providerSubRef that actually belongs to
+  // a DIFFERENT member's membership. handleActivated keys purely on
+  // (provider, providerSubRef) with no garageId check, so without a guard
+  // this would silently advance the victim's period/pricing while the
+  // target garage's snapshot still gets flipped to premium with no
+  // membership row of its own.
+  it('refuses a providerSubRef that belongs to a different garage', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/admin/subscriptions/grant',
+      headers: { authorization: adminAuth },
+      payload: payload(),
+    });
+    expect(first.statusCode).toBe(201);
+
+    const { user: otherMember } = await createUser({ email: 'other@jdm.test', verified: true });
+    const otherGarage = await prisma.garage.findUniqueOrThrow({
+      where: { userId: otherMember.id },
+      select: { id: true },
+    });
+
+    const hijack = await app.inject({
+      method: 'POST',
+      url: '/admin/subscriptions/grant',
+      headers: { authorization: adminAuth },
+      // Same providerSubRef as the first grant, but a different garage —
+      // exactly the paste mistake.
+      payload: { ...payload(), garageId: otherGarage.id },
+    });
+    expect(hijack.statusCode).toBe(409);
+
+    // The victim's membership must be untouched: still on the original
+    // garage, still the original period.
+    const victim = await prisma.premiumMembership.findUniqueOrThrow({
+      where: {
+        provider_providerSubRef: { provider: 'stripe', providerSubRef: 'sub_live_recovery' },
+      },
+      select: { garageId: true, currentPeriodEnd: true },
+    });
+    expect(victim.garageId).toBe(garageId);
+    expect(victim.currentPeriodEnd.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+
+    // The other garage must NOT have been granted a membership or flipped
+    // to premium off the back of the refused request.
+    const otherGarageCount = await prisma.premiumMembership.count({
+      where: { garageId: otherGarage.id },
+    });
+    expect(otherGarageCount).toBe(0);
+    const otherGarageRow = await prisma.garage.findUniqueOrThrow({
+      where: { id: otherGarage.id },
+      select: { premiumTier: true },
+    });
+    expect(otherGarageRow.premiumTier).toBeNull();
   });
 
   // Replaying the same recovery must not double-charge the books.

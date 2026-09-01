@@ -363,9 +363,13 @@ membership has to be created by hand.
 exists for this. Body: `garageId`, `tier`, `cadence`,
 `providerCustomerRef`, `providerSubRef`, `providerInvoiceRef`,
 `baseAmountCents`, `devFeePercent`, `currentPeriodStart`,
-`currentPeriodEnd` and `reason`. Every value comes from the real Stripe
-invoice in the dashboard, never a guess — the invoice line is the
-source of truth forever and `devFeePercent` is never re-derived later.
+`currentPeriodEnd`, `livemode` and `reason`. Every value comes from the
+real Stripe invoice in the dashboard, never a guess — the invoice line
+is the source of truth forever and `devFeePercent` is never re-derived
+later. `livemode` must match whether the underlying charge was a real
+or test-mode Stripe invoice: the endpoint never infers it, because a
+wrong guess here means test-mode money counted as live revenue with no
+way for the cutover script to find it later.
 
 The route calls the same `applyMembershipEvent` the webhook calls, with
 a synthetic `subscription.activated` event, inside the same
@@ -380,13 +384,18 @@ Re-running the same `providerSubRef` is safe (idempotent, same as a
 replayed webhook) and does not duplicate the invoice. Granting to a
 garage that already has a live membership under a **different**
 subscription is refused with `409 GarageAlreadyPremium` — resolve that
-membership first.
+membership first. Pasting a `providerSubRef` that already belongs to
+**another garage's** membership is refused with
+`409 SubscriptionBelongsToAnotherGarage`, so a copy/paste mistake out of
+the Stripe dashboard cannot silently mutate a different member's
+subscription.
 
-The grant is auditable (`AdminAudit`, action
-`premium.subscription.granted`, actor + reason) and distinguishable
-from a genuine webhook activation: its `PremiumMembershipInvoice.providerTransactionRef`
-is set to the literal `admin-grant`, a value the real Stripe webhook
-path never writes.
+The grant and its `AdminAudit` row (action `premium.subscription.granted`,
+actor + reason) commit in the same transaction — a failure between
+"membership granted" and "audit written" cannot happen. The row is also
+distinguishable from a genuine webhook activation: its
+`PremiumMembershipInvoice.providerTransactionRef` is set to the literal
+`admin-grant`, a value the real Stripe webhook path never writes.
 
 **Tell the member.** Their payment is safe and kept. Give a concrete
 time for the fix. Do not ask them to retry.

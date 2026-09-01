@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import type { FastifyBaseLogger } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
@@ -253,6 +254,63 @@ describe('runPixReconcileTick', () => {
       select: { status: true },
     });
     expect(row.status).toBe('expired');
+  });
+
+  // Fix round 2, CRITICAL. Nothing ever moves a row OUT of `expired`, so
+  // before the lower bound every abandoned Pix checkout ever made was
+  // permanent sweep input: ordered oldest-first and capped at 200, the window
+  // eventually held only ancient `expired` rows and no `pending` row was ever
+  // examined again. Each of those also cost one getPixBilling call per minute
+  // forever. The window is now bounded on both sides.
+  it('ignores rows older than the lookback and still reaches a fresh pending row', async () => {
+    const ancient = new Date(NOW.getTime() - 5 * 24 * 60 * 60 * 1000); // 5 days
+    const stale = await makePendingPixOrder('pix_char_ancient', ancient, 'expired');
+    const fresh = await makePendingPixOrder('pix_char_fresh_pending', OLD);
+
+    const abacatepay = buildFakeAbacatePay();
+    const push = new DevPushSender();
+
+    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 150, now: NOW });
+
+    const fetched = abacatepay.calls.filter((c) => c.method === 'getPixBilling');
+    expect(fetched).toHaveLength(1);
+    expect(JSON.stringify(fetched[0])).toContain('pix_char_fresh_pending');
+
+    const rows = await prisma.order.findMany({
+      where: { id: { in: [stale.id, fresh.id] } },
+      select: { id: true, status: true },
+    });
+    expect(rows.find((r) => r.id === stale.id)?.status).toBe('expired');
+    expect(rows.find((r) => r.id === fresh.id)?.status).toBe('paid');
+  });
+
+  // The depth alarm must be able to fire BEFORE the window saturates. It used
+  // to default to exactly QUERY_LIMIT (200 === 200), so it could only confirm
+  // an already-truncated sweep. Two rows against alertDepth 2 proves the
+  // threshold is honoured on its own, independently of the query limit.
+  it('warns when the queue depth reaches the alert threshold, below saturation', async () => {
+    await makePendingPixOrder('pix_char_depth_a');
+    await makePendingPixOrder('pix_char_depth_b');
+
+    const warnings: unknown[] = [];
+    const log = {
+      warn: (obj: unknown) => warnings.push(obj),
+      error: () => undefined,
+      info: () => undefined,
+    } as unknown as FastifyBaseLogger;
+
+    const abacatepay = buildFakeAbacatePay();
+    abacatepay.nextStatus = { id: 'pix_char_depth_a', status: 'PENDING', paidAt: null };
+    const push = new DevPushSender();
+
+    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 2, now: NOW, log });
+
+    const depthWarning = warnings.find(
+      (w) => (w as { kind?: string }).kind === 'pix-reconcile.queue_depth_alert',
+    ) as { depth: number; alertDepth: number; saturated: boolean } | undefined;
+    expect(depthWarning).toBeDefined();
+    expect(depthWarning?.depth).toBe(2);
+    expect(depthWarning?.saturated).toBe(false);
   });
 
   // Important fix: a recovered customer must be told, same push the webhook

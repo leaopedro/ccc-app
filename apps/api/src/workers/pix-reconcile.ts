@@ -73,6 +73,36 @@ const QUERY_LIMIT = 200;
  */
 const GRACE_MS = ORDER_EXPIRY_MS / 5;
 
+/**
+ * Upper bound on how far back the sweep looks (fix round 2, CRITICAL).
+ *
+ * Without it this worker starved itself. The window selects
+ * `status in ('pending','expired')` and NOTHING ever moves a row out of
+ * `expired` — order-expiry.ts only writes `pending -> expired`, and this
+ * worker deliberately refuses to settle an expired row. So every abandoned
+ * Pix checkout ever made stayed permanent sweep input. Ordered oldest-first
+ * and capped at QUERY_LIMIT, the window filled with ancient `expired` rows
+ * and stopped reaching any `pending` row at all — silently turning off the
+ * exact lost-webhook recovery the worker exists for. The per-row cost was the
+ * same shape: one getPixBilling HTTP call per minute, forever, per abandoned
+ * checkout (the `alreadyFlagged` skip only covers rows already alerted as
+ * PAID, which is the rare case, not the normal one).
+ *
+ * Why 48h:
+ *   - ORDER_EXPIRY_MS is 15 minutes, so 48h is 192x the order TTL. A Pix that
+ *     is going to be paid is paid inside its own BR Code validity, not two
+ *     days later.
+ *   - abacatepay-webhook.ts's REPLAY_WINDOW_MS is 24h: an event whose payload
+ *     timestamp is older than that is REJECTED. Past 24h no webhook redelivery
+ *     can settle the row any more, so 48h already gives a full extra day of
+ *     sweep coverage beyond the point where the provider could still fix it
+ *     itself.
+ *   - Anything older than that is not drift a per-minute cron should keep
+ *     retrying; it is an incident for a human, and the expired-but-paid alert
+ *     below is how a human learns about it.
+ */
+const LOOKBACK_MS = 48 * 60 * 60 * 1000;
+
 type StaleRow = {
   id: string;
   providerRef: string | null;
@@ -179,27 +209,58 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
   // source of truth for whether money moved, and local status must not
   // decide whether we even look (that is exactly how a lost webhook +
   // order-expiry combine to hide a paid order forever).
+  // Bounded on BOTH sides. The lower bound (LOOKBACK_MS) is the fix for the
+  // self-starvation described on that constant; the upper bound (GRACE_MS) is
+  // the "customer has not paid yet" guard.
   const staleRows: StaleRow[] = await prisma.order.findMany({
     where: {
       provider: 'abacatepay',
       status: { in: ['pending', 'expired'] },
       providerRef: { not: null },
-      createdAt: { lt: new Date(now.getTime() - GRACE_MS) },
+      createdAt: {
+        gte: new Date(now.getTime() - LOOKBACK_MS),
+        lt: new Date(now.getTime() - GRACE_MS),
+      },
     },
     orderBy: { createdAt: 'asc' },
     take: QUERY_LIMIT,
     select: { id: true, providerRef: true, cartId: true, status: true, amountCents: true },
   });
 
+  // Saturation alarm. `alertDepth` MUST stay strictly below QUERY_LIMIT
+  // (env.ts defaults it to 150 against a limit of 200) — an alarm that can
+  // only fire at exactly the limit fires when the sweep is already dropping
+  // rows, which is too late to be a warning. Sentry, not just log.warn:
+  // silently sweeping a truncated window is a silent-failure condition, and
+  // the log line alone has no alerting attached to it.
   if (staleRows.length >= deps.alertDepth) {
+    const saturated = staleRows.length >= QUERY_LIMIT;
     log?.warn(
       {
         kind: 'pix-reconcile.queue_depth_alert',
         depth: staleRows.length,
         alertDepth: deps.alertDepth,
+        queryLimit: QUERY_LIMIT,
+        saturated,
       },
       'pix-reconcile: stale pending Pix queue depth at or above alert threshold',
     );
+    Sentry.withScope((scope) => {
+      scope.setTag('kind', 'pix-reconcile-queue-depth');
+      scope.setTag('provider', 'abacatepay');
+      scope.setLevel(saturated ? 'error' : 'warning');
+      scope.setExtras({
+        depth: staleRows.length,
+        alertDepth: deps.alertDepth,
+        queryLimit: QUERY_LIMIT,
+      });
+      Sentry.captureMessage(
+        saturated
+          ? 'pix-reconcile: sweep window saturated, rows are being dropped'
+          : 'pix-reconcile: sweep queue depth above alert threshold',
+        saturated ? 'error' : 'warning',
+      );
+    });
   }
 
   // Batch-check which already-expired rows were already alerted, so a

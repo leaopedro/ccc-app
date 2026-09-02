@@ -589,6 +589,39 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
     expect(container.querySelector('[data-testid="garage-badges-sheet"]')).toBeNull();
   });
 
+  // Final review C2 — the call site, not just the copy helper. This suite runs
+  // with EXPO_PUBLIC_CAIXA_ENABLED unset, exactly like both eas build profiles,
+  // so the sheet a real member opens must not advertise the physical box: the
+  // caixa screens are gated off, the member can never opt in / add items / set
+  // an address, and box-cutoff.ts skips exactly those boxes. Fails if a call
+  // site goes back to passing an ungated benefits list.
+  it('does not advertise the caixa in the premium sheet when the caixa build is off', async () => {
+    setApi({
+      garage: makeGarage({
+        garage: makeGarageOwner({ badges: [] }),
+        cars: [carCivic],
+      }),
+      badges: makeBadgesAggregate({
+        badges: [lockedBadge('EVT-001'), lockedBadge('CAR-001'), lockedBadge('CCC-003', true)],
+      }),
+    });
+    await mount();
+    const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
+    );
+    await act(async () => {
+      lockedBtn!.click();
+      await flush();
+    });
+    const sheet = container.querySelector('[data-testid="premium-sheet"]');
+    expect(sheet).not.toBeNull();
+    const sheetText = (sheet!.textContent ?? '').toLowerCase();
+    // Sanity: the sheet really did render its benefit list, so a "no caixa"
+    // pass cannot come from an empty sheet.
+    expect(sheetText).toContain('capas personalizadas'.toLowerCase());
+    expect(sheetText).not.toContain('caixa');
+  });
+
   it('calls togglePinBadge then refetches badges when the pin button is tapped', async () => {
     setApi({
       garage: makeGarage({

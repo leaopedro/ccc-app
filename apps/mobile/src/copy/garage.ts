@@ -127,15 +127,27 @@ const ptBR = {
     // dentro do orçamento e do único CEP com frete grátis (seed.ts). A
     // advertência acima continua valendo para qualquer item novo que ainda
     // não exista no produto.
+    // Fix round 2 (C2): the caixa lives OUTSIDE `premiumBenefits` because it is
+    // conditional. The caixa screens are behind EXPO_PUBLIC_CAIXA_ENABLED,
+    // absent from both eas profiles, so in a shipped build the member can
+    // never opt in, add items, or set an address — and box-cutoff.ts skips
+    // exactly those boxes (`!hasItems || !autoSendOptIn || !shippingAddressId`).
+    // Promising it in a build that cannot deliver it is the same 2.3.1 exposure
+    // the notes above cover. `premiumSheetBenefits` (screens/garage) puts it
+    // back at the top of the list when the flag is on, matching how
+    // ContratarScreen and PlanoDetalheScreen gate their caixa card.
+    premiumBenefitCaixa: {
+      title: 'Caixa física da Casa',
+      sub: 'Você monta e confirma sua caixa a cada ciclo.',
+    },
+    // Fix round 2 (I3): "Eventos abertos da comunidade" was removed. Its only
+    // evidence was a seed marketing label (seed.ts:526) — exactly the evidence
+    // rejected above for "Acesso ao clube". No code gates event attendance on
+    // membership or tier: `Event` has no membership field in schema.prisma, and
+    // the only `minTier` in the codebase gates BOX CATALOG items (box.ts,
+    // box-cutoff.ts), not events. Either events are open to everyone, in which
+    // case they are not a member benefit, or the claim is unbacked.
     premiumBenefits: [
-      {
-        title: 'Caixa física da Casa',
-        sub: 'Você monta e confirma sua caixa a cada ciclo.',
-      },
-      {
-        title: 'Eventos abertos da comunidade',
-        sub: 'Presença em encontros abertos aos membros.',
-      },
       { title: 'Capas personalizadas', sub: 'Escolha entre 9 cenários ou envie a sua.' },
       { title: 'Selo Premium', sub: 'Aparece nos seus carros em todo o app.' },
     ],
@@ -249,21 +261,17 @@ const en = {
     premiumTierLabel: (tier: 'gold' | 'silver' | 'bronze') => `${tier.toUpperCase()} TIER`,
     premiumNearExpiry: (n: number) =>
       `Expires in ${n} ${n === 1 ? 'day' : 'days'} · Renew to keep your cover.`,
-    // Kept in lockstep with the PT list above — see that comment for why the
-    // box and community events are there and why club access (no entitlement
-    // gate exists), guests/discounts/concierge, and addon modules are not.
-    // Note: `garageCopyEn` has no importers in this app; PT is the copy an
+    // Kept in lockstep with the PT list above — see those comments for why the
+    // box sits behind the caixa build flag, and why club access, community
+    // events, guests/discounts/concierge and addon modules are not listed at
+    // all. Note: `garageCopyEn` has no importers in this app; PT is the copy an
     // App Store reviewer actually sees, whatever language they read in. This
     // EN block only exists as an i18n scaffold.
+    premiumBenefitCaixa: {
+      title: 'The Casa box',
+      sub: 'You curate and confirm your box every cycle.',
+    },
     premiumBenefits: [
-      {
-        title: 'The Casa box',
-        sub: 'You curate and confirm your box every cycle.',
-      },
-      {
-        title: 'Open community events',
-        sub: 'Attend meetups open to members.',
-      },
       { title: 'Custom covers', sub: 'Pick from 9 scenes or upload your own.' },
       { title: 'Premium badge', sub: 'Appears on your cars across the app.' },
     ],

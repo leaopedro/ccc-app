@@ -20,7 +20,9 @@ import {
 } from '~/screens/garage/garage-header-gates';
 import { pickProfileStatsProps } from '~/screens/garage/garage-progression.viewmodel';
 import { buildGarageSlots } from '~/screens/garage/garage-slots';
+import { premiumSheetBenefits } from '~/screens/garage/premium-benefits';
 import { useBuySpotFlow } from '~/screens/garage/useBuySpotFlow';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 import { theme } from '~/theme';
 
 // Chunk 19 — PT-BR copy mapped to the BadgesSheet `copy` prop shape.
@@ -263,7 +265,12 @@ export default function GarageIndex() {
           heroTitle: garageCopy.garage.premiumHeroTitle,
           heroBody: garageCopy.garage.premiumHeroBody,
           nearExpiry: garageCopy.garage.premiumNearExpiry,
-          benefits: garageCopy.garage.premiumBenefits,
+          // Final review C2 — the caixa only appears when the build can
+          // actually deliver it (EXPO_PUBLIC_CAIXA_ENABLED).
+          benefits: premiumSheetBenefits({
+            caixaEnabled: isCaixaBuildEnabled(),
+            copy: garageCopy.garage,
+          }),
           footer: garageCopy.garage.premiumFooter,
         }}
       />

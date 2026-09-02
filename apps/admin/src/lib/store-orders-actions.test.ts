@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
-}));
+const { revalidatePath } = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
+vi.mock('next/cache', () => ({ revalidatePath }));
 
 const updateAdminStoreOrderFulfillment =
   vi.fn<(id: string, payload: unknown) => Promise<unknown>>();
@@ -104,6 +103,10 @@ describe('requestOrderRefundAction', () => {
     expect(requestAdminOrderRefund).toHaveBeenCalledWith('order-1', {
       reason: 'cliente desistiu dentro dos sete dias',
     });
+    // Both surfaces: the store queue and the kind-agnostic /pedidos/[id].
+    // The refresh picks up the new audit row, not a status change.
+    expect(revalidatePath).toHaveBeenCalledWith('/loja/pedidos/order-1');
+    expect(revalidatePath).toHaveBeenCalledWith('/pedidos/order-1');
   });
 
   it('rejects a reason shorter than 10 chars before calling the API', async () => {
@@ -119,6 +122,11 @@ describe('requestOrderRefundAction', () => {
     ['RefundNotSupported', 501, /AbacatePay/i],
     ['PartialRefundNotSupported', 422, /dashboard da Stripe/i],
     ['RefundAlreadyRequested', 409, /andamento/i],
+    // Distinto de RefundAlreadyRequested: aqui nao existe webhook para
+    // esperar, entao a copia tem que dizer para NAO esperar.
+    ['RefundStuck', 409, /não espere pelo webhook/i],
+    // Distinto de RefundFailed: nada saiu daqui, nenhum dinheiro se moveu.
+    ['RefundNotAttempted', 503, /nada foi enviado à Stripe/i],
     ['RefundFailed', 502, /Stripe recusou/i],
   ] as const)('maps %s (%i) to an actionable message', async (code, status, pattern) => {
     requestAdminOrderRefund.mockRejectedValue(new ApiError(status, code, 'raw api message'));

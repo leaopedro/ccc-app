@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 import {
+  type AdminOrderRefundImpact,
   type AdminStoreOrderAuditEntry,
   type AdminStoreOrderDetail,
   type AdminStoreOrderItem,
@@ -70,6 +71,104 @@ export const isAllowedFulfillmentTransition = (
   if (from === to) return false;
   const table = method === 'ship' ? SHIP_TRANSITIONS : PICKUP_TRANSITIONS;
   return table[from].includes(to);
+};
+
+/**
+ * The single definition of "this order belongs to the store fulfilment
+ * workflow". Three independent conditions, each excluded for its own reason:
+ *
+ *  - `kind` product/mixed: matches the list-path filter, so detail and update
+ *    reject anything the queue never shows.
+ *  - `fulfillmentMethod` ship/pickup: garage-spot purchases carry `virtual`
+ *    and are settled by `fulfillGarageSpotsForOrder`. They must never enter a
+ *    hand-worked packing queue.
+ *  - at least one non-virtual product line: a ticket+garage-spot `mixed` order
+ *    inherits `pickup` from its ticket line but has nothing physical to pack.
+ *
+ * Extracted so `getAdminOrderDetail`'s `fulfillmentSurface: 'store'` can never
+ * drift from what `/admin/store/orders/:id` will actually serve.
+ */
+export const isStoreFulfillableOrder = (order: {
+  kind: OrderKind;
+  fulfillmentMethod: 'ship' | 'pickup' | 'virtual';
+  items: Array<{ kind: string; variant: { product: { virtual: boolean } } | null }>;
+}): boolean => {
+  if (order.kind !== 'product' && order.kind !== 'mixed') return false;
+  if (order.fulfillmentMethod !== 'ship' && order.fulfillmentMethod !== 'pickup') return false;
+  return order.items.some((it) => it.kind === 'product' && it.variant?.product.virtual === false);
+};
+
+/**
+ * Blast radius of a full Stripe refund of `order`, read straight off the
+ * `charge.refunded` cascade in routes/stripe-webhook.ts:
+ *
+ *   affectedIds = order.cartId && anchor is paid
+ *                   ? every order sharing that cartId (this one included)
+ *                   : [order.id]
+ *   then revokeTicketsForRefundedOrder(id) for every affected id.
+ *
+ * Note `revokeTicketsForRefundedOrder` runs on ALL affected ids regardless of
+ * their own status, while the status flip only touches rows still `paid`. So
+ * the ticket counts here deliberately do not filter on order status either —
+ * a `pending` sibling's valid ticket really does get revoked.
+ */
+export const computeRefundImpact = async (order: {
+  id: string;
+  cartId: string | null;
+}): Promise<AdminOrderRefundImpact> => {
+  const siblingOrders = order.cartId
+    ? await prisma.order.findMany({
+        where: { cartId: order.cartId, id: { not: order.id } },
+        select: { id: true },
+      })
+    : [];
+  const siblingOrderIds = siblingOrders.map((o) => o.id);
+  const [siblingTicketCount, ownTicketCount] = await Promise.all([
+    siblingOrderIds.length
+      ? prisma.ticket.count({ where: { orderId: { in: siblingOrderIds }, status: 'valid' } })
+      : Promise.resolve(0),
+    prisma.ticket.count({ where: { orderId: order.id, status: 'valid' } }),
+  ]);
+  return { siblingOrderCount: siblingOrderIds.length, siblingTicketCount, ownTicketCount };
+};
+
+/** Admin audit rows for an order, newest first, with the actor resolved. */
+export const loadAdminOrderAuditHistory = async (
+  orderId: string,
+): Promise<AdminStoreOrderAuditEntry[]> => {
+  const audits = await prisma.adminAudit.findMany({
+    where: { entityType: 'order', entityId: orderId },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  const actorIds = Array.from(new Set(audits.map((a) => a.actorId)));
+  const actors = actorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+  const actorById = new Map(actors.map((a) => [a.id, a]));
+
+  return audits
+    .map((a) => {
+      const action = adminAuditActionSchema.safeParse(a.action);
+      if (!action.success) return null;
+      const actor = actorById.get(a.actorId) ?? null;
+      const metadata =
+        a.metadata && typeof a.metadata === 'object' && !Array.isArray(a.metadata)
+          ? (a.metadata as Record<string, unknown>)
+          : null;
+      return {
+        id: a.id,
+        actorName: actor?.name ?? null,
+        actorEmail: actor?.email ?? null,
+        action: action.data,
+        metadata,
+        createdAt: a.createdAt.toISOString(),
+      } satisfies AdminStoreOrderAuditEntry;
+    })
+    .filter((e): e is AdminStoreOrderAuditEntry => e !== null);
 };
 
 const FILTER_TO_STATUSES: Record<
@@ -315,39 +414,7 @@ export const getAdminStoreOrderDetail = async (
     throw new OrderNotEligibleError(orderId, 'order has no physical product items');
   }
 
-  const audits = await prisma.adminAudit.findMany({
-    where: { entityType: 'order', entityId: order.id },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
-  const actorIds = Array.from(new Set(audits.map((a) => a.actorId)));
-  const actors = actorIds.length
-    ? await prisma.user.findMany({
-        where: { id: { in: actorIds } },
-        select: { id: true, name: true, email: true },
-      })
-    : [];
-  const actorById = new Map(actors.map((a) => [a.id, a]));
-
-  const history: AdminStoreOrderAuditEntry[] = audits
-    .map((a) => {
-      const action = adminAuditActionSchema.safeParse(a.action);
-      if (!action.success) return null;
-      const actor = actorById.get(a.actorId) ?? null;
-      const metadata =
-        a.metadata && typeof a.metadata === 'object' && !Array.isArray(a.metadata)
-          ? (a.metadata as Record<string, unknown>)
-          : null;
-      return {
-        id: a.id,
-        actorName: actor?.name ?? null,
-        actorEmail: actor?.email ?? null,
-        action: action.data,
-        metadata,
-        createdAt: a.createdAt.toISOString(),
-      } satisfies AdminStoreOrderAuditEntry;
-    })
-    .filter((e): e is AdminStoreOrderAuditEntry => e !== null);
+  const history: AdminStoreOrderAuditEntry[] = await loadAdminOrderAuditHistory(order.id);
 
   const lastTracking = history.find(
     (h) =>
@@ -398,21 +465,8 @@ export const getAdminStoreOrderDetail = async (
 
   // Refund blast radius: a full refund at Stripe flips EVERY order sharing
   // this cartId to `refunded` and revokes their tickets (see the
-  // `charge.refunded` cascade in stripe-webhook.ts). Count only the OTHER
-  // orders and their currently-valid tickets — this order's own tickets are
-  // not a surprise, the operator is already choosing to refund it.
-  const siblingOrders = order.cartId
-    ? await prisma.order.findMany({
-        where: { cartId: order.cartId, id: { not: order.id } },
-        select: { id: true },
-      })
-    : [];
-  const siblingOrderIds = siblingOrders.map((o) => o.id);
-  const siblingTicketCount = siblingOrderIds.length
-    ? await prisma.ticket.count({
-        where: { orderId: { in: siblingOrderIds }, status: 'valid' },
-      })
-    : 0;
+  // `charge.refunded` cascade in stripe-webhook.ts). See computeRefundImpact.
+  const refundImpact = await computeRefundImpact(order);
 
   return {
     id: order.id,
@@ -455,10 +509,7 @@ export const getAdminStoreOrderDetail = async (
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
-    refundImpact: {
-      siblingOrderCount: siblingOrderIds.length,
-      siblingTicketCount,
-    },
+    refundImpact,
   };
 };
 

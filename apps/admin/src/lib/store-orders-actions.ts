@@ -107,6 +107,11 @@ export const requestOrderRefundAction = async (
   // Order.status only flips later, when the charge.refunded webhook lands.
   // Revalidating here is still correct: it picks up the new
   // 'order.refund_requested' audit row in history, not a status change.
+  //
+  // Both surfaces: /loja/pedidos/[id] for store orders and /pedidos/[id] for
+  // every other kind. Revalidating a path the order does not use is a no-op,
+  // and this action is shared by both screens.
   revalidatePath(`/loja/pedidos/${orderId}`);
+  revalidatePath(`/pedidos/${orderId}`);
   return { ok: true, requested: true };
 };

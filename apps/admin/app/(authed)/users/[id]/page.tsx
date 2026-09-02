@@ -352,7 +352,14 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <tbody>
             {user.recentOrders.map((o) => (
               <tr key={o.id} className="border-b border-[color:var(--color-border)]">
-                <td className="py-2 text-sm">{o.eventTitle}</td>
+                <td className="py-2 text-sm">
+                  {/* Entrada para a tela de reembolso. Antes disto um pedido de
+                      ingresso não tinha página nenhuma no admin e o reembolso
+                      dele só saía pelo dashboard da Stripe. */}
+                  <Link href={`/pedidos/${o.id}`} className="underline">
+                    {o.eventTitle || `Pedido #${o.id.slice(-8).toUpperCase()}`}
+                  </Link>
+                </td>
                 <td className="text-sm">{orderStatusLabel[o.status] ?? o.status}</td>
                 <td className="text-sm">{fmtCurrency(o.amountCents, o.currency)}</td>
                 <td className="text-sm">{fmtDate(o.createdAt)}</td>

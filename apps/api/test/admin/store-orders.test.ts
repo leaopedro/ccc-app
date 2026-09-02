@@ -318,7 +318,11 @@ describe('Admin store orders queue', () => {
           headers: { authorization: header },
         });
         const body = adminStoreOrderDetailSchema.parse(res.json());
-        expect(body.refundImpact).toEqual({ siblingOrderCount: 0, siblingTicketCount: 0 });
+        expect(body.refundImpact).toEqual({
+          siblingOrderCount: 0,
+          siblingTicketCount: 0,
+          ownTicketCount: 0,
+        });
       });
 
       it('counts sibling orders and their valid tickets sharing the same cartId', async () => {
@@ -413,7 +417,14 @@ describe('Admin store orders queue', () => {
           headers: { authorization: header },
         });
         const body = adminStoreOrderDetailSchema.parse(res.json());
-        expect(body.refundImpact).toEqual({ siblingOrderCount: 2, siblingTicketCount: 1 });
+        // ownTicketCount is 0 here: a product order carries no tickets of its
+        // own. It is the whole blast radius for a ticket order — see
+        // test/admin/order-detail.test.ts.
+        expect(body.refundImpact).toEqual({
+          siblingOrderCount: 2,
+          siblingTicketCount: 1,
+          ownTicketCount: 0,
+        });
       });
     });
 

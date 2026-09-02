@@ -22,6 +22,7 @@ import { adminBoxPartnersRoutes } from './box-partners-admin.js';
 import { adminBoxSettingsRoutes } from './box-settings-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
 import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
+import { adminOrderDetailRoutes } from './orders.js';
 import { adminRefundRoutes } from './refunds.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
 import { adminStoreOrderRoutes } from './store/orders.js';
@@ -211,6 +212,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminRefundRoutes);
+  });
+
+  // Kind-agnostic order detail: the read behind the refund screen. Admin-only
+  // to match POST /admin/orders/:id/refund — an organizer who could open it
+  // would get a refund form that 403s. Its OWN 120/min bucket, not the
+  // admin-refund one above: this is a read that fires on every render of the
+  // page (and again after revalidatePath on a successful refund), and sharing
+  // the 30/min mutation bucket would let page loads starve the refund itself.
+  // Same shape and reasoning as the admin-user-detail block.
+  // hook: 'preHandler' so the keyGenerator runs AFTER auth populates
+  // `request.user`.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 120,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-order-detail:${auth.sub}` : `admin-order-detail-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminOrderDetailRoutes);
   });
 
   // Membership grant: admin-only, isolated 30/min bucket. Same shape and same

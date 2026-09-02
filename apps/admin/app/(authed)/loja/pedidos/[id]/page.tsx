@@ -10,8 +10,10 @@ import {
 } from '../status-labels';
 
 import { FulfillmentForm } from './fulfillment-form';
-import { RefundOrderForm } from './refund-order-form';
 
+// Shared with /pedidos/[id], the kind-agnostic refund screen. Same form, same
+// error copy, same blast-radius confirmation — reused, not reimplemented.
+import { RefundOrderForm } from '~/components/refund-order-form';
 import { getAdminStoreOrder } from '~/lib/admin-api';
 import { ApiError } from '~/lib/api';
 
@@ -274,6 +276,7 @@ export default async function PedidoDetailPage({ params }: { params: Promise<{ i
               provider={order.provider}
               siblingOrderCount={order.refundImpact?.siblingOrderCount ?? 0}
               siblingTicketCount={order.refundImpact?.siblingTicketCount ?? 0}
+              ownTicketCount={order.refundImpact?.ownTicketCount ?? 0}
             />
           </section>
         </aside>

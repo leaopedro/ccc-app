@@ -212,4 +212,60 @@ describe('RefundOrderForm', () => {
     });
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
+
+  // Caso do pedido de ingresso: nenhum irmao, mas o reembolso revoga os
+  // ingressos do proprio pedido. Sem isto o operador le "0 outros pedidos"
+  // como "nada mais acontece", e o QR do comprador para de funcionar.
+  it('avisa que os ingressos do proprio pedido serao revogados', () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm
+          orderId="ord_ticket"
+          status="paid"
+          provider="stripe"
+          siblingOrderCount={0}
+          siblingTicketCount={0}
+          ownTicketCount={2}
+        />,
+      );
+    });
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toMatch(/2 ingresso\(s\) válido\(s\) deste pedido/i);
+  });
+
+  it('leva o raio de impacto para a confirmacao, nao so para o banner', async () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm
+          orderId="ord_ticket"
+          status="paid"
+          provider="stripe"
+          siblingOrderCount={1}
+          siblingTicketCount={3}
+          ownTicketCount={2}
+        />,
+      );
+    });
+    requestOrderRefundAction.mockResolvedValue({ ok: true, requested: true });
+    await setReason('cliente desistiu dentro dos sete dias');
+    await submit();
+    const message = confirmSpy.mock.calls[0]?.[0] ?? '';
+    expect(message).toMatch(/2 ingresso\(s\) válido\(s\) deste pedido/i);
+    expect(message).toMatch(/mais 1 pedido\(s\)/i);
+    expect(message).toMatch(/3 ingresso\(s\)/i);
+  });
+
+  it('nao promete conclusao: um 202 continua sendo apenas uma solicitacao', async () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm orderId="ord_ticket" status="paid" provider="stripe" ownTicketCount={2} />,
+      );
+    });
+    requestOrderRefundAction.mockResolvedValue({ ok: true, requested: true });
+    await setReason('cliente desistiu dentro dos sete dias');
+    await submit();
+    expect(container.textContent).toMatch(/continua .?pago.? até o webhook confirmar/i);
+    expect(container.textContent).not.toMatch(/reembolsado com sucesso/i);
+  });
 });

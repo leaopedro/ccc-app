@@ -231,6 +231,10 @@ describe('GET /admin/orders/:id', () => {
         siblingOrderCount: 0,
         siblingTicketCount: 0,
         ownTicketCount: 2,
+        ownExtraItemCount: 0,
+        siblingExtraItemCount: 0,
+        ownVoucherCount: 0,
+        siblingVoucherCount: 0,
       });
     });
 
@@ -266,6 +270,10 @@ describe('GET /admin/orders/:id', () => {
         siblingOrderCount: 2,
         siblingTicketCount: 4,
         ownTicketCount: 2,
+        ownExtraItemCount: 0,
+        siblingExtraItemCount: 0,
+        ownVoucherCount: 0,
+        siblingVoucherCount: 0,
       });
       const predicted =
         body.refundImpact.siblingTicketCount + (body.refundImpact.ownTicketCount ?? 0);
@@ -282,6 +290,138 @@ describe('GET /admin/orders/:id', () => {
       const revoked = await prisma.ticket.count({ where: { status: 'revoked' } });
       expect(revoked).toBe(predicted);
       expect(revoked).toBe(6);
+    });
+  });
+
+  /**
+   * `TicketExtra` is per-EVENT and shared by every attendee; `TicketExtraItem`
+   * is per-TICKET. Refunding one buyer's extras order must therefore never be
+   * scoped by `extraId` alone — that predicate matches every attendee who
+   * bought the same extra at the same event.
+   */
+  describe('refunding an extras order stays inside the buyer', () => {
+    const seedExtrasOnlyOrder = async (opts: {
+      userId: string;
+      extraId: string;
+      providerRef: string;
+      quantity?: number;
+    }) =>
+      prisma.order.create({
+        data: {
+          userId: opts.userId,
+          eventId,
+          tierId,
+          kind: 'extras_only',
+          amountCents: 6000 * (opts.quantity ?? 1),
+          quantity: opts.quantity ?? 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: opts.providerRef,
+          status: 'paid',
+          paidAt: new Date(),
+          orderExtras: { create: { extraId: opts.extraId, quantity: opts.quantity ?? 1 } },
+        },
+      });
+
+    const seedAttendeeWithExtra = async (email: string, extraId: string) => {
+      const { user } = await createUser({ email, verified: true });
+      const order = await prisma.order.create({
+        data: {
+          userId: user.id,
+          eventId,
+          tierId,
+          kind: 'ticket',
+          amountCents: 15_000,
+          quantity: 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: `pi_ticket_${email.split('@')[0]}`,
+          status: 'paid',
+          paidAt: new Date(),
+        },
+      });
+      const ticket = await prisma.ticket.create({
+        data: { orderId: order.id, userId: user.id, eventId, tierId, status: 'valid' },
+      });
+      const item = await prisma.ticketExtraItem.create({
+        data: {
+          ticketId: ticket.id,
+          extraId,
+          code: `code-${ticket.id}-${extraId}`,
+          status: 'valid',
+        },
+      });
+      return { user, ticket, item };
+    };
+
+    const refund = async (eventKey: string, providerRef: string, amount: number) => {
+      ctx.stripe.nextEvent = refundEvent(eventKey, providerRef, amount, amount);
+      const hook = await ctx.app.inject({
+        method: 'POST',
+        url: '/stripe/webhook',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+        payload: rawJson(ctx.stripe.nextEvent),
+      });
+      expect(hook.statusCode).toBe(200);
+    };
+
+    it('revokes only the refunded buyer extra item, not every buyer of that extra', async () => {
+      const extra = await prisma.ticketExtra.create({
+        data: { eventId, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },
+      });
+      const alice = await seedAttendeeWithExtra('extras-alice@jdm.test', extra.id);
+      const bob = await seedAttendeeWithExtra('extras-bob@jdm.test', extra.id);
+      const carol = await seedAttendeeWithExtra('extras-carol@jdm.test', extra.id);
+
+      const aliceExtrasOrder = await seedExtrasOnlyOrder({
+        userId: alice.user.id,
+        extraId: extra.id,
+        providerRef: 'pi_extras_alice',
+      });
+
+      await refund('evt_od_extras_alice', 'pi_extras_alice', 6000);
+
+      const statuses = await prisma.ticketExtraItem.findMany({
+        where: { extraId: extra.id },
+        select: { id: true, status: true },
+      });
+      const byId = new Map(statuses.map((s) => [s.id, s.status]));
+      expect(byId.get(alice.item.id)).toBe('revoked');
+      expect(byId.get(bob.item.id)).toBe('valid');
+      expect(byId.get(carol.item.id)).toBe('valid');
+      expect(statuses.filter((s) => s.status === 'revoked')).toHaveLength(1);
+
+      // The order that was refunded is the only one whose row moved.
+      expect(
+        (await prisma.order.findUniqueOrThrow({ where: { id: aliceExtrasOrder.id } })).status,
+      ).toBe('refunded');
+    });
+
+    it('counts the extra items it will revoke in refundImpact', async () => {
+      const extra = await prisma.ticketExtra.create({
+        data: { eventId, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },
+      });
+      const alice = await seedAttendeeWithExtra('impact-alice@jdm.test', extra.id);
+      await seedAttendeeWithExtra('impact-bob@jdm.test', extra.id);
+
+      const order = await seedExtrasOnlyOrder({
+        userId: alice.user.id,
+        extraId: extra.id,
+        providerRef: 'pi_extras_impact',
+      });
+
+      const body = adminOrderDetailSchema.parse((await getDetail(order.id)).json());
+      // An extras_only order owns no Ticket rows, so a ticket-only impact reads
+      // 0 and the operator sees no warning at all before destroying goods.
+      expect(body.refundImpact.ownTicketCount).toBe(0);
+      expect(body.refundImpact.ownExtraItemCount).toBe(1);
+
+      await refund('evt_od_extras_impact', 'pi_extras_impact', 6000);
+
+      const revoked = await prisma.ticketExtraItem.count({ where: { status: 'revoked' } });
+      expect(revoked).toBe(body.refundImpact.ownExtraItemCount);
     });
   });
 

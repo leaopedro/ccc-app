@@ -1254,11 +1254,26 @@ export type AdminStoreOrderAuditEntry = z.infer<typeof adminStoreOrderAuditEntry
  * "nothing else happens". Kept `.optional()` for the same deploy-skew reason
  * the whole object is optional on the store detail: an API that predates this
  * field omits the key rather than failing the parse.
+ *
+ * `ownExtraItemCount` / `siblingExtraItemCount` count `TicketExtraItem` rows,
+ * the physical goods bought as event extras. They are not a nicety: an
+ * `extras_only` order owns NO `Ticket` rows at all, so a ticket-only impact
+ * reads 0/0/0 for exactly the order whose refund destroys goods, and the
+ * operator gets no banner before pressing the button. These come from the same
+ * resolver the revoke uses (`resolveOrderExtraItemIds`), so the number shown
+ * and the number revoked cannot drift.
+ *
+ * `ownVoucherCount` / `siblingVoucherCount` are the `PickupVoucher` rows the
+ * same cascade revokes (`revoke.ts`, the `pickupVoucher.updateMany` at the end).
  */
 export const adminOrderRefundImpactSchema = z.object({
   siblingOrderCount: z.number().int().nonnegative(),
   siblingTicketCount: z.number().int().nonnegative(),
   ownTicketCount: z.number().int().nonnegative().optional(),
+  ownExtraItemCount: z.number().int().nonnegative().optional(),
+  siblingExtraItemCount: z.number().int().nonnegative().optional(),
+  ownVoucherCount: z.number().int().nonnegative().optional(),
+  siblingVoucherCount: z.number().int().nonnegative().optional(),
 });
 export type AdminOrderRefundImpact = z.infer<typeof adminOrderRefundImpactSchema>;
 

@@ -44,6 +44,19 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
     order = await getAdminOrder(id);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) notFound();
+    // GET /admin/orders/:id é admin-only, mas /users/[id] é organizer+admin e
+    // aponta para cá. Sem este ramo o 403 vira tela de erro do Next, que não
+    // diz nada ao operador. Erro esperado, não crash.
+    if (e instanceof ApiError && e.status === 403) {
+      return (
+        <section className="flex flex-col gap-4">
+          <h1 className="text-2xl font-bold">Acesso restrito</h1>
+          <p className="text-sm text-[color:var(--color-muted)]">
+            Só administradores podem abrir o detalhe de um pedido.
+          </p>
+        </section>
+      );
+    }
     throw e;
   }
 
@@ -214,6 +227,10 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
               siblingOrderCount={order.refundImpact.siblingOrderCount}
               siblingTicketCount={order.refundImpact.siblingTicketCount}
               ownTicketCount={order.refundImpact.ownTicketCount ?? 0}
+              ownExtraItemCount={order.refundImpact.ownExtraItemCount ?? 0}
+              siblingExtraItemCount={order.refundImpact.siblingExtraItemCount ?? 0}
+              ownVoucherCount={order.refundImpact.ownVoucherCount ?? 0}
+              siblingVoucherCount={order.refundImpact.siblingVoucherCount ?? 0}
             />
           </section>
         </aside>

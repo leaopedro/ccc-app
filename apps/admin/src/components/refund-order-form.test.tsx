@@ -256,6 +256,78 @@ describe('RefundOrderForm', () => {
     expect(message).toMatch(/3 ingresso\(s\)/i);
   });
 
+  // Pedido `extras_only`: ownTicketCount é 0 porque a Order não tem Ticket
+  // nenhum, mas o reembolso revoga o TicketExtraItem do comprador. Sem contar
+  // extras o banner some justamente no caso em que o operador destrói
+  // mercadoria física.
+  it('avisa sobre extras mesmo quando o pedido nao tem ingresso proprio', () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm
+          orderId="ord_extras"
+          status="paid"
+          provider="stripe"
+          siblingOrderCount={0}
+          siblingTicketCount={0}
+          ownTicketCount={0}
+          ownExtraItemCount={3}
+        />,
+      );
+    });
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toMatch(/3 extra\(s\) de ingresso/i);
+  });
+
+  it('conta ingresso, extra e voucher na mesma frase', () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm
+          orderId="ord_mixed"
+          status="paid"
+          provider="stripe"
+          ownTicketCount={2}
+          ownExtraItemCount={1}
+          ownVoucherCount={4}
+        />,
+      );
+    });
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert!.textContent).toMatch(
+      /2 ingresso\(s\), 1 extra\(s\) de ingresso e 4 voucher\(s\) de retirada/i,
+    );
+  });
+
+  it('leva extras e vouchers dos irmaos para a confirmacao', async () => {
+    act(() => {
+      root.render(
+        <RefundOrderForm
+          orderId="ord_cart"
+          status="paid"
+          provider="stripe"
+          siblingOrderCount={2}
+          siblingTicketCount={0}
+          siblingExtraItemCount={5}
+          siblingVoucherCount={1}
+          ownExtraItemCount={2}
+        />,
+      );
+    });
+    requestOrderRefundAction.mockResolvedValue({ ok: true, requested: true });
+    await setReason('cliente desistiu dentro dos sete dias');
+    await submit();
+    const message = confirmSpy.mock.calls[0]?.[0] ?? '';
+    expect(message).toMatch(/2 extra\(s\) de ingresso válido\(s\) deste pedido/i);
+    expect(message).toMatch(/mais 2 pedido\(s\)/i);
+    expect(message).toMatch(/5 extra\(s\) de ingresso e 1 voucher\(s\) de retirada/i);
+    // O banner e a confirmação saem da mesma função; se divergirem, isto
+    // quebra. O banner separa as frases em <p>, a confirmação por espaço.
+    const banner = container.querySelector('[role="alert"]')!.textContent ?? '';
+    expect(message).toBe(
+      `${banner.replace(/\.(?=[A-ZÀ-Ü])/g, '. ')} Solicitar reembolso mesmo assim?`,
+    );
+  });
+
   it('nao promete conclusao: um 202 continua sendo apenas uma solicitacao', async () => {
     act(() => {
       root.render(

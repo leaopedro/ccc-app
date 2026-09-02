@@ -277,6 +277,10 @@ export default async function PedidoDetailPage({ params }: { params: Promise<{ i
               siblingOrderCount={order.refundImpact?.siblingOrderCount ?? 0}
               siblingTicketCount={order.refundImpact?.siblingTicketCount ?? 0}
               ownTicketCount={order.refundImpact?.ownTicketCount ?? 0}
+              ownExtraItemCount={order.refundImpact?.ownExtraItemCount ?? 0}
+              siblingExtraItemCount={order.refundImpact?.siblingExtraItemCount ?? 0}
+              ownVoucherCount={order.refundImpact?.ownVoucherCount ?? 0}
+              siblingVoucherCount={order.refundImpact?.siblingVoucherCount ?? 0}
             />
           </section>
         </aside>

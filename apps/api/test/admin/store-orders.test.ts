@@ -322,6 +322,10 @@ describe('Admin store orders queue', () => {
           siblingOrderCount: 0,
           siblingTicketCount: 0,
           ownTicketCount: 0,
+          ownExtraItemCount: 0,
+          siblingExtraItemCount: 0,
+          ownVoucherCount: 0,
+          siblingVoucherCount: 0,
         });
       });
 
@@ -424,6 +428,10 @@ describe('Admin store orders queue', () => {
           siblingOrderCount: 2,
           siblingTicketCount: 1,
           ownTicketCount: 0,
+          ownExtraItemCount: 0,
+          siblingExtraItemCount: 0,
+          ownVoucherCount: 0,
+          siblingVoucherCount: 0,
         });
       });
     });

@@ -58,8 +58,18 @@ const resolveBudgetOnly = async (
 
   // LIFO order: newest addedAt first. Re-read so tier-dropped lines above are
   // excluded from the trim set (the in-memory `box.items` is now stale).
-  const eligible = await tx.monthlyBoxItem.findMany({ where: { boxId, included: true } });
-  const items = [...eligible].sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
+  //
+  // `addedAt` alone does not order this. It defaults to CURRENT_TIMESTAMP,
+  // which Postgres freezes at transaction start, and PUT /me/box/selection
+  // upserts every line of one save inside a single transaction — so all of
+  // them carry the identical instant. Ordering in the database down to `id`
+  // makes the trim pick the same physical item every run. Without it the query
+  // came back unordered, the stable sort preserved that arbitrary order, and
+  // the member lost a different item each time for the same cents.
+  const items = await tx.monthlyBoxItem.findMany({
+    where: { boxId, included: true },
+    orderBy: [{ addedAt: 'desc' }, { id: 'desc' }],
+  });
   let total = items.reduce((s, i) => s + i.subtotalCents, 0);
   for (const line of items) {
     if (total <= box.budgetCentsSnapshot) break;

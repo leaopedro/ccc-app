@@ -199,7 +199,7 @@ describe('loadEligibleMembership — which membership owns the box', () => {
     expect(res.json().id).toBe(trialBox.id);
   });
 
-  it('flags the same history entry as current when two boxes share a cycleStart', async () => {
+  it('flags the box GET /me/box returns as current, not merely the newest row', async () => {
     const { user, garage } = await seedGarage('pick-history@jdm.test');
     const active = await seedMembership(garage.id, {
       status: 'active',
@@ -217,12 +217,20 @@ describe('loadEligibleMembership — which membership owns the box', () => {
       periodStart: '2026-08-01T00:00:00.000Z',
       periodEnd: '2027-08-01T00:00:00.000Z',
     });
-    // Same cycleStart, different memberships: cycleStart desc alone leaves the
-    // `current` flag to whatever Postgres feels like returning first.
-    await seedBox(active, '2026-08-01');
-    await seedBox(trial, '2026-08-01');
+    // Same cycleStart, two memberships. Ordering alone cannot separate them,
+    // so a position-based `current` can land on the trial's box while
+    // GET /me/box returns the active one, and the two screens disagree.
+    const activeBox = await seedBox(active, '2026-08-01');
+    const trialBox = await seedBox(trial, '2026-08-01');
 
-    const seen = new Set<string>();
+    const boxRes = await app.inject({
+      method: 'GET',
+      url: '/me/box',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(boxRes.statusCode).toBe(200);
+    expect(boxRes.json().id).toBe(activeBox.id);
+
     for (let i = 0; i < 5; i += 1) {
       const res = await app.inject({
         method: 'GET',
@@ -231,10 +239,35 @@ describe('loadEligibleMembership — which membership owns the box', () => {
       });
       expect(res.statusCode).toBe(200);
       const body = res.json() as { id: string; current: boolean }[];
-      expect(body.filter((b) => b.current)).toHaveLength(1);
-      seen.add(body.find((b) => b.current)!.id);
+      expect(body).toHaveLength(2);
+      // Exactly one current, and it is the box the pick resolved.
+      expect(body.filter((b) => b.current).map((b) => b.id)).toEqual([activeBox.id]);
+      expect(body.find((b) => b.id === trialBox.id)!.current).toBe(false);
     }
-    expect(seen.size).toBe(1);
+  });
+
+  it('flags nothing as current when the member has no eligible membership', async () => {
+    const { user, garage } = await seedGarage('pick-history-none@jdm.test');
+    // Cancelled member: the history list survives, the current flag does not.
+    const gone = await seedMembership(garage.id, {
+      status: 'expired',
+      tier: 'gold',
+      cadence: 'monthly',
+      ref: 'sub_hist_expired',
+      periodStart: '2026-07-01T00:00:00.000Z',
+      periodEnd: '2026-07-31T00:00:00.000Z',
+    });
+    await seedBox(gone, '2026-07-01');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/boxes',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { current: boolean }[];
+    expect(body).toHaveLength(1);
+    expect(body.every((b) => !b.current)).toBe(true);
   });
 
   it('returns null when no row is box-eligible', async () => {

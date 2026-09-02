@@ -72,13 +72,16 @@ const MEMBERSHIP_PICK_ORDER = [{ createdAt: 'desc' }, { id: 'desc' }] as const;
  *      not a total order — Postgres `CURRENT_TIMESTAMP` is transaction start
  *      time, so rows written together tie — hence `id desc` behind it.
  *
- * Deliberately NOT `pickLiveMembership` from services/billing: that helper
- * answers "which subscription takes money", over LIVE_MEMBERSHIP_STATUSES,
- * which includes `past_due`, `cancel_scheduled` and `paused`. None of those may
- * have a box. Reusing it raw would hand a box to a paused member; reusing it and
- * filtering afterwards would return null for a `trialing` member sitting beside
- * a `past_due` sibling and silently take their box away. Only the preference
- * step is shared, and it is shared through the constant, not the function.
+ * Note for anyone tempted to route this through the billing layer's "which
+ * membership is live" helper, whichever name it carries when you read this:
+ * do not. That question is answered over LIVE_MEMBERSHIP_STATUSES, which
+ * includes `past_due`, `cancel_scheduled` and `paused`. None of those may have
+ * a box. Calling it raw would hand a box to a paused member; calling it and
+ * filtering for eligibility afterwards would return null for a `trialing`
+ * member sitting beside a `past_due` sibling and silently take their box away.
+ * Box eligibility is a different question from who is being charged, so only
+ * the preference step above is shared, and it is shared through the status
+ * constant rather than through a function.
  */
 export const loadEligibleMembership = async (
   userId: string,
@@ -109,7 +112,10 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     const { sub } = requireUser(request);
     const garage = await prisma.garage.findUnique({ where: { userId: sub }, select: { id: true } });
     if (!garage) return reply.send([]);
-    return reply.send(await listBoxHistory(app.uploads, garage.id));
+    // The history list is not gated on a membership, but the `current` flag is:
+    // it must name the same box GET /me/box returns, not just the newest row.
+    const membership = await loadEligibleMembership(sub);
+    return reply.send(await listBoxHistory(app.uploads, garage.id, membership?.id ?? null));
   });
 
   app.get('/me/box/catalog', { preHandler: [app.authenticate] }, async (request, reply) => {

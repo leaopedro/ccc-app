@@ -86,7 +86,7 @@ describe('GET /me/boxes', () => {
   });
 
   it('returns two entries newest-first; cancelled membership does not gate history', async () => {
-    const { user, newerBox } = await setupGarageWithCancelledHistory();
+    const { user, newerBox, olderBox } = await setupGarageWithCancelledHistory();
     const res = await app.inject({
       method: 'GET',
       url: '/me/boxes',
@@ -96,7 +96,12 @@ describe('GET /me/boxes', () => {
     const history = boxHistorySchema.parse(res.json());
     expect(history).toHaveLength(2);
     expect(history[0]!.id).toBe(newerBox.id);
-    expect(history[0]!.current).toBe(true);
-    expect(history[1]!.current).toBe(false);
+    expect(history[1]!.id).toBe(olderBox.id);
+    // The list is not gated on a membership — that is what this test is for.
+    // The `current` flag is, and this membership is `expired`, so nothing is
+    // current. It used to mean "position 0", which flagged this box as live
+    // while GET /me/box answers 403 for the very same member. `current` now
+    // names the box that endpoint returns, and here there is none.
+    expect(history.every((h) => !h.current)).toBe(true);
   });
 });

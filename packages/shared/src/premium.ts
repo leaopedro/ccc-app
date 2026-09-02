@@ -178,6 +178,36 @@ export const isLiveMembershipStatus = (status: string): status is LiveMembership
   (LIVE_MEMBERSHIP_STATUSES as readonly string[]).includes(status);
 
 /**
+ * Os estados que o indice unico parcial do banco realmente cobre.
+ *
+ *   CREATE UNIQUE INDEX premium_membership_live_per_garage
+ *     ON "PremiumMembership" ("garageId")
+ *     WHERE status IN ('active', 'past_due', 'cancel_scheduled');
+ *
+ * (migracao 20260527094120, linhas 109-111.)
+ *
+ * NAO e a mesma lista de LIVE_MEMBERSHIP_STATUSES, e a diferenca e proposital.
+ * LIVE_MEMBERSHIP_STATUSES responde "este membro tem direito / pode abrir outra
+ * assinatura?" e por isso inclui `trialing` e `paused`. Esta lista responde
+ * "o Postgres vai recusar este INSERT/UPDATE?", e o Postgres so recusa nos tres
+ * estados acima. Uma linha `paused` ou `trialing` nao ocupa o slot do indice.
+ *
+ * Use esta constante, e so esta, em pre-checagens que existem para evitar um
+ * P2002 nesse indice. Usar a lista larga ali recusaria ativacoes que o banco
+ * teria aceitado: uma assinatura Stripe pausada bloquearia a compra Apple do
+ * mesmo membro, cobrada e sem membership. Se um dia `trialing`/`paused` tambem
+ * devem bloquear uma segunda membership, a mudanca e no indice, com migracao,
+ * nao aqui.
+ */
+export const LIVE_PER_GARAGE_INDEX_STATUSES = [
+  'active',
+  'past_due',
+  'cancel_scheduled',
+] as const satisfies readonly LiveMembershipStatus[];
+
+export type LivePerGarageIndexStatus = (typeof LIVE_PER_GARAGE_INDEX_STATUSES)[number];
+
+/**
  * Rejeicoes de checkout premium que o cliente consegue tratar. Sao erros de
  * combinacao, nao de disponibilidade: repetir a mesma requisicao nunca
  * funciona, entao 503 e a resposta errada.

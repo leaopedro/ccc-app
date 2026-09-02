@@ -359,6 +359,35 @@ admin at `/premium/catalogo`, verify with `GET /api/plans`, then note
 that the event is already marked processed and will NOT re-run. The
 membership has to be created by hand.
 
+**If the alert was `premium-live-membership-conflict`.** An activation
+arrived for a garage that already holds a membership inside the
+`premium_membership_live_per_garage` index under a different
+subscription. The incumbent won, the new activation wrote nothing, and
+the member was charged for it. The alert carries both subscription refs,
+both providers, both amounts, and the tier, cadence, `baseAmountCents`,
+`devFeePercent` and period bounds of the refused one, so it has
+everything the grant below needs.
+
+Decide which subscription the member should keep. Cancel the other at
+its provider and refund the charge there. Refunding is the usual answer:
+the member almost always has entitlement already, through the incumbent,
+and is simply paying twice. If the refused subscription is the one to
+keep, expire the incumbent first, then grant it with
+`POST /admin/subscriptions/grant`.
+
+The originating `PremiumSubscriptionAttempt` was already settled to
+`failed` by the webhook, so the member is not blocked from subscribing
+again once the duplicate is cleaned up.
+
+**If the alert was `premium-unknown-subscription`.** An event arrived for
+a subscription that has no `PremiumMembership` row. At `warning` level it
+is housekeeping: an out-of-order delivery, or a subscription that
+pre-dates F8. At `error` level it is a renewal, which means money moved
+and there is nowhere to file it. The common cause of the recurring
+`error` variant is a subscription that a
+`premium-live-membership-conflict` refused and nobody cancelled at the
+provider: it keeps billing every cycle. Cancel it at the provider.
+
 **Creating a membership by hand.** `POST /admin/subscriptions/grant`
 exists for this. Body: `garageId`, `tier`, `cadence`,
 `providerCustomerRef`, `providerSubRef`, `providerInvoiceRef`,

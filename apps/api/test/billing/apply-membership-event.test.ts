@@ -639,7 +639,7 @@ describe('applyMembershipEvent', () => {
     expect(invoice!.refundedAmountCents).toBe(Math.floor(BASE_PRICING.grossAmountCents / 2));
   });
 
-  it('concurrent activations for same garage: one wins, the other fails cleanly (P2002)', async () => {
+  it('concurrent activations for same garage: one wins, the loser writes nothing and does not throw', async () => {
     const { user } = await createUser({ email: 'am13@jdm.test', verified: true });
     const gid = await garageId(user.id);
 
@@ -665,11 +665,14 @@ describe('applyMembershipEvent', () => {
       }),
     ]);
 
-    // Exactly one should succeed.
+    // Both settle cleanly now. The loser used to reject with P2002 from
+    // `premium_membership_live_per_garage`, which in the webhook meant a 5xx
+    // for a subscription the provider had already charged, retried forever.
+    // It now hits the live-per-garage guard in handleActivated, writes
+    // nothing and alerts Sentry — see
+    // test/billing/activation-live-membership-conflict.test.ts.
     const successes = [resultA, resultB].filter((r) => r.status === 'fulfilled');
-    const failures = [resultA, resultB].filter((r) => r.status === 'rejected');
-    expect(successes).toHaveLength(1);
-    expect(failures).toHaveLength(1);
+    expect(successes).toHaveLength(2);
 
     // Only one live membership row for this garage.
     const liveMemberships = await prisma.premiumMembership.findMany({

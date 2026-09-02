@@ -481,6 +481,39 @@ distinguishable from a genuine webhook activation: its
 **Tell the member.** Their payment is safe and kept. Give a concrete
 time for the fix. Do not ask them to retry.
 
+## Runbook 6 — extras revogados de terceiros pelo bug de escopo do revoke
+
+**Quando usar.** Um membro diz que o extra dele (camiseta, kit, o que for) não
+passa no portão, e ele nunca pediu reembolso.
+
+**O que aconteceu.** Até a correção de 2026-09-02, `revokeExtrasOnlyItems`
+casava só em `extraId`, sem escopo de ticket, pedido ou usuário. `TicketExtra` é
+por **evento**, compartilhado por todos os participantes; só `TicketExtraItem` é
+por ticket. Então reembolsar um pedido `extras_only` (ou um `mixed` sem ticket
+próprio) revogava aquele extra de **todos** os compradores do evento. Silencioso:
+sem erro, sem alerta, e o banner de raio de alcance mostrava zero, porque contava
+só linhas de `Ticket`.
+
+**O código está corrigido.** O que sobra é dado já estragado em produção.
+
+**Como achar.** `docs/runbooks/audit-extras-blast.sql`, só leitura. A consulta 1
+é a primária: agrupa revogações por extra e por segundo. Reembolso legítimo mexe
+em uma ou duas linhas; um blast mexe em uma por comprador, todas no mesmo
+segundo. A consulta 2 filtra linha a linha pelo sinal mais forte, item revogado
+sob ticket ainda `valid`, o que não deveria existir, porque revogação legítima
+derruba ticket e itens juntos. A consulta 3 correlaciona o horário do cluster com
+o `order.refund_requested` que disparou.
+
+**Cuidados que o arquivo detalha:** a consulta 2 produz falsos positivos
+legítimos (revogação manual, evento cancelado, ticket de cortesia sem `Order`),
+e tem um falso negativo que importa — uma vítima real que também tenha um
+reembolso próprio daquele extra fica escondida. Por isso o cluster é a consulta
+primária e o join é só o filtro.
+
+**Não existe reversão automática segura.** Voltar um item para `valid` devolve
+acesso a um bem que pode ter sido legitimamente reembolsado. Decidir cluster por
+cluster, com o reembolso da consulta 3 na mão.
+
 ## Refunds and support
 
 **Reembolso assistido.** `POST /admin/orders/:id/refund`, executado pelo

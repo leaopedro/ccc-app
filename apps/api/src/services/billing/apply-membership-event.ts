@@ -1,5 +1,6 @@
 import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import type { Prisma, PremiumProvider, PrismaClient } from '@prisma/client';
+import * as Sentry from '@sentry/node';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
 import { awardXp } from '../garage/xp-awarder.js';
@@ -95,6 +96,102 @@ async function handleActivated(
   let membership;
   let didAdvancePeriod = false;
   if (!existing) {
+    // Live-per-garage guard. The lookup above keys ONLY on
+    // (provider, providerSubRef), but the DB also carries the partial unique
+    // `premium_membership_live_per_garage` (migration 20260527094120):
+    //
+    //   CREATE UNIQUE INDEX premium_membership_live_per_garage
+    //     ON "PremiumMembership" ("garageId")
+    //     WHERE status IN ('active', 'past_due', 'cancel_scheduled');
+    //
+    // So a garage that already holds a live membership under a DIFFERENT
+    // subscription made the findUnique miss and the create below raise P2002.
+    // Nothing here, in applyMembershipEvent, or in the Stripe/RC webhook
+    // routes caught it: the webhook 500'd, Stripe retried on its backoff, and
+    // every retry hit the same violation. Worst shape in the billing system —
+    // the card was charged, no membership row landed, and no refund was
+    // issued. Two real ways to get here: the double native-checkout race
+    // documented in routes/me-premium.ts (an attempt with no
+    // confirmation_secret leaves a live sub behind and a retry mints a
+    // second one), and a member who already pays through one provider
+    // subscribing again through the other.
+    //
+    // Chosen behaviour: the pre-existing live membership WINS and this
+    // activation writes nothing, exactly the winner routes/admin/subscriptions.ts
+    // already picked for the same constraint ("garage already has a live
+    // membership; cancel or expire it before granting a new one"). That route
+    // can answer 409 because a human is on the other end; a webhook cannot —
+    // any non-2xx just buys another retry of the same violation — so here the
+    // event is allowed to complete and be marked processed, and the alert is
+    // what carries it to a human.
+    //
+    // Why not supersede the incumbent instead: expiring it would hand
+    // entitlement to the newest payment, but the superseded subscription is
+    // still live and still billing at the provider, so its next renewal comes
+    // back through handleRenewed, flips that row to 'active' and violates the
+    // same index from the other side. Superseding trades one uncaught P2002
+    // for a different one, and it cancels nothing at the provider — the
+    // double charge stays either way. Only a human can pick which
+    // subscription to keep and refund the other.
+    //
+    // Nothing is silently dropped: this is a Sentry `error` carrying the
+    // garage, both providers, both subscription refs, both gross amounts and
+    // the unrecorded invoice ref, so the operator can refund/cancel the
+    // duplicate at the provider and, if the wrong one won, re-provision
+    // through POST /admin/subscriptions/grant (Runbook 5, "money in, nothing
+    // out"). The SubscriptionWebhookEvent row also keeps the raw payload, so
+    // the paid invoice is never traceless.
+    //
+    // No SAVEPOINT + P2002 catch as a backstop: this pre-check is race-free
+    // under the lock every caller of applyMembershipEvent must already hold
+    // (canon §F8.5, `SELECT ... FROM "Garage" ... FOR UPDATE`), which is the
+    // same contract the findUnique→create window above already relies on.
+    const liveElsewhere = await tx.premiumMembership.findFirst({
+      where: { garageId, status: { in: [...LIVE_MEMBERSHIP_STATUSES] } },
+      select: {
+        id: true,
+        provider: true,
+        providerSubRef: true,
+        status: true,
+        tier: true,
+        grossAmountCents: true,
+        currency: true,
+        currentPeriodEnd: true,
+      },
+    });
+    if (liveElsewhere) {
+      Sentry.captureMessage(
+        'billing: activation refused — garage already has a live membership under another subscription',
+        {
+          level: 'error',
+          tags: { kind: 'premium-live-membership-conflict', provider },
+          extra: {
+            garageId,
+            incumbentMembershipId: liveElsewhere.id,
+            incumbentProvider: liveElsewhere.provider,
+            incumbentProviderSubRef: liveElsewhere.providerSubRef,
+            incumbentStatus: liveElsewhere.status,
+            incumbentTier: liveElsewhere.tier,
+            incumbentGrossAmountCents: liveElsewhere.grossAmountCents,
+            incumbentCurrency: liveElsewhere.currency,
+            incumbentCurrentPeriodEnd: liveElsewhere.currentPeriodEnd.toISOString(),
+            incomingProvider: provider,
+            incomingProviderSubRef: providerSubRef,
+            incomingProviderCustomerRef: providerCustomerRef,
+            incomingTier: tier,
+            incomingGrossAmountCents: pricing.grossAmountCents,
+            incomingCurrency: pricing.currency,
+            // Paid at the provider and deliberately NOT written here: it
+            // belongs to the losing subscription, and filing it under the
+            // incumbent membership would corrupt that member's invoice history.
+            unrecordedProviderInvoiceRef: invoice.providerInvoiceRef,
+            unrecordedPaidAt: invoice.paidAt.toISOString(),
+          },
+        },
+      );
+      return;
+    }
+
     membership = await tx.premiumMembership.create({
       data: {
         garageId,
@@ -332,6 +429,14 @@ async function handleRenewed(
     where: { provider_providerSubRef: { provider, providerSubRef } },
   });
 
+  // Known, NOT fixed here: this update writes status 'active', so it can move
+  // a row INTO the live set the same way handleActivated's create does. If the
+  // renewing row is 'paused'/'expired' while another row for the garage is
+  // live, `premium_membership_live_per_garage` raises the same uncaught P2002.
+  // It needs the same winner-picking judgement as the activation case and a
+  // different set of inputs (there is no incoming subscription to refuse, only
+  // a renewal of one we already know), so it is deliberately left to its own
+  // change rather than widened into this one. Same applies to handleResumed.
   const isForward = currentPeriodEnd > existing.currentPeriodEnd;
   const membership = isForward
     ? await tx.premiumMembership.update({

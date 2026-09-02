@@ -1,7 +1,5 @@
-import { brand } from '@ccc/design';
 import type { MyOrder } from '@ccc/shared/orders';
 import { Button } from '@ccc/ui';
-import { PaymentSheetError, useStripe } from '@stripe/stripe-react-native';
 import Constants from 'expo-constants';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -20,12 +18,15 @@ import {
 
 import { ApiError } from '~/api/client';
 import { cancelMyOrder, getOrder, listMyOrders, resumeOrder } from '~/api/orders';
+import { resolveResumeSheetOutcomeAction } from '~/cart/resume-sheet-outcome';
 import { selectResumeKind } from '~/cart/resume-selector';
+import { stripeResumeAvailable } from '~/cart/resume-stripe-availability';
 import { resolveWebResume } from '~/cart/resume-web-checkout';
 import { clearPendingCheckoutUrl, getPendingCheckoutUrl } from '~/cart/web-pending-checkout';
 import { ordersCopy } from '~/copy/orders';
 import { showMessage } from '~/lib/confirm';
 import { formatBRL, formatEventDateRange } from '~/lib/format';
+import { usePaymentSheet } from '~/payments/payment-sheet';
 import { resolveOrderKindLabel } from '~/screens/profile/orders-kind-label';
 import { theme } from '~/theme';
 
@@ -85,12 +86,20 @@ function ResumePixButton({ orderId }: { orderId: string }) {
   );
 }
 
-// Resumes a Stripe (card) order. Only rendered when StripeProvider is in
-// the tree (STRIPE_AVAILABLE === true). Isolates useStripe() so OrderCard
-// doesn't crash in preview builds without Stripe.
+// Resumes a Stripe (card) order via the shared PaymentSheet seam
+// (usePaymentSheet, src/payments/payment-sheet.ts) — the same seam the cart
+// and subscription flows use. Only rendered when a publishable key is
+// configured (stripeResumeAvailable). That gate is NOT a crash guard: it
+// never was one. useStripe() from @stripe/stripe-react-native has no
+// useContext call anywhere in the package, its web stub is likewise
+// context-free, and initPaymentSheet wraps its native call in a try/catch
+// and resolves `{ error }` rather than rejecting — so calling it works
+// identically whether or not StripeProvider is mounted. The gate exists so
+// we don't render a "Pagar" button with nothing behind it when no key is
+// configured at all.
 function PayWithStripeButton({ orderId, reload }: { orderId: string; reload: () => unknown }) {
   const router = useRouter();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { pay } = usePaymentSheet();
 
   const handlePay = async () => {
     try {
@@ -108,17 +117,11 @@ function PayWithStripeButton({ orderId, reload }: { orderId: string; reload: () 
         } as never);
         return;
       }
-      const { error: initError } = await initPaymentSheet({
-        paymentIntentClientSecret: data.clientSecret,
-        merchantDisplayName: brand.name,
-      });
-      if (initError) {
-        Alert.alert(ordersCopy.payError, ordersCopy.payErrorBody);
-        return;
-      }
-      const { error: presentError } = await presentPaymentSheet();
-      if (presentError && presentError.code !== PaymentSheetError.Canceled) {
-        Alert.alert(ordersCopy.payError, ordersCopy.payErrorBody);
+      const outcome = await pay(data.clientSecret);
+      const action = resolveResumeSheetOutcomeAction(outcome);
+      if (action.kind === 'silent') return;
+      if (action.kind === 'error') {
+        Alert.alert(ordersCopy.payError, action.text);
         return;
       }
       reload();
@@ -203,10 +206,13 @@ function ResumeOrderButton({
       Platform.OS === 'web' &&
       order.provider === 'stripe' &&
       getPendingCheckoutUrl(order.id) !== null,
-    // Canon §F8.16 — never offer Stripe-based ticket resumption on iOS even
-    // when STRIPE_AVAILABLE is true. iOS order checkout via RC/in-app
-    // fallback is Phase F8.1 work; until then iOS users hit `kind === 'none'`.
-    stripeAvailable: Platform.OS !== 'ios' && STRIPE_AVAILABLE,
+    // Canon §F8.16 used to force this false on iOS. That rule is superseded
+    // (2026-08-29): iOS now resumes through the same PaymentSheet seam as
+    // every other platform. See stripeResumeAvailable.
+    stripeAvailable: stripeResumeAvailable({
+      platform: Platform.OS,
+      hasPublishableKey: STRIPE_AVAILABLE,
+    }),
   });
 
   switch (kind) {

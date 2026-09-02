@@ -49,6 +49,16 @@ All chunk plans MUST conform to these. Where spec inline text drifts, canon wins
 
 **§F8.15 — Webhook idempotency model.** Two-layer: (a) `SubscriptionWebhookEvent @@unique(provider, providerEventId)` — provider-level event dedup; (b) `PremiumMembershipInvoice @@unique(provider, providerInvoiceRef)` — per-invoice dedup. Replays MUST short-circuit at layer (a) with 200 OK + no further work. Chunks F8.04 + F8.05 own (a); chunk F8.03 owns (b). NEVER skip storing `payload Json` on `SubscriptionWebhookEvent` (load-bearing for prod debugging — Phase 2 didn't have this gap, but other one-time webhook code in `stripe-webhook.ts` does).
 
+**§F8.16 — SUPERSEDIDO em 2026-08-29.** Motivo: a diretriz citada como base
+(`3.1.5(a)`) não existe mais; `3.1.5` hoje é "Cryptocurrencies". O texto vivo é
+`3.1.3(e) — Goods and Services Outside of the App`, que exige método de pagamento
+**fora** do in-app purchase para bens e serviços **físicos** consumidos fora do
+app. O iOS passa a pagar por Stripe nativo. A regra de lint `no-stripe-on-ios` e
+o teste de isolamento foram removidos. Ver
+`docs/superpowers/specs/2026-08-29-pagamentos-mobile-consolidado-design.md` (C1) e
+`docs/superpowers/plans/2026-08-29-pagamentos-mobile-app.md` (Task 1). Texto
+original preservado abaixo para histórico.
+
 **§F8.16 — iOS bundle isolation.** iOS code path MUST NOT link to, mention, or redirect to Stripe checkout. Enforced via a lint rule added in chunk F8.18 (forbid `stripe://`, `checkout.stripe.com`, `STRIPE_PUBLISHABLE_KEY` references inside iOS-conditional `apps/mobile/src/` code blocks). App Review hinges on this.
 
 ## Dependency graph

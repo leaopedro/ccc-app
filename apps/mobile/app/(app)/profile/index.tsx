@@ -248,7 +248,7 @@ export default function ProfileMenuScreen() {
           onPress={() => router.push('/profile/garage' as never)}
         />
         {/* Gated on the same flag as the tab bar. The tab was already hidden when
-            billing is off, but this row was not, so the "Assinaturas em breve."
+            billing is off, but this row was not, so the billing-unavailable
             placeholder stayed two taps from the Profile tab — placeholder content
             on a primary path is an App Store 2.1 rejection. */}
         {PREMIUM_BILLING_ENABLED && subscriptionsEnabled ? (

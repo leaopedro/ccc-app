@@ -1,7 +1,7 @@
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { getGarage, type GarageReadResponse } from '~/api/garage';
 import { garageCopy } from '~/copy/garage';
@@ -23,7 +23,10 @@ export default function ProfileGarageIndex() {
     }, []),
   );
 
-  const slots = useMemo(() => (garage ? buildGarageSlots(garage) : []), [garage]);
+  const slots = useMemo(
+    () => (garage ? buildGarageSlots(garage, { platform: Platform.OS }) : []),
+    [garage],
+  );
 
   const handleAddCar = useCallback(() => {
     router.push('/profile/garage/new' as never);

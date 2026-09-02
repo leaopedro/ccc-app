@@ -22,6 +22,8 @@ import { IdentityCard } from './IdentityCard';
 import { publicGarageUrl } from '~/config/urls';
 import { garageCopy } from '~/copy/garage';
 import { showMessage } from '~/lib/confirm';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
+import { premiumSheetBenefits } from '~/screens/garage/premium-benefits';
 
 type Props = {
   garage: GarageOwner;
@@ -94,7 +96,12 @@ export function GarageHeader({ garage, onUpdated, carCount }: Props) {
           heroTitle: garageCopy.garage.premiumHeroTitle,
           heroBody: garageCopy.garage.premiumHeroBody,
           nearExpiry: garageCopy.garage.premiumNearExpiry,
-          benefits: garageCopy.garage.premiumBenefits,
+          // Final review C2 — the caixa only appears when the build can
+          // actually deliver it (EXPO_PUBLIC_CAIXA_ENABLED).
+          benefits: premiumSheetBenefits({
+            caixaEnabled: isCaixaBuildEnabled(),
+            copy: garageCopy.garage,
+          }),
           footer: garageCopy.garage.premiumFooter,
         }}
       />

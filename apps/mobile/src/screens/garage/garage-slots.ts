@@ -53,8 +53,17 @@ export type GarageSlotV2 =
  *   - not unlimited
  *   - no slots available
  *   - purchaseOption is present in the payload
+ *   - not iOS (final review I3, below)
  */
-export function buildGarageSlots(payload: GarageReadResponse): GarageSlotV2[] {
+export function buildGarageSlots(
+  payload: GarageReadResponse,
+  // Final review I6: REQUIRED, and `platform` is non-optional. It used to
+  // default to `{}`, so `ctx.platform !== 'ios'` failed OPEN — any caller that
+  // forgot the argument rendered the buy tile on iOS, where checkout refuses
+  // the item with 403 VIRTUAL_ITEM_IOS_BLOCKED and strands it in the cart.
+  // A silent regression like that has to be a type error, not a runtime one.
+  ctx: { platform: string },
+): GarageSlotV2[] {
   const carsById = new Map(payload.cars.map((c) => [c.id, c]));
   const slots: GarageSlotV2[] = [];
   let index = 1;
@@ -73,7 +82,18 @@ export function buildGarageSlots(payload: GarageReadResponse): GarageSlotV2[] {
     slots.push({ kind: 'empty', index: index++, source: 'default_free', spot: null });
   }
 
-  if (!payload.isUnlimited && payload.availableSlots === 0 && payload.purchaseOption) {
+  // A purchased spot is a virtual-variant cart item; routes/cart.ts refuses
+  // it with 403 VIRTUAL_ITEM_IOS_BLOCKED on iOS at checkout time (App Store
+  // 3.1.3(e) — digital unlock cannot sell outside IAP). Rendering the tile
+  // there is a purchase affordance that always fails by design, and it
+  // strands the cart item behind a checkout that will never succeed. Hide
+  // it instead of letting the member tap into a guaranteed refusal.
+  if (
+    !payload.isUnlimited &&
+    payload.availableSlots === 0 &&
+    payload.purchaseOption &&
+    ctx.platform !== 'ios'
+  ) {
     slots.push({ kind: 'buy', index: index++, purchaseOption: payload.purchaseOption });
   }
 

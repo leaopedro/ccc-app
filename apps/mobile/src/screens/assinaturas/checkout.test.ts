@@ -23,6 +23,14 @@ vi.mock('expo-web-browser', () => ({
   openAuthSessionAsync: (url: string) => openAuthSessionAsync(url),
 }));
 vi.mock('~/api/premium', () => ({ createPremiumCheckout, createPremiumSubscriptionNative }));
+// The caixa flag decides which App Store guideline governs a keyless iOS build,
+// so it has to be movable per test. The real module reads process.env at import
+// time, which vi.resetModules() alone cannot re-evaluate usefully here.
+const caixa = vi.hoisted(() => ({ enabled: false }));
+vi.mock('~/screens/caixa/caixa-enabled', () => ({
+  CAIXA_BUILD_ENABLED: caixa.enabled,
+  isCaixaBuildEnabled: () => caixa.enabled,
+}));
 
 const load = async () => import('./checkout');
 
@@ -36,6 +44,9 @@ describe('startPremiumCheckout', () => {
     // Default: a build that HAS a key, so the iOS cases below exercise the
     // native seam. The keyless cases set this to `{}` explicitly.
     expoExtra.value = { stripePublishableKey: 'pk_test_checkout' };
+    // Default off, matching the pre-2026-09-01 profiles. The eas.json flip to
+    // `true` is covered by its own case below.
+    caixa.enabled = false;
   });
 
   afterEach(() => {
@@ -112,6 +123,50 @@ describe('startPremiumCheckout', () => {
     expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
     expect(openAuthSessionAsync).not.toHaveBeenCalled();
     expect(out).toMatchObject({ kind: 'error', error: { reason: 'unavailable' } });
+  });
+
+  // 2026-09-01: EXPO_PUBLIC_CAIXA_ENABLED is now `true` in all three eas
+  // profiles, so this is the branch every real build takes when the key is
+  // missing — not a hypothetical.
+  //
+  // The refusal above and the fallback here are the SAME rule applied to two
+  // different products. With the caixa in the membership there is a physical
+  // box shipped each cycle, which is 3.1.3(e): a method other than IAP is
+  // required, so the hosted checkout is legitimate exactly as it is for the
+  // cart. Without the caixa the membership is cosmetics, and the same link out
+  // would be the 3.1.3 chapeau violation the case above refuses.
+  it('falls back to the hosted checkout on a keyless iOS build when the caixa ships', async () => {
+    platform.OS = 'ios';
+    expoExtra.value = {};
+    caixa.enabled = true;
+    createPremiumCheckout.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_ios_caixa',
+    });
+    openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' });
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    // Still no native call — the sheet cannot mount without a key either way.
+    expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
+    expect(openAuthSessionAsync).toHaveBeenCalledWith(
+      'https://checkout.stripe.com/c/pay/cs_ios_caixa',
+    );
+    expect(out).toEqual({ kind: 'returned' });
+  });
+
+  // The caixa flag must not touch the keyed path: with a publishable key the
+  // native sheet is the only correct answer regardless of what ships in the box.
+  it('still uses the native sheet on iOS with a key, caixa on', async () => {
+    platform.OS = 'ios';
+    caixa.enabled = true;
+    createPremiumSubscriptionNative.mockResolvedValue({ clientSecret: 'seti_caixa_secret' });
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(out).toEqual({ kind: 'sheet', clientSecret: 'seti_caixa_secret' });
   });
 
   // Final review I1: Android stays on the hosted browser flow, matching

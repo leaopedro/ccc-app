@@ -3,10 +3,12 @@
 // Final review C2: `garageCopy.garage.premiumBenefits` used to include the
 // physical caixa unconditionally, and the sheet rendered it ungated on both
 // call sites (app/(app)/garage/index.tsx, screens/garage/GarageHeader.tsx).
-// The caixa screens are behind EXPO_PUBLIC_CAIXA_ENABLED, which neither eas
-// profile sets, so in a shipped build the member can never opt in, add items
-// or set an address — and apps/api/src/workers/box-cutoff.ts skips exactly
-// those boxes. The sheet was promising a box the binary cannot deliver.
+// The caixa screens are behind EXPO_PUBLIC_CAIXA_ENABLED. When that flag is
+// off the member can never opt in, add items or set an address — and
+// apps/api/src/workers/box-cutoff.ts skips exactly those boxes, so the sheet
+// was promising a box the binary cannot deliver. The flag went `true` in all
+// three eas profiles on 2026-09-01, so today the caixa does render; the gate
+// stays because the promise is only ever true relative to the flag.
 //
 // ContratarScreen.tsx and PlanoDetalheScreen.tsx already gate their caixa card
 // on `isCaixaBuildEnabled()`; this is the same gate for the sheet, kept as a

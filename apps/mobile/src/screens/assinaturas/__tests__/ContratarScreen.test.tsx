@@ -517,11 +517,12 @@ describe('ContratarScreen', () => {
     expect(body).toContain(assinaturasCopy.caixa.delivery);
   });
 
-  // Final review C2 — EXPO_PUBLIC_CAIXA_ENABLED is absent from both the
-  // preview and production eas.json profiles, so a shipped binary cannot
-  // assemble the box at all. Promising it anyway (the box copy rendering
+  // Final review C2 — with EXPO_PUBLIC_CAIXA_ENABLED off, a binary cannot
+  // assemble the box at all, so promising it anyway (the box copy rendering
   // unconditionally) is exactly the 2.3.1 exposure this branch exists to
-  // close: no title, no body, no stray empty container either.
+  // close: no title, no body, no stray empty container either. All three eas
+  // profiles set the flag `true` as of 2026-09-01, so this pins the OFF
+  // direction, which is the one that can lie.
   it('renders no caixa copy at all when the caixa build flag is off', async () => {
     caixaFlag.enabled = false;
     await renderScreen();

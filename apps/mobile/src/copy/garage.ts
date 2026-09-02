@@ -128,10 +128,12 @@ const ptBR = {
     // advertência acima continua valendo para qualquer item novo que ainda
     // não exista no produto.
     // Fix round 2 (C2): the caixa lives OUTSIDE `premiumBenefits` because it is
-    // conditional. The caixa screens are behind EXPO_PUBLIC_CAIXA_ENABLED,
-    // absent from both eas profiles, so in a shipped build the member can
-    // never opt in, add items, or set an address — and box-cutoff.ts skips
+    // conditional on EXPO_PUBLIC_CAIXA_ENABLED. With that flag off the member
+    // can never opt in, add items, or set an address — and box-cutoff.ts skips
     // exactly those boxes (`!hasItems || !autoSendOptIn || !shippingAddressId`).
+    // The flag went `true` in all three eas profiles on 2026-09-01; the split
+    // stays, because a future build that turns it back off must not silently
+    // start promising the box again.
     // Promising it in a build that cannot deliver it is the same 2.3.1 exposure
     // the notes above cover. `premiumSheetBenefits` (screens/garage) puts it
     // back at the top of the list when the flag is on, matching how

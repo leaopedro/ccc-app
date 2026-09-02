@@ -9,11 +9,12 @@
 // forbids outright (the exception is US-storefront only). iOS now pays through
 // the native PaymentSheet — when the build actually carries a publishable key
 // to mount StripeProvider with. Without one the sheet cannot exist at all, and
-// iOS reports the contratação as unavailable rather than opening a hosted
-// checkout: while the caixa flag is off this membership ships as cosmetics
-// only, so steering to a web purchase would be the very 3.1.3 violation the
-// paragraph above describes. Supplying the key is a human prerequisite this
-// code cannot satisfy for itself; see the note at the branch.
+// what iOS does instead depends on whether the caixa ships with the plan: with
+// it, the membership is a physical delivery and 3.1.3(e) permits the hosted
+// checkout; without it, the membership is cosmetics and the same link out is
+// the 3.1.3 violation described above, so iOS reports it unavailable instead.
+// Supplying the key is a human prerequisite this code cannot satisfy for
+// itself; see the note at the branch.
 //
 // Android stays on the hosted browser flow below, same as before this
 // branch and same as PremiumScreen.tsx's onSubscribeAndroid — whether
@@ -48,6 +49,7 @@ import { Platform } from 'react-native';
 import { createPremiumCheckout, createPremiumSubscriptionNative } from '~/api/premium';
 
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 
 import { resolveCheckoutError, type CheckoutError } from './checkout-error';
 
@@ -92,38 +94,47 @@ export async function startPremiumCheckout(input: {
   // first means a keyless build never creates either.
   if (Platform.OS === 'ios') {
     if (!hasStripePublishableKey()) {
-      // Fix round 3. iOS must NOT fall through to the hosted browser flow.
+      // No key means no StripeProvider, so the sheet can never present. What a
+      // keyless iOS build may do INSTEAD depends on what the membership is,
+      // because the App Store guideline that applies depends on it.
       //
-      // Round 2 sent a keyless iOS build to `WebBrowser.openAuthSessionAsync`,
-      // reasoning that a working purchase beats a dead end. That reasoning is
-      // wrong for THIS product on THIS platform. With EXPO_PUBLIC_CAIXA_ENABLED
-      // absent from both eas profiles, the shipped membership is `capas
-      // personalizadas` plus `selo Premium` (copy/garage.ts premiumBenefits) —
-      // in-app cosmetics, with no physical component. A digital subscription
-      // sold through an in-app link to an external checkout is the 3.1.3
-      // chapeau violation this branch exists to remove, and it is worse than
-      // an error because it actually completes.
+      // With the caixa on, the membership delivers a physical box each cycle.
+      // That is 3.1.3(e) — physical goods consumed outside the app must use a
+      // method OTHER than IAP — so a hosted checkout is legitimate, exactly as
+      // it is for the cart, which sells goods and tickets the same way.
       //
-      // The cart keeps its hosted fallback on purpose: it sells physical goods
-      // and event tickets, where 3.1.3(e) REQUIRES a non-IAP method. That
-      // carve-out does not reach a cosmetics-only membership.
+      // With the caixa off, the membership is `capas personalizadas` plus
+      // `selo Premium` (copy/garage.ts): in-app cosmetics, no physical
+      // component. That is a digital subscription, 3.1.1 wants IAP for it, and
+      // an in-app link out to a web checkout is the 3.1.3 chapeau violation
+      // this module's header describes — worse than an error, because it
+      // completes. So refuse, and let the member see `indisponível`.
       //
-      // Setting EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY on the production profile
-      // restores the native PaymentSheet and makes this branch unreachable.
-      // That is the real remedy; this only refuses to violate in its absence.
-      return {
-        kind: 'error',
-        error: { reason: 'unavailable', message: assinaturasCopy.contratar.errorUnavailable },
-      };
-    }
-    try {
-      const intent = await createPremiumSubscriptionNative(input);
-      return { kind: 'sheet', clientSecret: intent.clientSecret };
-    } catch (err) {
-      // Same mapper as the hosted path below: checkout-native shares
-      // resolveSubscriptionPackage with checkoutHandler on the API side, so
-      // it returns the identical 503/409/422/403/404 shapes.
-      return { kind: 'error', error: resolveCheckoutError(err) };
+      // Reading the flag rather than hardcoding either answer is deliberate:
+      // the two are only ever correct relative to what is in the product, and
+      // whoever flips EXPO_PUBLIC_CAIXA_ENABLED should not also have to
+      // remember to come back and flip this.
+      //
+      // Either way, setting EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY on the
+      // production profile makes this whole branch unreachable and restores
+      // the native sheet. That remains the real remedy.
+      if (!isCaixaBuildEnabled()) {
+        return {
+          kind: 'error',
+          error: { reason: 'unavailable', message: assinaturasCopy.contratar.errorUnavailable },
+        };
+      }
+      // Physical product, no key: fall through to the hosted session below.
+    } else {
+      try {
+        const intent = await createPremiumSubscriptionNative(input);
+        return { kind: 'sheet', clientSecret: intent.clientSecret };
+      } catch (err) {
+        // Same mapper as the hosted path below: checkout-native shares
+        // resolveSubscriptionPackage with checkoutHandler on the API side, so
+        // it returns the identical 503/409/422/403/404 shapes.
+        return { kind: 'error', error: resolveCheckoutError(err) };
+      }
     }
   }
 

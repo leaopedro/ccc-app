@@ -14,7 +14,9 @@ import {
   adminGroupDetailSchema,
   adminGroupListResponseSchema,
   adminGroupMembersResponseSchema,
+  adminOrderDetailSchema,
   adminOrderRefundResponseSchema,
+  type AdminOrderDetail,
   type AdminOrderRefund,
   type AdminOrderRefundResponse,
   adminStoreCollectionDetailSchema,
@@ -841,6 +843,12 @@ export const updateAdminStoreOrderFulfillment = (
     body: JSON.stringify(input),
     schema: adminStoreOrderDetailSchema,
   });
+
+// Kind-agnostic order detail. Pairs with requestAdminOrderRefund below and
+// covers the kinds /admin/store/orders/:id 404s — ticket (the default kind),
+// extras_only and box. Carries no fulfillment fields on purpose.
+export const getAdminOrder = (id: string): Promise<AdminOrderDetail> =>
+  apiFetch(`/admin/orders/${id}`, { schema: adminOrderDetailSchema });
 
 // Assisted refund (Task 8): admin-only, requests the refund at Stripe and
 // returns 202 — it does NOT flip the order's status itself. Note this is a

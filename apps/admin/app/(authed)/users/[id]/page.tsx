@@ -15,6 +15,7 @@ import { UserStatusChip } from '~/components/user-status-chip';
 import { getAdminUser, getMe, listAdminEvents, listAdminGroups } from '~/lib/admin-api';
 import { getAdminUserGarage } from '~/lib/admin-garage-api';
 import { ApiError } from '~/lib/api';
+import { readRole } from '~/lib/auth-session';
 import { fetchBadgeCatalog, fetchPublicGarage } from '~/lib/public-garage';
 
 export const dynamic = 'force-dynamic';
@@ -132,6 +133,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const availableGroups = groups.filter((g) => !memberGroupIds.has(g.id));
   const location = [user.city, user.stateCode].filter(Boolean).join('/');
   const isSelf = me.id === user.id;
+  // Esta página é organizer+admin (routes/admin/index.ts), mas
+  // GET /admin/orders/:id é admin-only. Um link para /pedidos/{id} mostrado a
+  // um organizer levaria a um 403 no server component, ou seja, tela de erro
+  // do Next em vez de resposta. Organizer vê o texto, não o link.
+  const canOpenOrderDetail = (await readRole()) === 'admin';
 
   // Conquistas panel data. The badge catalog comes from the public
   // /badges/catalog endpoint (chunk 16) — no auth, killswitch-aware.
@@ -352,7 +358,18 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <tbody>
             {user.recentOrders.map((o) => (
               <tr key={o.id} className="border-b border-[color:var(--color-border)]">
-                <td className="py-2 text-sm">{o.eventTitle}</td>
+                <td className="py-2 text-sm">
+                  {/* Entrada para a tela de reembolso. Antes disto um pedido de
+                      ingresso não tinha página nenhuma no admin e o reembolso
+                      dele só saía pelo dashboard da Stripe. */}
+                  {canOpenOrderDetail ? (
+                    <Link href={`/pedidos/${o.id}`} className="underline">
+                      {o.eventTitle || `Pedido #${o.id.slice(-8).toUpperCase()}`}
+                    </Link>
+                  ) : (
+                    o.eventTitle || `Pedido #${o.id.slice(-8).toUpperCase()}`
+                  )}
+                </td>
                 <td className="text-sm">{orderStatusLabel[o.status] ?? o.status}</td>
                 <td className="text-sm">{fmtCurrency(o.amountCents, o.currency)}</td>
                 <td className="text-sm">{fmtDate(o.createdAt)}</td>

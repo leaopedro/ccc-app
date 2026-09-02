@@ -12,10 +12,80 @@ type Props = {
   provider: 'stripe' | 'abacatepay';
   siblingOrderCount?: number;
   siblingTicketCount?: number;
+  /**
+   * Valid tickets on THIS order, which the `charge.refunded` cascade revokes
+   * too. Usually 0 for a store order, which is why the first version of this
+   * form only spoke about siblings. For a ticket order it is the whole blast
+   * radius: "0 outros pedidos" alone reads as "nothing else happens", while
+   * the buyer's QR is about to stop working.
+   */
+  ownTicketCount?: number;
+  /**
+   * Valid `TicketExtraItem` rows the cascade revokes: the camiseta, the pit
+   * pass, the physical goods bought as event extras. Load-bearing on its own,
+   * not a refinement of the ticket count: an `extras_only` order owns NO
+   * tickets, so `ownTicketCount` is 0 for exactly the order whose refund
+   * destroys goods and the banner would not render at all.
+   */
+  ownExtraItemCount?: number;
+  siblingExtraItemCount?: number;
+  /** Valid `PickupVoucher` rows, revoked by the same cascade. */
+  ownVoucherCount?: number;
+  siblingVoucherCount?: number;
   onDone?: () => void;
 };
 
 const REASON_MIN_LENGTH = 10;
+
+const joinPt = (parts: string[]): string =>
+  parts.length <= 1
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}`;
+
+const countedItems = (tickets: number, extraItems: number, vouchers: number): string[] => {
+  const parts: string[] = [];
+  if (tickets > 0) parts.push(`${tickets} ingresso(s)`);
+  if (extraItems > 0) parts.push(`${extraItems} extra(s) de ingresso`);
+  if (vouchers > 0) parts.push(`${vouchers} voucher(s) de retirada`);
+  return parts;
+};
+
+/**
+ * One description of the blast radius, used verbatim by the banner and the
+ * confirm dialog. They must never disagree: the banner is what the operator
+ * reads, the confirm is what they act on. Every count the cascade touches goes
+ * through here, so a kind of loss that is not counted here is a kind of loss
+ * the operator is never warned about.
+ */
+const impactSentences = (impact: {
+  siblingOrderCount: number;
+  siblingTicketCount: number;
+  ownTicketCount: number;
+  ownExtraItemCount: number;
+  siblingExtraItemCount: number;
+  ownVoucherCount: number;
+  siblingVoucherCount: number;
+}): string[] => {
+  const parts: string[] = [];
+  const own = countedItems(impact.ownTicketCount, impact.ownExtraItemCount, impact.ownVoucherCount);
+  if (own.length > 0) {
+    parts.push(
+      `Reembolsar revoga ${joinPt(own)} válido(s) deste pedido quando o webhook confirmar.`,
+    );
+  }
+  if (impact.siblingOrderCount > 0) {
+    const siblings = countedItems(
+      impact.siblingTicketCount,
+      impact.siblingExtraItemCount,
+      impact.siblingVoucherCount,
+    );
+    const summary = siblings.length > 0 ? `${joinPt(siblings)} válido(s)` : 'nenhum item válido';
+    parts.push(
+      `Este pedido está num carrinho com mais ${impact.siblingOrderCount} pedido(s), somando ${summary} nesses outros pedidos. Um reembolso total aqui revoga esses itens também, quando o webhook confirmar — não só os deste pedido.`,
+    );
+  }
+  return parts;
+};
 
 export const RefundOrderForm = ({
   orderId,
@@ -23,6 +93,11 @@ export const RefundOrderForm = ({
   provider,
   siblingOrderCount = 0,
   siblingTicketCount = 0,
+  ownTicketCount = 0,
+  ownExtraItemCount = 0,
+  siblingExtraItemCount = 0,
+  ownVoucherCount = 0,
+  siblingVoucherCount = 0,
   onDone,
 }: Props) => {
   const [reason, setReason] = useState('');
@@ -48,16 +123,23 @@ export const RefundOrderForm = ({
   }
 
   const canSubmit = reason.trim().length >= REASON_MIN_LENGTH && !isPending;
-  const hasSiblings = siblingOrderCount > 0;
+  const impact = impactSentences({
+    siblingOrderCount,
+    siblingTicketCount,
+    ownTicketCount,
+    ownExtraItemCount,
+    siblingExtraItemCount,
+    ownVoucherCount,
+    siblingVoucherCount,
+  });
+  const hasImpact = impact.length > 0;
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (reason.trim().length < REASON_MIN_LENGTH) return;
 
-    const confirmMessage = hasSiblings
-      ? `Este pedido faz parte de um carrinho com mais ${siblingOrderCount} pedido(s). ` +
-        `Reembolsar aqui pode revogar ${siblingTicketCount} ingresso(s) válido(s) desses outros ` +
-        `pedidos quando o webhook confirmar. Solicitar reembolso mesmo assim?`
+    const confirmMessage = hasImpact
+      ? `${impact.join(' ')} Solicitar reembolso mesmo assim?`
       : 'Solicitar reembolso deste pedido à Stripe? Essa ação move dinheiro de verdade e não pode ser desfeita por aqui.';
     // Same confirm() pattern as RevokeGarageSpotButton — no dialog component
     // for destructive actions exists elsewhere in this app.
@@ -84,15 +166,15 @@ export const RefundOrderForm = ({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      {hasSiblings ? (
-        <p
+      {hasImpact ? (
+        <div
           role="alert"
-          className="rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-300"
+          className="flex flex-col gap-1 rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-300"
         >
-          Este pedido está num carrinho com mais {siblingOrderCount} pedido(s) e{' '}
-          {siblingTicketCount} ingresso(s) válido(s) nesses outros pedidos. Um reembolso total aqui
-          revoga esses ingressos também, quando o webhook confirmar — não só os itens deste pedido.
-        </p>
+          {impact.map((sentence) => (
+            <p key={sentence}>{sentence}</p>
+          ))}
+        </div>
       ) : null}
 
       <label className="flex flex-col gap-1 text-sm">

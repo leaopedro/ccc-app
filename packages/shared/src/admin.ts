@@ -1245,10 +1245,35 @@ export type AdminStoreOrderAuditEntry = z.infer<typeof adminStoreOrderAuditEntry
  * those OTHER orders and their currently-valid tickets — never this order's
  * own line, which the operator is already choosing to refund on purpose.
  * Both are 0 when the order has no `cartId` (solo checkout).
+ *
+ * `ownTicketCount` is THIS order's own currently-valid tickets, which the same
+ * cascade revokes via `revokeTicketsForRefundedOrder(order.id)`. For a store
+ * order it is usually 0 and the sibling counts carry the whole surprise. For a
+ * ticket order it is the entire point: refunding it revokes the buyer's event
+ * tickets, and an operator who only saw "0 outros pedidos" would read that as
+ * "nothing else happens". Kept `.optional()` for the same deploy-skew reason
+ * the whole object is optional on the store detail: an API that predates this
+ * field omits the key rather than failing the parse.
+ *
+ * `ownExtraItemCount` / `siblingExtraItemCount` count `TicketExtraItem` rows,
+ * the physical goods bought as event extras. They are not a nicety: an
+ * `extras_only` order owns NO `Ticket` rows at all, so a ticket-only impact
+ * reads 0/0/0 for exactly the order whose refund destroys goods, and the
+ * operator gets no banner before pressing the button. These come from the same
+ * resolver the revoke uses (`resolveOrderExtraItemIds`), so the number shown
+ * and the number revoked cannot drift.
+ *
+ * `ownVoucherCount` / `siblingVoucherCount` are the `PickupVoucher` rows the
+ * same cascade revokes (`revoke.ts`, the `pickupVoucher.updateMany` at the end).
  */
 export const adminOrderRefundImpactSchema = z.object({
   siblingOrderCount: z.number().int().nonnegative(),
   siblingTicketCount: z.number().int().nonnegative(),
+  ownTicketCount: z.number().int().nonnegative().optional(),
+  ownExtraItemCount: z.number().int().nonnegative().optional(),
+  siblingExtraItemCount: z.number().int().nonnegative().optional(),
+  ownVoucherCount: z.number().int().nonnegative().optional(),
+  siblingVoucherCount: z.number().int().nonnegative().optional(),
 });
 export type AdminOrderRefundImpact = z.infer<typeof adminOrderRefundImpactSchema>;
 
@@ -1274,6 +1299,88 @@ export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   refundImpact: adminOrderRefundImpactSchema.optional(),
 });
 export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
+
+/**
+ * One line of an order, for the kind-agnostic detail below.
+ *
+ * Not `adminStoreOrderItemSchema`: that one mirrors `OrderItem` rows, and the
+ * commonest ticket order in this codebase has none. `POST /orders`
+ * (routes/orders.ts) writes a `ticket` order with `eventId`/`tierId`/
+ * `quantity` plus `OrderExtra` rows and no `OrderItem` at all, so an
+ * OrderItem-shaped list renders that order as an empty table. These lines are
+ * built from whichever source the order actually has.
+ *
+ * `unitPriceCents`/`subtotalCents` are nullable for exactly that reason: a
+ * legacy ticket order carries no per-line price, only `Order.amountCents` for
+ * the whole thing. Null means "not itemised", and the screen must render it as
+ * such — never as R$ 0,00, which reads as free.
+ */
+export const adminOrderLineSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['product', 'ticket', 'extras']),
+  label: z.string(),
+  sublabel: z.string().nullable(),
+  quantity: z.number().int().positive(),
+  unitPriceCents: z.number().int().nonnegative().nullable(),
+  subtotalCents: z.number().int().nonnegative().nullable(),
+});
+export type AdminOrderLine = z.infer<typeof adminOrderLineSchema>;
+
+/**
+ * Where an order's post-payment workflow lives, if it has one.
+ *
+ * `store`  — physical goods, worked from /loja/pedidos/[id]. Mirrors exactly
+ *            the eligibility `getAdminStoreOrderDetail` enforces, so the link
+ *            can never point at a 404.
+ * `box`    — monthly box, worked from the box queue at /box/caixas.
+ * `none`   — ticket / extras / garage-spot orders. Nothing to fulfil by hand:
+ *            settlement issues the ticket or the spot automatically. The
+ *            generic detail must NOT offer a status transition for these.
+ */
+export const adminOrderFulfillmentSurfaceSchema = z.enum(['store', 'box', 'none']);
+export type AdminOrderFulfillmentSurface = z.infer<typeof adminOrderFulfillmentSurfaceSchema>;
+
+/**
+ * Kind-agnostic order detail, backing the admin's refund surface.
+ *
+ * Deliberately NOT an extension of `adminStoreOrderDetailSchema`. That shape
+ * carries `fulfillmentStatus`, `fulfillmentMethod`, `shippingAddress` and the
+ * pickup refs, all of which are meaningless for a ticket order — and
+ * `Order.fulfillmentMethod` DEFAULTS to `pickup`, so a ticket order would
+ * carry a plausible-looking "Retirada / Não cumprido" pair that invites an
+ * operator to drive a workflow that does not exist for it. Omitting the fields
+ * from the wire shape is what makes that unreachable, rather than a `kind`
+ * check in the page that someone deletes later.
+ *
+ * The fulfilment workflow itself is untouched: `PATCH
+ * /admin/store/orders/:id/fulfillment` keeps its own independent kind /
+ * method / physical-item gate in `updateAdminStoreFulfillment`.
+ */
+export const adminOrderDetailSchema = z.object({
+  id: z.string(),
+  shortId: z.string(),
+  kind: z.enum(['ticket', 'extras_only', 'product', 'mixed', 'box']),
+  paymentStatus: orderStatusSchema,
+  provider: z.enum(['stripe', 'abacatepay']),
+  providerRef: z.string().nullable(),
+  amountCents: z.number().int().nonnegative(),
+  shippingCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  customer: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+  }),
+  eventId: z.string().nullable(),
+  eventTitle: z.string().nullable(),
+  lines: z.array(adminOrderLineSchema),
+  history: z.array(adminStoreOrderAuditEntrySchema),
+  refundImpact: adminOrderRefundImpactSchema,
+  fulfillmentSurface: adminOrderFulfillmentSurfaceSchema,
+  paidAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;
 
 /**
  * Assisted refund. Executed by the founder from the admin, never by the

@@ -57,7 +57,12 @@ export type GarageSlotV2 =
  */
 export function buildGarageSlots(
   payload: GarageReadResponse,
-  ctx: { platform?: string } = {},
+  // Final review I6: REQUIRED, and `platform` is non-optional. It used to
+  // default to `{}`, so `ctx.platform !== 'ios'` failed OPEN — any caller that
+  // forgot the argument rendered the buy tile on iOS, where checkout refuses
+  // the item with 403 VIRTUAL_ITEM_IOS_BLOCKED and strands it in the cart.
+  // A silent regression like that has to be a type error, not a runtime one.
+  ctx: { platform: string },
 ): GarageSlotV2[] {
   const carsById = new Map(payload.cars.map((c) => [c.id, c]));
   const slots: GarageSlotV2[] = [];

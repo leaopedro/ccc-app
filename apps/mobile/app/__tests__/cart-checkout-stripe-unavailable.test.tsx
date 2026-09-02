@@ -348,4 +348,82 @@ describe('cart checkout — no publishable key falls back to hosted checkout', (
     expect(openURLMock).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_1');
     expect(payMock).not.toHaveBeenCalled();
   });
+
+  // Final review I5 — `disabled={checkingOut}` is React state, which does not
+  // apply synchronously. A second tap landing in the same tick reads a stale
+  // `false` from its own closure and fires `beginCheckout` again, creating two
+  // PaymentIntents (or two hosted sessions) for one cart. Only a ref checked
+  // and set before the first `await` can stop that; ContratarScreen already
+  // does it with `submittingRef`.
+  //
+  // `beginCheckout` is left pending on purpose: that is the window the bug
+  // lives in. Resolving it first would let the state update land and the test
+  // would pass even against the unguarded version.
+  it('calls beginCheckout exactly once on a rapid double tap', async () => {
+    let resolveCheckout: (value: BeginCheckoutResponse) => void = () => {};
+    beginCheckoutMock.mockImplementation(
+      () =>
+        new Promise<BeginCheckoutResponse>((resolve) => {
+          resolveCheckout = resolve;
+        }),
+    );
+    openURLMock.mockResolvedValue(true);
+
+    const { default: CartScreen } = await import('../(app)/cart/index');
+    await act(async () => {
+      root.render(<CartScreen />);
+      await flush();
+    });
+
+    const payButton = findButtonByText(container, 'Pagar');
+    await act(async () => {
+      payButton.click();
+      payButton.click();
+      await flush();
+    });
+
+    expect(beginCheckoutMock).toHaveBeenCalledTimes(1);
+
+    // Settle the pending call so the component unmounts cleanly.
+    await act(async () => {
+      resolveCheckout({
+        checkoutId: 'checkout_1',
+        status: 'pending',
+        cart: fixtures.CART,
+        orderIds: ['order_1'],
+        provider: 'stripe',
+        providerRef: 'cs_test_1',
+        clientSecret: null,
+        checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_1',
+        brCode: null,
+        reservationExpiresAt: null,
+      });
+      await flush();
+    });
+  });
+
+  // The guard must release: a member whose first attempt failed has to be able
+  // to tap Pagar again. A ref that is set but never cleared would leave the
+  // cart permanently unpayable, which is a worse bug than the double tap.
+  it('allows a second attempt after the first one settles', async () => {
+    beginCheckoutMock.mockRejectedValue(new Error('network'));
+
+    const { default: CartScreen } = await import('../(app)/cart/index');
+    await act(async () => {
+      root.render(<CartScreen />);
+      await flush();
+    });
+
+    const payButton = findButtonByText(container, 'Pagar');
+    await act(async () => {
+      payButton.click();
+      await flush();
+    });
+    await act(async () => {
+      payButton.click();
+      await flush();
+    });
+
+    expect(beginCheckoutMock).toHaveBeenCalledTimes(2);
+  });
 });

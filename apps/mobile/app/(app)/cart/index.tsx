@@ -5,7 +5,7 @@ import { Button } from '@ccc/ui';
 import Constants from 'expo-constants';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Car as CarIcon, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -366,6 +366,14 @@ export default function CartScreen() {
   const [drawerExtras, setDrawerExtras] = useState<EventExtraPublic[]>([]);
   const [loadingExtras, setLoadingExtras] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  // Final review I5: `disabled={checkingOut}` is React state, which does not
+  // apply synchronously — a fast double tap reads a stale `false` in its own
+  // closure before the first tap's re-render lands, and fires `beginCheckout`
+  // twice, creating two PaymentIntents for one cart. Gate on a ref instead,
+  // checked and set in the same tick before any `await`; `checkingOut` stays
+  // purely for the label/disabled/loading props. Same guard as
+  // ContratarScreen.tsx's `submittingRef`.
+  const checkingOutRef = useRef(false);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix'>('card');
   const { pay } = usePaymentSheet();
   const [selectedShippingAddressId, setSelectedShippingAddressId] = useState<string | null>(null);
@@ -525,6 +533,8 @@ export default function CartScreen() {
   }, [clear]);
 
   const handlePay = useCallback(async () => {
+    if (checkingOutRef.current) return;
+    checkingOutRef.current = true;
     setCheckingOut(true);
     // Final review C1: without a publishable key, native can't mount a
     // PaymentSheet at all — request the hosted flow instead, same as web.
@@ -614,6 +624,7 @@ export default function CartScreen() {
       }
       showError(cartCopy.errors.checkout);
     } finally {
+      checkingOutRef.current = false;
       setCheckingOut(false);
     }
   }, [

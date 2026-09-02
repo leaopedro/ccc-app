@@ -127,6 +127,59 @@ describe('runBoxCutoffTick', () => {
     expect(fresh.chargeCents).toBe(0);
   });
 
+  it('trims the LIFO budget deterministically when every line ties on addedAt', async () => {
+    // PUT /me/box/selection upserts a whole save inside one transaction, and
+    // `addedAt` defaults to CURRENT_TIMESTAMP, which Postgres freezes at
+    // transaction start. Every line of that save therefore carries the same
+    // instant, and `addedAt` alone cannot order them.
+    const { box } = await makeBox({
+      status: 'open',
+      autoSendOptIn: true,
+      withAddress: true,
+      budget: 5000,
+    });
+    const addedAt = new Date('2026-07-20T10:00:00.000Z');
+    const lines = [];
+    for (const slug of ['tie-a', 'tie-b', 'tie-c']) {
+      const item = await prisma.boxCatalogItem.create({
+        data: {
+          slug,
+          title: slug,
+          description: 'x',
+          priceCents: 3000,
+          category: 'sticker',
+        },
+      });
+      lines.push(
+        await prisma.monthlyBoxItem.create({
+          data: {
+            boxId: box.id,
+            catalogItemId: item.id,
+            quantity: 1,
+            unitPriceCents: 3000,
+            subtotalCents: 3000,
+            titleSnapshot: slug,
+            addedAt,
+          },
+        }),
+      );
+    }
+
+    // 9000 of items against a 5000 budget. LIFO drops from the newest end, and
+    // with addedAt tied that end is `id desc`, so the two highest ids go and the
+    // lowest id survives. Same physical item every run.
+    const survivor = [...lines].sort((a, b) => (a.id < b.id ? -1 : 1))[0]!;
+
+    await runBoxCutoffTick({});
+
+    const fresh = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(fresh.status).toBe('ready');
+    const included = await prisma.monthlyBoxItem.findMany({
+      where: { boxId: box.id, included: true },
+    });
+    expect(included.map((i) => i.id)).toEqual([survivor.id]);
+  });
+
   it('awaiting_payment with a pending box Order -> cancels order and goes ready budget-only', async () => {
     const { box } = await makeBox({
       status: 'awaiting_payment',

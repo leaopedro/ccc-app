@@ -7,7 +7,11 @@ import type { Uploads } from '../uploads/types.js';
 export const listBoxHistory = async (uploads: Uploads, garageId: string): Promise<BoxHistory> => {
   const boxes = await prisma.monthlyBox.findMany({
     where: { garageId },
-    orderBy: { cycleStart: 'desc' },
+    // Garage-scoped, so two memberships of the same garage can both have a box
+    // in the list, and `cycleStart` alone is not a total order across them: two
+    // subscriptions starting the same day tie. Position 0 is load-bearing here
+    // — it is what flags `current` below — so tie-break down to `id`.
+    orderBy: [{ cycleStart: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
     include: {
       items: {
         where: { included: true },

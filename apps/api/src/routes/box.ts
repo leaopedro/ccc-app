@@ -6,6 +6,7 @@ import {
   meetsMinTier,
 } from '@ccc/shared/box';
 import type { GaragePremiumTier } from '@ccc/shared/garage';
+import { LIVE_PER_GARAGE_INDEX_STATUSES } from '@ccc/shared/premium';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -25,7 +26,60 @@ const BOX_INCLUDE = {
 } as const;
 const ELIGIBLE_STATUSES = ['active', 'trialing'] as const;
 
-/** user -> garage -> latest eligible membership. Null when none qualifies. */
+/**
+ * Box-eligible AND holding the garage's live slot. Today the intersection is
+ * exactly `['active']`, but it is computed instead of written down so it cannot
+ * drift if either list moves.
+ *
+ * The slot is the partial unique index:
+ *
+ *   CREATE UNIQUE INDEX premium_membership_live_per_garage
+ *     ON "PremiumMembership" ("garageId")
+ *     WHERE status IN ('active', 'past_due', 'cancel_scheduled');
+ *
+ * so at most one row can ever be in here for a garage. Whichever row that is,
+ * it is the one the provider is charging.
+ */
+const BILLING_ELIGIBLE_STATUSES = ELIGIBLE_STATUSES.filter((status) =>
+  (LIVE_PER_GARAGE_INDEX_STATUSES as readonly string[]).includes(status),
+);
+
+const MEMBERSHIP_PICK_ORDER = [{ createdAt: 'desc' }, { id: 'desc' }] as const;
+
+/**
+ * The membership that owns this user's box, or null when none qualifies.
+ *
+ * This is an identity, not a yes/no: the `id` selects the MonthlyBox and the
+ * `tier` selects which catalog items the member may put in it. Pick the sibling
+ * row and the member gets another subscription's box at another subscription's
+ * tier.
+ *
+ * A garage can legally hold two eligible rows. The partial unique index above
+ * does not cover `trialing`, so an annual gold trial can sit beside the monthly
+ * silver that is actually billing. The old `orderBy: { currentPeriodEnd: 'desc' }`
+ * then handed the box to the trial every time, because an annual period ends a
+ * year out and a monthly period ends this month. Recency of the period end says
+ * nothing about which subscription is taking money.
+ *
+ * Rule, in order:
+ *
+ *   1. Prefer the box-eligible row holding the garage's live slot. That is the
+ *      row the provider is billing, so it is the tier the member has actually
+ *      bought. The index guarantees at most one, so this step alone decides.
+ *   2. Otherwise the newest box-eligible row by `createdAt desc, id desc`. This
+ *      is the trial-only garage, and also two-trials garages: `trialing` is
+ *      outside the index, so nothing stops a second one. `createdAt` alone is
+ *      not a total order — Postgres `CURRENT_TIMESTAMP` is transaction start
+ *      time, so rows written together tie — hence `id desc` behind it.
+ *
+ * Deliberately NOT `pickLiveMembership` from services/billing: that helper
+ * answers "which subscription takes money", over LIVE_MEMBERSHIP_STATUSES,
+ * which includes `past_due`, `cancel_scheduled` and `paused`. None of those may
+ * have a box. Reusing it raw would hand a box to a paused member; reusing it and
+ * filtering afterwards would return null for a `trialing` member sitting beside
+ * a `past_due` sibling and silently take their box away. Only the preference
+ * step is shared, and it is shared through the constant, not the function.
+ */
 export const loadEligibleMembership = async (
   userId: string,
 ): Promise<{ id: string; tier: GaragePremiumTier } | null> => {
@@ -34,12 +88,20 @@ export const loadEligibleMembership = async (
     select: { id: true },
   });
   if (!garage) return null;
-  const membership = await prisma.premiumMembership.findFirst({
-    where: { garageId: garage.id, status: { in: [...ELIGIBLE_STATUSES] } },
-    orderBy: { currentPeriodEnd: 'desc' },
+  const billing = await prisma.premiumMembership.findFirst({
+    where: { garageId: garage.id, status: { in: BILLING_ELIGIBLE_STATUSES } },
+    // The index allows only one row here. The ordering is belt and braces: if
+    // the index is ever widened or dropped, this still picks the same way the
+    // fallback does instead of going arbitrary.
+    orderBy: [...MEMBERSHIP_PICK_ORDER],
     select: { id: true, tier: true },
   });
-  return membership;
+  if (billing) return billing;
+  return prisma.premiumMembership.findFirst({
+    where: { garageId: garage.id, status: { in: [...ELIGIBLE_STATUSES] } },
+    orderBy: [...MEMBERSHIP_PICK_ORDER],
+    select: { id: true, tier: true },
+  });
 };
 
 export const boxRoutes: FastifyPluginAsync = async (app) => {

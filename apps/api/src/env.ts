@@ -96,7 +96,17 @@ const envSchema = z.object({
   STRIPE_BILLING_WEBHOOK_SECRET: z.string().min(1).optional(),
   REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().min(1).optional(),
   REVENUECAT_REST_API_KEY: z.string().min(1).optional(),
-  RECONCILE_ALERT_DEPTH: z.coerce.number().int().positive().default(200),
+  // Queue-depth alarm threshold for BOTH reconciliation sweeps
+  // (workers/billing-reconcile.ts and workers/pix-reconcile.ts). Both cap their
+  // window at QUERY_LIMIT = 200.
+  //
+  // Default 150, not 200 (fix round 2, CRITICAL). At 200 the threshold equalled
+  // the query limit, so the alarm could only fire once the window was ALREADY
+  // saturated and silently dropping rows — an alarm that never warns, only
+  // confirms. 150 is 75% of the limit: enough headroom that an operator sees
+  // the backlog building while there is still room in the window, and far above
+  // any normal steady state (a healthy tick sweeps single digits).
+  RECONCILE_ALERT_DEPTH: z.coerce.number().int().positive().default(150),
   // Progressive-profile gates. Default OFF: the feature deploys inert, and
   // Railway variables drive the rollout. Percent is a deterministic bucket
   // over userId, not a sampling rate.

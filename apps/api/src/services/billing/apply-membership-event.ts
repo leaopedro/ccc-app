@@ -187,6 +187,10 @@ async function handleActivated(
         currency: pricing.currency,
         paidAt: invoice.paidAt,
         status: 'paid',
+        // exactOptionalPropertyTypes: omit the key when the normalizer had no
+        // mode to report, so the column keeps its `true` default instead of
+        // being written with undefined.
+        ...(invoice.livemode !== undefined ? { livemode: invoice.livemode } : {}),
       },
     });
     await tx.$executeRawUnsafe('RELEASE SAVEPOINT invoice_insert');
@@ -373,6 +377,10 @@ async function handleRenewed(
         currency: pricing.currency,
         paidAt: invoice.paidAt,
         status: 'paid',
+        // exactOptionalPropertyTypes: omit the key when the normalizer had no
+        // mode to report, so the column keeps its `true` default instead of
+        // being written with undefined.
+        ...(invoice.livemode !== undefined ? { livemode: invoice.livemode } : {}),
       },
     });
     await tx.$executeRawUnsafe('RELEASE SAVEPOINT invoice_insert');

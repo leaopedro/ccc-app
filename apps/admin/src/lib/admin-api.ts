@@ -14,6 +14,9 @@ import {
   adminGroupDetailSchema,
   adminGroupListResponseSchema,
   adminGroupMembersResponseSchema,
+  adminOrderRefundResponseSchema,
+  type AdminOrderRefund,
+  type AdminOrderRefundResponse,
   adminStoreCollectionDetailSchema,
   adminStoreCollectionListResponseSchema,
   adminStoreCollectionSchema,
@@ -537,6 +540,7 @@ export const financeQs = (q?: AdminFinanceQuery) => {
   if (q.provider) sp.set('provider', q.provider);
   if (q.method) sp.set('method', q.method);
   if (q.statuses) q.statuses.forEach((s) => sp.append('statuses', s));
+  if (q.livemode) sp.set('livemode', q.livemode);
   const str = sp.toString();
   return str ? `?${str}` : '';
 };
@@ -836,6 +840,20 @@ export const updateAdminStoreOrderFulfillment = (
     method: 'PATCH',
     body: JSON.stringify(input),
     schema: adminStoreOrderDetailSchema,
+  });
+
+// Assisted refund (Task 8): admin-only, requests the refund at Stripe and
+// returns 202 — it does NOT flip the order's status itself. Note this is a
+// different resource than /admin/store/orders: refunds apply to any Order
+// (ticket, product, mixed, box), not just store orders.
+export const requestAdminOrderRefund = (
+  id: string,
+  input: AdminOrderRefund,
+): Promise<AdminOrderRefundResponse> =>
+  apiFetch(`/admin/orders/${id}/refund`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    schema: adminOrderRefundResponseSchema,
   });
 
 // ── Admin support tickets ─────────────────────────────────────────

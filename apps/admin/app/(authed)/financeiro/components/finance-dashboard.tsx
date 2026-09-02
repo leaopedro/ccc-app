@@ -75,6 +75,7 @@ function DashboardInner() {
     const membershipStatus = searchParams.get('membershipStatus') as
       | AdminFinanceQuery['membershipStatus']
       | undefined;
+    const livemode = searchParams.get('livemode') as AdminFinanceQuery['livemode'] | undefined;
 
     if (
       !from &&
@@ -86,7 +87,8 @@ function DashboardInner() {
       !kind &&
       !cadence &&
       !tier &&
-      !membershipStatus
+      !membershipStatus &&
+      !livemode
     ) {
       return undefined;
     }
@@ -101,6 +103,7 @@ function DashboardInner() {
       cadence,
       tier,
       membershipStatus,
+      livemode,
     };
   }, [searchParams]);
 
@@ -190,6 +193,7 @@ function DashboardInner() {
     cadence: searchParams.get('cadence'),
     tier: searchParams.get('tier'),
     membershipStatus: searchParams.get('membershipStatus'),
+    livemode: searchParams.get('livemode'),
   };
 
   if (view.status === 'error') {

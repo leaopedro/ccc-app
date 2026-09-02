@@ -104,6 +104,23 @@ agora revoga ingresso automaticamente.
 
 ## 2. Webhooks
 
+**Contra qual host.** Registrar os três no domínio próprio,
+`https://api.casacar.club`. É o host que o app já usa: os perfis `preview` e
+`production` do `apps/mobile/eas.json` apontam `EXPO_PUBLIC_API_BASE_URL` para
+ele desde 2026-08-12. O host gerado pelo Railway
+(`ccc-app-production.up.railway.app`) continua respondendo, mas não serve para
+webhook: uma troca de serviço no Railway muda esse hostname e derruba as três
+entregas de uma vez, sem aviso.
+
+**Antes de registrar, conferir a porta do domínio.** A API escuta na porta
+**4000**, e o Railway cria todo domínio customizado apontando para a 8080. Foi o
+que aconteceu com `api.casacar.club` em 2026-08-12: a Stripe receberia 502 com o
+header `x-railway-fallback: true` enquanto o container estava saudável. Conferir
+com `railway domain status api.casacar.club` e, se preciso,
+`railway domain update api.casacar.club --port 4000`. Esse header é ambíguo, quer
+dizer só que a borda não roteou o hostname, o que cobre tanto container fora do
+ar quanto porta errada.
+
 Os caminhos não seguem um padrão único. Foram conferidos no código, e nenhum tem
 prefixo (`apps/api/src/app.ts` registra os três sem `prefix`).
 
@@ -248,3 +265,35 @@ majoritariamente bem físico e serviço presencial, não SaaS.
 Stripe Tax e, principalmente, emissão de nota fiscal são decisões do contador,
 registradas como pendência aberta no Spec A. Stripe Tax calcula imposto; não
 emite documento fiscal brasileiro.
+
+---
+
+## 8. O que roda sozinho depois do go-live
+
+Duas coisas que não são painel e que o operador precisa saber que existem.
+
+**Reconciliação do Pix.** `apps/api/src/workers/pix-reconcile.ts` roda a cada
+minuto (mesma cadência do `order-expiry.ts`) e varre pedidos `pending` ou já
+`expired` da AbacatePay com mais de 3 minutos desde a criação. Para cada um,
+pergunta o status autoritativo ao provedor (`getPixBilling`) e só age quando a
+resposta é `PAID`: se o pedido local ainda está `pending`, liquida pelo mesmo
+`settlePaidOrder` que o webhook usa e manda o mesmo push de ingresso
+confirmado; se o pedido já está `expired`, o estoque já foi devolvido pela
+varredura de expiração e liquidar agora venderia em dobro, então o worker só
+dispara um alerta no Sentry (deduplicado por pedido) pedindo reembolso manual.
+Ele existe porque um `transparent.completed` perdido deixava o Pix pago e o
+pedido pendente até a varredura de expiração **expirar** o pedido, devolvendo o
+estoque à prateleira sem emitir ingresso e sem reembolsar. Ele nunca expira e
+nunca reembolsa; só liquida ou alerta. Ele **não** é gateado por
+`GROWTH_PREMIUM_BILLING_ENABLED` (que cobre só assinatura); liga junto com o
+Pix avulso, quando `app.abacatepay` está configurado.
+
+**Reembolso assistido.** `POST /admin/orders/:id/refund`, com tela no admin.
+Pede o reembolso à Stripe e responde 202. Quem escreve `Order.status` continua
+sendo o webhook `charge.refunded`: essa rota nunca toca a coluna, então 202
+quer dizer "pedido à Stripe feito", não "reembolso concluído". Só aceita
+reembolso total (`amountCents` diferente do total do pedido cai em 422); um
+reembolso parcial fica deliberadamente fora, para não ficar indistinguível do
+caso "dinheiro já saiu, pedido ainda não foi atualizado". Pix responde 501: a
+AbacatePay não expõe API de reembolso e o caminho é o suporte do fornecedor.
+Detalhes e o runbook em `docs/observability.md`, seção "Refunds and support".

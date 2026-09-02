@@ -359,37 +359,83 @@ admin at `/premium/catalogo`, verify with `GET /api/plans`, then note
 that the event is already marked processed and will NOT re-run. The
 membership has to be created by hand.
 
-**Creating a membership by hand.** There is no admin endpoint for this —
-`/admin/subscriptions` exposes plan, add-ons, cancel, resume and pause,
-but not create. Tickets have `POST /admin/tickets/grant`; memberships do
-not. Until one exists, a developer inserts the `PremiumMembership` row
-plus its `PremiumMembershipInvoice`, matching tier, cadence,
-`baseAmountCents`, `devFeePercent` and period bounds to the Stripe
-invoice, and updates `Garage.premiumTier` / `premiumUntil`. Do this
-inside a transaction holding `SELECT id FROM "Garage" ... FOR UPDATE`,
-the same lock the webhook takes.
+**Creating a membership by hand.** `POST /admin/subscriptions/grant`
+exists for this. Body: `garageId`, `tier`, `cadence`,
+`providerCustomerRef`, `providerSubRef`, `providerInvoiceRef`,
+`baseAmountCents`, `devFeePercent`, `currentPeriodStart`,
+`currentPeriodEnd`, `livemode` and `reason`. Every value comes from the
+real Stripe invoice in the dashboard, never a guess — the invoice line
+is the source of truth forever and `devFeePercent` is never re-derived
+later. `livemode` must match whether the underlying charge was a real
+or test-mode Stripe invoice: the endpoint never infers it, because a
+wrong guess here means test-mode money counted as live revenue with no
+way for the cutover script to find it later.
+
+The route calls the same `applyMembershipEvent` the webhook calls, with
+a synthetic `subscription.activated` event, inside the same
+`SELECT ... FOR UPDATE` lock on `Garage`. That means the membership row,
+its invoice, the `Garage.premiumTier` / `premiumUntil` snapshot, the XP
+award and the ticket-backfill enqueue all happen exactly as a real
+activation would. Provider is always `stripe` — this runbook is the
+Stripe gap; Apple/RevenueCat memberships are provisioned by Apple
+itself.
+
+Re-running the same `providerSubRef` is safe (idempotent, same as a
+replayed webhook) and does not duplicate the invoice. Granting to a
+garage that already has a live membership under a **different**
+subscription is refused with `409 GarageAlreadyPremium` — resolve that
+membership first. Pasting a `providerSubRef` that already belongs to
+**another garage's** membership is refused with
+`409 SubscriptionBelongsToAnotherGarage`, so a copy/paste mistake out of
+the Stripe dashboard cannot silently mutate a different member's
+subscription.
+
+The grant and its `AdminAudit` row (action `premium.subscription.granted`,
+actor + reason) commit in the same transaction — a failure between
+"membership granted" and "audit written" cannot happen. The row is also
+distinguishable from a genuine webhook activation: its
+`PremiumMembershipInvoice.providerTransactionRef` is set to the literal
+`admin-grant`, a value the real Stripe webhook path never writes.
 
 **Tell the member.** Their payment is safe and kept. Give a concrete
 time for the fix. Do not ask them to retry.
 
 ## Refunds and support
 
-There is no refund tooling in the product. `app.stripe.refund` is only
-called from automatic branches inside the webhook handlers (duplicate
-ticket, revoked ticket, unavailable pickup, order expired, cart paid
-after expiry). There is no admin endpoint and no admin screen.
+**Reembolso assistido.** `POST /admin/orders/:id/refund`, executado pelo
+fundador no admin, com papel `admin`. Corpo: `reason` (obrigatório, vai para o
+`AdminAudit`) e `amountCents` opcional — mas só aceita o valor cheio do
+pedido; qualquer outro valor é 422 (ver reembolso parcial abaixo).
 
-- **Card, via Stripe:** refund from the Stripe dashboard. The
-  `charge.refunded` webhook then flips every order in the cart to
-  `refunded` and revokes the tickets. Verify in the DB, not just the
-  dashboard.
-- **Pix, via AbacatePay:** no documented refund API exists (see
-  `plans/jdma-260-abacatepay-refund-api-path.md`). It goes through the
-  vendor's support, manually.
-- **Who:** the founder. Single operator, alerts by email, no paging and
-  no on-call rotation. A failure that starts at 02:00 is seen in the
-  morning. For payments that is the accepted exposure today; it is worth
-  revisiting once volume makes a missed night expensive.
+A rota pede o reembolso à Stripe e responde 202. Ela **não** escreve
+`Order.status`: quem escreve é o webhook `charge.refunded` verificado, que
+também revoga os ingressos e propaga para todos os pedidos do carrinho. 202
+significa "pedimos", não "pronto". Confirmar no banco, não no dashboard.
+
+Duas chamadas concorrentes para o mesmo pedido são serializadas por um lock
+consultivo do Postgres (`pg_advisory_xact_lock`, escopo por order id) segurado
+durante toda a transação, inclusive a chamada à Stripe. A chamada à Stripe
+carrega uma idempotency key determinística (`providerRef` + valor). O guard
+de "já foi pedido" é a própria linha em `AdminAudit`, escrita na mesma
+transação: `Order.status` não muda aqui, então não serve como sinal. Uma
+segunda chamada que chegue depois da primeira já ter confirmado o audit
+recebe 409, sem tocar a Stripe de novo. Falha na Stripe vira 502, não 500.
+
+- **Pix, via AbacatePay:** a rota responde 501. Não existe API de reembolso
+  documentada (ver `plans/jdma-260-abacatepay-refund-api-path.md`). Vai pelo
+  suporte do fornecedor, manualmente.
+- **Reembolso parcial: recusado, 422.** A rota existe para eliminar a ida ao
+  dashboard no caso comum (reembolso total). Um parcial de fato move dinheiro
+  na Stripe, mas o handler de `charge.refunded` deliberadamente mantém
+  `Order.status` intacto quando `amount_refunded < amount` (só alerta no
+  Sentry com a tag `payment-webhook-partial-refund`) — então o 202 desta rota
+  ficaria idêntico para "pronto" e "dinheiro moveu, pedido vai ficar
+  desalinhado até alguém ler o Sentry". Reembolso parcial continua uma ação
+  deliberada no dashboard da Stripe.
+- **Quem:** o fundador. Operador único, alertas por email, sem paging e sem
+  rotação de plantão. Falha que começa às 02:00 é vista de manhã. Para
+  pagamentos essa é a exposição aceita hoje; vale revisitar quando o volume
+  tornar uma noite perdida cara.
 
 ## Where to find things
 

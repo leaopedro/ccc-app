@@ -124,6 +124,8 @@ export type FakeStripe = StripeClient & {
   nextPaymentMethodCard: PaymentMethodCard | null;
   /** When set, retrievePaymentMethodCard throws this error. */
   nextRetrievePaymentMethodCardError: Error | null;
+  /** When set, refund throws this error instead of recording the call (provider-failure path). */
+  nextRefundError: Error | null;
 };
 
 export const buildFakeStripe = (): FakeStripe => {
@@ -178,6 +180,7 @@ export const buildFakeStripe = (): FakeStripe => {
     nextResumeSubscriptionCollectionError: null,
     nextPaymentMethodCard: null,
     nextRetrievePaymentMethodCardError: null,
+    nextRefundError: null,
 
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
@@ -213,8 +216,12 @@ export const buildFakeStripe = (): FakeStripe => {
       return { id: customerId, metadata };
     },
 
-    refund: async (paymentIntentId, reason, amountCents) => {
-      fake.calls.push({ kind: 'refund', payload: { paymentIntentId, reason, amountCents } });
+    refund: async (paymentIntentId, reason, amountCents, idempotencyKey) => {
+      if (fake.nextRefundError) throw fake.nextRefundError;
+      fake.calls.push({
+        kind: 'refund',
+        payload: { paymentIntentId, reason, amountCents, idempotencyKey },
+      });
     },
 
     cancelPaymentIntent: async (paymentIntentId) => {

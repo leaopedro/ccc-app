@@ -396,6 +396,24 @@ export const getAdminStoreOrderDetail = async (
       })
     : null;
 
+  // Refund blast radius: a full refund at Stripe flips EVERY order sharing
+  // this cartId to `refunded` and revokes their tickets (see the
+  // `charge.refunded` cascade in stripe-webhook.ts). Count only the OTHER
+  // orders and their currently-valid tickets — this order's own tickets are
+  // not a surprise, the operator is already choosing to refund it.
+  const siblingOrders = order.cartId
+    ? await prisma.order.findMany({
+        where: { cartId: order.cartId, id: { not: order.id } },
+        select: { id: true },
+      })
+    : [];
+  const siblingOrderIds = siblingOrders.map((o) => o.id);
+  const siblingTicketCount = siblingOrderIds.length
+    ? await prisma.ticket.count({
+        where: { orderId: { in: siblingOrderIds }, status: 'valid' },
+      })
+    : 0;
+
   return {
     id: order.id,
     shortId: order.id.slice(-8).toUpperCase(),
@@ -437,6 +455,10 @@ export const getAdminStoreOrderDetail = async (
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
+    refundImpact: {
+      siblingOrderCount: siblingOrderIds.length,
+      siblingTicketCount,
+    },
   };
 };
 

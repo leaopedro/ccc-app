@@ -68,6 +68,7 @@ import { startEventRemindersWorker } from './workers/event-reminders.js';
 import { startBoxCutoffWorker } from './workers/box-cutoff.js';
 import { startNotificationDeliveryWorker } from './workers/notification-delivery.js';
 import { startOrderExpiryWorker } from './workers/order-expiry.js';
+import { startPixReconcileWorker } from './workers/pix-reconcile.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
 import { startRetentionWorker } from './workers/retention.js';
 
@@ -232,6 +233,24 @@ export const buildApp = async (
     app.addHook('onClose', () => {
       orderExpiryWorker.stop();
     });
+
+    // Pix avulso is NOT gated by GROWTH_PREMIUM_BILLING_ENABLED. That flag
+    // covers subscriptions. Registering this sweep inside the flag block would
+    // leave one-off Pix unswept exactly during the window the go-live plan
+    // keeps the flag off. Guarded on app.abacatepay itself: when the provider
+    // is not configured (missing API key/webhook secret) there is nothing to
+    // reconcile against, same as the webhook route 503ing in that case.
+    if (app.abacatepay) {
+      const pixReconcileWorker = startPixReconcileWorker({
+        abacatepay: app.abacatepay,
+        push: app.push,
+        env,
+        log: app.log,
+      });
+      app.addHook('onClose', () => {
+        pixReconcileWorker.stop();
+      });
+    }
 
     // F8.12: hourly reconciliation sweep — feature-flagged off by default
     // (canon §F8.11). Registers only when GROWTH_PREMIUM_BILLING_ENABLED is

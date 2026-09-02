@@ -663,6 +663,54 @@ describe('POST /abacatepay/webhook', () => {
       expect(ticket!.status).toBe('valid');
     });
 
+    // Fix round 2, IMPORTANT. AbacatePay's only mode signal is the event's
+    // `devMode`, so Pix livemode is defined as NOT devMode. Nothing wrote the
+    // column at settlement before, so every Pix order read as live revenue.
+    it('stamps Order.livemode from the event devMode flag', async () => {
+      const { user } = await createUser({ verified: true });
+      const { order } = await seedEventTierOrder(user.id);
+      const payload = JSON.stringify({
+        id: 'evt_paid_devmode',
+        event: 'transparent.completed',
+        devMode: true,
+        data: {
+          id: order.providerRef,
+          amount: 5000,
+          status: 'PAID',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: webhookUrl,
+        headers: { 'content-type': 'application/json', 'x-webhook-signature': 'valid-sig' },
+        payload,
+      });
+      expect(res.statusCode).toBe(200);
+
+      const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      expect(updatedOrder.status).toBe('paid');
+      expect(updatedOrder.livemode).toBe(false);
+    });
+
+    it('keeps Order.livemode true for a non-devMode event', async () => {
+      const { user } = await createUser({ verified: true });
+      const { order } = await seedEventTierOrder(user.id);
+      const payload = makeTransparentCompletedPayload(order.providerRef!, 'evt_paid_live');
+
+      await app.inject({
+        method: 'POST',
+        url: webhookUrl,
+        headers: { 'content-type': 'application/json', 'x-webhook-signature': 'valid-sig' },
+        payload,
+      });
+
+      const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      expect(updatedOrder.livemode).toBe(true);
+    });
+
     it('sends push notification on first payment', async () => {
       const { user } = await createUser({ verified: true });
       const { order } = await seedEventTierOrder(user.id);

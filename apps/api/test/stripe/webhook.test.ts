@@ -133,6 +133,58 @@ describe('POST /stripe/webhook', () => {
     expect(ticket).not.toBeNull();
   });
 
+  // Fix round 2, IMPORTANT. Order.livemode defaults to `true` and had only
+  // two writers — the one-shot mark-pre-cutover-orders script and the admin
+  // grant's operator input — so every row created after the migration read as
+  // live revenue whatever mode charged it, and the finance screen could not
+  // filter it back out. Production points at a Stripe SANDBOX account today,
+  // so this is current traffic, not a hypothetical.
+  it('stamps Order.livemode from the Stripe event at settlement', async () => {
+    const { user } = await createUser({ verified: true });
+    const { order } = await seedEventTierOrder(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_livemode_false',
+      type: 'payment_intent.succeeded',
+      livemode: false,
+      data: { object: { id: order.providerRef, metadata: { orderId: order.id } } },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const reloaded = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(reloaded.status).toBe('paid');
+    expect(reloaded.livemode).toBe(false);
+  });
+
+  it('leaves Order.livemode true for a live-mode event', async () => {
+    const { user } = await createUser({ verified: true });
+    const { order } = await seedEventTierOrder(user.id);
+
+    stripe.nextEvent = {
+      id: 'evt_livemode_true',
+      type: 'payment_intent.succeeded',
+      livemode: true,
+      data: { object: { id: order.providerRef, metadata: { orderId: order.id } } },
+    };
+
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    const reloaded = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(reloaded.livemode).toBe(true);
+  });
+
   it('is idempotent: redelivery of the same event does not re-issue a ticket', async () => {
     const { user } = await createUser({ verified: true });
     const { order } = await seedEventTierOrder(user.id);
@@ -867,6 +919,153 @@ describe('POST /stripe/webhook', () => {
 
       const reloaded = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
       expect(reloaded.status).toBe('paid');
+    });
+
+    // Characterisation test. It asserts what the code DOES today, on purpose.
+    //
+    // The payments tracker claimed partial refunds "work by accident, because
+    // a cart produces a single Order, so a partial refund ends up being
+    // total". That is false: one PaymentIntent can cover several Orders in a
+    // cart (only the canonical order carries providerRef), and the handler
+    // detects `amount_refunded < amount` explicitly and REFUSES to flip any
+    // of them, flagging Sentry instead. These tests pin that refusal so a
+    // refactor cannot delete it silently, and so nobody plans against the
+    // wrong premise.
+    describe('partial refund on a multi-order cart', () => {
+      const seedPaidCart = async (opts?: { amountCents?: number }) => {
+        const totalAmount = opts?.amountCents ?? 12_000;
+        const perOrder = totalAmount / 2;
+        const { user } = await createUser({ verified: true });
+        const cart = await prisma.cart.create({
+          data: { userId: user.id, status: 'checking_out' },
+        });
+        const providerRef = `pi_cart_${cart.id}`;
+
+        const orders = [];
+        for (let i = 0; i < 2; i++) {
+          const { event, tier } = await (async () => {
+            const event = await prisma.event.create({
+              data: {
+                slug: `e-${Math.random().toString(36).slice(2, 8)}`,
+                title: 'Evento',
+                description: 'desc',
+                startsAt: new Date(Date.now() + 86400_000),
+                endsAt: new Date(Date.now() + 90000_000),
+                venueName: 'v',
+                venueAddress: 'a',
+                city: 'São Paulo',
+                stateCode: 'SP',
+                type: 'meeting',
+                status: 'published',
+                capacity: 5,
+                maxTicketsPerUser: 5,
+                publishedAt: new Date(),
+              },
+            });
+            const tier = await prisma.ticketTier.create({
+              data: {
+                eventId: event.id,
+                name: 'Geral',
+                priceCents: perOrder,
+                quantityTotal: 5,
+                quantitySold: 1,
+                sortOrder: 0,
+              },
+            });
+            return { event, tier };
+          })();
+
+          const order = await prisma.order.create({
+            data: {
+              userId: user.id,
+              eventId: event.id,
+              tierId: tier.id,
+              cartId: cart.id,
+              amountCents: perOrder,
+              quantity: 1,
+              method: 'card',
+              provider: 'stripe',
+              providerRef: i === 0 ? providerRef : null,
+              status: 'paid',
+              paidAt: new Date(),
+            },
+          });
+          await prisma.ticket.create({
+            data: {
+              orderId: order.id,
+              userId: user.id,
+              eventId: event.id,
+              tierId: tier.id,
+              source: 'purchase',
+              status: 'valid',
+            },
+          });
+          orders.push(order);
+        }
+
+        return { cart, orders, providerRef };
+      };
+
+      it('leaves every order in the cart `paid` on a partial refund', async () => {
+        const { cart, orders, providerRef } = await seedPaidCart({ amountCents: 12_000 });
+        stripe.nextEvent = refundEvent('evt_cart_partial_1', providerRef, 12_000, 3_000);
+
+        const res = await app.inject({
+          method: 'POST',
+          url: '/stripe/webhook',
+          headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+          payload: rawJson(stripe.nextEvent),
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json()).toMatchObject({ ok: true, ignored: true, reason: 'partial-refund' });
+
+        const rows = await prisma.order.findMany({
+          where: { id: { in: orders.map((o) => o.id) } },
+          select: { status: true },
+        });
+        expect(rows).toHaveLength(2);
+        expect(rows.every((r) => r.status === 'paid')).toBe(true);
+        void cart;
+      });
+
+      it('leaves the tickets valid on a partial refund', async () => {
+        const { orders, providerRef } = await seedPaidCart({ amountCents: 12_000 });
+        stripe.nextEvent = refundEvent('evt_cart_partial_2', providerRef, 12_000, 3_000);
+
+        await app.inject({
+          method: 'POST',
+          url: '/stripe/webhook',
+          headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+          payload: rawJson(stripe.nextEvent),
+        });
+
+        const tickets = await prisma.ticket.findMany({
+          where: { orderId: { in: orders.map((o) => o.id) } },
+          select: { status: true },
+        });
+        expect(tickets).toHaveLength(2);
+        expect(tickets.every((t) => t.status === 'valid')).toBe(true);
+      });
+
+      it('still flips the whole cart when the refund is total', async () => {
+        const { orders, providerRef } = await seedPaidCart({ amountCents: 12_000 });
+        stripe.nextEvent = refundEvent('evt_cart_total', providerRef, 12_000, 12_000);
+
+        await app.inject({
+          method: 'POST',
+          url: '/stripe/webhook',
+          headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+          payload: rawJson(stripe.nextEvent),
+        });
+
+        const rows = await prisma.order.findMany({
+          where: { id: { in: orders.map((o) => o.id) } },
+          select: { status: true },
+        });
+        expect(rows).toHaveLength(2);
+        expect(rows.every((r) => r.status === 'refunded')).toBe(true);
+      });
     });
 
     it('ignores charge.refunded with no matching order', async () => {

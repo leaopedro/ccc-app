@@ -1,17 +1,19 @@
-// Bumped 2026-08-14: the payment section claimed we do not collect CPF, while
-// the legal-basis table two sections below already listed CPF for subscription
-// identity validation, and the code encrypts and stores it at signup. The
-// document contradicted itself and the iOS privacy manifest.
+// Bumped 2026-08-29: subscription billing moved from RevenueCat to Stripe. The
+// published document named RevenueCat as an Operador in both the payment prose
+// and the subprocessor table, while the code charges through Stripe. Naming a
+// processor that does not process is an LGPD accuracy defect, and it is a
+// visible contradiction to an App Review reviewer once iOS charges via Stripe.
 //
-// This constant is NOT inert: apps/admin/src/components/cookie-banner.tsx
-// compares it against the stored consent version, so bumping it re-shows the
-// cookie banner to every admin user. That is arguably the right behaviour for a
-// policy change, but it IS a user-visible effect — an earlier version of this
-// comment claimed the bump was purely documentary, which was wrong (the check
-// missed apps/admin). The mobile app and the API do not read it. Whether this
-// correction requires fresh consent from existing users is a legal call, tracked
-// in the payments roadmap.
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
+// This constant is NOT inert. Two consumers:
+//   1. apps/admin/src/components/cookie-banner.tsx:39 compares it against the
+//      stored consent version, so this bump re-shows the cookie banner to every
+//      admin user. Intended for a policy change, and user-visible.
+//   2. apps/mobile/app/(auth)/privacidade.tsx:2 bundles this module into the
+//      iOS binary. That is why this change must land BEFORE submission, not in
+//      parallel with it.
+// The API does not read it. Whether existing users need fresh consent is a
+// legal call, tracked in the payments roadmap.
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-29' as const;
 
 /**
  * The version this one replaced. Interpolated into section 12 instead of being
@@ -22,7 +24,7 @@ export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
  * section. The date is gone entirely because the version string already carries
  * it; one source, not three.
  */
-export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-06' as const;
+export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
 
 export type PolicySection = {
   id: string;
@@ -83,7 +85,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 - Dados de cartão de crédito/débito: processados pela **Stripe** nos EUA — nunca armazenados por nós
 - Pix: processado pela **AbacatePay** no Brasil; armazenamos apenas o status da transação e **não** enviamos seu CPF ao processador de Pix
 - CPF: coletado no seu perfil e armazenado de forma criptografada. Usado para validar sua identidade na contratação de assinatura e para obrigações fiscais. Ver a tabela de bases legais abaixo
-- Assinaturas premium: gerenciadas pela **RevenueCat**, que recebe apenas um identificador interno da sua conta
+- Assinaturas premium: gerenciadas pela **Stripe** (EUA), que recebe apenas o e-mail da conta e um identificador interno da garagem
 
 **Notificações**
 - Token de dispositivo para notificações push (Expo Push / APNs / FCM)
@@ -111,6 +113,48 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 **Sobre o interesse legítimo:** realizamos o balanço de interesses (teste LIA) antes de usar esta base. Você pode opor-se a tratamentos baseados em interesse legítimo enviando mensagem ao Encarregado.`,
   },
+  // RevenueCat removed from the table below on 2026-08-29: no live path sends
+  // data to it today. This is NOT "dead code" — verify before trusting this
+  // comment:
+  //   - apps/api/src/routes/revenuecat-webhook.ts is registered unconditionally
+  //     at apps/api/src/app.ts:183 (POST /webhooks/revenuecat exists in prod).
+  //   - apps/api/src/services/revenuecat/client.ts#buildRevenueCatClient calls
+  //     GET https://api.revenuecat.com/v1/subscribers/{app_user_id}, sending
+  //     garageId as app_user_id.
+  //   - apps/api/src/workers/billing-reconcile.ts#reconcileRcRow calls that
+  //     client, once per hour, for every PremiumMembership row with
+  //     provider: 'apple_revenuecat'. Today there are none, and the sweep is
+  //     gated by env GROWTH_PREMIUM_BILLING_ENABLED (apps/api/src/env.ts),
+  //     which is off pending F8.19 smoke.
+  // The precise condition that makes this comment wrong: GROWTH_PREMIUM_
+  // BILLING_ENABLED flips to true WHILE any PremiumMembership row carries
+  // provider: 'apple_revenuecat'. At that point garageId starts flowing to
+  // RevenueCat's API again, and this table must re-add a RevenueCat row and
+  // PRIVACY_POLICY_VERSION must bump BEFORE that flag flips, not after.
+  //
+  // MOBILE (added in review fix round 2 — the enumeration above only covered
+  // apps/api, and a reader could reasonably have taken it as exhaustive):
+  //   - apps/mobile/src/screens/settings/PremiumScreen.tsx:113-120 still calls
+  //     fetchOfferings() and purchasePackage() from ~/lib/revenuecat on the
+  //     iOS subscribe CTA (Platform.OS === 'ios' branch, behind
+  //     EXPO_PUBLIC_PREMIUM_BILLING_ENABLED). Both go straight into the
+  //     react-native-purchases SDK.
+  //   - Nothing reaches RevenueCat from there today for ONE reason only:
+  //     apps/mobile/src/lib/revenuecat.ts#initRevenueCat — the sole caller of
+  //     Purchases.configure({ apiKey, appUserID: garageId }) — has NO caller
+  //     outside its own unit test. The SDK is never configured, so the CTA is
+  //     BROKEN, not privacy-safe by design. That distinction is the whole
+  //     point of this note.
+  //   - Nothing on the DEVICE identifies the user to RevenueCat either, since
+  //     appUserID (garageId) only ever leaves via that same configure() call.
+  // The precise condition that makes THIS paragraph wrong: any caller of
+  // initRevenueCat lands (an app/_layout.tsx startup call is the documented
+  // intent in that file's own comment) while the iOS CTA still exists. From
+  // that commit on, garageId goes to RevenueCat from the device on every
+  // launch, and this table must re-add a RevenueCat row with
+  // PRIVACY_POLICY_VERSION bumped BEFORE the build ships, not after.
+  // Removing the CTA instead is owned by a separate plan; do not treat this
+  // comment as a decision about which way that goes.
   {
     id: 'compartilhamento',
     title: '5. Com quem compartilhamos seus dados',
@@ -118,9 +162,8 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 
 | Fornecedor | Finalidade | País | Papel LGPD |
 |---|---|---|---|
-| Stripe | Processamento de pagamentos com cartão | EUA | Operador |
+| Stripe | Processamento de pagamentos com cartão e gestão de assinaturas | EUA | Operador |
 | AbacatePay | Processamento de Pix | Brasil | Operador |
-| RevenueCat | Gestão de assinaturas premium | EUA | Operador |
 | Expo / Apple / Google | Envio de notificações push | EUA | Operador |
 | Sentry | Monitoramento de erros | EUA | Operador |
 | Cloudflare R2 | Armazenamento de fotos e mídia | EUA | Operador |

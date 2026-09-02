@@ -178,18 +178,70 @@ export const revenuecatWebhookRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(200).send({ ok: true, ignored: true });
     }
 
+    // Unknown subscription. Mirrors the branch stripe-billing-webhook.ts already
+    // has for the same situation, which RC was missing entirely.
+    //
+    // Every non-activated handler in apply-membership-event.ts identifies the
+    // membership with `findUniqueOrThrow` on (provider, providerSubRef). With no
+    // row, Prisma raises P2025, it escapes the transaction, the route answers
+    // 500, and RC retries the same event on its backoff forever. The subscription
+    // that gets refused by the live-per-garage guard is exactly the shape that
+    // produces this: it stays live at Apple and its next RENEWAL arrives for a
+    // providerSubRef we deliberately never wrote. The guard would have moved the
+    // infinite 5xx loop rather than removed it.
+    //
+    // So: complete, mark processed, and alert. Level splits on whether money
+    // moved, same rule as the Stripe branch — a renewal carries a paid invoice
+    // now absent from our books, everything else is housekeeping.
+    if (normalized.kind !== 'subscription.activated') {
+      const known = await prisma.premiumMembership.findUnique({
+        where: {
+          provider_providerSubRef: {
+            provider: 'apple_revenuecat',
+            providerSubRef: normalized.providerSubRef,
+          },
+        },
+        select: { id: true },
+      });
+      if (!known) {
+        const carriesPayment = normalized.kind === 'subscription.renewed';
+        request.log.warn(
+          { providerEventId, eventType, providerSubRef: normalized.providerSubRef },
+          'revenuecat webhook: unknown subscription, skipping',
+        );
+        Sentry.captureMessage('revenuecat webhook: event for unknown subscription', {
+          level: carriesPayment ? 'error' : 'warning',
+          tags: { kind: 'premium-unknown-subscription', provider: 'apple_revenuecat' },
+          extra: {
+            providerEventId,
+            eventType,
+            eventKind: normalized.kind,
+            providerSubRef: normalized.providerSubRef,
+            garageId,
+            memberWasCharged: carriesPayment,
+          },
+        });
+        await prisma.subscriptionWebhookEvent.update({
+          where: { provider_providerEventId: { provider: 'apple_revenuecat', providerEventId } },
+          data: { processedAt: new Date() },
+        });
+        return reply.status(200).send({ ok: true, ignored: true, reason: 'unknown-subscription' });
+      }
+    }
+
     try {
-      await prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
-        await applyMembershipEvent(tx, normalized);
+        return applyMembershipEvent(tx, normalized);
       });
 
       // Canon §F8.4 post-commit hook: enqueue ticket backfill on activation.
-      // No-op for renewal/cancel/expiry/past_due/uncancel/tier_changed.
+      // No-op for renewal/cancel/expiry/past_due/uncancel/tier_changed, and for
+      // an activation the live-per-garage guard refused (it wrote nothing).
       // MUST run BEFORE processedAt is set: if enqueue fails after processedAt
       // commits, RC retry would hit the dedup catch (processedAt non-null),
       // return 200, and the backfill would be permanently lost.
-      await enqueuePremiumTicketBackfillIfActivated(prisma, normalized);
+      await enqueuePremiumTicketBackfillIfActivated(prisma, normalized, outcome);
       // Box Builder Fase 2: open the current-cycle box post-commit (best-effort).
       await openMonthlyBoxIfEligible(prisma, normalized);
 

@@ -702,10 +702,33 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
       if (!existing) {
         // Event for an unknown subscription — mark processed and skip.
         // Most likely an out-of-order delivery or a sub that pre-dates F8.
+        //
+        // It is also how a subscription refused by the live-per-garage guard in
+        // apply-membership-event.ts keeps showing up: that subscription is still
+        // live at Stripe and still billing, so every renewal lands here. A
+        // `log.warn` alone let that bill silently for months, which is the same
+        // money-in-nothing-out shape the guard exists to surface — so it alerts.
+        //
+        // Level splits on whether money moved. A renewal carries a paid invoice
+        // that is now nowhere in our books: that is an error. A
+        // cancel/expire/past_due/pause for a subscription we never knew is
+        // housekeeping noise from an out-of-order delivery or a pre-F8 sub, and
+        // paging on it would drown the signal that matters.
+        const carriesPayment = billingEvt.kind === 'subscription.renewed';
         request.log.warn(
           { eventId: event.id, providerSubRef: billingEvt.providerSubRef, kind: billingEvt.kind },
           'stripe-billing webhook: unknown subscription, skipping',
         );
+        Sentry.captureMessage('stripe-billing webhook: event for unknown subscription', {
+          level: carriesPayment ? 'error' : 'warning',
+          tags: { kind: 'premium-unknown-subscription', provider: 'stripe' },
+          extra: {
+            eventId: event.id,
+            eventKind: billingEvt.kind,
+            providerSubRef: billingEvt.providerSubRef,
+            memberWasCharged: carriesPayment,
+          },
+        });
         await prisma.subscriptionWebhookEvent.update({
           where: { id: webhookEventId },
           data: { processedAt: new Date() },
@@ -750,14 +773,15 @@ export const stripeBillingWebhookRoutes: FastifyPluginAsync = async (app) => {
     // -----------------------------------------------------------------------
     // §F8.5 — Open tx + SELECT FOR UPDATE on Garage, then dispatch
     // -----------------------------------------------------------------------
-    await prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
-      await applyMembershipEvent(tx, billingEvt);
+      return applyMembershipEvent(tx, billingEvt);
     });
 
     // Canon §F8.4 post-commit hook: enqueue ticket backfill on activation.
-    // No-op for renewal/cancel/expiry/past_due/uncancel/tier_changed.
-    await enqueuePremiumTicketBackfillIfActivated(prisma, billingEvt);
+    // No-op for renewal/cancel/expiry/past_due/uncancel/tier_changed, and for
+    // an activation the live-per-garage guard refused (it wrote nothing).
+    await enqueuePremiumTicketBackfillIfActivated(prisma, billingEvt, outcome);
     // Box Builder Fase 2: open the current-cycle box post-commit (best-effort).
     await openMonthlyBoxIfEligible(prisma, billingEvt);
 

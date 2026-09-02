@@ -1,4 +1,11 @@
-import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
+// Two lists, deliberately different, both used in this file. Read the doc
+// comments in @ccc/shared/premium before swapping one for the other:
+//   LIVE_MEMBERSHIP_STATUSES        — entitlement: 5 wide, includes trialing/paused.
+//   LIVE_PER_GARAGE_INDEX_STATUSES  — what premium_membership_live_per_garage
+//                                     actually enforces: 3 wide.
+// Pre-checks that exist to avoid a P2002 on that index must use the second one.
+// handleExpired below asks the entitlement question, so it uses the first.
+import { LIVE_MEMBERSHIP_STATUSES, LIVE_PER_GARAGE_INDEX_STATUSES } from '@ccc/shared/premium';
 import type { Prisma, PremiumProvider, PrismaClient } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 
@@ -6,6 +13,23 @@ import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
 import { awardXp } from '../garage/xp-awarder.js';
 
 import type { BillingEvent } from './types.js';
+
+/**
+ * What applyMembershipEvent actually did.
+ *
+ * `refused_live_conflict` is the only non-write outcome: an activation landed
+ * on a garage that already holds a membership inside the
+ * `premium_membership_live_per_garage` index under another subscription, so the
+ * event was allowed to complete without writing anything (see the guard in
+ * handleActivated). Post-commit hooks must not fire work off it.
+ */
+export type MembershipEventOutcome = 'applied' | 'refused_live_conflict';
+
+/** Adapter for the handlers that have no refusal path and always write. */
+const applied = async (p: Promise<void>): Promise<MembershipEventOutcome> => {
+  await p;
+  return 'applied';
+};
 
 /**
  * Writes the DB side-effects of a normalized BillingEvent inside the
@@ -23,26 +47,26 @@ import type { BillingEvent } from './types.js';
 export const applyMembershipEvent = async (
   tx: Prisma.TransactionClient,
   evt: BillingEvent,
-): Promise<void> => {
+): Promise<MembershipEventOutcome> => {
   switch (evt.kind) {
     case 'subscription.activated':
       return handleActivated(tx, evt);
     case 'subscription.renewed':
-      return handleRenewed(tx, evt);
+      return applied(handleRenewed(tx, evt));
     case 'subscription.cancelled':
-      return handleCancelled(tx, evt);
+      return applied(handleCancelled(tx, evt));
     case 'subscription.uncancelled':
-      return handleUncancelled(tx, evt);
+      return applied(handleUncancelled(tx, evt));
     case 'subscription.expired':
-      return handleExpired(tx, evt);
+      return applied(handleExpired(tx, evt));
     case 'subscription.past_due':
-      return handlePastDue(tx, evt);
+      return applied(handlePastDue(tx, evt));
     case 'subscription.tier_changed':
-      return handleTierChanged(tx, evt);
+      return applied(handleTierChanged(tx, evt));
     case 'subscription.paused':
-      return handlePaused(tx, evt);
+      return applied(handlePaused(tx, evt));
     case 'subscription.resumed':
-      return handleResumed(tx, evt);
+      return applied(handleResumed(tx, evt));
     default: {
       // Exhaustive check — TypeScript will error if BillingEvent grows a new kind
       // without a corresponding case.
@@ -59,7 +83,7 @@ export const applyMembershipEvent = async (
 async function handleActivated(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.activated' }>,
-): Promise<void> {
+): Promise<MembershipEventOutcome> {
   const {
     garageId,
     provider,
@@ -93,105 +117,184 @@ async function handleActivated(
     where: { provider_providerSubRef: { provider, providerSubRef } },
   });
 
+  // -------------------------------------------------------------------------
+  // Live-per-garage guard
+  //
+  // The lookup above keys ONLY on (provider, providerSubRef), but the DB also
+  // carries the partial unique `premium_membership_live_per_garage`
+  // (migration 20260527094120):
+  //
+  //   CREATE UNIQUE INDEX premium_membership_live_per_garage
+  //     ON "PremiumMembership" ("garageId")
+  //     WHERE status IN ('active', 'past_due', 'cancel_scheduled');
+  //
+  // A garage that already holds a live membership under a DIFFERENT
+  // subscription made the findUnique miss and the create below raise P2002.
+  // Nothing here, in applyMembershipEvent, or in the Stripe/RC webhook routes
+  // caught it: the webhook 500'd, Stripe retried on its backoff, and every
+  // retry hit the same violation. Worst shape in the billing system — the card
+  // was charged, no membership row landed, and no refund was issued. Two real
+  // ways to get here: the double native-checkout race documented in
+  // routes/me-premium.ts (an attempt with no confirmation_secret leaves a live
+  // sub behind and a retry mints a second one), and a member who already pays
+  // through one provider subscribing again through the other.
+  //
+  // The guard sits ABOVE all three write branches, not only the create. Both
+  // `existing` branches below also write status 'active', so an activation for
+  // a row that is currently `expired`/`paused` moves that row INTO the live set
+  // and violates the same index. That is a real Apple path, not a theoretical
+  // one: normalize-revenuecat keys providerSubRef on `original_transaction_id`,
+  // which Apple reuses across re-purchases, so a member who lets an Apple sub
+  // expire and buys again comes back as INITIAL_PURCHASE onto the SAME row.
+  // If a Stripe membership went live in between, the update is the P2002.
+  //
+  // `id: { not: existing.id }` on the existing branches: a row already inside
+  // the index cannot conflict with itself, and the index itself guarantees no
+  // OTHER row is live while it is, so this find returns null in the ordinary
+  // case and costs one indexed lookup.
+  //
+  // Scope is LIVE_PER_GARAGE_INDEX_STATUSES, NOT LIVE_MEMBERSHIP_STATUSES. The
+  // two differ on purpose and the difference is load-bearing here: the shared
+  // "live" list also carries `trialing` and `paused`, which the index does not.
+  // Checking the wider list would refuse activations Postgres would have
+  // accepted — a member with a paused Stripe subscription subscribing on Apple
+  // gets charged and provisioned nothing, which is the exact failure this guard
+  // exists to prevent. Whether `trialing`/`paused` SHOULD also block a second
+  // membership is an open product question; deciding it means changing the
+  // index in a migration, not widening this pre-check.
+  //
+  // Chosen behaviour: the pre-existing live membership WINS and this activation
+  // writes nothing. A route with a human on the other end could answer 409; a
+  // webhook cannot — any non-2xx just buys another retry of the same violation
+  // — so the event is allowed to complete and be marked processed, and the
+  // alert is what carries it to a human.
+  //
+  // Why not supersede the incumbent instead: expiring it would hand entitlement
+  // to the newest payment, but the superseded subscription is still live and
+  // still billing at the provider, so its next renewal comes back through
+  // handleRenewed, flips that row to 'active' and violates the same index from
+  // the other side. Superseding trades one uncaught P2002 for a different one,
+  // and it cancels nothing at the provider — the double charge stays either
+  // way. Only a human can pick which subscription to keep and refund the other.
+  //
+  // Nothing is silently dropped: this is a Sentry `error` carrying the garage,
+  // both providers, both subscription refs, both gross amounts and the
+  // unrecorded invoice ref. The SubscriptionWebhookEvent row also keeps the raw
+  // payload, so the paid invoice is never traceless.
+  //
+  // The remediation path that exists TODAY (docs/observability.md, Runbook 5,
+  // "money in, nothing out"): there is NO admin endpoint that creates a
+  // membership. `/admin/subscriptions` exposes plan, add-ons, cancel, resume
+  // and pause, and nothing else. An operator refunds or cancels the duplicate
+  // at the provider and, if the wrong subscription won, hand-writes the
+  // `PremiumMembership` + `PremiumMembershipInvoice` rows and the
+  // `Garage.premiumTier`/`premiumUntil` snapshot inside a transaction holding
+  // `SELECT id FROM "Garage" ... FOR UPDATE`. PR #43 (feat/go-live-web-codigo)
+  // adds `POST /admin/subscriptions/grant`; once that merges it becomes the
+  // path to use here and this comment should point at it instead.
+  //
+  // No SAVEPOINT + P2002 catch as a backstop: this pre-check is race-free under
+  // the lock every caller of applyMembershipEvent must already hold (canon
+  // §F8.5, `SELECT ... FROM "Garage" ... FOR UPDATE`), which is the same
+  // contract the findUnique→write window above already relies on.
+  // -------------------------------------------------------------------------
+  const liveElsewhere = await tx.premiumMembership.findFirst({
+    where: {
+      garageId,
+      status: { in: [...LIVE_PER_GARAGE_INDEX_STATUSES] },
+      ...(existing ? { id: { not: existing.id } } : {}),
+    },
+    select: {
+      id: true,
+      provider: true,
+      providerSubRef: true,
+      status: true,
+      tier: true,
+      grossAmountCents: true,
+      currency: true,
+      currentPeriodEnd: true,
+    },
+  });
+  if (liveElsewhere) {
+    // Settle the originating attempt here instead of leaving it to the reaper.
+    //
+    // Without this the row stays `pending` until reapAbandonedAttempts
+    // (workers/billing-reconcile.ts) flips it to `abandoned` hours later. Two
+    // problems with that: `abandoned` means "the member gave up", which is a
+    // lie about someone whose card was charged, and until the reaper runs the
+    // partial unique on (garageId WHERE status='pending') keeps answering
+    // `SubscriptionAttemptInFlight` for an attempt that will never resolve.
+    //
+    // `failed` is the honest state of the three that exist. It says the attempt
+    // did not become a membership and the member did not walk away. There is no
+    // `charged_not_provisioned` status and adding one is a migration this fix
+    // does not need: the Sentry alert, not the enum, is what carries "the money
+    // moved" to a human.
+    //
+    // Releasing the pending slot cannot mint a third subscription: reaching
+    // this branch means the garage holds an INDEXED-live membership, so both
+    // the precheck and checkout-native answer `AlreadySubscribed` before any
+    // provider call.
+    const settledAttempts = await tx.premiumSubscriptionAttempt.updateMany({
+      where: { providerSubRef, status: 'pending' },
+      data: { status: 'failed' },
+    });
+
+    Sentry.captureMessage(
+      'billing: activation refused, member WAS charged — garage already has a live membership under another subscription',
+      {
+        level: 'error',
+        tags: { kind: 'premium-live-membership-conflict', provider },
+        extra: {
+          garageId,
+          // Explicit, because the whole point of the alert is that money moved
+          // and nothing was provisioned for it.
+          memberWasCharged: true,
+          incumbentMembershipId: liveElsewhere.id,
+          incumbentProvider: liveElsewhere.provider,
+          incumbentProviderSubRef: liveElsewhere.providerSubRef,
+          incumbentStatus: liveElsewhere.status,
+          incumbentTier: liveElsewhere.tier,
+          incumbentGrossAmountCents: liveElsewhere.grossAmountCents,
+          incumbentCurrency: liveElsewhere.currency,
+          incumbentCurrentPeriodEnd: liveElsewhere.currentPeriodEnd.toISOString(),
+          incomingProvider: provider,
+          incomingProviderSubRef: providerSubRef,
+          incomingProviderCustomerRef: providerCustomerRef,
+          // Everything Runbook 5's hand-written row needs, so the operator can
+          // execute the documented remediation from the alert alone without
+          // going digging in the provider dashboard: tier, cadence,
+          // baseAmountCents, devFeePercent and the period bounds.
+          incomingTier: tier,
+          incomingCadence: cadence,
+          incomingBaseAmountCents: pricing.baseAmountCents,
+          incomingDevFeePercent: pricing.devFeePercent,
+          incomingGrossAmountCents: pricing.grossAmountCents,
+          incomingCurrency: pricing.currency,
+          incomingCurrentPeriodStart: currentPeriodStart.toISOString(),
+          incomingCurrentPeriodEnd: currentPeriodEnd.toISOString(),
+          // Null when the incoming subscription has no row yet (the create
+          // case). Non-null means an existing, non-live row was about to be
+          // flipped back to 'active' — the Apple re-purchase shape.
+          incomingMembershipId: existing?.id ?? null,
+          incomingMembershipStatus: existing?.status ?? null,
+          // Paid at the provider and deliberately NOT written here: it belongs
+          // to the losing subscription, and filing it under the incumbent
+          // membership would corrupt that member's invoice history.
+          unrecordedProviderInvoiceRef: invoice.providerInvoiceRef,
+          unrecordedPaidAt: invoice.paidAt.toISOString(),
+          unrecordedPeriodStart: invoice.periodStart.toISOString(),
+          unrecordedPeriodEnd: invoice.periodEnd.toISOString(),
+          settledAttempts: settledAttempts.count,
+        },
+      },
+    );
+    return 'refused_live_conflict';
+  }
+
   let membership;
   let didAdvancePeriod = false;
   if (!existing) {
-    // Live-per-garage guard. The lookup above keys ONLY on
-    // (provider, providerSubRef), but the DB also carries the partial unique
-    // `premium_membership_live_per_garage` (migration 20260527094120):
-    //
-    //   CREATE UNIQUE INDEX premium_membership_live_per_garage
-    //     ON "PremiumMembership" ("garageId")
-    //     WHERE status IN ('active', 'past_due', 'cancel_scheduled');
-    //
-    // So a garage that already holds a live membership under a DIFFERENT
-    // subscription made the findUnique miss and the create below raise P2002.
-    // Nothing here, in applyMembershipEvent, or in the Stripe/RC webhook
-    // routes caught it: the webhook 500'd, Stripe retried on its backoff, and
-    // every retry hit the same violation. Worst shape in the billing system —
-    // the card was charged, no membership row landed, and no refund was
-    // issued. Two real ways to get here: the double native-checkout race
-    // documented in routes/me-premium.ts (an attempt with no
-    // confirmation_secret leaves a live sub behind and a retry mints a
-    // second one), and a member who already pays through one provider
-    // subscribing again through the other.
-    //
-    // Chosen behaviour: the pre-existing live membership WINS and this
-    // activation writes nothing, exactly the winner routes/admin/subscriptions.ts
-    // already picked for the same constraint ("garage already has a live
-    // membership; cancel or expire it before granting a new one"). That route
-    // can answer 409 because a human is on the other end; a webhook cannot —
-    // any non-2xx just buys another retry of the same violation — so here the
-    // event is allowed to complete and be marked processed, and the alert is
-    // what carries it to a human.
-    //
-    // Why not supersede the incumbent instead: expiring it would hand
-    // entitlement to the newest payment, but the superseded subscription is
-    // still live and still billing at the provider, so its next renewal comes
-    // back through handleRenewed, flips that row to 'active' and violates the
-    // same index from the other side. Superseding trades one uncaught P2002
-    // for a different one, and it cancels nothing at the provider — the
-    // double charge stays either way. Only a human can pick which
-    // subscription to keep and refund the other.
-    //
-    // Nothing is silently dropped: this is a Sentry `error` carrying the
-    // garage, both providers, both subscription refs, both gross amounts and
-    // the unrecorded invoice ref, so the operator can refund/cancel the
-    // duplicate at the provider and, if the wrong one won, re-provision
-    // through POST /admin/subscriptions/grant (Runbook 5, "money in, nothing
-    // out"). The SubscriptionWebhookEvent row also keeps the raw payload, so
-    // the paid invoice is never traceless.
-    //
-    // No SAVEPOINT + P2002 catch as a backstop: this pre-check is race-free
-    // under the lock every caller of applyMembershipEvent must already hold
-    // (canon §F8.5, `SELECT ... FROM "Garage" ... FOR UPDATE`), which is the
-    // same contract the findUnique→create window above already relies on.
-    const liveElsewhere = await tx.premiumMembership.findFirst({
-      where: { garageId, status: { in: [...LIVE_MEMBERSHIP_STATUSES] } },
-      select: {
-        id: true,
-        provider: true,
-        providerSubRef: true,
-        status: true,
-        tier: true,
-        grossAmountCents: true,
-        currency: true,
-        currentPeriodEnd: true,
-      },
-    });
-    if (liveElsewhere) {
-      Sentry.captureMessage(
-        'billing: activation refused — garage already has a live membership under another subscription',
-        {
-          level: 'error',
-          tags: { kind: 'premium-live-membership-conflict', provider },
-          extra: {
-            garageId,
-            incumbentMembershipId: liveElsewhere.id,
-            incumbentProvider: liveElsewhere.provider,
-            incumbentProviderSubRef: liveElsewhere.providerSubRef,
-            incumbentStatus: liveElsewhere.status,
-            incumbentTier: liveElsewhere.tier,
-            incumbentGrossAmountCents: liveElsewhere.grossAmountCents,
-            incumbentCurrency: liveElsewhere.currency,
-            incumbentCurrentPeriodEnd: liveElsewhere.currentPeriodEnd.toISOString(),
-            incomingProvider: provider,
-            incomingProviderSubRef: providerSubRef,
-            incomingProviderCustomerRef: providerCustomerRef,
-            incomingTier: tier,
-            incomingGrossAmountCents: pricing.grossAmountCents,
-            incomingCurrency: pricing.currency,
-            // Paid at the provider and deliberately NOT written here: it
-            // belongs to the losing subscription, and filing it under the
-            // incumbent membership would corrupt that member's invoice history.
-            unrecordedProviderInvoiceRef: invoice.providerInvoiceRef,
-            unrecordedPaidAt: invoice.paidAt.toISOString(),
-          },
-        },
-      );
-      return;
-    }
-
     membership = await tx.premiumMembership.create({
       data: {
         garageId,
@@ -411,6 +514,8 @@ async function handleActivated(
     sourceRef: `garage:${garageId}`,
     delta: 200,
   });
+
+  return 'applied';
 }
 
 // ---------------------------------------------------------------------------
@@ -429,14 +534,17 @@ async function handleRenewed(
     where: { provider_providerSubRef: { provider, providerSubRef } },
   });
 
-  // Known, NOT fixed here: this update writes status 'active', so it can move
-  // a row INTO the live set the same way handleActivated's create does. If the
-  // renewing row is 'paused'/'expired' while another row for the garage is
-  // live, `premium_membership_live_per_garage` raises the same uncaught P2002.
+  // Known, NOT fixed here, and stated in the PR description as deferred: this
+  // update writes status 'active', so it can move a row INTO the live set the
+  // same way handleActivated's writes can. If the renewing row is
+  // 'paused'/'expired' while another row for the garage is live,
+  // `premium_membership_live_per_garage` raises the same uncaught P2002.
   // It needs the same winner-picking judgement as the activation case and a
   // different set of inputs (there is no incoming subscription to refuse, only
   // a renewal of one we already know), so it is deliberately left to its own
   // change rather than widened into this one. Same applies to handleResumed.
+  // The traffic is far narrower than activation, which is why deferring it is
+  // acceptable and not silent.
   const isForward = currentPeriodEnd > existing.currentPeriodEnd;
   const membership = isForward
     ? await tx.premiumMembership.update({
@@ -815,6 +923,14 @@ export const reconcileMembershipAddonsAmount = async (
  * §4.4). Mid-cycle event publishes are handled by F8.07's separate
  * event-publish hook.
  *
+ * Second gate: `outcome`. An activation refused by the live-per-garage guard
+ * wrote no membership, no invoice and no Garage snapshot, so backfilling
+ * tickets off it is work scheduled from a no-op. The worker would find the
+ * incumbent membership and do roughly the right thing, which is why this was
+ * harmless rather than a bug, but a job queued by an event that wrote nothing
+ * has no business existing. Defaults to 'applied' so callers that never see a
+ * refusal (tests, the reconcile worker's synthesised events) stay unchanged.
+ *
  * Idempotency: this function ALWAYS creates a new row when called with an
  * activated event. Upstream (`SubscriptionWebhookEvent` unique on
  * `(provider, providerEventId)`) is responsible for ensuring this is called
@@ -825,8 +941,10 @@ export const reconcileMembershipAddonsAmount = async (
 export const enqueuePremiumTicketBackfillIfActivated = async (
   client: PrismaClient,
   evt: BillingEvent,
+  outcome: MembershipEventOutcome = 'applied',
 ): Promise<void> => {
   if (evt.kind !== 'subscription.activated') return;
+  if (outcome !== 'applied') return;
   await client.premiumTicketBackfillJob.create({
     data: { garageId: evt.garageId, status: 'pending' },
   });

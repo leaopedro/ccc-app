@@ -8,7 +8,17 @@ const platform = { OS: 'android' as string };
 vi.mock('react-native', () => ({ Platform: platform }));
 // checkout.ts imports ./checkout-error, which reaches ~/api/client and
 // therefore expo-constants. Stub it so this stays a plain node run.
-vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
+//
+// `extra` is mutable so a test can add/remove the publishable key without
+// re-mocking the module — checkout.ts reads it at call time (final review C1).
+const expoExtra = vi.hoisted(() => ({ value: {} as { stripePublishableKey?: string } }));
+vi.mock('expo-constants', () => ({
+  default: {
+    get expoConfig() {
+      return { extra: expoExtra.value };
+    },
+  },
+}));
 vi.mock('expo-web-browser', () => ({
   openAuthSessionAsync: (url: string) => openAuthSessionAsync(url),
 }));
@@ -23,6 +33,9 @@ describe('startPremiumCheckout', () => {
     createPremiumSubscriptionNative.mockReset();
     openAuthSessionAsync.mockReset();
     platform.OS = 'android';
+    // Default: a build that HAS a key, so the iOS cases below exercise the
+    // native seam. The keyless cases set this to `{}` explicitly.
+    expoExtra.value = { stripePublishableKey: 'pk_test_checkout' };
   });
 
   afterEach(() => {
@@ -44,6 +57,55 @@ describe('startPremiumCheckout', () => {
 
     expect(out).toEqual({ kind: 'sheet', clientSecret: 'pi_sub_secret_x' });
     expect(createPremiumCheckout).not.toHaveBeenCalled();
+  });
+
+  // Final review C1 — the App Store build regression. eas.json `production`
+  // sets EXPO_PUBLIC_PREMIUM_BILLING_ENABLED but no
+  // EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY, so `shouldMountStripeProvider` is
+  // false and no PaymentSheet can ever be presented. Taking the native branch
+  // there created a real Stripe subscription plus a `pending` attempt row and
+  // THEN dead-ended, leaving the member with a generic error and an attempt
+  // lock that blocks switching plans.
+  //
+  // The decision must happen before the server call, so a keyless build never
+  // creates that state at all. These three assertions are the whole fix:
+  // no checkout-native call, a hosted URL opened, a `returned` outcome the
+  // screen knows how to poll on.
+  it('falls back to the hosted subscription checkout on iOS when the build has no publishable key', async () => {
+    platform.OS = 'ios';
+    expoExtra.value = {};
+    createPremiumCheckout.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_ios_keyless',
+    });
+    openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' });
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
+    expect(openAuthSessionAsync).toHaveBeenCalledWith(
+      'https://checkout.stripe.com/c/pay/cs_ios_keyless',
+    );
+    expect(out).toEqual({ kind: 'returned' });
+  });
+
+  // The empty-string case is the one the real config produces:
+  // app.config.ts writes `process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''`
+  // into extra, so an unset env var arrives as '' rather than undefined. A
+  // truthiness check that only handled `undefined` would still dead-end.
+  it('treats an empty publishable key as absent on iOS', async () => {
+    platform.OS = 'ios';
+    expoExtra.value = { stripePublishableKey: '' };
+    createPremiumCheckout.mockResolvedValue({
+      url: 'https://checkout.stripe.com/c/pay/cs_ios_empty_key',
+    });
+    openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' });
+    const { startPremiumCheckout } = await load();
+
+    const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
+
+    expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
+    expect(out).toEqual({ kind: 'returned' });
   });
 
   // Final review I1: Android stays on the hosted browser flow, matching

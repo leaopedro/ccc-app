@@ -7,7 +7,12 @@
 // "contract on the website" notice. That notice was in-app steering to an
 // external purchase method on the Brazil storefront, which the 3.1.3 chapeau
 // forbids outright (the exception is US-storefront only). iOS now pays through
-// the native PaymentSheet.
+// the native PaymentSheet — when the build actually carries a publishable key
+// to mount StripeProvider with. Without one the sheet cannot exist at all, so
+// iOS falls back to the same hosted session Android uses (final review C1):
+// a purchase that completes, instead of a dead end after real server state was
+// already created. Supplying the key is a human prerequisite this code cannot
+// satisfy for itself.
 //
 // Android stays on the hosted browser flow below, same as before this
 // branch and same as PremiumScreen.tsx's onSubscribeAndroid — whether
@@ -35,12 +40,29 @@
 // caused polling to start immediately, racing the poller's budget against
 // a member who hasn't finished paying yet. Do not reintroduce that call.
 
+import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { createPremiumCheckout, createPremiumSubscriptionNative } from '~/api/premium';
 
 import { resolveCheckoutError, type CheckoutError } from './checkout-error';
+
+/**
+ * Whether this build actually carries a Stripe publishable key.
+ *
+ * Same signal the cart uses (app/(app)/cart/index.tsx STRIPE_AVAILABLE) and the
+ * same one `shouldMountStripeProvider` gates the provider on: with no key,
+ * StripeProvider never mounts, so `usePaymentSheet` can never present a sheet.
+ *
+ * Read at call time, not at import time, so the value tracks the runtime config
+ * rather than module-load order.
+ */
+const hasStripePublishableKey = (): boolean =>
+  (
+    (Constants.expoConfig?.extra as { stripePublishableKey?: string } | undefined)
+      ?.stripePublishableKey ?? ''
+  ).length > 0;
 
 export type CheckoutOutcome =
   | { kind: 'redirected' }
@@ -52,12 +74,20 @@ export async function startPremiumCheckout(input: {
   planSlug: string;
   addonKeys: string[];
 }): Promise<CheckoutOutcome> {
-  // iOS only: create the subscription server-side and drive Task 4's
-  // PaymentSheet with its first invoice's client secret. The subscription is
-  // `payment_behavior: 'default_incomplete'` — nothing is charged and no
-  // membership exists until the sheet confirms and the `invoice.paid`
-  // webhook lands.
-  if (Platform.OS === 'ios') {
+  // iOS only, and only when a publishable key exists: create the subscription
+  // server-side and drive Task 4's PaymentSheet with its first invoice's
+  // client secret. The subscription is `payment_behavior:
+  // 'default_incomplete'` — nothing is charged and no membership exists until
+  // the sheet confirms and the `invoice.paid` webhook lands.
+  //
+  // Final review C1: the key check must happen BEFORE the server call. Without
+  // it, a keyless build (eas.json `production` ships no
+  // EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) created a real Stripe subscription and
+  // a `pending` attempt row, and only then failed to present a sheet that
+  // could never mount — a generic error for the member plus an attempt lock
+  // that blocks switching plans (409 SubscriptionAttemptInFlight). Deciding
+  // first means a keyless build never creates either.
+  if (Platform.OS === 'ios' && hasStripePublishableKey()) {
     try {
       const intent = await createPremiumSubscriptionNative(input);
       return { kind: 'sheet', clientSecret: intent.clientSecret };
@@ -87,6 +117,9 @@ export async function startPremiumCheckout(input: {
   }
 
   // Android: hosted browser flow, restored to its pre-branch behaviour.
+  // iOS reaches here only in a keyless build (final review C1), where the
+  // sheet cannot mount at all — the hosted session is the only path that can
+  // still complete a purchase, same as Android's.
   await WebBrowser.openAuthSessionAsync(url);
   return { kind: 'returned' };
 }

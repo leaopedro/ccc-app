@@ -359,25 +359,77 @@ admin at `/premium/catalogo`, verify with `GET /api/plans`, then note
 that the event is already marked processed and will NOT re-run. The
 membership has to be created by hand.
 
-**If the alert was `premium-live-membership-conflict`.** An activation
-arrived for a garage that already holds a membership inside the
-`premium_membership_live_per_garage` index under a different
-subscription. The incumbent won, the new activation wrote nothing, and
-the member was charged for it. The alert carries both subscription refs,
-both providers, both amounts, and the tier, cadence, `baseAmountCents`,
-`devFeePercent` and period bounds of the refused one, so it has
-everything the grant below needs.
+**If the alert was `premium-live-membership-conflict`.** An event tried to
+put a second membership row into the
+`premium_membership_live_per_garage` index for one garage. One garage,
+two billing subscriptions. Read `extra.eventKind` first — it takes six
+values, grouped into the four bullets below by remediation. Every variant
+carries the incumbent's membership id, provider, subscription ref,
+status, tier, amount and period end, plus the same fields for the
+subscription that lost.
 
-Decide which subscription the member should keep. Cancel the other at
-its provider and refund the charge there. Refunding is the usual answer:
-the member almost always has entitlement already, through the incumbent,
-and is simply paying twice. If the refused subscription is the one to
-keep, expire the incumbent first, then grant it with
-`POST /admin/subscriptions/grant`.
+The underlying cause is always the same and so is the first move: decide
+which subscription the member should keep, then cancel the other at its
+provider and refund what it charged. Refunding is the usual answer — the
+member almost always has entitlement already, through the incumbent, and
+is simply paying twice.
 
-The originating `PremiumSubscriptionAttempt` was already settled to
-`failed` by the webhook, so the member is not blocked from subscribing
-again once the duplicate is cleaned up.
+**The double billing never self-heals** — nothing here cancels anything
+at a provider, so the duplicate keeps charging until a human stops it.
+The stranded membership row is a different matter and mostly does
+recover on its own, so do not plan around replaying the alerting event:
+every one of these is marked `processedAt` and will never be redelivered.
+What un-strands the row is the NEXT paid invoice on the losing
+subscription, which arrives in `handleRenewed`. Once the garage has a
+single subscription again, that renewal applies in full — status, period
+and `Garage.premiumUntil`. Until then it files its invoice and re-alerts.
+So the human is needed to stop the money, not to un-strand the member.
+
+- **`subscription.activated`** — a new subscription was paid for and no
+  membership row was written at all. `memberWasCharged: true`. The
+  charge is in `unrecordedProviderInvoiceRef` and is **not** in our
+  books. The alert also carries the tier, cadence, `baseAmountCents`,
+  `devFeePercent` and period bounds, which is everything
+  `POST /admin/subscriptions/grant` needs: if the refused subscription is
+  the one to keep, expire the incumbent first, then grant it. The
+  originating `PremiumSubscriptionAttempt` was already settled to
+  `failed`, so the member is not blocked from subscribing again once the
+  duplicate is cleaned up.
+- **`subscription.renewed`** — a renewal was paid for a subscription we
+  already had a row for. `memberWasCharged: true`, but unlike the
+  activation case the invoice **is** recorded, under
+  `incomingMembershipId` — see `recordedProviderInvoiceRef`. What did not
+  happen is the status flip and the `Garage.premiumUntil` extension
+  (`statusFlipRefused`, `garageSnapshotRefused`), so the member paid for
+  a period that grants nothing. Refund it, or, if this is the
+  subscription to keep, expire the incumbent and then the next renewal
+  applies normally. Recurring alerts on the same
+  `incomingProviderSubRef` mean nobody cancelled the duplicate: it bills
+  every cycle.
+- **`subscription.resumed`** — a paused subscription was un-paused
+  (Billing Portal, or `POST /admin/subscriptions/:id/resume`) while
+  another row is live. Nothing was written and nothing was charged
+  _yet_: `memberWasCharged: false`, `providerResumedBilling: true`. The
+  provider has resumed collection regardless of our DB, so this one is
+  time-sensitive — act before the next invoice or it becomes the
+  `renewed` case above, with a real charge attached. Re-pause or cancel
+  it at the provider if it is the duplicate. If it is the subscription to
+  keep, expire the incumbent: the resume event itself is already
+  `processedAt` and will not be redelivered, but the next cycle's invoice
+  lands in `handleRenewed` and flips the row active then.
+- **`subscription.cancelled` / `subscription.past_due` /
+  `subscription.uncancelled`** — no money moved in the event itself.
+  `attemptedStatus` is the status the provider says that subscription is
+  now in and which our row could not record, so `PremiumMembership` is
+  knowingly stale for `incomingMembershipId`. Resolve the duplicate
+  first. The stale status then clears on the next event that subscription
+  produces — a later `deleted` always applies, since `expired` only ever
+  leaves the index — but nothing forces one to arrive, so set the status
+  by hand if the subscription is already gone at the provider.
+
+In all six, the member keeps entitlement through the incumbent while this
+is open. Nobody is locked out, so this is an urgent-billing problem, not
+an urgent-access one.
 
 **If the alert was `premium-unknown-subscription`.** An event arrived for
 a subscription that has no `PremiumMembership` row. At `warning` level it

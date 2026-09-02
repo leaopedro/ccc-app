@@ -199,28 +199,36 @@ export const computeRefundImpact = async (order: {
  *
  * Mirrors `revokeTicketsForRefundedOrder`'s branching exactly, branch for
  * branch, because a count that does not match the revoke is worse than no
- * count: `extras_only` goes through the resolver; anything else revokes the
- * extras hanging off its OWN valid tickets, and only `mixed` falls back to the
- * resolver when it turned out to own none. A `ticket` order with no valid
- * tickets left revokes nothing, so it counts nothing.
+ * count. `extras_only` is the resolver alone. Anything else loses the extras
+ * hanging off its OWN valid tickets, and a `mixed` order ADDS the resolver on
+ * top rather than falling back to it: it can carry a ticket line for event A
+ * and a standalone extras line for event B at the same time, and both are
+ * revoked. The two halves cannot double-count, because
+ * `extrasScopesForOrder` drops every event that has a ticket line in this
+ * order, so the resolver never returns an item sitting on a ticket the order
+ * owns.
  */
 const countRevocableExtraItems = async (orderId: string): Promise<number> => {
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: { kind: true } });
   if (!order) return 0;
 
-  if (order.kind !== 'extras_only') {
-    const ownTickets = await prisma.ticket.findMany({
-      where: { orderId, status: 'valid' },
-      select: { id: true },
-    });
-    if (ownTickets.length > 0) {
-      return prisma.ticketExtraItem.count({
-        where: { ticketId: { in: ownTickets.map((t) => t.id) }, status: 'valid' },
-      });
-    }
-    if (order.kind !== 'mixed') return 0;
+  if (order.kind === 'extras_only') {
+    return (await resolveOrderExtraItemIds(prisma, orderId)).length;
   }
-  return (await resolveOrderExtraItemIds(prisma, orderId)).length;
+
+  const ownTickets = await prisma.ticket.findMany({
+    where: { orderId, status: 'valid' },
+    select: { id: true },
+  });
+  const onOwnTickets =
+    ownTickets.length > 0
+      ? await prisma.ticketExtraItem.count({
+          where: { ticketId: { in: ownTickets.map((t) => t.id) }, status: 'valid' },
+        })
+      : 0;
+
+  if (order.kind !== 'mixed') return onOwnTickets;
+  return onOwnTickets + (await resolveOrderExtraItemIds(prisma, orderId)).length;
 };
 
 /** Admin audit rows for an order, newest first, with the actor resolved. */

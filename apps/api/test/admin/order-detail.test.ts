@@ -399,6 +399,259 @@ describe('GET /admin/orders/:id', () => {
       ).toBe('refunded');
     });
 
+    /**
+     * `mixed` spanning two events. `issueTicketsForMixedOrder` creates the
+     * event-A ticket from the A ticket line, then hangs the standalone
+     * event-B extras line on the buyer's PRE-EXISTING B ticket. Revoke used
+     * to skip the resolver whenever any ticket was revoked, so the A tickets
+     * suppressed the B extras and the customer kept the goods after a full
+     * refund.
+     */
+    it('revokes the extras of an event the mixed order has no ticket line for', async () => {
+      const eventB = await prisma.event.create({
+        data: {
+          slug: `evt-od-b-${Math.random().toString(36).slice(2, 8)}`,
+          title: 'Encontro Ibirapuera',
+          description: 'd',
+          startsAt: new Date(Date.now() + 86_400_000),
+          endsAt: new Date(Date.now() + 90_000_000),
+          city: 'SP',
+          stateCode: 'SP',
+          type: 'meeting',
+          status: 'published',
+          capacity: 20,
+          maxTicketsPerUser: 5,
+        },
+      });
+      const tierB = await prisma.ticketTier.create({
+        data: {
+          eventId: eventB.id,
+          name: 'Geral',
+          priceCents: 10_000,
+          quantityTotal: 20,
+          sortOrder: 0,
+        },
+      });
+      const extraA = await prisma.ticketExtra.create({
+        data: { eventId, name: 'Pit pass', priceCents: 4000, quantityTotal: 50 },
+      });
+      const extraB = await prisma.ticketExtra.create({
+        data: { eventId: eventB.id, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },
+      });
+
+      const { user: buyer } = await createUser({ email: 'mixed-two-ev@jdm.test', verified: true });
+
+      // O ingresso do evento B ja existe, de um pedido anterior que NAO esta
+      // sendo reembolsado. E nele que a linha de extras avulsa se pendura.
+      const priorOrderB = await prisma.order.create({
+        data: {
+          userId: buyer.id,
+          eventId: eventB.id,
+          tierId: tierB.id,
+          kind: 'ticket',
+          amountCents: 10_000,
+          quantity: 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: 'pi_prior_b',
+          status: 'paid',
+          paidAt: new Date(),
+        },
+      });
+      const ticketB = await prisma.ticket.create({
+        data: {
+          orderId: priorOrderB.id,
+          userId: buyer.id,
+          eventId: eventB.id,
+          tierId: tierB.id,
+          status: 'valid',
+        },
+      });
+      const itemB = await prisma.ticketExtraItem.create({
+        data: {
+          ticketId: ticketB.id,
+          extraId: extraB.id,
+          code: `code-${ticketB.id}-${extraB.id}`,
+          status: 'valid',
+        },
+      });
+
+      const mixed = await prisma.order.create({
+        data: {
+          userId: buyer.id,
+          kind: 'mixed',
+          amountCents: 25_000,
+          quantity: 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: 'pi_mixed_two_events',
+          status: 'paid',
+          paidAt: new Date(),
+          items: {
+            create: [
+              {
+                kind: 'ticket',
+                tierId,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 15_000,
+                subtotalCents: 15_000,
+              },
+              {
+                kind: 'extras',
+                extraId: extraA.id,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 4000,
+                subtotalCents: 4000,
+              },
+              {
+                kind: 'extras',
+                extraId: extraB.id,
+                eventId: eventB.id,
+                quantity: 1,
+                unitPriceCents: 6000,
+                subtotalCents: 6000,
+              },
+            ],
+          },
+        },
+      });
+      const ticketA = await prisma.ticket.create({
+        data: { orderId: mixed.id, userId: buyer.id, eventId, tierId, status: 'valid' },
+      });
+      const itemA = await prisma.ticketExtraItem.create({
+        data: {
+          ticketId: ticketA.id,
+          extraId: extraA.id,
+          code: `code-${ticketA.id}-${extraA.id}`,
+          status: 'valid',
+        },
+      });
+
+      // A faixa promete os dois: o extra do ingresso proprio e o do evento B.
+      const body = adminOrderDetailSchema.parse((await getDetail(mixed.id)).json());
+      expect(body.refundImpact.ownTicketCount).toBe(1);
+      expect(body.refundImpact.ownExtraItemCount).toBe(2);
+
+      await refund('evt_od_mixed_two', 'pi_mixed_two_events', 25_000);
+
+      const reloadA = await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: itemA.id } });
+      const reloadB = await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: itemB.id } });
+      expect(reloadA.status).toBe('revoked');
+      // Antes do fix este continuava `valid`: reembolsado e com a camiseta.
+      expect(reloadB.status).toBe('revoked');
+
+      // O ingresso do pedido anterior, que ninguem reembolsou, segue de pe.
+      expect((await prisma.ticket.findUniqueOrThrow({ where: { id: ticketB.id } })).status).toBe(
+        'valid',
+      );
+
+      const revoked = await prisma.ticketExtraItem.count({ where: { status: 'revoked' } });
+      expect(revoked).toBe(body.refundImpact.ownExtraItemCount);
+    });
+
+    /**
+     * O outro lado da mesma moeda: o extra PAREADO com a linha de ingresso do
+     * evento A sai por `revokeOwnedTickets`, via ticketId. O resolver nao pode
+     * rodar para o evento A tambem, senao alcanca o ingresso que o comprador
+     * tem do MESMO evento por outro pedido, nao reembolsado.
+     */
+    it('nao alcanca o extra que o comprador tem do mesmo evento por outro pedido', async () => {
+      const extra = await prisma.ticketExtra.create({
+        data: { eventId, name: 'Pit pass', priceCents: 4000, quantityTotal: 50 },
+      });
+      const { user: buyer } = await createUser({ email: 'mixed-same-ev@jdm.test', verified: true });
+
+      const otherOrder = await prisma.order.create({
+        data: {
+          userId: buyer.id,
+          eventId,
+          tierId,
+          kind: 'ticket',
+          amountCents: 15_000,
+          quantity: 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: 'pi_other_same_ev',
+          status: 'paid',
+          paidAt: new Date(),
+        },
+      });
+      const otherTicket = await prisma.ticket.create({
+        data: { orderId: otherOrder.id, userId: buyer.id, eventId, tierId, status: 'valid' },
+      });
+      const untouched = await prisma.ticketExtraItem.create({
+        data: {
+          ticketId: otherTicket.id,
+          extraId: extra.id,
+          code: `code-${otherTicket.id}-${extra.id}`,
+          status: 'valid',
+        },
+      });
+
+      const mixed = await prisma.order.create({
+        data: {
+          userId: buyer.id,
+          kind: 'mixed',
+          amountCents: 19_000,
+          quantity: 1,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: 'pi_mixed_same_ev',
+          status: 'paid',
+          paidAt: new Date(),
+          items: {
+            create: [
+              {
+                kind: 'ticket',
+                tierId,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 15_000,
+                subtotalCents: 15_000,
+              },
+              {
+                kind: 'extras',
+                extraId: extra.id,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 4000,
+                subtotalCents: 4000,
+              },
+            ],
+          },
+        },
+      });
+      const ownTicket = await prisma.ticket.create({
+        data: { orderId: mixed.id, userId: buyer.id, eventId, tierId, status: 'valid' },
+      });
+      const owned = await prisma.ticketExtraItem.create({
+        data: {
+          ticketId: ownTicket.id,
+          extraId: extra.id,
+          code: `code-${ownTicket.id}-${extra.id}`,
+          status: 'valid',
+        },
+      });
+
+      const body = adminOrderDetailSchema.parse((await getDetail(mixed.id)).json());
+      expect(body.refundImpact.ownExtraItemCount).toBe(1);
+
+      await refund('evt_od_mixed_same', 'pi_mixed_same_ev', 19_000);
+
+      expect(
+        (await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: owned.id } })).status,
+      ).toBe('revoked');
+      expect(
+        (await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: untouched.id } })).status,
+      ).toBe('valid');
+    });
+
     it('counts the extra items it will revoke in refundImpact', async () => {
       const extra = await prisma.ticketExtra.create({
         data: { eventId, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },

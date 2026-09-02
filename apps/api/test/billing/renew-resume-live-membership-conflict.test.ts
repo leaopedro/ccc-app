@@ -218,6 +218,8 @@ describe('applyMembershipEvent: renewed/resumed onto a non-live row beside a liv
       grossAmountCents: 1000,
       devFeePercent: 0,
       devFeeAmountCents: 0,
+      cancelAtPeriodEnd: true,
+      cancelledAt: new Date('2026-05-20'),
     });
     await seedMembership(gid, {
       provider: 'apple_revenuecat',
@@ -257,6 +259,12 @@ describe('applyMembershipEvent: renewed/resumed onto a non-live row beside a liv
     const row = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: loser.id } });
     // Refused.
     expect(row.status).toBe('expired');
+    // Withheld with it: status and cancelAtPeriodEnd describe one decision, so
+    // the row must not end up `expired` while claiming it is not winding down
+    // and still carrying a cancelledAt.
+    expect(row.cancelAtPeriodEnd).toBe(true);
+    expect(row.cancelledAt).toEqual(new Date('2026-05-20'));
+
     // Applied — the invoice we just filed under this row has to agree with it.
     expect(row.currentPeriodEnd).toEqual(new Date('2026-10-01'));
     expect(row.baseAmountCents).toBe(5000);
@@ -391,7 +399,11 @@ describe('applyMembershipEvent: renewed/resumed onto a non-live row beside a liv
     const { user } = await createUser({ email: 'renew-happy@jdm.test', verified: true });
     const gid = (await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } })).id;
 
-    const row = await seedMembership(gid, { providerSubRef: 'sub_happy' });
+    const row = await seedMembership(gid, {
+      providerSubRef: 'sub_happy',
+      status: 'cancel_scheduled',
+      cancelAtPeriodEnd: true,
+    });
 
     await apply(
       {
@@ -420,6 +432,8 @@ describe('applyMembershipEvent: renewed/resumed onto a non-live row beside a liv
 
     const after = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.status).toBe('active');
+    // Both halves of the withheld pair still apply when there is no conflict.
+    expect(after.cancelAtPeriodEnd).toBe(false);
     expect(after.currentPeriodEnd).toEqual(new Date('2026-08-01'));
     const garage = await prisma.garage.findUniqueOrThrow({ where: { id: gid } });
     expect(garage.premiumUntil).toEqual(new Date('2026-08-01'));

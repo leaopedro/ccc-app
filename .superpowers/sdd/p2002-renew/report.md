@@ -85,8 +85,10 @@ This goes beyond the stated scope. It is included because the audit was asked fo
 
 ## Also
 
-- Scopes the attempt-row settle in the activation refusal path by `(garageId, providerSubRef)` instead of `providerSubRef` alone. Minor left open by PR #44's review; one line.
-- Runbook 5 in `docs/observability.md` now splits `premium-live-membership-conflict` into its five variants with the remediation for each, since the alert now fires from five places rather than one.
+- Scopes **both** attempt-row settles in `handleActivated` by `(garageId, providerSubRef)` instead of `providerSubRef` alone — the refusal path and the success path. `PremiumSubscriptionAttempt` carries no unique index on `providerSubRef`, so only provider convention stopped the filter matching another garage's row. Minor left open by PR #44's review.
+- A refused renewal no longer writes `cancelAtPeriodEnd: false`. `status` and `cancelAtPeriodEnd` describe one decision, and writing half of it left an `expired` row claiming it was not winding down while `cancelledAt` still held a date. No reader was affected; the admin detail view read wrong. Both halves now ride the same conflict check, pinned in tests on the refusal and the happy path.
+- Runbook 5 in `docs/observability.md` now splits `premium-live-membership-conflict` by `extra.eventKind`, which takes six values from four call sites, grouped into four bullets by remediation. Previously the alert fired from one place and the runbook had one paragraph.
+- The same runbook section no longer says "nothing self-heals" flatly, and no longer tells the operator to expire the incumbent "so the resume can be replayed". Every one of these events is marked `processedAt` and is never redelivered. What un-strands the row is the next paid invoice on the losing subscription, which lands in `handleRenewed` and applies in full once the garage has a single subscription again. The human is needed to stop the double billing, not to un-strand the member.
 
 ## Not done
 

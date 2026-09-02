@@ -473,8 +473,13 @@ async function handleActivated(
   // (not update): a hosted-checkout membership has no matching attempt row
   // at all, and a replay of this same event finds the row already
   // 'succeeded'; both must be a no-op, not a thrown "record not found".
+  //
+  // Scoped by garageId for the same reason the refusal branch above is: this
+  // table carries no unique index on `providerSubRef`, so nothing but provider
+  // convention stops the filter matching another garage's attempt. Both settles
+  // in this handler now carry the same scope.
   await tx.premiumSubscriptionAttempt.updateMany({
-    where: { providerSubRef, status: 'pending' },
+    where: { garageId, providerSubRef, status: 'pending' },
     data: { status: 'succeeded' },
   });
 
@@ -755,13 +760,18 @@ async function handleRenewed(
     ? await tx.premiumMembership.update({
         where: { id: existing.id },
         data: {
-          // The one field withheld when another row holds the index slot. The
-          // key is omitted rather than written back as `existing.status`: this
-          // handler has no business restating a status it did not decide.
-          ...(liveElsewhere ? {} : { status: 'active' as const }),
+          // The two fields withheld when another row holds the index slot.
+          // `status` is the one Postgres would refuse; `cancelAtPeriodEnd`
+          // rides with it because the pair describes one decision — "this
+          // subscription is live and not winding down" — and writing half of
+          // it leaves an `expired` row claiming it is not scheduled to cancel
+          // while `cancelledAt` still holds a date. No reader is affected
+          // either way; it is the admin detail view that reads wrong.
+          // Omitted rather than written back from `existing`: this handler has
+          // no business restating state it did not decide.
+          ...(liveElsewhere ? {} : { status: 'active' as const, cancelAtPeriodEnd: false }),
           currentPeriodStart,
           currentPeriodEnd,
-          cancelAtPeriodEnd: false,
           baseAmountCents: pricing.baseAmountCents,
           devFeePercent: pricing.devFeePercent,
           devFeeAmountCents: pricing.devFeeAmountCents,

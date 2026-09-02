@@ -19,7 +19,6 @@
  */
 
 import { prisma } from '@ccc/db';
-import { LIVE_MEMBERSHIP_STATUSES } from '@ccc/shared/premium';
 import {
   addonMutationResponseSchema,
   attachAddonRequestSchema,
@@ -31,13 +30,8 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { requireUser } from '../plugins/auth.js';
 import { attachAddon, detachAddon } from '../services/billing/addons.js';
 import { isBillingActionError } from '../services/billing/errors.js';
+import { pickLiveMembership } from '../services/billing/live-membership.js';
 import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
-
-/**
- * Live membership statuses — the same set me-premium.ts treats as "blocks a new
- * subscription".
- */
-const LIVE_STATUSES = LIVE_MEMBERSHIP_STATUSES;
 
 /** Add-on statuses that still count as attached (billable or winding down). */
 const ATTACHED_ADDON_STATUSES = ['active', 'cancel_scheduled'] as const;
@@ -71,10 +65,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'NotFound', message: 'Garage not found.' });
       }
 
-      const membership = await prisma.premiumMembership.findFirst({
-        where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
+      const membership = await pickLiveMembership(prisma, garage.id);
 
       if (!membership) {
         return reply.status(200).send(
@@ -191,10 +182,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'NotFound', message: 'Garage not found.' });
     }
 
-    const membership = await prisma.premiumMembership.findFirst({
-      where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
+    const membership = await pickLiveMembership(prisma, garage.id);
     if (!membership) {
       return reply
         .status(409)
@@ -256,10 +244,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'NotFound', message: 'Garage not found.' });
       }
 
-      const membership = await prisma.premiumMembership.findFirst({
-        where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
+      const membership = await pickLiveMembership(prisma, garage.id);
       if (!membership) {
         return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
       }

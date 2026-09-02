@@ -7,16 +7,20 @@
  * billing. Before pickLiveMembership, the reads over the wide list carried no
  * `orderBy` at all, and Postgres was free to hand back either row.
  *
- * It was not even coin-flip random. The planner serves these reads from
- * `PremiumMembership_garageId_status_idx` (garageId, status), so rows come back
- * in enum declaration order — trialing, active, past_due, cancel_scheduled,
- * expired, paused — and a `trialing` sibling ALWAYS won, whatever the insert
- * order or createdAt. That is the reproduction pinned below: the member taps
- * Cancelar, Stripe cancels the trial, and the subscription charging them every
- * month survives untouched while the app says they cancelled.
+ * It was not even coin-flip random when measured. The planner served these
+ * reads from `PremiumMembership_garageId_status_idx` (garageId, status), so
+ * rows came back in enum declaration order — trialing, active, past_due,
+ * cancel_scheduled, expired, paused — and a `trialing` sibling won over the
+ * `active` row in both insert orders. That is the reproduction pinned below:
+ * the member taps Cancelar, Stripe cancels the trial, and the subscription
+ * charging them every month survives untouched while the app says they
+ * cancelled.
  *
- * The tests assert the CORRECT row wins in both insert orders, so they do not
- * depend on physical row order the way the bug did.
+ * Plan choice is not a promise, though: new statistics or a Postgres upgrade
+ * can hand back the other row instead. The bug being fixed is the missing
+ * ordering, not the specific row that happened to win, so these tests assert
+ * the CORRECT row wins in BOTH insert orders and never encode which row the
+ * broken code returned.
  */
 import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';

@@ -11,13 +11,22 @@
 //
 // so a `trialing` or `paused` row can sit beside the row that is actually
 // billing, and the activation path treats that as an expected outcome rather
-// than a crash. A `findFirst` over the wide list with no `orderBy` then lets
-// Postgres return either one. It is not even random in practice: the planner
-// picks an Index Scan on (garageId, status), so rows come back in enum
-// declaration order (trialing, active, past_due, cancel_scheduled, expired,
-// paused) and a `trialing` sibling ALWAYS shadows the `active` row. A member
-// who taps Cancelar then cancels the trial while the subscription charging
-// them every month survives untouched.
+// than a crash. A `findFirst` over the wide list with no `orderBy` leaves the
+// choice to the planner, and the planner owes us nothing.
+//
+// Measured on this schema it was not even a coin flip: the read came back from
+// an Index Scan on (garageId, status), so rows arrived in enum declaration
+// order (trialing, active, past_due, cancel_scheduled, expired, paused) and a
+// `trialing` sibling shadowed the `active` row in both insert orders. Nothing
+// pins that plan, though — different statistics or a Postgres upgrade can pick
+// another one and hand back another row. So the bug is the absent ordering,
+// not the particular row that won: a member taps Cancelar, Stripe cancels a
+// subscription nobody chose, and the one charging them every month survives
+// untouched.
+//
+// The rule below does not lean on that measurement either. Step 1 is bounded
+// to a single row by the partial unique index and still carries an explicit
+// `orderBy`; step 2 has a total order through `id`. Both hold under any plan.
 //
 // Selection rule, in order:
 //

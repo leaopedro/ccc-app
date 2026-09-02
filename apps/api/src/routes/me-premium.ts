@@ -1079,6 +1079,17 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     // this file uses, so the screen and the action never describe different
     // rows. Null when the garage has none (never subscribed, or every row is
     // expired) — the admin-grant fallback below then answers.
+    //
+    // This read used to be "newest row of any status", which answered the
+    // wrong SHAPE for a garage whose newest row is expired beside an older
+    // live one. Not "inactive": handleExpired skips the snapshot clear exactly
+    // because another live row exists, so computeIsPremiumActive stayed true
+    // and the admin-grant branch below answered active — but with provider
+    // null, cadence null, manageUrl null and currentPeriodEnd read off
+    // premiumUntil instead of the subscription's period. A real Stripe member
+    // was shown a grant-shaped answer with no way to manage the subscription,
+    // and /cancel meanwhile acted on the live row this branch never mentioned.
+    // Picking the live row here fixes the shape and makes the two agree.
     const membership = await pickLiveMembership(prisma, garage.id);
 
     // --- Live membership row path ---

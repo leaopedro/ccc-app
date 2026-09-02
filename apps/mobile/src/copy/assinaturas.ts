@@ -79,6 +79,12 @@ export const assinaturasCopy = {
     pendingSubcopy: 'Assim que o pagamento for confirmado sua assinatura aparece aqui.',
     pendingCta: 'VER MINHA ASSINATURA',
     successToast: 'Assinatura ativada.',
+    // Final review I4: this used to reuse paymentsCopy.sheet.cancelled, which
+    // says "Seu pedido continua aguardando pagamento". There is no *pedido* in
+    // the subscription flow — the member closed the sheet on a contratação,
+    // and the pending attempt (not an order) is what stays open. Closing the
+    // sheet is a choice, so this is a plain toast, never an error.
+    cancelledToast: 'Pagamento cancelado. Sua assinatura não foi ativada.',
     errorGeneric: 'Não foi possível iniciar o pagamento. Tente novamente.',
     // One string per actionable failure. Telling a member to "tente novamente"
     // when the answer is "you already subscribe" or "wait a minute" sends them
@@ -175,6 +181,21 @@ export const assinaturasCopyEn = {
     title: 'THE CASA CAR CLUB BOX',
     body: 'Every cycle, you curate your box and confirm it before the cutoff.',
     delivery: 'One box per monthly cycle, on your confirmation.',
+  },
+  // Fix round 2 — the twins this file's own rule required and did not have.
+  // `errorAttemptInFlight` was added on this branch and `cancelledToast` in
+  // this round; see their PT comments for the reachability each one describes.
+  contratar: {
+    cancelledToast: 'Payment cancelled. Your membership was not activated.',
+    errorAttemptInFlight:
+      'You have a subscription attempt for another plan in progress. Try again with the same plan as before, or wait for that attempt to expire.',
+  },
+  // `unavailableTitle` / `unavailableSubcopy` were rewritten on this branch
+  // (they used to say "em breve"), so they need twins too. State only: no
+  // cause, no timeline — the screen cannot tell the flag-off case from a 503.
+  minhaAssinatura: {
+    unavailableTitle: 'Memberships are unavailable right now.',
+    unavailableSubcopy: 'Please try again later.',
   },
 } as const;
 

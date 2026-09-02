@@ -434,7 +434,11 @@ describe('ContratarScreen', () => {
   // 8. Cancel is not an error: a closed sheet shows the neutral copy via
   // showToast, never the red inline error banner. Fails if 'cancelled' is
   // routed through setCheckoutError.
-  it('shows a neutral toast, not an error, when the sheet is cancelled', async () => {
+  //
+  // Final review I4: the toast must be the subscription-worded string. The
+  // cart's `paymentsCopy.sheet.cancelled` says "Seu pedido continua aguardando
+  // pagamento", and this flow creates no *pedido* at all.
+  it('shows a neutral, subscription-worded toast when the sheet is cancelled', async () => {
     startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
     pay.mockResolvedValue({ kind: 'cancelled' });
     await renderScreen();
@@ -446,8 +450,10 @@ describe('ContratarScreen', () => {
       await flush();
     });
 
-    expect(showToast).toHaveBeenCalledWith(paymentsCopy.sheet.cancelled);
-    expect(text()).not.toContain(paymentsCopy.sheet.cancelled);
+    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.cancelledToast);
+    expect(showToast).not.toHaveBeenCalledWith(paymentsCopy.sheet.cancelled);
+    expect(assinaturasCopy.contratar.cancelledToast.toLowerCase()).not.toContain('pedido');
+    expect(text()).not.toContain(assinaturasCopy.contratar.cancelledToast);
     expect(pollSubscriptionActive).not.toHaveBeenCalled();
     expect(routerReplace).not.toHaveBeenCalled();
   });
@@ -523,5 +529,38 @@ describe('ContratarScreen', () => {
     expect(body).not.toContain(assinaturasCopy.caixa.title);
     expect(body).not.toContain(assinaturasCopy.caixa.body);
     expect(body).not.toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  // Final review I2 — with the platform gate closed the CTA used to be simply
+  // omitted, leaving the tier, the price, working add-on toggles and a live
+  // total with no way to buy and nothing said about why. That reads as a
+  // broken screen (2.1). Explain it instead, while still rendering no
+  // purchase-shaped affordance.
+  it('explains why buying is unavailable when the platform gate is closed', async () => {
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: false });
+    await renderScreen();
+
+    expect(container.querySelector('[data-testid="contratar-cta"]')).toBeNull();
+    expect(text()).toContain(assinaturasCopy.minhaAssinatura.unavailableTitle);
+    expect(text()).toContain(assinaturasCopy.minhaAssinatura.unavailableSubcopy);
+  });
+
+  // The explanation must not become a second way to buy: no CTA label, and
+  // the gate still blocks the checkout seam entirely.
+  it('offers no purchase affordance while the platform gate is closed', async () => {
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: false });
+    await renderScreen();
+
+    expect(text()).not.toContain(assinaturasCopy.contratar.cta);
+    expect(startPremiumCheckout).not.toHaveBeenCalled();
+  });
+
+  // The gate is off by default until the fetch resolves, so the counterpart
+  // has to be pinned too: an open gate still renders the CTA and no notice.
+  it('renders the CTA and no unavailable notice when the gate is open', async () => {
+    await renderScreen();
+
+    expect(container.querySelector('[data-testid="contratar-cta"]')).not.toBeNull();
+    expect(text()).not.toContain(assinaturasCopy.minhaAssinatura.unavailableTitle);
   });
 });

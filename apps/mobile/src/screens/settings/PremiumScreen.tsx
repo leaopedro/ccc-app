@@ -169,14 +169,17 @@ export default function PremiumScreen() {
       {showSubscribeCTA ? (
         Platform.OS === 'ios' ? (
           subscriptionsEnabled ? (
+            // Final review (minor): this button navigates to `/assinaturas`,
+            // the plan LIST — it does not subscribe, and it does not pick
+            // Gold. "Assinar Gold" promised both. Label it for where it goes.
             <Pressable
               onPress={onSubscribeIos}
               style={styles.cta}
               accessibilityRole="button"
-              accessibilityLabel="Assinar Premium Gold"
+              accessibilityLabel="Ver planos de assinatura"
               testID="premium-cta-ios-native"
             >
-              <Text style={styles.ctaText}>Assinar Gold</Text>
+              <Text style={styles.ctaText}>Ver planos</Text>
             </Pressable>
           ) : null
         ) : (

@@ -230,7 +230,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         const sheet = await pay(outcome.clientSecret);
         if (sheet.kind === 'cancelled') {
           // A closed sheet is a choice, not a failure — never the error path.
-          showToast(paymentsCopy.sheet.cancelled);
+          // Final review I4: subscription-worded. paymentsCopy.sheet.cancelled
+          // talks about a *pedido*, and this flow has no order.
+          showToast(copy.cancelledToast);
           return;
         }
         if (sheet.kind === 'failed') {
@@ -390,7 +392,21 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
             loading={submitting}
             testID="contratar-cta"
           />
-        ) : null}
+        ) : (
+          // Final review I2: the CTA used to be simply omitted, leaving the
+          // tier, the price, interactive add-on toggles and a live total with
+          // no way to buy and no explanation — a broken screen to a reviewer
+          // (2.1). Say why instead. No purchase-shaped affordance renders, so
+          // the platform gate still holds.
+          <View style={styles.unavailable} testID="contratar-unavailable">
+            <Text style={styles.unavailableTitle}>
+              {assinaturasCopy.minhaAssinatura.unavailableTitle}
+            </Text>
+            <Text style={styles.unavailableSubcopy}>
+              {assinaturasCopy.minhaAssinatura.unavailableSubcopy}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -606,6 +622,20 @@ const styles = StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: c.hairline, marginVertical: 2 },
   summaryTotalLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13.5, color: c.cream },
   summaryTotalValue: { fontFamily: 'Inter_600SemiBold', fontSize: 18, color: c.goldLight },
+  unavailable: { alignItems: 'center', gap: 5, paddingVertical: 6 },
+  unavailableTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13.5,
+    color: c.cream,
+    textAlign: 'center',
+  },
+  unavailableSubcopy: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: c.muted55,
+    textAlign: 'center',
+  },
   errorText: {
     fontFamily: 'Inter_400Regular',
     fontSize: 12.5,

@@ -503,8 +503,21 @@ enum PremiumSubscriptionAttemptStatus {
   pending
   succeeded
   abandoned
-  /// Stripe recusou (cartao, 3DS, etc). Distinto de `abandoned` (usuario
-  /// desistiu) para observabilidade e handling separados.
+  /// Dois significados, e eles nao sao intercambiaveis na hora de tratar.
+  ///
+  /// 1. Stripe recusou (cartao, 3DS, etc). Nenhum dinheiro se moveu.
+  /// 2. Desde 2026-09-01: a ativacao foi recusada porque a garagem ja tinha
+  ///    uma membership viva sob outro `providerSubRef`. Aqui a Stripe
+  ///    ACEITOU e o membro FOI COBRADO, mas nada foi provisionado. Ver
+  ///    `handleActivated` em services/billing/apply-membership-event.ts e o
+  ///    alerta `premium-live-membership-conflict`.
+  ///
+  /// O caso 2 exige reembolso ou provisionamento manual; o caso 1 nao exige
+  /// nada. A distincao vive no Sentry, nao nesta coluna, entao nao inferir
+  /// "nao cobrado" a partir deste valor.
+  ///
+  /// Distinto de `abandoned` (usuario desistiu) para observabilidade e
+  /// handling separados.
   failed
 }
 

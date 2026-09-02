@@ -20,7 +20,6 @@ import { createHash } from 'node:crypto';
 import { prisma } from '@ccc/db';
 import * as Sentry from '@sentry/node';
 import {
-  LIVE_MEMBERSHIP_STATUSES,
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRejectionSchema,
@@ -36,6 +35,7 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest 
 import { z } from 'zod';
 
 import { requireUser } from '../plugins/auth.js';
+import { pickLiveMembership } from '../services/billing/live-membership.js';
 import { handleStaleRef } from '../services/billing/stale-ref.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
@@ -52,13 +52,6 @@ const billingPortalBodySchema = z.object({
 
 /** App Store deep link to subscription management — used when the user pays via Apple IAP. */
 const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
-
-/**
- * Live membership statuses that block a new subscription. `expired` is
- * intentionally excluded so a lapsed user can re-subscribe.
- */
-const LIVE_STATUSES = LIVE_MEMBERSHIP_STATUSES;
-const ACTIVE_STATUSES = new Set<string>(LIVE_STATUSES);
 
 /**
  * How many times to re-mint a checkout session whose idempotency key replayed a
@@ -310,10 +303,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
           .send(premiumCheckoutPrecheckResponseSchema.parse({ available: true }));
       }
 
-      const liveMembership = await prisma.premiumMembership.findFirst({
-        where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-        select: { provider: true, providerCustomerRef: true },
-      });
+      const liveMembership = await pickLiveMembership(prisma, garage.id);
 
       if (!liveMembership) {
         // No live membership, but the native path (Task 9) may have left a
@@ -418,10 +408,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (existingGarage) {
-      const liveMembership = await prisma.premiumMembership.findFirst({
-        where: { garageId: existingGarage.id, status: { in: [...LIVE_STATUSES] } },
-        select: { provider: true, providerCustomerRef: true },
-      });
+      const liveMembership = await pickLiveMembership(prisma, existingGarage.id);
 
       if (liveMembership) {
         let manageUrl: string;
@@ -647,10 +634,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
     const outcome = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garage.id} FOR UPDATE`;
 
-      const live = await tx.premiumMembership.findFirst({
-        where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-        select: { provider: true, providerCustomerRef: true },
-      });
+      const live = await pickLiveMembership(tx, garage.id);
       if (live) return { kind: 'already' as const, live };
 
       // Um pending de OUTRO pacote (cadence ou packageDigest diferentes) NAO
@@ -907,14 +891,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(404).send({ error: 'NotFound', message: 'no membership found' });
       }
 
-      const membership = await prisma.premiumMembership.findFirst({
-        where: {
-          garageId: garage.id,
-          status: { in: [...LIVE_STATUSES] },
-        },
-        select: { provider: true, providerCustomerRef: true },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
+      const membership = await pickLiveMembership(prisma, garage.id);
 
       if (!membership) {
         return reply.status(404).send({ error: 'NotFound', message: 'no active membership found' });
@@ -972,10 +949,10 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
     }
 
-    const membership = await prisma.premiumMembership.findFirst({
-      where: { garageId: garage.id, status: { in: [...LIVE_STATUSES] } },
-      select: { id: true, provider: true, providerSubRef: true, currentPeriodEnd: true },
-    });
+    // Same pick as GET /status, by construction: the member must cancel the
+    // subscription the app just told them they have, not a trialing or paused
+    // sibling that leaves the billing one alive.
+    const membership = await pickLiveMembership(prisma, garage.id);
     if (!membership) {
       return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
     }
@@ -1066,10 +1043,11 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
    * GET /api/me/premium/status (F8.11)
    *
    * Returns the current premium entitlement state for the requesting user's
-   * garage. Reads the most-recent PremiumMembership row; falls back to the
+   * garage. Reads the garage's live PremiumMembership via pickLiveMembership
+   * (the same pick /cancel and the checkout guards use); falls back to the
    * canonical computeIsPremiumActive helper for admin grants on Garage when
-   * no membership row exists (perpetual grants with premiumUntil=null are
-   * active).
+   * there is no live membership row (perpetual grants with premiumUntil=null
+   * are active).
    *
    * On Stripe portal mint failure (test env without live key, network error,
    * missing Dashboard portal config), manageUrl is null + the error is logged;
@@ -1097,15 +1075,25 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'NotFound', message: 'Garage not found.' });
     }
 
-    // Most-recent membership row (may be expired or null). Secondary id
-    // ordering keeps the pick deterministic when two rows share createdAt.
-    const membership = await prisma.premiumMembership.findFirst({
-      where: { garageId: garage.id },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
+    // The garage's live membership, picked by the same rule every action on
+    // this file uses, so the screen and the action never describe different
+    // rows. Null when the garage has none (never subscribed, or every row is
+    // expired) — the admin-grant fallback below then answers.
+    //
+    // This read used to be "newest row of any status", which answered the
+    // wrong SHAPE for a garage whose newest row is expired beside an older
+    // live one. Not "inactive": handleExpired skips the snapshot clear exactly
+    // because another live row exists, so computeIsPremiumActive stayed true
+    // and the admin-grant branch below answered active — but with provider
+    // null, cadence null, manageUrl null and currentPeriodEnd read off
+    // premiumUntil instead of the subscription's period. A real Stripe member
+    // was shown a grant-shaped answer with no way to manage the subscription,
+    // and /cancel meanwhile acted on the live row this branch never mentioned.
+    // Picking the live row here fixes the shape and makes the two agree.
+    const membership = await pickLiveMembership(prisma, garage.id);
 
     // --- Live membership row path ---
-    if (membership && ACTIVE_STATUSES.has(membership.status)) {
+    if (membership) {
       let manageUrl: string | null = null;
       if (membership.provider === 'apple_revenuecat') {
         manageUrl = APPLE_MANAGE_URL;

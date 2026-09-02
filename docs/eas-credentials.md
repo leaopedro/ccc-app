@@ -150,57 +150,69 @@ After you enable a capability, Apple notes that provisioning profiles using that
 App ID become invalid and need regeneration. That is fine here because EAS will
 regenerate signing assets on the next interactive build.
 
-### App Review note — iOS bundle must not reference Stripe
+### App Review note — o iOS paga pela Stripe, e isso é deliberado
 
-> **A ser revertido.** A decisão de 2026-08-12, registrada em
-> `docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md`, é que o iOS passa a
-> cobrar via Stripe e Apple Pay. Esta seção descreve o estado atual do código, que
-> ainda tem o isolamento e a regra de lint, mas ela sai junto do Apple Pay. Não
-> tratar como invariante permanente.
+> **Reescrito em 2026-09-02.** Esta seção mandava exatamente o oposto do que o
+> app faz hoje. Ficou desatualizada quando o pagamento nativo entrou (PR #45) e
+> teria mandado alguém desfazer o trabalho antes de submeter. O texto antigo
+> exigia que o bundle iOS não citasse a Stripe, descrevia uma regra de lint
+> `no-stripe-on-ios` que não existe mais, e dizia que o iOS assinava por
+> StoreKit via RevenueCat, que nunca chegou a ser ligado.
 
-The iOS bundle MUST NOT reference Stripe checkout surfaces. This is required for
-App Store Review compliance: Apple rejects apps that imply an external payment
-method for digital goods (App Store Review Guideline 3.1.1).
+O canon §F8.16 está **superseded**, não apagado. A decisão está em
+`docs/superpowers/specs/2026-08-12-apple-pay-ios-design.md` e no spec
+consolidado `2026-08-29-pagamentos-mobile-consolidado-design.md`.
 
-Enforcement: the `ccc-mobile/no-stripe-on-ios` ESLint rule (added in F8.18)
-scans both `apps/mobile/src/**/*.{ts,tsx}` AND `apps/mobile/app/**/*.{ts,tsx}`
-at CI time and reports an error if any of the following tokens appear outside
-a `Platform.OS !== 'ios'` (or `=== 'android'`) guard:
+**Qual diretriz vale para quê.** Isto é o que decide tudo abaixo, então vale
+ler antes de mexer:
 
-- `stripe://`
-- `checkout.stripe.com`
-- `STRIPE_PUBLISHABLE_KEY`
-- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- **Carrinho** (produtos da loja e ingressos): bem físico e serviço consumido
+  fora do app. A **3.1.3(e)** exige método que **não** seja IAP, e nomeia o
+  Apple Pay como correto. Por isso o carrinho pode usar Stripe, e por isso o
+  fallback dele para checkout hospedado é legítimo.
+- **Assinatura premium**: depende do que está no produto. Com
+  `EXPO_PUBLIC_CAIXA_ENABLED` ligado, a adesão entrega uma caixa física a cada
+  ciclo e cai na mesma 3.1.3(e). Desligado, sobram capas e selo, tudo dentro do
+  app, e aí é assinatura digital, onde a **3.1.1** pede IAP.
+- **Encaminhar o usuário para fora** para comprar algo digital é o chapeau da
+  **3.1.3**, e vale mesmo quando a compra funciona. Foi por isso que o texto
+  "contrate pelo site" saiu do app.
 
-Runtime isolation on iOS:
+Não confundir com a 3.1.5(a): aquela numeração hoje é Criptomoedas.
 
-- `apps/mobile/app/_layout.tsx` only mounts `<StripeProvider>` when
-  `Platform.OS !== 'ios'`. iOS users never get a Stripe context in the
-  React tree.
-- `apps/mobile/app/(app)/profile/orders.tsx` passes
-  `stripeAvailable: Platform.OS !== 'ios' && STRIPE_AVAILABLE` to
-  `selectResumeKind`, so the Stripe-based ticket resume CTA never renders
-  on iOS.
+**Como está implementado:**
 
-iOS users subscribe via Apple StoreKit through RevenueCat (canon §F8.16).
-Android + web users subscribe via the Stripe Checkout flow. The two paths
-are completely isolated.
+- `apps/mobile/app/_layout.tsx` monta `<StripeProvider>` no iOS também. O que
+  decide é haver chave publicável, não a plataforma
+  (`app/stripe-provider-gate.ts`).
+- `src/payments/payment-sheet.ts` é o seam único do PaymentSheet, com
+  `returnURL` para o retorno do 3DS e Apple Pay declarado.
+- Carrinho, assinatura e retomada de pedido passam por ele no nativo.
+- `src/screens/assinaturas/checkout.ts`: sem chave publicável, o iOS lê
+  `EXPO_PUBLIC_CAIXA_ENABLED` para decidir. Com caixa, cai no checkout
+  hospedado, que é legítimo para bem físico. Sem caixa, responde indisponível,
+  porque o link para fora seria a violação do chapeau.
+- A regra de lint `no-stripe-on-ios` e o teste de isolamento **foram
+  removidos** junto com a decisão que os motivava.
 
-Open product gap (Phase F8.1): iOS one-time order checkout (event tickets)
-currently falls back to `kind === 'none'` — no payment CTA renders. The
-fallback path needs a RevenueCat one-time purchase product OR an in-app
-purchase product before the iOS store release.
+**Antes de submeter TestFlight ou App Store:**
 
-Before submitting a TestFlight or App Store build:
+1. `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` definida no perfil `production` do
+   `eas.json`. Sem ela o PaymentSheet nativo não monta e a assinatura cai no
+   checkout hospedado.
+2. `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` `true` (já está nos três perfis).
+3. `EXPO_PUBLIC_CAIXA_ENABLED` `true` (já está nos três perfis). Se for
+   desligado, reler a seção das diretrizes acima antes de submeter: a
+   assinatura vira produto digital e a análise muda.
+4. Apple Pay testado em aparelho real. O `merchantIdentifier` só é aplicado no
+   variant `production` (`app.config.ts`), porque o merchant id precisa estar
+   habilitado no App ID correspondente no portal da Apple. Enquanto não
+   estiver nos App IDs `.dev` e `.preview`, não dá para testar Apple Pay num
+   build de preview.
 
-1. Run `pnpm --filter @ccc/mobile exec eslint src/ app/` and confirm 0
-   errors from the `ccc-mobile/no-stripe-on-ios` rule.
-2. Confirm `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` is `true` in the EAS build
-   secret so the Premium screen is not hidden behind the maintenance banner.
-3. Confirm `EXPO_PUBLIC_RC_IOS_API_KEY` is set as an EAS secret for the
-   production build profile.
-4. Confirm the Phase F8.1 iOS order-checkout fallback has shipped (see
-   open product gap above) before the App Store submission.
+`EXPO_PUBLIC_RC_IOS_API_KEY` não é mais necessária. A RevenueCat está dormente,
+com a condição exata de reativação registrada em `docs/revenuecat.md` e em
+`packages/shared/src/legal.ts`.
 
 ### 1.2b Create the Merchant ID first
 

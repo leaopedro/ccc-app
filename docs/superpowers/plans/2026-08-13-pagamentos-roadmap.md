@@ -164,23 +164,23 @@ completa verde: 262 arquivos, 2268 testes.
 
 ### Código
 
-- [ ] **DEV** Adicionar AbacatePay ao fanout de exclusão de conta
+- [x] **DEV** Adicionar AbacatePay ao fanout de exclusão de conta
       (`services/account-deletion/vendor-fanout.ts`). É Operador nomeado na
       política e está ausente.
-- [ ] **DEV** Atualizar `legal.ts`: assinatura deixa de ser "gerida pela
+- [x] **DEV** Atualizar `legal.ts`: assinatura deixa de ser "gerida pela
       RevenueCat" e passa a Stripe, na prosa e na tabela de subprocessadores.
       Subir `PRIVACY_POLICY_VERSION`.
 - [ ] **PEDRO** Decidir se a mudança de subprocessador exige novo consentimento.
 - [x] **DEV** Alinhar a data de vigência da política: `legal.ts` diz 6 de agosto
       de 2026, `apps/admin/app/(public)/privacidade/page.tsx` diz 14 de maio.
-- [ ] **DEV** Marcar ou arquivar pedidos pré-cutover. Não existe campo
+- [x] **DEV** Marcar ou arquivar pedidos pré-cutover. Não existe campo
       `livemode`, e `routes/admin/finance.ts` agrega tudo junto, então o primeiro
       relatório de receita real incluiria dinheiro de teste.
-- [ ] **DEV** Caminho de recuperação de membership. Ingresso tem
+- [x] **DEV** Caminho de recuperação de membership. Ingresso tem
       `POST /admin/tickets/grant`; assinatura não tem equivalente. Hoje o
       procedimento é manual e está escrito no Runbook 5 de
       `docs/observability.md`.
-- [ ] **DEV** Worker de reconciliação do Pix. Não existe nada varrendo cobranças
+- [x] **DEV** Worker de reconciliação do Pix. Não existe nada varrendo cobranças
       da AbacatePay como o `billing-reconcile.ts` varre assinaturas Stripe. Um
       `transparent.completed` perdido deixa Pix pago com pedido pendente.
 
@@ -253,7 +253,7 @@ do Spec A.
       de verificação de email.
 - [x] **PEDRO** Publicar privacidade e termos em URL HTTPS pública em
       `casacar.club`. App Store Connect exige.
-- [ ] **DEV** Garantir que nenhuma aba primária caia em placeholder "em breve" no
+- [x] **DEV** Garantir que nenhuma aba primária caia em placeholder "em breve" no
       build submetido.
 
 ### Regra 2.3.1 — benefício anunciado e não implementado
@@ -275,7 +275,21 @@ do Spec A.
       `76cd32a` (2026-08-12). `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` também já
       está ligado nos dois perfis (`cc606ae`). Sobra a chave `pk_live` e a flag
       da caixa, que espera QA.
-- [ ] **DEV** `docs/eas-credentials.md` ainda diz `com.jdmexperience.app`.
+- [x] **DEV** `docs/eas-credentials.md` ainda diz `com.jdmexperience.app`.
+      Feito. Em 2026-09-02 a seção "App Review note" também foi reescrita: ela
+      mandava o oposto do que o app faz, citava a regra de lint
+      `no-stripe-on-ios` que já não existe, e dizia que o iOS assinava por
+      StoreKit via RevenueCat.
+- [ ] **DEV** `merchantIdentifier` nos variants `.dev` e `.preview`.
+      Bloqueado fora do código: `app.config.ts` só aplica no `production` de
+      propósito, porque o merchant id precisa estar habilitado no App ID
+      correspondente no portal da Apple. Sem isso não dá para testar Apple Pay
+      num build de preview.
+- [ ] **DEV** `eas.json` perfil `preview` aponta para a conta Stripe errada.
+      A chave é `pk_test_51RD9T6…`, que não é nenhuma das duas contas da Casa
+      Car Club: o sandbox é `51U4ESa…` e a do CNPJ é `51U4EST…`. `51RD9T6` é a
+      conta antiga da JDM, então o smoke de preview bate num catálogo que não é
+      o nosso.
 - [x] **DEV** Remover o SKU virtual "Vaga de Garagem Adicional". Decidido em
       2026-08-13: sai de todo lugar.
 
@@ -305,7 +319,7 @@ do Spec A.
       Se isso descreve onde os itens da **caixa** são comprados, é procurement e
       não tem campo no modelo — os campos de fornecedor descrevem quem presta o
       serviço do add-on. Confirmar se há algo a registrar.
-- [ ] **DEV** Reescrever a folha "O que é Premium?" (`src/copy/garage.ts:99-106`
+- [x] **DEV** Reescrever a folha "O que é Premium?" (`src/copy/garage.ts:99-106`
       e a versão em inglês em `:210-219`) para liderar com box, clube e serviços.
       Hoje os quatro benefícios listados são digitais, e é essa folha que o
       revisor lê.
@@ -318,21 +332,21 @@ do Spec A.
 
 ### Código
 
-- [ ] **DEV** `flow: native` no `POST /api/cart/checkout`, com `receipt_email` e
+- [x] **DEV** `flow: native` no `POST /api/cart/checkout`, com `receipt_email` e
       cancelamento da PaymentIntent quando a varredura expirar o pedido.
-- [ ] **DEV** Endpoint de assinatura nativa, lendo
+- [x] **DEV** Endpoint de assinatura nativa, lendo
       `latest_invoice.confirmation_secret.client_secret`.
-- [ ] **DEV** Guarda de duplicidade por índice único parcial no banco, com UUID
+- [x] **DEV** Guarda de duplicidade por índice único parcial no banco, com UUID
       por tentativa como chave de idempotência. A chave por pacote que o spec
       original propunha replica a assinatura antiga numa recontratação dentro de
       24 horas.
-- [ ] **DEV** Gate por plataforma servido pela API, com teste. A flag atual é
+- [x] **DEV** Gate por plataforma servido pela API, com teste. A flag atual é
       global: desligar para responder à Apple mataria web e Android junto.
-- [ ] **DEV** Remover o isolamento iOS: gate do `StripeProvider`, regra de lint
+- [x] **DEV** Remover o isolamento iOS: gate do `StripeProvider`, regra de lint
       `no-stripe-on-ios`, teste de isolamento, e marcar o canon §F8.16 como
       superseded em vez de apagar.
 - [ ] **DEV** `merchantIdentifier` preenchido em todas as variants.
-- [ ] **DEV** `PaymentSheet` no carrinho, na assinatura e no retomar pedido, com
+- [x] **DEV** `PaymentSheet` no carrinho, na assinatura e no retomar pedido, com
       `returnURL` para o retorno do 3DS.
 
 ### Submissão

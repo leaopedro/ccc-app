@@ -102,6 +102,10 @@ describe('GET /me/boxes', () => {
     // current. It used to mean "position 0", which flagged this box as live
     // while GET /me/box answers 403 for the very same member. `current` now
     // names the box that endpoint returns, and here there is none.
+    //
+    // This is user-visible: the history screen highlights the flagged card and
+    // draws a "Ciclo atual" badge on it. A cancelled member used to get both on
+    // their newest box and now correctly gets neither.
     expect(history.every((h) => !h.current)).toBe(true);
   });
 });

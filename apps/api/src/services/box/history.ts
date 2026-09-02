@@ -15,6 +15,14 @@ import type { Uploads } from '../uploads/types.js';
  * produce two boxes that tie on `cycleStart`. Flagging position 0 would then
  * point at the sibling's box while `GET /me/box` returns the billing one, and
  * the two screens would disagree about which box is current.
+ *
+ * The flag is visible, so it is worth being exact about what it drives.
+ * `apps/mobile/app/(app)/caixa/historico.tsx` reads it three times per row: it
+ * picks the bright gold card border over the soft one, renders the "Ciclo
+ * atual" badge next to the cycle title, and switches the subtitle from muted to
+ * gold. Null here means no card is highlighted and no badge is drawn anywhere
+ * in the list, which is the honest render for a member whose `GET /me/box`
+ * answers 403.
  */
 export const listBoxHistory = async (
   uploads: Uploads,

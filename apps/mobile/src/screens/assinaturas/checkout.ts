@@ -8,11 +8,12 @@
 // external purchase method on the Brazil storefront, which the 3.1.3 chapeau
 // forbids outright (the exception is US-storefront only). iOS now pays through
 // the native PaymentSheet — when the build actually carries a publishable key
-// to mount StripeProvider with. Without one the sheet cannot exist at all, so
-// iOS falls back to the same hosted session Android uses (final review C1):
-// a purchase that completes, instead of a dead end after real server state was
-// already created. Supplying the key is a human prerequisite this code cannot
-// satisfy for itself.
+// to mount StripeProvider with. Without one the sheet cannot exist at all, and
+// iOS reports the contratação as unavailable rather than opening a hosted
+// checkout: while the caixa flag is off this membership ships as cosmetics
+// only, so steering to a web purchase would be the very 3.1.3 violation the
+// paragraph above describes. Supplying the key is a human prerequisite this
+// code cannot satisfy for itself; see the note at the branch.
 //
 // Android stays on the hosted browser flow below, same as before this
 // branch and same as PremiumScreen.tsx's onSubscribeAndroid — whether
@@ -45,6 +46,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { createPremiumCheckout, createPremiumSubscriptionNative } from '~/api/premium';
+
+import { assinaturasCopy } from '~/copy/assinaturas';
 
 import { resolveCheckoutError, type CheckoutError } from './checkout-error';
 
@@ -87,7 +90,32 @@ export async function startPremiumCheckout(input: {
   // could never mount — a generic error for the member plus an attempt lock
   // that blocks switching plans (409 SubscriptionAttemptInFlight). Deciding
   // first means a keyless build never creates either.
-  if (Platform.OS === 'ios' && hasStripePublishableKey()) {
+  if (Platform.OS === 'ios') {
+    if (!hasStripePublishableKey()) {
+      // Fix round 3. iOS must NOT fall through to the hosted browser flow.
+      //
+      // Round 2 sent a keyless iOS build to `WebBrowser.openAuthSessionAsync`,
+      // reasoning that a working purchase beats a dead end. That reasoning is
+      // wrong for THIS product on THIS platform. With EXPO_PUBLIC_CAIXA_ENABLED
+      // absent from both eas profiles, the shipped membership is `capas
+      // personalizadas` plus `selo Premium` (copy/garage.ts premiumBenefits) —
+      // in-app cosmetics, with no physical component. A digital subscription
+      // sold through an in-app link to an external checkout is the 3.1.3
+      // chapeau violation this branch exists to remove, and it is worse than
+      // an error because it actually completes.
+      //
+      // The cart keeps its hosted fallback on purpose: it sells physical goods
+      // and event tickets, where 3.1.3(e) REQUIRES a non-IAP method. That
+      // carve-out does not reach a cosmetics-only membership.
+      //
+      // Setting EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY on the production profile
+      // restores the native PaymentSheet and makes this branch unreachable.
+      // That is the real remedy; this only refuses to violate in its absence.
+      return {
+        kind: 'error',
+        error: { reason: 'unavailable', message: assinaturasCopy.contratar.errorUnavailable },
+      };
+    }
     try {
       const intent = await createPremiumSubscriptionNative(input);
       return { kind: 'sheet', clientSecret: intent.clientSecret };
@@ -116,10 +144,8 @@ export async function startPremiumCheckout(input: {
     return { kind: 'redirected' };
   }
 
-  // Android: hosted browser flow, restored to its pre-branch behaviour.
-  // iOS reaches here only in a keyless build (final review C1), where the
-  // sheet cannot mount at all — the hosted session is the only path that can
-  // still complete a purchase, same as Android's.
+  // Android only: hosted browser flow, restored to its pre-branch behaviour.
+  // iOS can no longer reach this line — see the 3.1.3 note above.
   await WebBrowser.openAuthSessionAsync(url);
   return { kind: 'returned' };
 }

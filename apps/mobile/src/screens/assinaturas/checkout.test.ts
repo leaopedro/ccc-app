@@ -68,10 +68,15 @@ describe('startPremiumCheckout', () => {
   // lock that blocks switching plans.
   //
   // The decision must happen before the server call, so a keyless build never
-  // creates that state at all. These three assertions are the whole fix:
-  // no checkout-native call, a hosted URL opened, a `returned` outcome the
-  // screen knows how to poll on.
-  it('falls back to the hosted subscription checkout on iOS when the build has no publishable key', async () => {
+  // creates that state at all.
+  //
+  // Fix round 3 changed WHAT a keyless iOS build does. Round 2 opened the
+  // hosted checkout, reasoning a completed purchase beats a dead end. But with
+  // EXPO_PUBLIC_CAIXA_ENABLED off in both eas profiles this membership is
+  // cosmetics only, so an in-app link to a web checkout for it is the 3.1.3
+  // chapeau violation the module header describes — worse than an error,
+  // because it succeeds. iOS now reports it unavailable and touches nothing.
+  it('reports the contratação unavailable on iOS when the build has no publishable key', async () => {
     platform.OS = 'ios';
     expoExtra.value = {};
     createPremiumCheckout.mockResolvedValue({
@@ -82,11 +87,11 @@ describe('startPremiumCheckout', () => {
 
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
 
+    // No server state, and — the point of round 3 — no browser.
     expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
-    expect(openAuthSessionAsync).toHaveBeenCalledWith(
-      'https://checkout.stripe.com/c/pay/cs_ios_keyless',
-    );
-    expect(out).toEqual({ kind: 'returned' });
+    expect(createPremiumCheckout).not.toHaveBeenCalled();
+    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: 'error', error: { reason: 'unavailable' } });
   });
 
   // The empty-string case is the one the real config produces:
@@ -105,7 +110,8 @@ describe('startPremiumCheckout', () => {
     const out = await startPremiumCheckout({ planSlug: 'fundador', addonKeys: [] });
 
     expect(createPremiumSubscriptionNative).not.toHaveBeenCalled();
-    expect(out).toEqual({ kind: 'returned' });
+    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: 'error', error: { reason: 'unavailable' } });
   });
 
   // Final review I1: Android stays on the hosted browser flow, matching

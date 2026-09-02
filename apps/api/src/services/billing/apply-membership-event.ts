@@ -17,11 +17,18 @@ import type { BillingEvent } from './types.js';
 /**
  * What applyMembershipEvent actually did.
  *
- * `refused_live_conflict` is the only non-write outcome: an activation landed
- * on a garage that already holds a membership inside the
- * `premium_membership_live_per_garage` index under another subscription, so the
- * event was allowed to complete without writing anything (see the guard in
- * handleActivated). Post-commit hooks must not fire work off it.
+ * `refused_live_conflict` is the only non-write outcome: the event would have
+ * moved a row INTO the `premium_membership_live_per_garage` index while another
+ * row for the same garage already occupies it, so the event was allowed to
+ * complete without writing anything. Reported by handleActivated,
+ * handleResumed, handleCancelled, handlePastDue and handleUncancelled — every
+ * handler whose only job is a status the index would refuse. Post-commit hooks
+ * must not fire work off it.
+ *
+ * handleRenewed hits the same conflict but does NOT report it here, and that is
+ * deliberate — read the comment on its guard. A renewal that loses the index
+ * race still writes its invoice and its period, so from a post-commit hook's
+ * point of view the event genuinely applied.
  */
 export type MembershipEventOutcome = 'applied' | 'refused_live_conflict';
 
@@ -29,6 +36,130 @@ export type MembershipEventOutcome = 'applied' | 'refused_live_conflict';
 const applied = async (p: Promise<void>): Promise<MembershipEventOutcome> => {
   await p;
   return 'applied';
+};
+
+/**
+ * The row currently holding this garage's slot in
+ * `premium_membership_live_per_garage`, excluding `exceptId`.
+ *
+ * Shared by every handler that writes a status the index covers ('active',
+ * 'past_due', 'cancel_scheduled') and can therefore move a row INTO it. Six of
+ * them: handleActivated, handleRenewed, handleResumed, handleCancelled,
+ * handlePastDue, handleUncancelled. The last three go through
+ * `refuseStatusFlipIfLiveElsewhere`; the first three each need their own
+ * decision about what to keep, so they call this directly.
+ *
+ * Scope is LIVE_PER_GARAGE_INDEX_STATUSES, NOT LIVE_MEMBERSHIP_STATUSES. The
+ * long comment on handleActivated's guard explains why widening it would create
+ * the exact failure these guards exist to prevent; it applies verbatim here.
+ *
+ * `exceptId` is the row the caller is about to write. A row already inside the
+ * index cannot conflict with itself, and the index guarantees no OTHER row is
+ * live while it is, so passing it makes this return null for every ordinary
+ * event at the cost of one indexed lookup.
+ *
+ * Race-free under the `SELECT ... FROM "Garage" ... FOR UPDATE` lock every
+ * caller of applyMembershipEvent must already hold (canon §F8.5) — the same
+ * contract the read-then-write in each handler already depends on.
+ */
+const findLiveIncumbent = async (
+  tx: Prisma.TransactionClient,
+  garageId: string,
+  exceptId: string | null,
+) =>
+  tx.premiumMembership.findFirst({
+    where: {
+      garageId,
+      status: { in: [...LIVE_PER_GARAGE_INDEX_STATUSES] },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: {
+      id: true,
+      provider: true,
+      providerSubRef: true,
+      status: true,
+      tier: true,
+      grossAmountCents: true,
+      currency: true,
+      currentPeriodEnd: true,
+    },
+  });
+
+/** The `extra` keys describing the incumbent, identical across all three alerts. */
+const incumbentExtra = (incumbent: NonNullable<Awaited<ReturnType<typeof findLiveIncumbent>>>) => ({
+  incumbentMembershipId: incumbent.id,
+  incumbentProvider: incumbent.provider,
+  incumbentProviderSubRef: incumbent.providerSubRef,
+  incumbentStatus: incumbent.status,
+  incumbentTier: incumbent.tier,
+  incumbentGrossAmountCents: incumbent.grossAmountCents,
+  incumbentCurrency: incumbent.currency,
+  incumbentCurrentPeriodEnd: incumbent.currentPeriodEnd.toISOString(),
+});
+
+/**
+ * The pure status flips: cancelled, past_due, uncancelled.
+ *
+ * All three write a status that is INSIDE the index
+ * ('cancel_scheduled', 'past_due', 'active'), so all three can move a row into
+ * it and raise the same P2002 the activation guard exists to prevent. PR #44
+ * reported them safe; they are not. A probe against a real Postgres, run before
+ * this change, threw `Unique constraint failed on the fields: (garageId)` on
+ * each of the three. `tier_changed`, `expired`, `paused` and
+ * `reconcileMembershipAddonsAmount` passed the same probe and need no guard —
+ * `tier_changed` and the reconcile write no status at all, and `expired` /
+ * `paused` write statuses OUTSIDE the index, so they only ever LEAVE it.
+ *
+ * Reachability differs a lot across the three, and the reasoning is recorded on
+ * each handler. It does not change the treatment: they share one guard because
+ * they share one situation. None of them carries money, none of them creates
+ * entitlement, and the only thing each does is flip a status — so when the
+ * status is the thing Postgres refuses, there is no partial write worth
+ * salvaging (this is what separates them from handleRenewed, whose invoice
+ * still has a correct home). Leave the row where it is, complete the event,
+ * alert.
+ *
+ * Level is `error`. No charge happened inside these events, but reaching this
+ * branch always means a garage is carrying two billing subscriptions with one
+ * live row, and the state does not resolve itself.
+ *
+ * Returns the outcome to hand straight back from the handler.
+ */
+const refuseStatusFlipIfLiveElsewhere = async (
+  tx: Prisma.TransactionClient,
+  evt: Extract<
+    BillingEvent,
+    { kind: 'subscription.cancelled' | 'subscription.past_due' | 'subscription.uncancelled' }
+  >,
+  target: { id: string; garageId: string; status: string },
+  attemptedStatus: string,
+): Promise<MembershipEventOutcome> => {
+  const liveElsewhere = await findLiveIncumbent(tx, target.garageId, target.id);
+  if (!liveElsewhere) return 'applied';
+
+  Sentry.captureMessage(
+    `billing: ${evt.kind} not applied — garage already has a live membership under another subscription`,
+    {
+      level: 'error',
+      tags: { kind: 'premium-live-membership-conflict', provider: evt.provider },
+      extra: {
+        garageId: target.garageId,
+        eventKind: evt.kind,
+        memberWasCharged: false,
+        ...incumbentExtra(liveElsewhere),
+        incomingProvider: evt.provider,
+        incomingProviderSubRef: evt.providerSubRef,
+        incomingMembershipId: target.id,
+        incomingMembershipStatus: target.status,
+        // The status the provider says this subscription is in, which the
+        // index would not let us record. Without it the operator cannot tell
+        // what our row is now wrong about.
+        attemptedStatus,
+        statusFlipRefused: true,
+      },
+    },
+  );
+  return 'refused_live_conflict';
 };
 
 /**
@@ -54,19 +185,19 @@ export const applyMembershipEvent = async (
     case 'subscription.renewed':
       return applied(handleRenewed(tx, evt));
     case 'subscription.cancelled':
-      return applied(handleCancelled(tx, evt));
+      return handleCancelled(tx, evt);
     case 'subscription.uncancelled':
-      return applied(handleUncancelled(tx, evt));
+      return handleUncancelled(tx, evt);
     case 'subscription.expired':
       return applied(handleExpired(tx, evt));
     case 'subscription.past_due':
-      return applied(handlePastDue(tx, evt));
+      return handlePastDue(tx, evt);
     case 'subscription.tier_changed':
       return applied(handleTierChanged(tx, evt));
     case 'subscription.paused':
       return applied(handlePaused(tx, evt));
     case 'subscription.resumed':
-      return applied(handleResumed(tx, evt));
+      return handleResumed(tx, evt);
     default: {
       // Exhaustive check — TypeScript will error if BillingEvent grows a new kind
       // without a corresponding case.
@@ -193,23 +324,7 @@ async function handleActivated(
   // §F8.5, `SELECT ... FROM "Garage" ... FOR UPDATE`), which is the same
   // contract the findUnique→write window above already relies on.
   // -------------------------------------------------------------------------
-  const liveElsewhere = await tx.premiumMembership.findFirst({
-    where: {
-      garageId,
-      status: { in: [...LIVE_PER_GARAGE_INDEX_STATUSES] },
-      ...(existing ? { id: { not: existing.id } } : {}),
-    },
-    select: {
-      id: true,
-      provider: true,
-      providerSubRef: true,
-      status: true,
-      tier: true,
-      grossAmountCents: true,
-      currency: true,
-      currentPeriodEnd: true,
-    },
-  });
+  const liveElsewhere = await findLiveIncumbent(tx, garageId, existing?.id ?? null);
   if (liveElsewhere) {
     // Settle the originating attempt here instead of leaving it to the reaper.
     //
@@ -230,8 +345,14 @@ async function handleActivated(
     // this branch means the garage holds an INDEXED-live membership, so both
     // the precheck and checkout-native answer `AlreadySubscribed` before any
     // provider call.
+    //
+    // Scoped by garageId as well as providerSubRef. Provider subscription ids
+    // are unique in practice, so no failure sequence was constructible from the
+    // unscoped version — but "in practice" is not a constraint, `providerSubRef`
+    // carries no unique index on this table, and settling another garage's
+    // attempt is a write we can rule out for free instead of arguing about.
     const settledAttempts = await tx.premiumSubscriptionAttempt.updateMany({
-      where: { providerSubRef, status: 'pending' },
+      where: { garageId, providerSubRef, status: 'pending' },
       data: { status: 'failed' },
     });
 
@@ -242,17 +363,15 @@ async function handleActivated(
         tags: { kind: 'premium-live-membership-conflict', provider },
         extra: {
           garageId,
+          // Which of the three conflict shapes this is. Same tag for all three
+          // so one Sentry alert rule and one runbook section cover them, but
+          // the remediations differ enough that the operator must not have to
+          // infer it from the message string.
+          eventKind: evt.kind,
           // Explicit, because the whole point of the alert is that money moved
           // and nothing was provisioned for it.
           memberWasCharged: true,
-          incumbentMembershipId: liveElsewhere.id,
-          incumbentProvider: liveElsewhere.provider,
-          incumbentProviderSubRef: liveElsewhere.providerSubRef,
-          incumbentStatus: liveElsewhere.status,
-          incumbentTier: liveElsewhere.tier,
-          incumbentGrossAmountCents: liveElsewhere.grossAmountCents,
-          incumbentCurrency: liveElsewhere.currency,
-          incumbentCurrentPeriodEnd: liveElsewhere.currentPeriodEnd.toISOString(),
+          ...incumbentExtra(liveElsewhere),
           incomingProvider: provider,
           incomingProviderSubRef: providerSubRef,
           incomingProviderCustomerRef: providerCustomerRef,
@@ -533,23 +652,113 @@ async function handleRenewed(
     where: { provider_providerSubRef: { provider, providerSubRef } },
   });
 
-  // Known, NOT fixed here, and stated in the PR description as deferred: this
-  // update writes status 'active', so it can move a row INTO the live set the
-  // same way handleActivated's writes can. If the renewing row is
-  // 'paused'/'expired' while another row for the garage is live,
-  // `premium_membership_live_per_garage` raises the same uncaught P2002.
-  // It needs the same winner-picking judgement as the activation case and a
-  // different set of inputs (there is no incoming subscription to refuse, only
-  // a renewal of one we already know), so it is deliberately left to its own
-  // change rather than widened into this one. Same applies to handleResumed.
-  // The traffic is far narrower than activation, which is why deferring it is
-  // acceptable and not silent.
+  // -------------------------------------------------------------------------
+  // Live-per-garage guard — renewal variant
+  //
+  // The update below writes status 'active', so it moves the row INTO
+  // `premium_membership_live_per_garage` exactly the way handleActivated's
+  // writes can. If the renewing row is currently OUTSIDE the index
+  // ('expired'/'paused') while a different row for the same garage is inside
+  // it, Postgres raises the same P2002, it escapes the transaction, the webhook
+  // 5xx's, and the provider retries the identical violation forever.
+  //
+  // Not theoretical, and it is the direct downstream of the activation guard:
+  // that guard refuses an Apple re-purchase and leaves the Apple row `expired`,
+  // but refusing it here does not cancel it at Apple. Apple keeps billing, and
+  // the next RENEWAL arrives keyed on `original_transaction_id` (see
+  // normalize-revenuecat) — the SAME row, still expired, still beside a live
+  // Stripe row. The route's unknown-subscription branch does not catch it,
+  // because the row does exist.
+  //
+  // Only the forward branch is guarded. A stale (out-of-order) renewal writes
+  // no status at all, so it cannot enter the index and must not alert.
+  //
+  // WHY THIS IS NOT "incumbent wins, refuse, alert" like handleActivated.
+  //
+  // The activation guard refuses the WHOLE event because there is nothing it
+  // can safely keep: the paid invoice belongs to a subscription with no
+  // membership row, and filing it under the incumbent would corrupt that
+  // member's invoice history. A renewal is a different situation on the one
+  // point that matters — the row already exists. The invoice has a correct,
+  // unambiguous home: its own subscription's membership. Refusing the whole
+  // event would throw away a real payment we are perfectly able to record, and
+  // "we lost the invoice" is a worse, less recoverable wrong than "the status
+  // did not flip". So this branch refuses exactly what Postgres refuses, the
+  // `status` write, and applies everything else:
+  //
+  //   - invoice: written. It is money, it is ours, and it has a home.
+  //   - period + pricing: written. They describe the subscription the provider
+  //     just billed; leaving them stale would make the row disagree with the
+  //     invoice we just filed under it.
+  //   - status: NOT written. The row keeps 'expired'/'paused'.
+  //   - Garage snapshot: NOT written — see the `isForward && !liveElsewhere`
+  //     gate below.
+  //
+  // The snapshot is the one judgement call worth stating, because the opposite
+  // is arguable: the member did pay for this period, so extending
+  // `premiumUntil` off it would keep entitlement alive. It is skipped anyway.
+  // `premiumUntil` is entitlement, entitlement follows the row that holds the
+  // index slot, and writing a snapshot from a row we are in the same breath
+  // refusing to make live is internally contradictory. Worse, it would paper
+  // over the conflict: the member would keep working premium while two
+  // subscriptions bill, which is precisely the state that needs a human. The
+  // incumbent is live and keeps its own snapshot current, so nothing is lost
+  // today; the alert is what fixes the underlying double-billing.
+  //
+  // Outcome stays 'applied', not 'refused_live_conflict'. The invoice and the
+  // period DID land, so post-commit hooks keyed on "this event applied" are
+  // right to run. openMonthlyBoxIfEligible is the only one that reaches a
+  // renewal and it re-reads the row's status itself, so the un-flipped row
+  // correctly opens no box.
+  // -------------------------------------------------------------------------
   const isForward = currentPeriodEnd > existing.currentPeriodEnd;
+  const liveElsewhere = isForward
+    ? await findLiveIncumbent(tx, existing.garageId, existing.id)
+    : null;
+
+  if (liveElsewhere) {
+    Sentry.captureMessage(
+      'billing: renewal paid but not activated — garage already has a live membership under another subscription',
+      {
+        level: 'error',
+        tags: { kind: 'premium-live-membership-conflict', provider },
+        extra: {
+          garageId: existing.garageId,
+          eventKind: evt.kind,
+          // The renewal moved money. Entitlement did not follow it.
+          memberWasCharged: true,
+          ...incumbentExtra(liveElsewhere),
+          incomingProvider: provider,
+          incomingProviderSubRef: providerSubRef,
+          incomingMembershipId: existing.id,
+          // The status the row keeps. This is the whole refusal.
+          incomingMembershipStatus: existing.status,
+          incomingGrossAmountCents: pricing.grossAmountCents,
+          incomingCurrency: pricing.currency,
+          incomingCurrentPeriodStart: currentPeriodStart.toISOString(),
+          incomingCurrentPeriodEnd: currentPeriodEnd.toISOString(),
+          // Unlike the activation alert, this invoice IS recorded — under the
+          // membership named by incomingMembershipId. The operator refunding
+          // the duplicate needs to know it is already in the books.
+          recordedProviderInvoiceRef: invoice.providerInvoiceRef,
+          recordedPaidAt: invoice.paidAt.toISOString(),
+          // What was deliberately not done, so the alert states its own
+          // remediation rather than making the operator diff the code.
+          statusFlipRefused: true,
+          garageSnapshotRefused: true,
+        },
+      },
+    );
+  }
+
   const membership = isForward
     ? await tx.premiumMembership.update({
         where: { id: existing.id },
         data: {
-          status: 'active',
+          // The one field withheld when another row holds the index slot. The
+          // key is omitted rather than written back as `existing.status`: this
+          // handler has no business restating a status it did not decide.
+          ...(liveElsewhere ? {} : { status: 'active' as const }),
           currentPeriodStart,
           currentPeriodEnd,
           cancelAtPeriodEnd: false,
@@ -602,7 +811,9 @@ async function handleRenewed(
   // Skip on stale renewal: existing garage.premiumUntil is already >=
   // membership.currentPeriodEnd which is >= the stale event's
   // currentPeriodEnd, so the write would be a no-op.
-  if (isForward) {
+  // Skip on live conflict: the row did not become live, so it does not get to
+  // move entitlement. Rationale in full on the guard above.
+  if (isForward && !liveElsewhere) {
     const garage = await tx.garage.findUniqueOrThrow({ where: { id: membership.garageId } });
     const existingUntil = garage.premiumUntil ?? new Date(0);
     const newUntil = currentPeriodEnd > existingUntil ? currentPeriodEnd : existingUntil;
@@ -621,15 +832,33 @@ async function handleRenewed(
 async function handleCancelled(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.cancelled' }>,
-): Promise<void> {
+): Promise<MembershipEventOutcome> {
   const { provider, providerSubRef, cancelledAt } = evt;
+
+  // `cancel_scheduled` is INSIDE premium_membership_live_per_garage, so this
+  // write can move a row into the index. The most reachable of the three pure
+  // flips, and it needs nothing more exotic than the self-serve Billing Portal:
+  // pause the Stripe subscription (row leaves the index), buy on Apple (the
+  // activation guard allows it, deliberately), then cancel the paused Stripe
+  // subscription to tidy up. Discriminator 1 in normalize-stripe fires on the
+  // cancel_at_period_end flip regardless of pause state, so that arrives here
+  // as `subscription.cancelled` onto a `paused` row beside a live Apple one.
+  // Our own admin cannot produce it — ADMIN_SUBSCRIPTION_ALLOWED_STATUS.cancel
+  // excludes `paused` — but the portal is not our admin.
+  const target = await tx.premiumMembership.findUniqueOrThrow({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    select: { id: true, garageId: true, status: true },
+  });
+  const refusal = await refuseStatusFlipIfLiveElsewhere(tx, evt, target, 'cancel_scheduled');
+  if (refusal !== 'applied') return refusal;
 
   // Set flag + cancelledAt. No snapshot change — user remains active
   // through currentPeriodEnd (spec §3.5).
   await tx.premiumMembership.update({
-    where: { provider_providerSubRef: { provider, providerSubRef } },
+    where: { id: target.id },
     data: { status: 'cancel_scheduled', cancelAtPeriodEnd: true, cancelledAt },
   });
+  return 'applied';
 }
 
 // ---------------------------------------------------------------------------
@@ -639,11 +868,28 @@ async function handleCancelled(
 async function handleUncancelled(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.uncancelled' }>,
-): Promise<void> {
+): Promise<MembershipEventOutcome> {
   const { provider, providerSubRef } = evt;
 
-  const membership = await tx.premiumMembership.update({
+  // Writes 'active', so it is mechanically exposed like the other two, but the
+  // hardest of the three to reach. The ordinary un-cancel acts on a row that is
+  // `cancel_scheduled`, which is already INSIDE the index — and the index then
+  // guarantees no other row is live, so the guard finds nothing. Getting the
+  // row out of the index first takes a direct Stripe-dashboard sequence (pause
+  // a cancel-scheduled subscription, then clear cancel_at_period_end); our
+  // admin refuses it, since ADMIN_SUBSCRIPTION_ALLOWED_STATUS.pause excludes
+  // `cancel_scheduled`. Guarded anyway: the check is one indexed lookup that
+  // returns null on every real un-cancel, and the alternative is a webhook that
+  // 5xx-retries forever if the sequence ever happens.
+  const target = await tx.premiumMembership.findUniqueOrThrow({
     where: { provider_providerSubRef: { provider, providerSubRef } },
+    select: { id: true, garageId: true, status: true },
+  });
+  const refusal = await refuseStatusFlipIfLiveElsewhere(tx, evt, target, 'active');
+  if (refusal !== 'applied') return refusal;
+
+  const membership = await tx.premiumMembership.update({
+    where: { id: target.id },
     data: { status: 'active', cancelAtPeriodEnd: false, cancelledAt: null },
   });
 
@@ -658,6 +904,7 @@ async function handleUncancelled(
     where: { id: membership.garageId },
     data: { premiumTier: membership.tier, premiumUntil: newUntil },
   });
+  return 'applied';
 }
 
 // ---------------------------------------------------------------------------
@@ -668,6 +915,11 @@ async function handleExpired(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.expired' }>,
 ): Promise<void> {
+  // Audited, unguarded on purpose: 'expired' is OUTSIDE
+  // premium_membership_live_per_garage, so this write only ever LEAVES the
+  // index. Leaving is unconditionally accepted by a partial unique. Confirmed
+  // against a real Postgres by the same probe that broke cancelled/past_due/
+  // uncancelled.
   const { provider, providerSubRef, cancelledAt } = evt;
 
   const membership = await tx.premiumMembership.update({
@@ -710,16 +962,34 @@ async function handleExpired(
 async function handlePastDue(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.past_due' }>,
-): Promise<void> {
+): Promise<MembershipEventOutcome> {
   const { provider, providerSubRef } = evt;
+
+  // Writes 'past_due', which is INSIDE the index, so the probe reproduces the
+  // P2002 here too. No LIVE path was constructible, though, and the reason is
+  // worth recording rather than re-deriving: getting here needs an
+  // `invoice.payment_failed` for a subscription whose row is OUTSIDE the index,
+  // and the statuses outside it are `paused`, `expired` and `trialing`. Stripe
+  // does not charge a paused or a cancelled subscription, so neither produces a
+  // payment failure, and nothing in this codebase ever writes `trialing` — the
+  // status exists in the enum and in LIVE_MEMBERSHIP_STATUSES but no handler,
+  // route or worker sets it. Guarded on the same one-lookup terms as the other
+  // two: "no path exists today" is a statement about today's normalizers.
+  const target = await tx.premiumMembership.findUniqueOrThrow({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    select: { id: true, garageId: true, status: true },
+  });
+  const refusal = await refuseStatusFlipIfLiveElsewhere(tx, evt, target, 'past_due');
+  if (refusal !== 'applied') return refusal;
 
   // Status flip only. No snapshot change — Stripe's automatic dunning
   // retries ~3× over 7d. Reconciliation sweep (chunk F8.12) handles
   // eventual snapshot expiry if dunning fails (spec §3.5).
   await tx.premiumMembership.update({
-    where: { provider_providerSubRef: { provider, providerSubRef } },
+    where: { id: target.id },
     data: { status: 'past_due' },
   });
+  return 'applied';
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +1000,9 @@ async function handleTierChanged(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.tier_changed' }>,
 ): Promise<void> {
+  // Audited, unguarded on purpose: this handler writes no `status` at all, so
+  // it cannot move a row into premium_membership_live_per_garage. It updates
+  // tier/cadence/pricing and the Garage snapshot only.
   const { provider, providerSubRef, tier, cadence, pricing } = evt;
 
   const membership = await tx.premiumMembership.update({
@@ -769,6 +1042,10 @@ async function handlePaused(
 ): Promise<void> {
   const { provider, providerSubRef } = evt;
 
+  // Audited, unguarded on purpose: 'paused' is OUTSIDE
+  // premium_membership_live_per_garage, so like handleExpired this write only
+  // ever leaves the index.
+  //
   // Status flip only. Snapshot da Garage fica intacto de proposito: o membro
   // mantem entitlement ate premiumUntil, mesma escolha ja feita em handlePastDue.
   // Pausa suspende cobranca, nao revoga o que ja foi pago.
@@ -785,8 +1062,72 @@ async function handlePaused(
 async function handleResumed(
   tx: Prisma.TransactionClient,
   evt: Extract<BillingEvent, { kind: 'subscription.resumed' }>,
-): Promise<void> {
+): Promise<MembershipEventOutcome> {
   const { provider, providerSubRef } = evt;
+
+  // -------------------------------------------------------------------------
+  // Live-per-garage guard — resume variant
+  //
+  // Third and last write of `status: 'active'` that can move a row into
+  // `premium_membership_live_per_garage`, and the easiest of the three to
+  // reach, because PR #44 opened the door on purpose. `paused` is inside
+  // LIVE_MEMBERSHIP_STATUSES but OUTSIDE the index, and the activation guard is
+  // scoped to the index precisely so a member with a paused Stripe subscription
+  // can still buy on Apple without being charged for nothing. Correct call —
+  // and it is what puts a paused row next to a live one. Clearing
+  // pause_collection in the Billing Portal (or an admin resume, see
+  // routes/admin/subscriptions.ts) then asks us to make the paused row active,
+  // Postgres raises P2002, the webhook 5xx's and Stripe retries forever.
+  //
+  // Behaviour: refuse the whole event, keep the incumbent, alert. Same answer
+  // as handleActivated and for the same reason handleRenewed does NOT get that
+  // answer — a resume carries no money and no invoice. There is nothing here
+  // worth salvaging from a partial write: the only thing this handler does is
+  // decide which row is live, and that is exactly the thing it may not do.
+  // Writing the period/snapshot half anyway would hand entitlement to a row we
+  // just declined to activate.
+  //
+  // Level is `error`, not `warning`, even though nothing was charged in this
+  // event. The provider has resumed collection regardless of what our DB says,
+  // so this member is now on two billing subscriptions with one live row, and
+  // the next cycle produces a real double charge. That is a state that has to
+  // reach a human before the next invoice, not after.
+  //
+  // Cost on the ordinary path: one indexed lookup that returns null, because
+  // `exceptId` excludes the resuming row and the index guarantees no other row
+  // is live when it already is.
+  // -------------------------------------------------------------------------
+  const target = await tx.premiumMembership.findUniqueOrThrow({
+    where: { provider_providerSubRef: { provider, providerSubRef } },
+    select: { id: true, garageId: true, status: true, tier: true, currentPeriodEnd: true },
+  });
+  const liveElsewhere = await findLiveIncumbent(tx, target.garageId, target.id);
+  if (liveElsewhere) {
+    Sentry.captureMessage(
+      'billing: resume refused — garage already has a live membership under another subscription, and the provider resumed billing anyway',
+      {
+        level: 'error',
+        tags: { kind: 'premium-live-membership-conflict', provider },
+        extra: {
+          garageId: target.garageId,
+          eventKind: evt.kind,
+          // No charge in THIS event. The next cycle is the problem.
+          memberWasCharged: false,
+          providerResumedBilling: true,
+          ...incumbentExtra(liveElsewhere),
+          incomingProvider: provider,
+          incomingProviderSubRef: providerSubRef,
+          incomingMembershipId: target.id,
+          incomingMembershipStatus: target.status,
+          incomingTier: target.tier,
+          incomingCurrentPeriodEnd: target.currentPeriodEnd.toISOString(),
+          statusFlipRefused: true,
+          garageSnapshotRefused: true,
+        },
+      },
+    );
+    return 'refused_live_conflict';
+  }
 
   // Fix round 2, finding 3: clearing cancelAtPeriodEnd/cancelledAt here is
   // copied from handleUncancelled, mas retomar cobranca (pause_collection
@@ -818,6 +1159,8 @@ async function handleResumed(
     where: { id: membership.garageId },
     data: { premiumTier: membership.tier, premiumUntil: newUntil },
   });
+
+  return 'applied';
 }
 
 // ---------------------------------------------------------------------------
@@ -880,6 +1223,9 @@ export const applyInvoiceRefund = async (
  * removed out-of-band via the Billing Portal). It is deliberately independent
  * of the tier/status normalization in applyMembershipEvent — it ONLY touches
  * addonsAmountCents and never the tier, status, period, or pricing snapshot.
+ *
+ * Audited against premium_membership_live_per_garage and deliberately
+ * unguarded: writing no `status` means it cannot move a row into that index.
  *
  * No-op when the (provider, providerSubRef) membership is unknown.
  *

@@ -1,7 +1,12 @@
 // F8.18 — PremiumScreen.
 //
-// iOS  → CTA calls purchasePackage from ~/lib/revenuecat (canon §F8.16: no Stripe).
+// iOS  → CTA routes into the `assinaturas` flow (native PaymentSheet, Task 6).
+//         Opening a web checkout from inside the app is an App Store 3.1.3
+//         violation on the Brazil storefront — no US-storefront exception
+//         applies — so iOS must not use WebBrowser here.
 // Android → CTA opens WebBrowser to the web subscribe flow + deep-link return.
+//         Untouched by this fix; migrating Android is a separate Task 13
+//         decision blocked on a human.
 //
 // Feature-flag: when EXPO_PUBLIC_PREMIUM_BILLING_ENABLED is false,
 // show maintenance banner and return early (canon §F8.11).
@@ -13,6 +18,7 @@
 //   default / inactive           → "Inativo"
 
 import { brand } from '@ccc/design';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -29,8 +35,8 @@ import {
 import { baseUrl } from '~/api/client';
 import type { PremiumStatusResponse } from '~/api/premium';
 import { getPremiumStatus } from '~/api/premium';
+import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { PREMIUM_BILLING_ENABLED } from '~/lib/premium-runtime';
-import { fetchOfferings, purchasePackage } from '~/lib/revenuecat';
 import { theme } from '~/theme';
 
 // Deep-link return scheme for Android WebBrowser flow.
@@ -55,7 +61,12 @@ export default function PremiumScreen() {
   const [status, setStatus] = useState<PremiumStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [purchasing, setPurchasing] = useState(false);
+  // Platform gate from the same source as `useSubscriptionsGate` /
+  // `usePremiumSlot` (Task 6/9/10) — server-driven, refetched fresh here
+  // rather than invented locally, so ops can kill iOS purchasing without a
+  // new binary and this screen honors it the same way the assinaturas
+  // routes do.
+  const { subscriptionsEnabled } = usePremiumPlans();
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -80,7 +91,7 @@ export default function PremiumScreen() {
   if (!enabled) {
     return (
       <View style={styles.center} testID="premium-maintenance">
-        <Text style={styles.maintenanceText}>Premium em breve</Text>
+        <Text style={styles.maintenanceText}>Assinaturas indisponíveis no momento.</Text>
       </View>
     );
   }
@@ -108,35 +119,17 @@ export default function PremiumScreen() {
   // Show manage link when active (includes cancel_scheduled).
   const showManageLink = status.active && !!status.manageUrl;
 
-  const onSubscribeIos = async () => {
-    setPurchasing(true);
-    try {
-      const offerings = await fetchOfferings();
-      const pkg = offerings?.current?.monthly;
-      if (!pkg) {
-        setError('Oferta não disponível no momento.');
-        return;
-      }
-      await purchasePackage(pkg);
-      // After purchase, the RC webhook fires server-side.
-      // Poll status after a short delay to reflect activation.
-      await new Promise<void>((r) => setTimeout(r, 2000));
-      await load();
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message !== 'purchaseCancelled') {
-        setError('Erro ao processar compra. Tente novamente.');
-      }
-    } finally {
-      setPurchasing(false);
-    }
-  };
-
   const onSubscribeAndroid = async () => {
     const url = `${baseUrl()}/premium`;
     const result = await WebBrowser.openAuthSessionAsync(url, DEEP_LINK_RETURN);
     if (result.type === 'success') {
       await load();
     }
+  };
+
+  // No WebBrowser here on purpose — see header comment.
+  const onSubscribeIos = () => {
+    router.push('/assinaturas');
   };
 
   const onManage = () => {
@@ -161,19 +154,34 @@ export default function PremiumScreen() {
         </Text>
       ) : null}
 
-      {/* Subscribe CTA — iOS: RC / Android: WebBrowser */}
+      {/* Subscribe CTA. The iOS branch used to call a RevenueCat SDK that is
+          never initialised (lib/revenuecat.ts has no caller), so the button did
+          nothing when tapped — an App Store 2.1 finding by itself. Removed on
+          2026-08-29; RevenueCat was deliberately NOT wired up.
+
+          iOS does NOT fall back to the Android WebBrowser CTA either: opening
+          a web checkout inside the app is an App Store 3.1.3 violation on
+          the Brazil storefront. iOS routes into the `assinaturas` flow
+          instead (native PaymentSheet, Task 6), and only when the platform
+          gate (subscriptionsEnabled) allows it — otherwise no purchase-shaped
+          affordance renders at all, matching how the assinaturas routes
+          themselves react to the same gate. */}
       {showSubscribeCTA ? (
         Platform.OS === 'ios' ? (
-          <Pressable
-            onPress={() => void onSubscribeIos()}
-            style={styles.cta}
-            disabled={purchasing}
-            accessibilityRole="button"
-            accessibilityLabel="Assinar Premium Gold"
-            testID="premium-cta-ios"
-          >
-            <Text style={styles.ctaText}>{purchasing ? 'Processando…' : 'Assinar Gold'}</Text>
-          </Pressable>
+          subscriptionsEnabled ? (
+            // Final review (minor): this button navigates to `/assinaturas`,
+            // the plan LIST — it does not subscribe, and it does not pick
+            // Gold. "Assinar Gold" promised both. Label it for where it goes.
+            <Pressable
+              onPress={onSubscribeIos}
+              style={styles.cta}
+              accessibilityRole="button"
+              accessibilityLabel="Ver planos de assinatura"
+              testID="premium-cta-ios-native"
+            >
+              <Text style={styles.ctaText}>Ver planos</Text>
+            </Pressable>
+          ) : null
         ) : (
           <Pressable
             onPress={() => void onSubscribeAndroid()}

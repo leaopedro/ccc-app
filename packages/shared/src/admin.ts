@@ -115,10 +115,12 @@ export const adminAuditActionSchema = z.enum([
   'premium.subscription.cancel_scheduled',
   'premium.subscription.resumed',
   'premium.subscription.paused',
+  'premium.subscription.granted',
   'document_viewed',
   'document_approved',
   'document_rejected',
   'user.pii_viewed',
+  'order.refund_requested',
 ]);
 export type AdminAuditAction = z.infer<typeof adminAuditActionSchema>;
 
@@ -628,6 +630,27 @@ export const adminFinanceQuerySchema = z.object({
   tier: z.enum(['gold', 'all']).optional(),
   membershipStatus: z.enum(['active', 'past_due', 'cancel_scheduled', 'expired', 'all']).optional(),
   statuses: z.array(orderStatusSchema).min(1).optional(),
+  /**
+   * Revenue-mode scope. Absent means `live`.
+   *
+   * Before the live cutover, production ran entirely in Stripe test mode. Rows
+   * from that period are marked `livemode = false` by
+   * apps/api/src/scripts/mark-pre-cutover-orders.ts. Defaulting to `live` here
+   * is what keeps the first real revenue report from silently including test
+   * money; making the operator remember a parameter to be correct would not.
+   *
+   * Coverage: filters `Order` and `PremiumMembershipInvoice` rows (and every
+   * figure derived from them — totalRevenueCents, netRevenueCents,
+   * membershipRevenueCents, membershipNetRevenueCents,
+   * membershipDevFeeCollectedCents, membershipRefundedCents). It does NOT
+   * filter activeMembershipsCount, membershipMRRCents, membershipARPUCents,
+   * newMembershipsCount or churnedMembershipsCount — those read directly from
+   * `PremiumMembership`, which has no `livemode` column. That table's
+   * test-mode exclusion is a different mechanism entirely:
+   * apps/api/src/scripts/purge-test-mode.ts flips `status` to `expired`. See
+   * `membershipCountsLivemodeFiltered` on `adminFinanceSummarySchema`.
+   */
+  livemode: z.enum(['live', 'test', 'all']).optional(),
 });
 export type AdminFinanceQuery = z.infer<typeof adminFinanceQuerySchema>;
 
@@ -662,6 +685,30 @@ export const adminFinanceSummarySchema = z.object({
   // Net (and therefore ARPU) can be negative in windows where refunds exceed
   // gross — keep the sign so the dashboard can render the loss period.
   membershipARPUCents: z.number().int(),
+  // Always `false`. Documents, in the response itself and not just in a
+  // schema comment, that activeMembershipsCount, membershipMRRCents,
+  // membershipARPUCents, newMembershipsCount and churnedMembershipsCount are
+  // NOT scoped by the `livemode` query parameter — they read `PremiumMembership`
+  // directly, which has no `livemode` column. A reader must not infer full
+  // livemode coverage from the presence of the `livemode` filter elsewhere in
+  // this same response.
+  // .optional() for deploy skew, not because the API ever omits it: admin ships
+  // on Vercel and the API on Railway, independently, so the admin can be live
+  // against an API that predates this field. Required here would make the whole
+  // finance dashboard throw on parse during that window. Absent is read as
+  // 'unknown, assume unfiltered' at the call site.
+  membershipCountsLivemodeFiltered: z.literal(false).optional(),
+  // True when neither `Order` nor `PremiumMembershipInvoice` has ANY row with
+  // `livemode = false` yet — i.e. `mark-pre-cutover-orders` has apparently
+  // never been run. Until it runs, every pre-cutover test-mode row still
+  // defaults to `livemode = true`, so the `live` (default) scope of this very
+  // response may silently include test money. This is a purely evidence-based
+  // check (did any row ever get flipped) — it does NOT know or guess a cutover
+  // instant, and it says nothing once a partial backfill has happened.
+  // .optional() for the same deploy-skew reason as
+  // membershipCountsLivemodeFiltered above. Absent ⇒ the warning banner simply
+  // does not render, which is the same as false.
+  livemodeBackfillPending: z.boolean().optional(),
 });
 export type AdminFinanceSummary = z.infer<typeof adminFinanceSummarySchema>;
 
@@ -1189,6 +1236,22 @@ export const adminStoreOrderAuditEntrySchema = z.object({
 });
 export type AdminStoreOrderAuditEntry = z.infer<typeof adminStoreOrderAuditEntrySchema>;
 
+/**
+ * Blast radius of refunding THIS order, from the `charge.refunded` cascade in
+ * stripe-webhook.ts: one PaymentIntent can cover a whole cart, so refunding
+ * the order that carries `providerRef` flips every OTHER order sharing its
+ * `cartId` to `refunded` too (when this order is `paid` at cascade time) and
+ * revokes their tickets. `siblingOrderCount`/`siblingTicketCount` count only
+ * those OTHER orders and their currently-valid tickets — never this order's
+ * own line, which the operator is already choosing to refund on purpose.
+ * Both are 0 when the order has no `cartId` (solo checkout).
+ */
+export const adminOrderRefundImpactSchema = z.object({
+  siblingOrderCount: z.number().int().nonnegative(),
+  siblingTicketCount: z.number().int().nonnegative(),
+});
+export type AdminOrderRefundImpact = z.infer<typeof adminOrderRefundImpactSchema>;
+
 export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   provider: z.enum(['stripe', 'abacatepay']),
   providerRef: z.string().nullable(),
@@ -1204,8 +1267,44 @@ export const adminStoreOrderDetailSchema = adminStoreOrderRowSchema.extend({
   pickupTicketId: z.string().nullable(),
   items: z.array(adminStoreOrderItemSchema),
   history: z.array(adminStoreOrderAuditEntrySchema),
+  // .optional() for deploy skew: the admin (Vercel) and the API (Railway)
+  // deploy independently, and this field is new. Required here would make the
+  // order-detail page throw on parse whenever the admin ships first. The refund
+  // form degrades to no sibling warning when it is absent.
+  refundImpact: adminOrderRefundImpactSchema.optional(),
 });
 export type AdminStoreOrderDetail = z.infer<typeof adminStoreOrderDetailSchema>;
+
+/**
+ * Assisted refund. Executed by the founder from the admin, never by the
+ * customer and never automatically.
+ *
+ * `amountCents` is optional but, as of fix round 1, may ONLY equal the
+ * order's full `amountCents` — the route (apps/api/src/routes/admin/refunds.ts)
+ * rejects any other value with 422. Partial refunds are refused, not
+ * supported: stripe-webhook.ts's `charge.refunded` handler deliberately
+ * leaves `Order.status` untouched on `amount_refunded < amount`, so a
+ * partial here would move real money at Stripe while returning the same 202
+ * a full refund returns — indistinguishable "done" vs. "drifted, needs a
+ * human". Kept in the schema anyway (cleaner than an amount-less shape) but
+ * effectively a no-partial field: omit it, or pass the full amount.
+ *
+ * Fix round 2, MINOR: no UI sends it any more either. RefundOrderForm used to
+ * render a "Valor parcial em centavos (opcional)" input, which after the 422
+ * above could only produce an error or a redundant full refund; that input is
+ * gone and the form always omits the key.
+ */
+export const adminOrderRefundSchema = z.object({
+  reason: z.string().min(10).max(500),
+  amountCents: z.number().int().positive().optional(),
+});
+export type AdminOrderRefund = z.infer<typeof adminOrderRefundSchema>;
+
+export const adminOrderRefundResponseSchema = z.object({
+  requested: z.literal(true),
+  provider: z.literal('stripe'),
+});
+export type AdminOrderRefundResponse = z.infer<typeof adminOrderRefundResponseSchema>;
 
 // adminStoreFulfillmentUpdateSchema is exported from ./store.js — re-exported via index.
 

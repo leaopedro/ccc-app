@@ -23,6 +23,7 @@ import {
   TIER_VISUAL,
   tierStyle,
 } from '~/screens/assinaturas/tier-visual';
+import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 
 function onBack() {
   if (router.canGoBack()) router.back();
@@ -177,6 +178,14 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
             </View>
           ))}
         </View>
+
+        {isCaixaBuildEnabled() ? (
+          <View style={styles.caixaCard}>
+            <Text style={styles.caixaTitle}>{assinaturasCopy.caixa.title}</Text>
+            <Text style={styles.caixaBody}>{assinaturasCopy.caixa.body}</Text>
+            <Text style={styles.caixaDelivery}>{assinaturasCopy.caixa.delivery}</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam).
@@ -314,6 +323,25 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: c.cream,
   },
+
+  // Caixa física
+  caixaCard: {
+    marginTop: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: c.tileBorder,
+    backgroundColor: c.surface,
+    padding: 18,
+    gap: 8,
+  },
+  caixaTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 2.8,
+    color: c.goldDeep,
+  },
+  caixaBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20, color: c.cream },
+  caixaDelivery: { fontFamily: 'Inter_400Regular', fontSize: 12.5, color: c.muted55 },
 
   // Sticky CTA
   ctaBar: {

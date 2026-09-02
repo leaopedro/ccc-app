@@ -250,6 +250,10 @@ export function normalizeStripeEvent(event: WebhookEvent): NormalizeStripeResult
       periodStart: period.start,
       periodEnd: period.end,
       paidAt,
+      // Stripe's own mode for this event. exactOptionalPropertyTypes: the key
+      // is omitted entirely rather than set to undefined, so an event with no
+      // livemode leaves PremiumMembershipInvoice.livemode at its default.
+      ...(event.livemode !== undefined ? { livemode: event.livemode } : {}),
     };
 
     if (invoice.billing_reason === 'subscription_create') {

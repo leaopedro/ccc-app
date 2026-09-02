@@ -102,6 +102,51 @@ const ptBR = {
     // promocional para esconder. Prometer benefício não implementado é exposição
     // na regra 2.3.1 da App Store, e o spec de Apple Pay depende desta lista ser
     // verdadeira. Reintroduzir só junto da implementação.
+    //
+    // 2026-08-31: a caixa física e os eventos da comunidade entram aqui por
+    // causa da Decisão 6 (3.1.3(e) exige que o app venda algo consumido fora
+    // dele; um sheet "O que é Premium?" com só dois desbloqueios digitais
+    // argumenta contra a própria posição de compliance). Esta lista não sabe
+    // o tier de quem está lendo — CoverPickerSheet abre este sheet também
+    // para quem ainda não é assinante (GarageHeader.tsx, onPremiumUpsell) —
+    // então só entra o que TODO tier tem, verificado em seed.ts (benefícios
+    // do plano Bronze): a caixa e "Eventos abertos da comunidade". Convidados,
+    // descontos com parceiros e concierge ficam de fora — são só a partir da
+    // Prata/Ouro (seed.ts) — e módulos como Detailing ficam de fora: são
+    // add-on pago à parte, não um benefício incluso, e Oficina nem está
+    // ativo no catálogo.
+    //
+    // Fix round 1: "Acesso ao clube" foi removido. Os únicos indícios eram
+    // rótulos de marketing do seed (dado de dev/preview); não existe nenhum
+    // gate de entitlement no código — fridge-unlock.ts autentica por chave de
+    // API compartilhada, não por membro ou tier, e check-in é por ingresso,
+    // não por premium. Prometer isso seria a mesma exposição 2.3.1 que a
+    // advertência acima cobre. "incluída na assinatura" também saiu da caixa:
+    // a cobrança real soma excedente do orçamento + módulos + frete
+    // (box/charge.ts), então "incluída" sem ressalva é falso fora do caso
+    // dentro do orçamento e do único CEP com frete grátis (seed.ts). A
+    // advertência acima continua valendo para qualquer item novo que ainda
+    // não exista no produto.
+    // Fix round 2 (C2): the caixa lives OUTSIDE `premiumBenefits` because it is
+    // conditional. The caixa screens are behind EXPO_PUBLIC_CAIXA_ENABLED,
+    // absent from both eas profiles, so in a shipped build the member can
+    // never opt in, add items, or set an address — and box-cutoff.ts skips
+    // exactly those boxes (`!hasItems || !autoSendOptIn || !shippingAddressId`).
+    // Promising it in a build that cannot deliver it is the same 2.3.1 exposure
+    // the notes above cover. `premiumSheetBenefits` (screens/garage) puts it
+    // back at the top of the list when the flag is on, matching how
+    // ContratarScreen and PlanoDetalheScreen gate their caixa card.
+    premiumBenefitCaixa: {
+      title: 'Caixa física da Casa',
+      sub: 'Você monta e confirma sua caixa a cada ciclo.',
+    },
+    // Fix round 2 (I3): "Eventos abertos da comunidade" was removed. Its only
+    // evidence was a seed marketing label (seed.ts:526) — exactly the evidence
+    // rejected above for "Acesso ao clube". No code gates event attendance on
+    // membership or tier: `Event` has no membership field in schema.prisma, and
+    // the only `minTier` in the codebase gates BOX CATALOG items (box.ts,
+    // box-cutoff.ts), not events. Either events are open to everyone, in which
+    // case they are not a member benefit, or the claim is unbacked.
     premiumBenefits: [
       { title: 'Capas personalizadas', sub: 'Escolha entre 9 cenários ou envie a sua.' },
       { title: 'Selo Premium', sub: 'Aparece nos seus carros em todo o app.' },
@@ -216,8 +261,16 @@ const en = {
     premiumTierLabel: (tier: 'gold' | 'silver' | 'bronze') => `${tier.toUpperCase()} TIER`,
     premiumNearExpiry: (n: number) =>
       `Expires in ${n} ${n === 1 ? 'day' : 'days'} · Renew to keep your cover.`,
-    // Same removal as the PT list above. This is the one an English-speaking
-    // reviewer reads.
+    // Kept in lockstep with the PT list above — see those comments for why the
+    // box sits behind the caixa build flag, and why club access, community
+    // events, guests/discounts/concierge and addon modules are not listed at
+    // all. Note: `garageCopyEn` has no importers in this app; PT is the copy an
+    // App Store reviewer actually sees, whatever language they read in. This
+    // EN block only exists as an i18n scaffold.
+    premiumBenefitCaixa: {
+      title: 'The Casa box',
+      sub: 'You curate and confirm your box every cycle.',
+    },
     premiumBenefits: [
       { title: 'Custom covers', sub: 'Pick from 9 scenes or upload your own.' },
       { title: 'Premium badge', sub: 'Appears on your cars across the app.' },

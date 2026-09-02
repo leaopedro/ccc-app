@@ -34,6 +34,18 @@ export type BillingInvoice = {
   periodStart: Date;
   periodEnd: Date;
   paidAt: Date;
+  /**
+   * Provider mode this invoice was charged in (fix round 2, IMPORTANT).
+   *
+   * Set from Stripe's `event.livemode` by normalize-stripe.ts. Absent for
+   * RevenueCat (normalize-revenuecat.ts does not map `environment` today) and
+   * for the reconcile worker's synthetic invoices, in which case
+   * `PremiumMembershipInvoice.livemode` keeps its `true` default. Before this
+   * existed nothing set the column at all, so every invoice after the
+   * migration read as live revenue even while production pointed at a Stripe
+   * sandbox account.
+   */
+  livemode?: boolean;
 };
 
 /**

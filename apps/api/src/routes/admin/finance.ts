@@ -92,6 +92,9 @@ function buildWhere(query: unknown): Prisma.OrderWhereInput {
     if (q.stateCode) where.event.stateCode = q.stateCode;
   }
 
+  const livemode = resolveLivemodeFilter(q);
+  if (livemode !== undefined) where.livemode = livemode;
+
   return where;
 }
 
@@ -224,7 +227,17 @@ type MembershipInvoiceWhereInput = {
   cadence?: 'monthly' | 'annual';
   tier?: 'bronze' | 'silver' | 'gold';
   garageId?: string;
+  livemode?: boolean;
 };
+
+// Absent → 'live'. See the schema comment on adminFinanceQuerySchema.livemode:
+// the default has to be the safe one, or the first real revenue report keeps
+// silently including test money.
+function resolveLivemodeFilter(q: AdminFinanceQuery): boolean | undefined {
+  if (q.livemode === 'all') return undefined;
+  if (q.livemode === 'test') return false;
+  return true;
+}
 
 type MembershipInvoiceRecord = {
   id: string;
@@ -303,6 +316,8 @@ async function findMembershipInvoices(
   }
 
   if (where.provider) filters.provider = where.provider;
+
+  if (where.livemode !== undefined) filters.livemode = where.livemode;
 
   if (where.cadence || where.tier || where.garageId) {
     filters.membership = {};
@@ -526,7 +541,6 @@ function rowToListItem(row: RawMembershipRow): MembershipListItem {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/finance/summary', async (request) => {
     const where = buildWhere(request.query);
@@ -552,6 +566,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
     if (q.provider === 'stripe') membershipWhere.provider = 'stripe';
     if (membershipCadence) membershipWhere.cadence = membershipCadence;
     if (membershipTier) membershipWhere.tier = membershipTier;
+    const summaryLivemode = resolveLivemodeFilter(q);
+    if (summaryLivemode !== undefined) membershipWhere.livemode = summaryLivemode;
 
     // Membership row-level filters shared by the active-count + new-count + MRR.
     // status filter is OR'd between the FilterBar selection and the
@@ -573,6 +589,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
       activeMembershipRows,
       newMemberships,
       churnedMemberships,
+      unmarkedTestOrderCount,
+      unmarkedTestInvoiceCount,
     ] = await Promise.all([
       includeOrders ? findFinanceOrders(where, ['paid', 'refunded']) : Promise.resolve([]),
       includeOrders
@@ -632,7 +650,17 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
             },
           })
         : Promise.resolve(0),
+      // livemodeBackfillPending evidence: global (not window-scoped) count of
+      // rows ever flipped to test-mode. Zero on BOTH tables means
+      // mark-pre-cutover-orders has apparently never run, so the `live`
+      // scope above may still include pre-cutover test money. This is a
+      // cheap indexed count (leading column of Order_livemode_status_paidAt_idx),
+      // run on every /finance/summary call — it does not block the page.
+      prisma.order.count({ where: { livemode: false } }),
+      prisma.premiumMembershipInvoice.count({ where: { livemode: false } }),
     ]);
+
+    const livemodeBackfillPending = unmarkedTestOrderCount === 0 && unmarkedTestInvoiceCount === 0;
 
     let totalRevenueCents = 0;
     let refundedCents = 0;
@@ -731,6 +759,10 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
       churnedMembershipsCount: churnedMemberships,
       membershipMRRCents,
       membershipARPUCents,
+      // See adminFinanceSummarySchema comments: these two are diagnostics, not
+      // scoped metrics, and are independent of the `livemode` query value.
+      membershipCountsLivemodeFiltered: false,
+      livemodeBackfillPending,
     };
   });
 
@@ -822,6 +854,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
     const trendTier = normalizeMembershipTier(tq);
     if (trendCadence) trendMembershipWhere.cadence = trendCadence;
     if (trendTier) trendMembershipWhere.tier = trendTier;
+    const trendLivemode = resolveLivemodeFilter(tq);
+    if (trendLivemode !== undefined) trendMembershipWhere.livemode = trendLivemode;
     const trendIncludeMembership = shouldIncludeMembership(tq);
     const trendIncludeOrders = shouldIncludeOrders(tq);
 
@@ -899,6 +933,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
     const pmTier = normalizeMembershipTier(pmq);
     if (pmCadence) pmMembershipWhere.cadence = pmCadence;
     if (pmTier) pmMembershipWhere.tier = pmTier;
+    const pmLivemode = resolveLivemodeFilter(pmq);
+    if (pmLivemode !== undefined) pmMembershipWhere.livemode = pmLivemode;
     const pmIncludeMembership = shouldIncludeMembership(pmq);
     const pmIncludeOrders = shouldIncludeOrders(pmq);
 
@@ -1146,6 +1182,8 @@ export const adminFinanceRoutes: FastifyPluginAsync = async (app) => {
     if (exportQuery.provider === 'stripe') {
       membershipInvoiceWhere.provider = 'stripe';
     }
+    const exportLivemode = resolveLivemodeFilter(exportQuery);
+    if (exportLivemode !== undefined) membershipInvoiceWhere.livemode = exportLivemode;
     const membershipInvoices = shouldIncludeMembership(exportQuery)
       ? await findMembershipInvoices(membershipInvoiceWhere)
       : [];

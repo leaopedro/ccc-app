@@ -6,12 +6,15 @@ vi.mock('next/cache', () => ({
 
 const updateAdminStoreOrderFulfillment =
   vi.fn<(id: string, payload: unknown) => Promise<unknown>>();
+const requestAdminOrderRefund = vi.fn<(id: string, payload: unknown) => Promise<unknown>>();
 vi.mock('./admin-api', () => ({
   updateAdminStoreOrderFulfillment: (id: string, payload: unknown) =>
     updateAdminStoreOrderFulfillment(id, payload),
+  requestAdminOrderRefund: (id: string, payload: unknown) => requestAdminOrderRefund(id, payload),
 }));
 
-import { updateOrderFulfillmentAction } from './store-orders-actions';
+import { ApiError } from './api';
+import { requestOrderRefundAction, updateOrderFulfillmentAction } from './store-orders-actions';
 
 describe('updateOrderFulfillmentAction', () => {
   beforeEach(() => {
@@ -79,5 +82,74 @@ describe('updateOrderFulfillmentAction', () => {
 
     expect(result.error).toBeTruthy();
     expect(updateAdminStoreOrderFulfillment).not.toHaveBeenCalled();
+  });
+});
+
+// Task 9: the refund screen's copy for each of POST /admin/orders/:id/refund's
+// error codes (task 8's contract) is owned by this action, not the component
+// — so it is pinned here against real ApiError instances, not a mock string.
+describe('requestOrderRefundAction', () => {
+  beforeEach(() => {
+    requestAdminOrderRefund.mockReset();
+  });
+
+  it('requests the refund and reports it as REQUESTED, not completed', async () => {
+    requestAdminOrderRefund.mockResolvedValue({ requested: true, provider: 'stripe' });
+
+    const result = await requestOrderRefundAction('order-1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+
+    expect(result).toEqual({ ok: true, requested: true });
+    expect(requestAdminOrderRefund).toHaveBeenCalledWith('order-1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+  });
+
+  it('rejects a reason shorter than 10 chars before calling the API', async () => {
+    const result = await requestOrderRefundAction('order-1', { reason: 'curto' });
+
+    expect(result.ok).toBe(false);
+    expect(requestAdminOrderRefund).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['NotFound', 404, /não encontrado/i],
+    ['OrderNotRefundable', 422, /pago/i],
+    ['RefundNotSupported', 501, /AbacatePay/i],
+    ['PartialRefundNotSupported', 422, /dashboard da Stripe/i],
+    ['RefundAlreadyRequested', 409, /andamento/i],
+    ['RefundFailed', 502, /Stripe recusou/i],
+  ] as const)('maps %s (%i) to an actionable message', async (code, status, pattern) => {
+    requestAdminOrderRefund.mockRejectedValue(new ApiError(status, code, 'raw api message'));
+
+    const result = await requestOrderRefundAction('order-1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(pattern);
+  });
+
+  it('maps a bare 403 to a permission message', async () => {
+    requestAdminOrderRefund.mockRejectedValue(new ApiError(403, 'Forbidden', 'raw'));
+
+    const result = await requestOrderRefundAction('order-1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/permissão/i);
+  });
+
+  it('maps a bare 429 to a rate-limit message', async () => {
+    requestAdminOrderRefund.mockRejectedValue(new ApiError(429, 'TooManyRequests', 'raw'));
+
+    const result = await requestOrderRefundAction('order-1', {
+      reason: 'cliente desistiu dentro dos sete dias',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/aguarde/i);
   });
 });

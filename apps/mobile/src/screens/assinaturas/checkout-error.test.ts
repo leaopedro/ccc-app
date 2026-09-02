@@ -51,6 +51,15 @@ describe('resolveCheckoutError', () => {
     expect(out.manageUrl).toBeUndefined();
   });
 
+  it('separates SubscriptionAttemptInFlight from AlreadySubscribed on the same status', () => {
+    // A conflicting in-flight attempt is not an active subscription: no
+    // manageUrl to fall back on, and telling the member "you already
+    // subscribe" would be false.
+    const out = resolveCheckoutError(err(409, { error: 'SubscriptionAttemptInFlight' }));
+    expect(out.reason).toBe('attempt_in_flight');
+    expect(out.manageUrl).toBeUndefined();
+  });
+
   it('maps 429 to rate_limited so the member is told to wait', () => {
     expect(resolveCheckoutError(err(429, { error: 'Error' })).reason).toBe('rate_limited');
   });
@@ -85,6 +94,7 @@ describe('resolveCheckoutError', () => {
       err(503, { error: 'ServiceUnavailable', missingAddonKeys: ['a'] }),
       err(409, { error: 'AlreadySubscribed', manageUrl: 'https://x.test' }),
       err(409, { error: 'StaleBillingReference' }),
+      err(409, { error: 'SubscriptionAttemptInFlight' }),
       err(429, {}),
       err(403, {}),
       err(404, {}),

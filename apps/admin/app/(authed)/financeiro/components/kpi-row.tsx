@@ -5,7 +5,7 @@ const fmtCurrency = (cents: number) =>
 
 const fmtNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n);
 
-type Tile = { label: string; value: string; accent?: boolean };
+type Tile = { label: string; value: string; accent?: boolean; unfiltered?: boolean };
 
 type TileGroup = { title: string; tiles: Tile[] };
 
@@ -13,6 +13,17 @@ function buildTileGroups(s: AdminFinanceSummary): TileGroup[] {
   // F8.15: net = tickets + store net (already in s.netRevenueCents) + membership net.
   // `?? 0` guards against API payloads from before F8.13 deployed.
   const totalNetCents = s.netRevenueCents + (s.membershipNetRevenueCents ?? 0);
+
+  // Task 5: activeMembershipsCount, membershipMRRCents, membershipARPUCents,
+  // newMembershipsCount and churnedMembershipsCount read PremiumMembership
+  // directly and never respond to the `livemode` selector — a different
+  // mechanism (purge-test-mode.ts) excludes test rows there. Driven by the
+  // API field, not a hardcoded list, so the marker disappears on its own if
+  // the API ever starts filtering these too.
+  // Absent (an API that predates the field — admin and API deploy separately)
+  // reads the same as `false`: the counts are NOT livemode-filtered. Claiming
+  // they were would be the dangerous direction.
+  const countsUnfiltered = !s.membershipCountsLivemodeFiltered;
 
   return [
     {
@@ -44,11 +55,13 @@ function buildTileGroups(s: AdminFinanceSummary): TileGroup[] {
         {
           label: 'Membros Ativos',
           value: fmtNumber(s.activeMembershipsCount ?? 0),
+          unfiltered: countsUnfiltered,
         },
         {
           label: 'MRR',
           value: fmtCurrency(s.membershipMRRCents ?? 0),
           accent: true,
+          unfiltered: countsUnfiltered,
         },
       ],
     },
@@ -67,6 +80,13 @@ export function KpiRow({ summary }: { summary: AdminFinanceSummary }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Absent ⇒ no banner, same as false. See the schema comment. */}
+      {summary.livemodeBackfillPending === true ? (
+        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-panel)]/40 p-3 text-xs text-[color:var(--color-muted)]">
+          Nenhuma marcação de pré-corte foi registrada. Os valores abaixo podem incluir receita de
+          modo teste do Stripe.
+        </div>
+      ) : null}
       {groups.map((group) => (
         <div
           key={group.title}
@@ -87,6 +107,14 @@ export function KpiRow({ summary }: { summary: AdminFinanceSummary }) {
                 >
                   {t.value}
                 </div>
+                {t.unfiltered ? (
+                  <div
+                    className="mt-1 text-[10px] text-[color:var(--color-muted)]"
+                    title="Este número vem direto das assinaturas ativas e não responde ao filtro de modo de receita (real/teste) acima."
+                  >
+                    Não filtra por modo
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

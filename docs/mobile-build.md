@@ -59,7 +59,7 @@ What this proves:
 
 - Expo project linkage works
 - the native iOS project compiles on EAS
-- the `com.jdmexperience.app.dev` variant resolves correctly
+- the `com.casacarclub.app.dev` variant resolves correctly
 
 What it does not prove:
 
@@ -181,7 +181,7 @@ pnpm --filter @ccc/mobile exec eas build --profile preview --platform ios
 On the first run, accept the EAS prompts to:
 
 - log into the Apple team if asked
-- create or reuse the `com.jdmexperience.app.preview` identifier
+- create or reuse the `com.casacarclub.app.preview` identifier
 - generate the signing certificate and provisioning profile
 - include the registered test devices in the ad hoc profile
 
@@ -216,7 +216,7 @@ When it finishes:
 
 Expected result:
 
-- installable APK for `com.jdmexperience.app.preview`
+- installable APK for `com.casacarclub.app.preview`
 
 ## Step 5: Optional Play Internal handoff
 

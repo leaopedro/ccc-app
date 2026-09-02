@@ -182,16 +182,11 @@ async function handleActivated(
   // unrecorded invoice ref. The SubscriptionWebhookEvent row also keeps the raw
   // payload, so the paid invoice is never traceless.
   //
-  // The remediation path that exists TODAY (docs/observability.md, Runbook 5,
-  // "money in, nothing out"): there is NO admin endpoint that creates a
-  // membership. `/admin/subscriptions` exposes plan, add-ons, cancel, resume
-  // and pause, and nothing else. An operator refunds or cancels the duplicate
-  // at the provider and, if the wrong subscription won, hand-writes the
-  // `PremiumMembership` + `PremiumMembershipInvoice` rows and the
-  // `Garage.premiumTier`/`premiumUntil` snapshot inside a transaction holding
-  // `SELECT id FROM "Garage" ... FOR UPDATE`. PR #43 (feat/go-live-web-codigo)
-  // adds `POST /admin/subscriptions/grant`; once that merges it becomes the
-  // path to use here and this comment should point at it instead.
+  // The remediation path (docs/observability.md, Runbook 5, "money in, nothing
+  // out"): an operator refunds or cancels the duplicate at the provider and,
+  // if the wrong subscription won, expires the incumbent and re-creates the
+  // membership with `POST /admin/subscriptions/grant`, which replays this same
+  // function under the same `SELECT ... FOR UPDATE` lock.
   //
   // No SAVEPOINT + P2002 catch as a backstop: this pre-check is race-free under
   // the lock every caller of applyMembershipEvent must already hold (canon
@@ -387,6 +382,10 @@ async function handleActivated(
         currency: pricing.currency,
         paidAt: invoice.paidAt,
         status: 'paid',
+        // exactOptionalPropertyTypes: omit the key when the normalizer had no
+        // mode to report, so the column keeps its `true` default instead of
+        // being written with undefined.
+        ...(invoice.livemode !== undefined ? { livemode: invoice.livemode } : {}),
       },
     });
     await tx.$executeRawUnsafe('RELEASE SAVEPOINT invoice_insert');
@@ -586,6 +585,10 @@ async function handleRenewed(
         currency: pricing.currency,
         paidAt: invoice.paidAt,
         status: 'paid',
+        // exactOptionalPropertyTypes: omit the key when the normalizer had no
+        // mode to report, so the column keeps its `true` default instead of
+        // being written with undefined.
+        ...(invoice.livemode !== undefined ? { livemode: invoice.livemode } : {}),
       },
     });
     await tx.$executeRawUnsafe('RELEASE SAVEPOINT invoice_insert');

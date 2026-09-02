@@ -2307,6 +2307,12 @@ git commit -m "test(stripe): fixa a recusa de reembolso parcial e corrige o rast
 
 ### Task 11: Os três webhooks, fixados por teste, e o fecho dos documentos
 
+> **Correção, 2026-09-01, depois da execução.** Esta task partia de uma premissa
+> falsa: que o perfil `production` do `eas.json` ainda apontava para o host do
+> Railway. Não aponta desde `76cd32a` (2026-08-12). O parágrafo do host em
+> `docs/stripe.md` foi reescrito para dizer o que é verdade, e não apresenta mais
+> uma escolha que já estava feita. O texto abaixo fica como registro.
+
 **Leia esta seção inteira antes de escrever código. Três dos itens que o Spec A
 pedia já estão feitos, e refazê-los é trabalho jogado fora.**
 

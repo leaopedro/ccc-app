@@ -20,8 +20,10 @@ import type {
   PremiumPlan,
   PremiumPlanDetailResponse,
 } from '@ccc/shared/premium-catalog';
+import type { PaymentSheetOutcome } from '~/payments/payment-sheet';
 import type { CheckoutOutcome } from '~/screens/assinaturas/checkout';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { paymentsCopy } from '~/copy/payments';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -30,6 +32,7 @@ declare global {
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
 const startPremiumCheckout = vi.fn<(input: unknown) => Promise<CheckoutOutcome>>();
 const pollSubscriptionActive = vi.fn<() => Promise<boolean>>();
+const pay = vi.fn<(clientSecret: string) => Promise<PaymentSheetOutcome>>();
 const showToast = vi.fn();
 const routerReplace = vi.fn();
 const routerBack = vi.fn();
@@ -38,6 +41,14 @@ const routerBack = vi.fn();
 // checkout.test.ts (Platform.OS is read at render/call time, not at import
 // time, so mutating this object before `renderScreen()` is enough).
 const platform = { OS: 'android' as string };
+
+// Final review C2 — the caixa paywall copy must not promise a box the build
+// can't assemble. Mutable so a single test can flip it off, same technique
+// as `platform` above (read at render time, not import time).
+const caixaFlag = { enabled: true };
+vi.mock('~/screens/caixa/caixa-enabled', () => ({
+  isCaixaBuildEnabled: () => caixaFlag.enabled,
+}));
 
 const hookState = vi.hoisted(() => ({
   modules: {
@@ -58,6 +69,10 @@ vi.mock('~/hooks/usePremiumAddonModules', () => ({
 
 vi.mock('~/screens/assinaturas/checkout', () => ({
   startPremiumCheckout: (input: unknown) => startPremiumCheckout(input),
+}));
+
+vi.mock('~/payments/payment-sheet', () => ({
+  usePaymentSheet: () => ({ pay: (clientSecret: string) => pay(clientSecret) }),
 }));
 
 vi.mock('~/screens/assinaturas/poll-subscription', () => ({
@@ -134,7 +149,7 @@ vi.mock('expo-linear-gradient', async () => {
 vi.mock('lucide-react-native', async () => {
   const ReactMod = await import('react');
   const icon = () => ReactMod.createElement('span');
-  return { ArrowLeft: icon };
+  return { ArrowLeft: icon, Check: icon };
 });
 
 const PLAN: PremiumPlan = {
@@ -171,12 +186,14 @@ describe('ContratarScreen', () => {
     root = createRoot(container);
 
     platform.OS = 'android';
+    caixaFlag.enabled = true;
     getPremiumPlan.mockReset();
     // Flattened, not nested under `plan` (final review, Important 2) — the
     // real route now returns the plan fields at the top level.
     getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: true });
     startPremiumCheckout.mockReset();
     pollSubscriptionActive.mockReset();
+    pay.mockReset();
     showToast.mockReset();
     routerReplace.mockClear();
     routerBack.mockClear();
@@ -365,16 +382,185 @@ describe('ContratarScreen', () => {
     expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
   });
 
-  // 6. On iOS the CTA never mounts and startPremiumCheckout is never
-  // reachable. Fails if `Platform.OS === 'ios'` is typo'd or inverted —
-  // Stripe would become reachable from an iOS build.
-  it('never renders the CTA and never calls startPremiumCheckout on iOS', async () => {
+  // 6. iOS now subscribes natively like every other platform: the CTA
+  // mounts and tapping it reaches startPremiumCheckout. Fails if the iOS
+  // web-contract notice (pre-2026-08-29) comes back and hides the CTA again.
+  // That notice was in-app steering to an external purchase method on the
+  // Brazil storefront, which the App Store 3.1.3 chapeau forbids outright —
+  // so its strings must not render either.
+  it('renders the CTA on iOS like every other platform', async () => {
     platform.OS = 'ios';
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_x' });
+    pay.mockResolvedValue({ kind: 'paid' });
+    pollSubscriptionActive.mockResolvedValue(true);
+    await renderScreen();
+
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered on iOS');
+    expect(text()).not.toContain('pelo site');
+    expect(text()).not.toContain('No iPhone');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(startPremiumCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  // 7. A `sheet` outcome drives the PaymentSheet via `pay`. When it resolves
+  // 'paid', the screen polls before navigating — same rule as the hosted
+  // 'returned' path — instead of granting entitlement off the sheet result
+  // alone.
+  it('drives the PaymentSheet on a sheet outcome and polls before navigating on paid', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'paid' });
+    pollSubscriptionActive.mockResolvedValue(true);
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(pay).toHaveBeenCalledWith('pi_sub_secret');
+    expect(pollSubscriptionActive).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.successToast);
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+  });
+
+  // 8. Cancel is not an error: a closed sheet shows the neutral copy via
+  // showToast, never the red inline error banner. Fails if 'cancelled' is
+  // routed through setCheckoutError.
+  //
+  // Final review I4: the toast must be the subscription-worded string. The
+  // cart's `paymentsCopy.sheet.cancelled` says "Seu pedido continua aguardando
+  // pagamento", and this flow creates no *pedido* at all.
+  it('shows a neutral, subscription-worded toast when the sheet is cancelled', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'cancelled' });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.cancelledToast);
+    expect(showToast).not.toHaveBeenCalledWith(paymentsCopy.sheet.cancelled);
+    expect(assinaturasCopy.contratar.cancelledToast.toLowerCase()).not.toContain('pedido');
+    expect(text()).not.toContain(assinaturasCopy.contratar.cancelledToast);
+    expect(pollSubscriptionActive).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  // 9. A failed sheet IS an error: shown inline, unlike cancelled.
+  it('shows the inline error message when the sheet fails', async () => {
+    startPremiumCheckout.mockResolvedValue({ kind: 'sheet', clientSecret: 'pi_sub_secret' });
+    pay.mockResolvedValue({ kind: 'failed', code: 'card_declined' });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="contratar-cta"]') as HTMLElement;
+    if (!cta) throw new Error('CTA not rendered');
+
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+
+    expect(text()).toContain(paymentsCopy.sheet.failed);
+    expect(pollSubscriptionActive).not.toHaveBeenCalled();
+  });
+
+  // 10. The last screen before payment must show what the money buys.
+  // Decision 6: the physical box has to be visible BEFORE the purchase, and
+  // the box lives in these DB-backed benefit labels, not in any copy file.
+  it('renders the plan benefits, in sortOrder', async () => {
+    getPremiumPlan.mockResolvedValue({
+      ...PLAN,
+      benefits: [
+        { label: 'Caixa física trimestral na sua casa', sortOrder: 2 },
+        { label: 'Acesso ao clube 24 horas', sortOrder: 1 },
+      ],
+      subscriptionsEnabled: true,
+    });
+    await renderScreen();
+
+    const body = text();
+    expect(body).toContain('Acesso ao clube 24 horas');
+    expect(body).toContain('Caixa física trimestral na sua casa');
+    expect(body.indexOf('Acesso ao clube 24 horas')).toBeLessThan(
+      body.indexOf('Caixa física trimestral na sua casa'),
+    );
+  });
+
+  // 10b. `PLAN` ships `benefits: []` — today's real production data. Nothing
+  // benefit-related may render: no heading, no empty box.
+  it('renders nothing benefit-related when the plan has no benefits', async () => {
+    await renderScreen();
+    expect(text()).not.toContain(assinaturasCopy.detail.benefitsTitle);
+  });
+
+  // 11. Decision 6: the physical box has to be visible BEFORE the purchase,
+  // framed as a physical good delivered to an address. Guideline 3.1.3(e)
+  // turns on the word "physical", and a reviewer only sees what the paywall
+  // renders. Only true, though, when the build can actually assemble the
+  // box — see the next test.
+  it('states the physical box and its delivery cadence before purchase, when the caixa build flag is on', async () => {
+    caixaFlag.enabled = true;
+    await renderScreen();
+    const body = text();
+    expect(body).toContain(assinaturasCopy.caixa.title);
+    expect(body).toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  // Final review C2 — EXPO_PUBLIC_CAIXA_ENABLED is absent from both the
+  // preview and production eas.json profiles, so a shipped binary cannot
+  // assemble the box at all. Promising it anyway (the box copy rendering
+  // unconditionally) is exactly the 2.3.1 exposure this branch exists to
+  // close: no title, no body, no stray empty container either.
+  it('renders no caixa copy at all when the caixa build flag is off', async () => {
+    caixaFlag.enabled = false;
+    await renderScreen();
+    const body = text();
+    expect(body).not.toContain(assinaturasCopy.caixa.title);
+    expect(body).not.toContain(assinaturasCopy.caixa.body);
+    expect(body).not.toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  // Final review I2 — with the platform gate closed the CTA used to be simply
+  // omitted, leaving the tier, the price, working add-on toggles and a live
+  // total with no way to buy and nothing said about why. That reads as a
+  // broken screen (2.1). Explain it instead, while still rendering no
+  // purchase-shaped affordance.
+  it('explains why buying is unavailable when the platform gate is closed', async () => {
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: false });
     await renderScreen();
 
     expect(container.querySelector('[data-testid="contratar-cta"]')).toBeNull();
-    expect(text()).toContain(assinaturasCopy.contratar.iosTitle);
+    expect(text()).toContain(assinaturasCopy.minhaAssinatura.unavailableTitle);
+    expect(text()).toContain(assinaturasCopy.minhaAssinatura.unavailableSubcopy);
+  });
 
+  // The explanation must not become a second way to buy: no CTA label, and
+  // the gate still blocks the checkout seam entirely.
+  it('offers no purchase affordance while the platform gate is closed', async () => {
+    getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: false });
+    await renderScreen();
+
+    expect(text()).not.toContain(assinaturasCopy.contratar.cta);
     expect(startPremiumCheckout).not.toHaveBeenCalled();
+  });
+
+  // The gate is off by default until the fetch resolves, so the counterpart
+  // has to be pinned too: an open gate still renders the CTA and no notice.
+  it('renders the CTA and no unavailable notice when the gate is open', async () => {
+    await renderScreen();
+
+    expect(container.querySelector('[data-testid="contratar-cta"]')).not.toBeNull();
+    expect(text()).not.toContain(assinaturasCopy.minhaAssinatura.unavailableTitle);
   });
 });

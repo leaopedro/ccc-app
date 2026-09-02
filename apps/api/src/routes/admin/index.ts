@@ -22,6 +22,7 @@ import { adminBoxPartnersRoutes } from './box-partners-admin.js';
 import { adminBoxSettingsRoutes } from './box-settings-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
 import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
+import { adminRefundRoutes } from './refunds.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
 import { adminStoreOrderRoutes } from './store/orders.js';
 import { adminStorePhotoRoutes } from './store/photos.js';
@@ -29,7 +30,7 @@ import { adminStoreProductRoutes } from './store/products.js';
 import { adminStoreVariantRoutes } from './store/variants.js';
 import { adminStoreProductTypeRoutes } from './store-product-types.js';
 import { adminStoreSettingsRoutes } from './store-settings.js';
-import { adminSubscriptionRoutes } from './subscriptions.js';
+import { adminSubscriptionGrantRoutes, adminSubscriptionRoutes } from './subscriptions.js';
 import { adminSupportRoutes } from './support.js';
 import { adminTicketRoutes } from './tickets.js';
 import { adminTierRoutes } from './tiers.js';
@@ -190,5 +191,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminGarageXpAdjustmentRoutes);
+  });
+
+  // Refunds: admin-only, moves real money at the provider. Isolated 30/min
+  // bucket, same shape as admin-xp-adj/admin-user-mut above, so a burst here
+  // cannot starve or be starved by unrelated admin mutations.
+  // hook: 'preHandler' so the rate-limit keyGenerator runs AFTER auth
+  // populates `request.user` — without it the plugin runs on the earlier
+  // `onRequest` hook and falls through to an IP-shared bucket.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-refund:${auth.sub}` : `admin-refund-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminRefundRoutes);
+  });
+
+  // Membership grant: admin-only, isolated 30/min bucket. Same shape and same
+  // reasoning as the refund block above.
+  //
+  // Fix round 2, IMPORTANT. This route used to ride inside
+  // `adminSubscriptionRoutes` in the organizer/admin block, which made
+  // POST /admin/subscriptions/grant reachable by any organizer. It writes paid
+  // entitlement straight into the database with no provider in the loop —
+  // PremiumMembership, its invoice, the Garage.premiumTier/premiumUntil
+  // snapshot, an XP award and a ticket backfill. That is the most powerful
+  // write in the admin surface, and it was less protected than the strictly
+  // weaker refund route right above. The rest of adminSubscriptionRoutes
+  // (reads plus mutations that go through Stripe and never write status)
+  // stays organizer/admin.
+  // hook: 'preHandler' so the rate-limit keyGenerator runs AFTER auth
+  // populates `request.user` — without it the plugin runs on the earlier
+  // `onRequest` hook and falls through to an IP-shared bucket.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub ? `admin-sub-grant:${auth.sub}` : `admin-sub-grant-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminSubscriptionGrantRoutes);
   });
 };

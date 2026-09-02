@@ -161,3 +161,43 @@ export const adminSubscriptionAddonMutationResponseSchema = z.object({
 export type AdminSubscriptionAddonMutationResponse = z.infer<
   typeof adminSubscriptionAddonMutationResponseSchema
 >;
+
+/**
+ * Manual membership recovery. The "paid and got nothing" path (Runbook 5).
+ *
+ * Every amount is typed in by the operator from the real provider invoice.
+ * Nothing is derived from env: the invoice line is the source of truth
+ * forever, and a wrong devFeePercent here is permanent.
+ */
+export const adminSubscriptionGrantSchema = z
+  .object({
+    garageId: z.string().min(1),
+    tier: tierSchema,
+    cadence: cadenceSchema,
+    providerCustomerRef: z.string().min(1).max(200),
+    providerSubRef: z.string().min(1).max(200),
+    providerInvoiceRef: z.string().min(1).max(120),
+    baseAmountCents: z.number().int().positive(),
+    devFeePercent: z.number().int().min(0).max(100),
+    currentPeriodStart: z.string().datetime(),
+    currentPeriodEnd: z.string().datetime(),
+    /**
+     * Required, not defaulted. applyMembershipEvent never sets this column,
+     * so it would otherwise silently land on the schema default (`true`)
+     * even for a grant transcribed from a test-mode Stripe invoice. Only
+     * the operator reading the real invoice knows which it was.
+     */
+    livemode: z.boolean(),
+    /** Free text, stored in the audit row. Required: a grant without a reason is unreviewable. */
+    reason: z.string().min(10).max(500),
+  })
+  .refine((v) => new Date(v.currentPeriodEnd) > new Date(v.currentPeriodStart), {
+    message: 'currentPeriodEnd must be after currentPeriodStart',
+    path: ['currentPeriodEnd'],
+  });
+export type AdminSubscriptionGrant = z.infer<typeof adminSubscriptionGrantSchema>;
+
+export const adminSubscriptionGrantResponseSchema = z.object({
+  membershipId: z.string().min(1),
+});
+export type AdminSubscriptionGrantResponse = z.infer<typeof adminSubscriptionGrantResponseSchema>;

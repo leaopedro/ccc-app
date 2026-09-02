@@ -10,6 +10,8 @@ import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacateWebhookEvent } from '../services/abacatepay/index.js';
 import { releaseAllReservationsForOrders } from '../services/orders/expire.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
+import { flagManualRefund } from '../services/orders/manual-refund-flag.js';
+import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
 import { settlePaidOrder } from '../services/orders/settle.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
@@ -143,42 +145,30 @@ const extractEventTimestamp = (data: Record<string, unknown>): Date | undefined 
 // stale-replay attacks where a captured signed payload is delivered weeks later.
 const REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-const flagManualRefund = (context: {
-  orderId?: string | null;
-  cartId?: string | null;
-  orderIds?: string[] | null;
-  providerRef: string;
-  userId: string;
-  eventId: string | null;
-  reason: string;
-}) => {
-  Sentry.withScope((scope) => {
-    scope.setTag('kind', 'pix-manual-refund-needed');
-    scope.setTag('provider', 'abacatepay');
-    scope.setTag('reason', context.reason);
-    scope.setExtras({
-      orderId: context.orderId ?? null,
-      cartId: context.cartId ?? null,
-      orderIds: context.orderIds ?? null,
-      providerRef: context.providerRef,
-      userId: context.userId,
-      eventId: context.eventId,
-    });
-    Sentry.captureMessage(`abacatepay: manual refund needed (${context.reason})`, 'error');
-  });
-};
+/**
+ * What `Order.livemode` means for Pix (fix round 2, IMPORTANT — decided here
+ * rather than left to default silently).
+ *
+ * AbacatePay exposes exactly one mode signal to this integration:
+ * `AbacateWebhookEvent.devMode`. There is no `livemode` field on the charge,
+ * and GET /transparents/:id (AbacatePayClient.getPixBilling) returns only
+ * id/status/updatedAt. So: livemode := NOT devMode, read off the webhook
+ * event that settles the order.
+ *
+ * The one gap, stated rather than hidden: workers/pix-reconcile.ts recovers a
+ * Pix whose webhook never arrived, and it has no devMode signal to read. Such
+ * a row keeps the column default (`true`). That gap cannot open in production
+ * anyway — a devMode event is REJECTED outright in production unless
+ * ABACATEPAY_DEV_WEBHOOK_ENABLED is on (see the M-9 branch below), so a
+ * production devMode Pix never settles through either path to begin with.
+ */
+const livemodeFromEvent = (event: AbacateWebhookEvent): boolean => !event.devMode;
 
 const constantTimeEquals = (a: string, b: string): boolean => {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
-};
-
-const cartSettlementPriority = (kind: 'ticket' | 'extras_only' | 'product' | 'mixed' | 'box') => {
-  if (kind === 'ticket') return 0;
-  if (kind === 'extras_only') return 1;
-  return 2;
 };
 
 export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
@@ -386,8 +376,6 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(200).send({ ok: true, ignored: true });
         }
 
-        cartOrders.sort((a, b) => cartSettlementPriority(a.kind) - cartSettlementPriority(b.kind));
-
         // JDMA-306: partial-mismatch reconciliation. metadata.orderIds records
         // every order the checkout intended to bill. If we found fewer pending
         // rows than metadata advertised, some were rolled back/deleted between
@@ -409,61 +397,18 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
           }
         }
 
-        let issuedAnyTicket = false;
-        for (const order of cartOrders) {
-          try {
-            const settled = await settlePaidOrder(order.id, billingId, app.env, {
-              cartId: metadataCartId,
-            });
-            if (
-              settled.kind === 'ticket' ||
-              settled.kind === 'extras_only' ||
-              (settled.kind === 'mixed' && (settled.issued?.length ?? 0) > 0)
-            ) {
-              issuedAnyTicket = true;
-            }
-          } catch (err) {
-            if (err instanceof TicketAlreadyExistsForEventError) {
-              flagManualRefund({
-                orderId: order.id,
-                providerRef: billingId,
-                userId: order.userId,
-                eventId: order.eventId,
-                reason: 'duplicate-ticket',
-              });
-              continue;
-            }
-            if (err instanceof TicketRevokedForExtrasOnlyError) {
-              flagManualRefund({
-                orderId: order.id,
-                providerRef: billingId,
-                userId: order.userId,
-                eventId: order.eventId,
-                reason: 'ticket-revoked',
-              });
-              continue;
-            }
-            if (err instanceof OrderNotPendingError) {
-              continue;
-            }
-            if (err instanceof EventPickupAssignmentUnavailableError) {
-              flagManualRefund({
-                orderId: order.id,
-                providerRef: billingId,
-                userId: order.userId,
-                eventId: order.eventId,
-                reason: 'pickup-ticket-unavailable',
-              });
-              continue;
-            }
-            throw err;
-          }
-        }
-
-        await prisma.cart.update({
-          where: { id: metadataCartId },
-          data: { status: 'converted' },
+        // Settle + convert through the shared path (services/orders/settle-cart.ts).
+        // workers/pix-reconcile.ts calls the exact same function, which is the
+        // point: it used to call settlePaidOrder directly and skip the
+        // Cart.status write below, stranding the customer's cart at
+        // `checking_out` forever after a recovered payment.
+        const settlement = await settleAbacatePayCart({
+          cartId: metadataCartId,
+          providerRef: billingId,
+          env: app.env,
+          livemode: livemodeFromEvent(event),
         });
+        const issuedAnyTicket = settlement.issuedAnyTicket;
 
         const firstTime = await markProcessed(event.id, event);
         request.log.info(
@@ -493,7 +438,7 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
         }
 
         try {
-          const userId = issuedAnyTicket ? cartOrders[0]?.userId : undefined;
+          const userId = issuedAnyTicket ? (settlement.userId ?? undefined) : undefined;
           if (userId) {
             await sendTransactionalPush(
               {
@@ -545,7 +490,13 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
       }
 
       try {
-        const settled = await settlePaidOrder(order.id, billingId, app.env);
+        const settled = await settlePaidOrder(
+          order.id,
+          billingId,
+          app.env,
+          undefined,
+          livemodeFromEvent(event),
+        );
         const firstTime = await markProcessed(event.id, event);
         request.log.info(
           { orderId: order.id, billingId, firstTime },

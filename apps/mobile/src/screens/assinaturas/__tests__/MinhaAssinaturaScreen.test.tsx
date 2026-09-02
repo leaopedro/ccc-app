@@ -427,7 +427,11 @@ describe('MinhaAssinaturaScreen', () => {
   it('renders an informative state when billing is unavailable (503/flag off)', async () => {
     hookState.value = result({ billingUnavailable: true });
     await renderScreen();
-    expect(text()).toContain('Assinaturas em breve.');
+    // "Em breve" describes a feature that does not exist. What actually
+    // happened is a temporary outage, and the copy has to say that instead
+    // of promising a launch.
+    expect(text()).not.toContain('em breve');
+    expect(text()).toContain(copy.unavailableTitle);
   });
 
   // 1. Benefits render when the subscription carries them. Fails if the

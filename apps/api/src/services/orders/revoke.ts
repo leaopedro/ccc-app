@@ -53,12 +53,31 @@ type ExtrasScope = { eventId: string; extraId: string; quantity: number };
  * `OrderItem` at all; those orders are single-event, so `Order.eventId` is the
  * event and the fallback is sound there and only there.
  *
- * The fallback is gated on the order having NO `OrderItem` rows, not on the
- * item scan coming back empty. Cart checkout writes BOTH `OrderItem` and
+ * The fallback is gated on the ticket/extras scan coming back empty, not on
+ * the scan producing zero SCOPES. Cart checkout writes BOTH `OrderItem` and
  * `OrderExtra` (services/cart/checkout.ts), so a mixed order whose every
- * extras line is paired with a ticket line legitimately yields zero scopes —
- * falling through to `OrderExtra` there would put the paired events straight
- * back in, which is the case the exclusion above exists to remove.
+ * extras line is paired with a ticket line legitimately yields zero scopes;
+ * gating on the scope count would fall through to `OrderExtra` and put the
+ * paired events straight back in, which is what the exclusion above exists to
+ * remove. That is the only guarantee this gate itself provides: it does NOT
+ * mean "the order has no OrderItem rows". A product-only `mixed` order has
+ * only `kind='product'` rows, so the scan is empty and it DOES reach the
+ * fallback — what stops it there is `!orderEventId`, plus the fact that
+ * `checkout.ts` pins `Order.eventId` only for single-line carts, so every
+ * `mixed` order already carries `eventId: null`. Two independent things hold
+ * this line; the gate is defence in depth, not the whole of it.
+ *
+ * Scopes are aggregated by `(eventId, extraId)` before returning. Nothing
+ * dedupes cart lines — `routes/cart.ts` always `create`s a new `CartItem`, and
+ * the pending-order guard is skipped for extras — so one cart can produce two
+ * `OrderItem(extras, B, X)` rows. Issuance collapses those to ONE
+ * `TicketExtraItem` (`seenExtrasOnlyEvents`, plus `upsert` with `update: {}`),
+ * so two un-aggregated scopes would resolve to the SAME row id twice: the
+ * revoke's `updateMany` destroys 1 while `ids.length` tells the operator 2.
+ * Summing the quantities is what the `take` cap needs anyway. After
+ * aggregation an item can match at most one scope, since it has exactly one
+ * `extraId` and its ticket exactly one `eventId`, so the returned ids are
+ * unique without a second pass.
  */
 const extrasScopesForOrder = async (
   db: Db,
@@ -74,11 +93,23 @@ const extrasScopesForOrder = async (
     const ticketEventIds = new Set(
       items.flatMap((it) => (it.kind === 'ticket' && it.eventId ? [it.eventId] : [])),
     );
-    return items.flatMap((it) =>
-      it.kind === 'extras' && it.extraId && it.eventId && !ticketEventIds.has(it.eventId)
-        ? [{ eventId: it.eventId, extraId: it.extraId, quantity: it.quantity }]
-        : [],
-    );
+    const byEventAndExtra = new Map<string, ExtrasScope>();
+    for (const it of items) {
+      if (it.kind !== 'extras' || !it.extraId || !it.eventId) continue;
+      if (ticketEventIds.has(it.eventId)) continue;
+      const key = `${it.eventId}:${it.extraId}`;
+      const seen = byEventAndExtra.get(key);
+      if (seen) {
+        seen.quantity += it.quantity;
+      } else {
+        byEventAndExtra.set(key, {
+          eventId: it.eventId,
+          extraId: it.extraId,
+          quantity: it.quantity,
+        });
+      }
+    }
+    return [...byEventAndExtra.values()];
   }
 
   if (!orderEventId) return [];

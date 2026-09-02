@@ -652,6 +652,78 @@ describe('GET /admin/orders/:id', () => {
       ).toBe('valid');
     });
 
+    /**
+     * Duas linhas de carrinho para o MESMO extra do mesmo evento. Nada
+     * deduplica: `routes/cart.ts` sempre cria um CartItem novo e o guard de
+     * pedido pendente e pulado para extras, entao o pedido sai com dois
+     * OrderItem(extras, B, X). A emissao colapsa os dois num unico
+     * TicketExtraItem (seenExtrasOnlyEvents + upsert com `update: {}`).
+     *
+     * Sem agregar por (eventId, extraId) os dois escopos resolviam para o
+     * MESMO id duas vezes: o updateMany destruia 1 e a faixa prometia 2.
+     */
+    it('nao conta duas vezes quando o carrinho repete o mesmo extra', async () => {
+      const extra = await prisma.ticketExtra.create({
+        data: { eventId, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },
+      });
+      const alice = await seedAttendeeWithExtra('dupe-alice@jdm.test', extra.id);
+      const bob = await seedAttendeeWithExtra('dupe-bob@jdm.test', extra.id);
+
+      // Formato que o checkout de carrinho produz para duas linhas de extras:
+      // kind `mixed` (preparedItems.length > 1) e eventId nulo no Order.
+      const order = await prisma.order.create({
+        data: {
+          userId: alice.user.id,
+          kind: 'mixed',
+          amountCents: 12_000,
+          quantity: 2,
+          currency: 'BRL',
+          method: 'card',
+          provider: 'stripe',
+          providerRef: 'pi_dupe_extras',
+          status: 'paid',
+          paidAt: new Date(),
+          items: {
+            create: [
+              {
+                kind: 'extras',
+                extraId: extra.id,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 6000,
+                subtotalCents: 6000,
+              },
+              {
+                kind: 'extras',
+                extraId: extra.id,
+                eventId,
+                quantity: 1,
+                unitPriceCents: 6000,
+                subtotalCents: 6000,
+              },
+            ],
+          },
+        },
+      });
+
+      const body = adminOrderDetailSchema.parse((await getDetail(order.id)).json());
+      // Uma linha existe de verdade, entao o operador tem de ler 1, nao 2.
+      expect(body.refundImpact.ownExtraItemCount).toBe(1);
+
+      await refund('evt_od_dupe', 'pi_dupe_extras', 12_000);
+
+      expect(
+        (await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: alice.item.id } })).status,
+      ).toBe('revoked');
+      expect(
+        (await prisma.ticketExtraItem.findUniqueOrThrow({ where: { id: bob.item.id } })).status,
+      ).toBe('valid');
+
+      // O numero prometido bate com o que o webhook realmente destruiu.
+      const revoked = await prisma.ticketExtraItem.count({ where: { status: 'revoked' } });
+      expect(revoked).toBe(body.refundImpact.ownExtraItemCount);
+    });
+
     it('counts the extra items it will revoke in refundImpact', async () => {
       const extra = await prisma.ticketExtra.create({
         data: { eventId, name: 'Camiseta oficial', priceCents: 6000, quantityTotal: 50 },

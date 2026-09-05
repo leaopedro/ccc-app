@@ -36,6 +36,35 @@ const bundleId: Record<Variant, string> = {
 // local broadcast push smoke (JDMA-534).
 const easProjectId = process.env.EAS_PROJECT_ID || 'bd5bfc09-9874-47f5-9ded-5dcf3bd8c3c3';
 
+const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+
+// A production build carrying a Stripe TEST key is the quiet failure we can
+// actually prevent here, so fail the build instead of shipping it.
+//
+// Today this is the NORMAL state: the production API runs on the Casa Car Club
+// sandbox account (`sk_test_51U4ESa…`), so the only publishable key that lets
+// the native PaymentSheet work is that account's test key. That is correct for
+// TestFlight and for App Review, and it is wrong the moment the app is on sale:
+// members would complete a purchase and never be charged.
+//
+// Both Casa Car Club accounts still have `charges_enabled: false`, so no build
+// can take real money yet regardless. Going live means moving the WHOLE stack
+// to the CNPJ account together — API secret key, both webhook secrets, and this
+// publishable key — not just this line.
+//
+// Set ALLOW_TEST_STRIPE_KEY=1 for a TestFlight or review build.
+if (
+  variant === 'production' &&
+  stripePublishableKey.startsWith('pk_test_') &&
+  !process.env.ALLOW_TEST_STRIPE_KEY
+) {
+  throw new Error(
+    'Build de producao com chave Stripe de TEST (pk_test_). ' +
+      'Para TestFlight ou App Review: ALLOW_TEST_STRIPE_KEY=1. ' +
+      'Para venda ao publico: migrar a stack inteira para a conta do CNPJ antes.',
+  );
+}
+
 const stripeMerchantIdentifier = variant === 'production' ? brand.app.stripeMerchantId : undefined;
 const sentryOrg = process.env.SENTRY_ORG;
 const sentryProjectMobile = process.env.SENTRY_PROJECT_MOBILE;
@@ -225,7 +254,7 @@ const config: ExpoConfig = {
     apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:4000',
     r2PublicBaseUrl: process.env.EXPO_PUBLIC_R2_PUBLIC_BASE_URL || '',
     sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+    stripePublishableKey,
     stripeMerchantIdentifier,
     // RevenueCat iOS API key — populated at build time via .env.local or EAS secret.
     // Only consumed on iOS; Android bundle never reads this value.

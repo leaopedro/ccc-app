@@ -197,9 +197,20 @@ Não confundir com a 3.1.5(a): aquela numeração hoje é Criptomoedas.
 
 **Antes de submeter TestFlight ou App Store:**
 
-1. `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` definida no perfil `production` do
-   `eas.json`. Sem ela o PaymentSheet nativo não monta e a assinatura cai no
-   checkout hospedado.
+1. `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` está definida nos perfis `preview` e
+   `production` desde 2026-09-04, com a chave da conta **sandbox** da Casa Car
+   Club (`pk_test_51U4ESa…`). Ela tem que casar com a conta cujo secret a API
+   usa: o Railway de produção roda em `sk_test_51U4ESa…`. Chave de outra conta
+   faz o client secret não abrir no app.
+   **É chave de TEST, e isso é proposital hoje.** Serve para TestFlight e para a
+   análise da Apple. Não serve para venda ao público: o membro concluiria a
+   compra sem ser cobrado. Por isso `app.config.ts` derruba o build de
+   `production` que carregue `pk_test_`, a menos que `ALLOW_TEST_STRIPE_KEY=1`
+   esteja setada. Use a variável para TestFlight e review.
+   Ir a live não é trocar esta linha: é mover a stack inteira para a conta do
+   CNPJ junto, secret da API, os dois webhook secrets e esta publicável. As duas
+   contas ainda estão com `charges_enabled: false`, então nenhum build cobra de
+   verdade hoje.
 2. `EXPO_PUBLIC_PREMIUM_BILLING_ENABLED` `true` (já está nos três perfis).
 3. `EXPO_PUBLIC_CAIXA_ENABLED` `true` (já está nos três perfis). Se for
    desligado, reler a seção das diretrizes acima antes de submeter: a

@@ -280,7 +280,11 @@ do Spec A.
       mandava o oposto do que o app faz, citava a regra de lint
       `no-stripe-on-ios` que já não existe, e dizia que o iOS assinava por
       StoreKit via RevenueCat.
-- [ ] **DEV** `merchantIdentifier` nos variants `.dev` e `.preview`.
+- [x] **DEV** `merchantIdentifier` nos variants `.dev` e `.preview`.
+      Feito em 2026-09-05. Os App IDs não existiam: a virada de marca deixou
+      `.dev` e `.preview` para trás em `com.jdmexperience.app.*`. Criados como
+      Explicit App ID com Apple Pay e `merchant.com.casacarclub.app`, e o
+      `app.config.ts` aplica o merchantIdentifier nos três variants.
       Bloqueado fora do código: `app.config.ts` só aplica no `production` de
       propósito, porque o merchant id precisa estar habilitado no App ID
       correspondente no portal da Apple. Sem isso não dá para testar Apple Pay

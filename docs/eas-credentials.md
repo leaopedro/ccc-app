@@ -215,11 +215,20 @@ Não confundir com a 3.1.5(a): aquela numeração hoje é Criptomoedas.
 3. `EXPO_PUBLIC_CAIXA_ENABLED` `true` (já está nos três perfis). Se for
    desligado, reler a seção das diretrizes acima antes de submeter: a
    assinatura vira produto digital e a análise muda.
-4. Apple Pay testado em aparelho real. O `merchantIdentifier` só é aplicado no
-   variant `production` (`app.config.ts`), porque o merchant id precisa estar
-   habilitado no App ID correspondente no portal da Apple. Enquanto não
-   estiver nos App IDs `.dev` e `.preview`, não dá para testar Apple Pay num
-   build de preview.
+4. Apple Pay testado em aparelho real. **Agora dá para testar num build de
+   preview.** Em 2026-09-05 os App IDs `com.casacarclub.app.dev` e
+   `com.casacarclub.app.preview` foram criados como Explicit App ID com Push
+   Notifications e Apple Pay Payment Processing, cada um com
+   `merchant.com.casacarclub.app` selecionado, e o `app.config.ts` passou a
+   aplicar o `merchantIdentifier` nos três variants.
+   Antes disso os dois App IDs simplesmente não existiam: a virada de JDM
+   Experience para Casa Car Club criou só o de produção e o merchant id, e
+   deixou os de variante para trás em `com.jdmexperience.app.*`.
+   **Ter a capability marcada não basta:** o merchant id precisa estar
+   selecionado dentro dela. App ID recém-registrado mostra "Enabled Merchant
+   IDs (0)" e gera entitlement que o SDK da Stripe não usa. O portal também não
+   deixa escolher o merchant durante o registro, só depois de reabrir o
+   identifier.
 
 `EXPO_PUBLIC_RC_IOS_API_KEY` não é mais necessária. A RevenueCat está dormente,
 com a condição exata de reativação registrada em `docs/revenuecat.md` e em

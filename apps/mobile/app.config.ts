@@ -65,7 +65,27 @@ if (
   );
 }
 
-const stripeMerchantIdentifier = variant === 'production' ? brand.app.stripeMerchantId : undefined;
+// Apple Pay on every variant, as of 2026-09-05.
+//
+// This was `variant === 'production' ? … : undefined` because the `.dev` and
+// `.preview` App IDs did not exist in the Apple portal at all: the rebrand from
+// JDM Experience created `com.casacarclub.app` and the merchant id, and left the
+// two variant identifiers behind under `com.jdmexperience.app.*`. Declaring a
+// merchant id against an App ID that does not have Apple Pay enabled produces
+// entitlements that fail signing, so production-only was the correct guard while
+// that was true.
+//
+// It is no longer true. `com.casacarclub.app.dev` and `com.casacarclub.app.preview`
+// were registered as Explicit App IDs with Push Notifications and Apple Pay
+// Payment Processing, each with `merchant.com.casacarclub.app` selected and the
+// old `merchant.com.jdmexperience.app` deliberately not selected. Verified by
+// reopening both after save, not assumed from the save dialog.
+//
+// So Apple Pay can now be exercised on a preview build, which is what the manual
+// device test needs. Note the merchant id must be SELECTED on the App ID, not
+// merely have the capability ticked: a freshly registered App ID reads
+// "Enabled Merchant IDs (0)" and produces entitlements the Stripe SDK cannot use.
+const stripeMerchantIdentifier = brand.app.stripeMerchantId;
 const sentryOrg = process.env.SENTRY_ORG;
 const sentryProjectMobile = process.env.SENTRY_PROJECT_MOBILE;
 

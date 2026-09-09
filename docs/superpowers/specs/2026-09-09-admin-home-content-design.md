@@ -130,7 +130,7 @@ adminHomeContentSchema
   institutionalImageObjectKey, institutionalImageUrl,
   updatedAt
 
-homeContentUpdateSchema        // todos opcionais
+homeContentUpdateSchema        // campos de conteúdo opcionais, precondição obrigatória
   heroTitle?           string.trim() 1..70
   heroSubtitle?        optionalText(200)
   heroBannerObjectKey? optionalText(300)

@@ -281,4 +281,100 @@ describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
     const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id));
     expect(codes).toContain('CCC-002');
   });
+
+  it('guest tickets — two check-ins on the same event still yields EVT-002', async () => {
+    const { user } = await createUser({ email: 'guest-streak@jdm.test', verified: true });
+
+    const e1 = await makeEvent('guest-e1', new Date('2026-04-01T10:00:00Z'));
+    const e2 = await makeEvent('guest-e2', new Date('2026-04-15T10:00:00Z'));
+    const e3 = await makeEvent('guest-e3', new Date('2026-05-01T10:00:00Z'));
+    const t1 = await makeTier(e1.id, 'GA');
+    const t2 = await makeTier(e2.id, 'GA');
+    const t3 = await makeTier(e3.id, 'GA');
+
+    await makeUsedTicket(user.id, e1.id, t1.id, new Date('2026-04-01T11:00:00Z'));
+    await makeUsedTicket(user.id, e2.id, t2.id, new Date('2026-04-15T11:00:00Z'));
+    // The member brought a guest to e3 and checked BOTH tickets in. Three
+    // events attended, four used tickets — the badge is still owed.
+    await makeUsedTicket(user.id, e3.id, t3.id, new Date('2026-05-01T11:00:00Z'));
+    const trigger = await makeUsedTicket(user.id, e3.id, t3.id, new Date('2026-05-01T11:00:30Z'));
+
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id));
+    expect(codes).toContain('EVT-002');
+  });
+
+  it('no streak — five used tickets spanning only two events', async () => {
+    const { user } = await createUser({ email: 'twoevents@jdm.test', verified: true });
+
+    const e1 = await makeEvent('two-e1', new Date('2026-04-01T10:00:00Z'));
+    const e2 = await makeEvent('two-e2', new Date('2026-04-15T10:00:00Z'));
+    const t1 = await makeTier(e1.id, 'GA');
+    const t2 = await makeTier(e2.id, 'GA');
+
+    await makeUsedTicket(user.id, e1.id, t1.id, new Date('2026-04-01T11:00:00Z'));
+    await makeUsedTicket(user.id, e1.id, t1.id, new Date('2026-04-01T11:05:00Z'));
+    await makeUsedTicket(user.id, e2.id, t2.id, new Date('2026-04-15T11:00:00Z'));
+    await makeUsedTicket(user.id, e2.id, t2.id, new Date('2026-04-15T11:05:00Z'));
+    const trigger = await makeUsedTicket(user.id, e2.id, t2.id, new Date('2026-04-15T11:10:00Z'));
+
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id));
+    expect(codes).toContain('EVT-001');
+    expect(codes).not.toContain('EVT-002');
+  });
+
+  it('startsAt tie — both tied events attended yields a stable EVT-002', async () => {
+    const { user } = await createUser({ email: 'tie-ok@jdm.test', verified: true });
+
+    const tie = new Date('2026-05-01T10:00:00Z');
+    const e0 = await makeEvent('tie-ok-e0', new Date('2026-04-01T10:00:00Z'));
+    const ea = await makeEvent('tie-ok-ea', tie);
+    const eb = await makeEvent('tie-ok-eb', tie);
+    const t0 = await makeTier(e0.id, 'GA');
+    const ta = await makeTier(ea.id, 'GA');
+    const tb = await makeTier(eb.id, 'GA');
+
+    await makeUsedTicket(user.id, e0.id, t0.id, new Date('2026-04-01T11:00:00Z'));
+    await makeUsedTicket(user.id, ea.id, ta.id, new Date('2026-05-01T11:00:00Z'));
+    // Same check-in instant as the sibling tied event — neither order is total
+    // on its own.
+    const trigger = await makeUsedTicket(user.id, eb.id, tb.id, new Date('2026-05-01T11:00:00Z'));
+
+    const runs = [];
+    for (let i = 0; i < 3; i++) {
+      runs.push(await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id)));
+    }
+    expect(runs[0]).toContain('EVT-002');
+    expect(runs[1]).toEqual(runs[0]);
+    expect(runs[2]).toEqual(runs[0]);
+  });
+
+  it('startsAt tie — one tied event skipped denies EVT-002 whichever id sorts first', async () => {
+    const { user } = await createUser({ email: 'tie-miss@jdm.test', verified: true });
+
+    const tie = new Date('2026-05-01T10:00:00Z');
+    const e0 = await makeEvent('tie-miss-e0', new Date('2026-04-01T10:00:00Z'));
+    const e1 = await makeEvent('tie-miss-e1', new Date('2026-04-15T10:00:00Z'));
+    const ea = await makeEvent('tie-miss-ea', tie);
+    const eb = await makeEvent('tie-miss-eb', tie);
+    const t0 = await makeTier(e0.id, 'GA');
+    const t1 = await makeTier(e1.id, 'GA');
+    const ta = await makeTier(ea.id, 'GA');
+    const tb = await makeTier(eb.id, 'GA');
+
+    await makeUsedTicket(user.id, e0.id, t0.id, new Date('2026-04-01T11:00:00Z'));
+    await makeUsedTicket(user.id, e1.id, t1.id, new Date('2026-04-15T11:00:00Z'));
+    const trigger = await makeUsedTicket(user.id, ea.id, ta.id, new Date('2026-05-01T11:00:00Z'));
+    // Held a ticket for the tied sibling and skipped it.
+    await prisma.ticket.create({
+      data: { userId: user.id, eventId: eb.id, tierId: tb.id, status: 'valid' },
+    });
+
+    const runs = [];
+    for (let i = 0; i < 3; i++) {
+      runs.push(await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, trigger.id)));
+    }
+    expect(runs[0]).not.toContain('EVT-002');
+    expect(runs[1]).toEqual(runs[0]);
+    expect(runs[2]).toEqual(runs[0]);
+  });
 });

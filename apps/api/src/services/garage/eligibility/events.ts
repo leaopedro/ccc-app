@@ -14,11 +14,10 @@ export type BadgeCode = string;
  *
  * Codes:
  *   - EVT-001 — "Primeiro Check-in"   : count(used tickets for user) >= 1
- *   - EVT-002 — "Sequência de 3"      : the user's three most-recently-used
- *                                       tickets cover the three most-recently-
- *                                       past published events of the user's
- *                                       ticket set (no missed event between
- *                                       check-ins). See streak query below.
+ *   - EVT-002 — "Sequência de 3"      : the user attended each of the three
+ *                                       most-recently-past published events of
+ *                                       the user's ticket set (no missed
+ *                                       event). See streak query below.
  *   - EVT-003 — "Lenda da Pista"      : count(used tickets for user) >= 10
  *   - CCC-001 — "Curitibano de Coração" : the just-checked-in event has
  *                                       `city === 'Curitiba'` (case-insensitive).
@@ -53,48 +52,70 @@ export const checkEligibility = async (
   if (usedCount >= 1) codes.push('EVT-001');
   if (usedCount >= 10) codes.push('EVT-003');
 
-  // EVT-002 — streak of 3. Definition (per plan §18 §5239-5247): the user's
-  // three most-recently-used tickets must cover the three most-recently-past
-  // published events the user holds a ticket for. "No missed event" means
-  // the last three events that already started have all been checked into.
+  // EVT-002 — streak of 3. Definition (per plan §18 §5239-5247): the three
+  // most-recently-past published events the user holds a ticket for must ALL
+  // have been checked into. "No missed event" is a statement about EVENTS, not
+  // about tickets: a member who brings a guest checks in two tickets for one
+  // event and that is still a single attended event.
   //
-  // Concretely we compare two ordered lists of event ids:
-  //   - lastUsed: the eventIds of the user's three most recent USED tickets,
-  //     ordered by Ticket.usedAt DESC.
-  //   - lastEligible: the eventIds of the user's three most recent
-  //     published-and-already-started events they hold ANY ticket for,
-  //     ordered by Event.startsAt DESC.
+  // So we compare two ordered lists of EVENT ids, both drawn from the Event
+  // table so each event appears exactly once no matter how many tickets the
+  // member holds for it:
+  //   - attended: the three most recent already-started published events the
+  //     user has a USED ticket for.
+  //   - eligible: the three most recent already-started published events the
+  //     user holds ANY ticket for.
   //
-  // Equality (in order) means streak. Anything else — missed event, fewer
-  // than three eligible events, fewer than three check-ins — is no streak.
-  if (usedCount >= 3) {
-    const lastUsedTickets = await tx.ticket.findMany({
-      where: { userId, status: 'used', usedAt: { not: null } },
-      orderBy: { usedAt: 'desc' },
+  // `attended` is a subset of `eligible`, so equality in order means every one
+  // of the three most recent eligible events was attended. Anything else —
+  // missed event, fewer than three eligible events, fewer than three attended
+  // events — is no streak.
+  //
+  // Both orders end in `Event.id` so the sort is total. `startsAt` is not
+  // unique (two events can start at the same instant) and neither is
+  // `Ticket.usedAt`; without the tiebreak the two lists could order a tie
+  // differently and deny an earned badge at random. Ordering by the event's
+  // own columns also keeps check-in timestamps out of the comparison entirely.
+  //
+  // The fetch is bounded to 3 rows per query. Note we deliberately do NOT use
+  // Prisma's `distinct` over tickets: with `distinct` set, Prisma drops the
+  // SQL LIMIT and dedupes in memory, which would read the member's whole
+  // ticket history on every check-in.
+  const now = new Date();
+  const startedPublished = {
+    status: 'published',
+    startsAt: { lte: now },
+  } as const;
+
+  const attendedEvents = await tx.event.findMany({
+    where: {
+      ...startedPublished,
+      tickets: { some: { userId, status: 'used', usedAt: { not: null } } },
+    },
+    orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
+    take: 3,
+    select: { id: true },
+  });
+
+  // Fewer than three DISTINCT attended events can never be a streak of three.
+  // This is the real gate: a used-ticket count is not, since five used tickets
+  // can cover two events.
+  if (attendedEvents.length === 3) {
+    const eligibleEvents = await tx.event.findMany({
+      where: {
+        ...startedPublished,
+        tickets: { some: { userId } },
+      },
+      orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
       take: 3,
-      select: { eventId: true },
+      select: { id: true },
     });
 
-    if (lastUsedTickets.length === 3) {
-      const now = new Date();
-      const lastEligibleEvents = await tx.event.findMany({
-        where: {
-          status: 'published',
-          startsAt: { lte: now },
-          tickets: { some: { userId } },
-        },
-        orderBy: { startsAt: 'desc' },
-        take: 3,
-        select: { id: true },
-      });
-
-      if (lastEligibleEvents.length === 3) {
-        const usedIds = lastUsedTickets.map((t) => t.eventId);
-        const eligibleIds = lastEligibleEvents.map((e) => e.id);
-        const matches = usedIds.every((id, i) => id === eligibleIds[i]);
-        if (matches) codes.push('EVT-002');
-      }
-    }
+    // eligibleEvents has exactly 3 rows here: every attended event is also an
+    // eligible one, so the superset cannot be shorter.
+    const attendedIds = attendedEvents.map((e) => e.id);
+    const matches = eligibleEvents.every((e, i) => e.id === attendedIds[i]);
+    if (matches) codes.push('EVT-002');
   }
 
   // CCC-001 — Curitiba check-in. Case-insensitive match against

@@ -4,16 +4,21 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getGarageStats, GarageNotFoundError } from '../../src/services/garage/stats.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
-const seedEvent = async (slug: string) =>
+const seedEvent = async (
+  slug: string,
+  overrides: { startsAt?: Date; status?: 'draft' | 'published' | 'cancelled' } = {},
+) =>
   prisma.event.create({
     data: {
       slug,
       title: slug,
       description: 'd',
-      startsAt: new Date('2026-05-10T10:00:00Z'),
-      endsAt: new Date('2026-05-10T20:00:00Z'),
+      startsAt: overrides.startsAt ?? new Date('2026-05-10T10:00:00Z'),
+      endsAt: new Date(
+        (overrides.startsAt ?? new Date('2026-05-10T10:00:00Z')).getTime() + 10 * 3600_000,
+      ),
       type: 'meeting',
-      status: 'published',
+      status: overrides.status ?? 'published',
       capacity: 100,
       feedAccess: 'public',
       postingAccess: 'attendees',
@@ -37,45 +42,96 @@ describe('getGarageStats', () => {
     expect(stats.joinedAt).toBe(garage.createdAt.toISOString());
   });
 
-  it('events count matches Ticket rows with status="used" AND filters by userId', async () => {
+  it('events counts DISTINCT attended events, not used tickets, AND filters by userId', async () => {
     const { user } = await createUser({ email: 'stats-events@jdm.test', verified: true });
     const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
 
     // Second user — proves the `userId` filter; their `used` ticket MUST NOT be
-    // counted toward `user`'s stats. A missing filter would return 4, not 3.
+    // counted toward `user`'s stats.
     const { user: other } = await createUser({
       email: 'stats-events-other@jdm.test',
       verified: true,
     });
 
-    const event = await seedEvent('stats-evt');
+    const e1 = await seedEvent('stats-evt-1', { startsAt: new Date('2026-04-01T10:00:00Z') });
+    const e2 = await seedEvent('stats-evt-2', { startsAt: new Date('2026-04-15T10:00:00Z') });
+    const tier1 = await prisma.ticketTier.create({
+      data: { eventId: e1.id, name: 'GA', priceCents: 0, currency: 'BRL', quantityTotal: 100 },
+    });
+    const tier2 = await prisma.ticketTier.create({
+      data: { eventId: e2.id, name: 'GA', priceCents: 0, currency: 'BRL', quantityTotal: 100 },
+    });
+
+    // 3 used by user across only TWO events (a guest at e1 twice over) + 1
+    // valid + 1 revoked (excluded by status) + 1 used by `other` (excluded by
+    // userId). A used-ticket count would say 3; attended events are 2.
+    await prisma.ticket.createMany({
+      data: [
+        { userId: user.id, eventId: e1.id, tierId: tier1.id, status: 'used', usedAt: new Date() },
+        { userId: user.id, eventId: e1.id, tierId: tier1.id, status: 'used', usedAt: new Date() },
+        { userId: user.id, eventId: e2.id, tierId: tier2.id, status: 'used', usedAt: new Date() },
+        { userId: user.id, eventId: e1.id, tierId: tier1.id, status: 'valid' },
+        { userId: user.id, eventId: e1.id, tierId: tier1.id, status: 'revoked' },
+        { userId: other.id, eventId: e1.id, tierId: tier1.id, status: 'used', usedAt: new Date() },
+      ],
+    });
+
+    const stats = await getGarageStats(prisma, garage.id);
+    expect(stats.events).toBe(2); // NOT 3 — the guest ticket at e1 is the same event.
+    expect(stats.posts).toBe(0);
+    expect(stats.likesReceived).toBe(0);
+  });
+
+  it('events counts a guest pair at one event as a single attended event', async () => {
+    const { user } = await createUser({ email: 'stats-guest@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+    const event = await seedEvent('stats-guest-evt');
     const tier = await prisma.ticketTier.create({
       data: { eventId: event.id, name: 'GA', priceCents: 0, currency: 'BRL', quantityTotal: 100 },
     });
 
-    // 3 used by user (counted) + 1 valid + 1 revoked (excluded by status)
-    // + 1 used by `other` (excluded by userId — proves filter).
+    // The member brought one guest and both tickets were scanned.
     await prisma.ticket.createMany({
       data: [
         { userId: user.id, eventId: event.id, tierId: tier.id, status: 'used', usedAt: new Date() },
         { userId: user.id, eventId: event.id, tierId: tier.id, status: 'used', usedAt: new Date() },
-        { userId: user.id, eventId: event.id, tierId: tier.id, status: 'used', usedAt: new Date() },
-        { userId: user.id, eventId: event.id, tierId: tier.id, status: 'valid' },
-        { userId: user.id, eventId: event.id, tierId: tier.id, status: 'revoked' },
-        {
-          userId: other.id,
+      ],
+    });
+
+    const stats = await getGarageStats(prisma, garage.id);
+    expect(stats.events).toBe(1);
+  });
+
+  it('events excludes used tickets on draft and not-yet-started events', async () => {
+    const { user } = await createUser({ email: 'stats-unpub@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+    const attended = await seedEvent('stats-unpub-ok', {
+      startsAt: new Date('2026-04-01T10:00:00Z'),
+    });
+    const draft = await seedEvent('stats-unpub-draft', { status: 'draft' });
+    const future = await seedEvent('stats-unpub-future', {
+      startsAt: new Date('2099-01-01T10:00:00Z'),
+    });
+
+    for (const event of [attended, draft, future]) {
+      const tier = await prisma.ticketTier.create({
+        data: { eventId: event.id, name: 'GA', priceCents: 0, currency: 'BRL', quantityTotal: 100 },
+      });
+      await prisma.ticket.create({
+        data: {
+          userId: user.id,
           eventId: event.id,
           tierId: tier.id,
           status: 'used',
           usedAt: new Date(),
         },
-      ],
-    });
+      });
+    }
 
     const stats = await getGarageStats(prisma, garage.id);
-    expect(stats.events).toBe(3); // NOT 4 — `other`'s used ticket excluded.
-    expect(stats.posts).toBe(0);
-    expect(stats.likesReceived).toBe(0);
+    expect(stats.events).toBe(1); // only the started published event.
   });
 
   it('posts count excludes hidden + removed + orphaned (authorUserId=null) rows', async () => {

@@ -111,10 +111,15 @@ export const checkEligibility = async (
       select: { id: true },
     });
 
-    // eligibleEvents has exactly 3 rows here: every attended event is also an
-    // eligible one, so the superset cannot be shorter.
+    // eligibleEvents cannot be shorter than 3 here: `attended` filters the same
+    // events by a strictly narrower ticket predicate, so the eligible set is a
+    // superset of the attended one. The length check is still written out rather
+    // than left to that argument, because `every` on a short array passes
+    // VACUOUSLY — if the invariant ever broke, the badge would be granted to
+    // everyone instead of failing visibly.
     const attendedIds = attendedEvents.map((e) => e.id);
-    const matches = eligibleEvents.every((e, i) => e.id === attendedIds[i]);
+    const matches =
+      eligibleEvents.length === 3 && eligibleEvents.every((e, i) => e.id === attendedIds[i]);
     if (matches) codes.push('EVT-002');
   }
 

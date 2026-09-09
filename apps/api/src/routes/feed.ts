@@ -142,7 +142,11 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       prisma.feedPost.findMany({
         where,
         select: POST_SELECT,
-        orderBy: { createdAt: 'desc' },
+        // Offset pagination over a non-total order silently loses rows. Two
+        // posts sharing a `createdAt` can be ordered one way for page 1 and the
+        // other way for page 2, so one is served twice and the other never —
+        // a member's post that simply does not exist for some readers.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * perPage,
         take: perPage,
       }),
@@ -243,7 +247,10 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: true,
             car: { select: CAR_SELECT },
           },
-          orderBy: { createdAt: 'asc' },
+          // Total order for the same reason as the post list above: offset
+          // paging across a `createdAt` tie duplicates one comment and drops
+          // another.
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           skip: (page - 1) * perPage,
           take: perPage,
         }),

@@ -155,7 +155,16 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     const orders = await prisma.order.findMany({
       where: { cartId, status: 'pending' },
       select: { id: true, amountCents: true, kind: true },
-      orderBy: { createdAt: 'asc' },
+      // `id` tiebreak is load-bearing, not cosmetic. reserveAndCreateOrders
+      // writes every order of a cart inside ONE transaction, and Postgres
+      // `CURRENT_TIMESTAMP` is transaction START time, so all of them share a
+      // byte-identical `createdAt`. `createdAt` alone therefore leaves
+      // `orders[0]` — the canonical row this handler stamps `providerRef` on
+      // below — up to the planner, and a redelivery can stamp a DIFFERENT row.
+      // charge.refunded and charge.dispute.created both resolve the cart by
+      // (provider, providerRef), so a wandering stamp means a refunded or
+      // disputed cart whose tickets never get revoked.
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
 
     if (orders.length === 0) {
@@ -180,7 +189,10 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
           const canonical = await prisma.order.findFirst({
             where: { cartId },
             select: { id: true },
-            orderBy: { createdAt: 'asc' },
+            // Same total order as the pending read above, for the same reason:
+            // this backfill and that stamp must agree on which row is
+            // canonical, on every redelivery.
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           });
           if (canonical) {
             await prisma.order.updateMany({

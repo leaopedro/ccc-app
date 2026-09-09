@@ -128,6 +128,10 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
   const due = await prisma.monthlyBox.findMany({
     where: { status: { in: ['open', 'awaiting_payment'] }, cutoffAt: { lte: now } },
     select: { id: true, garageId: true },
+    // A processed box leaves the predicate, so nothing starves either way.
+    // Ordered anyway so a backlog drains most-overdue-first instead of in
+    // whatever order the planner returns.
+    orderBy: [{ cutoffAt: 'asc' }, { id: 'asc' }],
     take: 50,
   });
 

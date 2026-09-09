@@ -129,7 +129,11 @@ export async function loadCartForCheckout(
   const cart = await prisma.cart.findFirst({
     where: { userId, status: { in: ['open', 'checking_out'] } },
     include: CART_CHECKOUT_INCLUDE,
-    orderBy: { updatedAt: 'desc' },
+    // `Cart_userId_open_unique` is PARTIAL — `WHERE status = 'open'` — so it
+    // does not bound this read, which also accepts `checking_out`. A user can
+    // hold one of each at the same time and this pick decides what they are
+    // about to be charged for. `id` makes the pick total.
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
   });
 
   if (!cart || cart.items.length === 0) {

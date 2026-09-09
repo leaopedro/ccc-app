@@ -622,7 +622,11 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
         : await prisma.shippingAddress.findFirst({
             where: { userId: sub },
             select: { id: true },
-            orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+            // `ShippingAddress_default_per_user_idx` bounds this to one row
+            // ONLY while the user has a default. With no default set, the pick
+            // falls through to `updatedAt` across every address they own and
+            // decides where physical goods are shipped. `id` ends the order.
+            orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }, { id: 'desc' }],
           });
       if (!shippingAddress) {
         return reply.status(input.shippingAddressId ? 404 : 422).send({

@@ -200,7 +200,24 @@ export const issueTicketForPaidOrder = async (
     if (order.status === 'paid') {
       const existing = await tx.ticket.findMany({
         where: { orderId },
-        orderBy: { createdAt: 'asc' },
+        // The `id` tiebreak decides who gets what. Every ticket of one order is
+        // created inside a single transaction, so they all share the same
+        // `createdAt` (Postgres CURRENT_TIMESTAMP = transaction start), and this
+        // list is index-paired with `ticketsMeta` below: meta[i].extras is
+        // attached to existing[i], and existing[0] is the ticket whose id and
+        // signed QR code this function returns. Ordering on `createdAt` alone
+        // meant a redelivery could hang the extras on a different ticket than the
+        // first delivery did, and hand back a different QR for the same order.
+        //
+        // What `id asc` buys, precisely: the pick is DETERMINISTIC, so every
+        // replay agrees with the first delivery. That the pairing also lands
+        // meta[i] back on the ticket created from meta[i] is a property of the
+        // ID GENERATOR, not of the database — `Ticket.id` is
+        // `@default(cuid())` and cuid v1 is monotonic within a process, so
+        // `id asc` reproduces the creation order of the loop below. Swap the
+        // default to a random uuid and the pairing silently scrambles while
+        // staying deterministic. Pair on a stored index if that ever changes.
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       });
       if (existing.length === 0) throw new OrderPaidWithoutTicketError(orderId);
       for (let i = 0; i < existing.length; i++) {
@@ -300,6 +317,14 @@ const issueExtrasOnly = async (
 ): Promise<IssueResult> => {
   const ticket = await tx.ticket.findFirst({
     where: { userId: order.userId, eventId: order.eventId, status: 'valid' },
+    // NOT one row. The (userId, eventId) WHERE status='valid' unique index was
+    // dropped in 20260503163319_drop_ticket_user_event_unique precisely so a
+    // buyer can hold several valid tickets to one event, and this pick decides
+    // which of them the purchased extra is bound to. Unordered, the planner
+    // chose, so a webhook redelivery could bind the extra to a different ticket
+    // than the one already handed to the buyer — they present that ticket at
+    // the gate and the extra they paid for is not on it.
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
   if (!ticket) {
     throw new TicketRevokedForExtrasOnlyError(order.id, order.userId, order.eventId);
@@ -465,6 +490,10 @@ export const issueTicketsForMixedOrder = async (
 
       const ticket = await tx.ticket.findFirst({
         where: { userId: order.userId, eventId: ex.eventId, status: 'valid' },
+        // Same total order as `issueExtrasOnly`, and for the same reason: the
+        // buyer may hold several valid tickets to this event, and both paths
+        // must land the extra on the same one across redeliveries.
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       });
       if (!ticket) {
         throw new TicketRevokedForExtrasOnlyError(orderId, order.userId, ex.eventId);

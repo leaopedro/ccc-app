@@ -79,7 +79,11 @@ export const settleAbacatePayCart = async (params: {
   const cartOrders = await prisma.order.findMany({
     where: { cartId, provider: 'abacatepay', status: 'pending' },
     select: { id: true, userId: true, eventId: true, amountCents: true, kind: true },
-    orderBy: { createdAt: 'asc' },
+    // `id` tiebreak, same as the Stripe path. Every order of a cart is written
+    // in one transaction and so shares a `createdAt`; without it the settlement
+    // order below is arbitrary within a priority band, and this webhook and
+    // workers/pix-reconcile.ts can settle the same cart in different orders.
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   });
 
   // Nothing pending: a replay, or a cart the caller already settled earlier in

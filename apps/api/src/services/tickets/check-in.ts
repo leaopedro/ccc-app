@@ -74,8 +74,10 @@ export const checkInTicket = async (
   // Wrap the status flip + Conquistas awarding in one tx so the event-surface
   // badge grants are atomic with the check-in. A crash between the update
   // and the award would otherwise leave the ticket `used` with no badge,
-  // and EVT-001/EVT-003/EVT-002 are count-based — replays would re-award
-  // them on the next check-in only because of the unique constraint guard.
+  // and the badge rules are all derived from stored state, not from this
+  // delivery — replays would re-award them on the next check-in only because
+  // of the unique constraint guard. (EVT-001 counts used tickets; EVT-002 and
+  // EVT-003 count DISTINCT attended events since 2026-09-09.)
   const flipped = await prisma.$transaction(async (tx) => {
     const result = await tx.ticket.updateMany({
       where: { id: ticketId, eventId: input.eventId, status: 'valid' },

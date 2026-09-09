@@ -24,7 +24,7 @@ export type BadgeCode = string;
  *                                       most-recently-past published events of
  *                                       the user's ticket set (no missed
  *                                       event). See streak query below.
- *   - EVT-003 — "Lenda da Pista"      : count(DISTINCT attended events) >= 10
+ *   - EVT-003 — "Veterano de Pista"   : count(DISTINCT attended events) >= 10
  *   - CCC-001 — "Curitibano de Coração" : the just-checked-in event has
  *                                       `city === 'Curitiba'` (case-insensitive).
  *   - CCC-002 — "Drift King"          : the just-checked-in event has

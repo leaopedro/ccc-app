@@ -168,9 +168,23 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (orders.length === 0) {
+      // This row is BOTH the "did the cart already settle" answer and the row
+      // the backfill below stamps. One read, so the two cannot disagree — an
+      // earlier version of this code asked twice, and the second read dropped
+      // the `status: 'paid'` filter. `handleCartFailure` marks pending orders
+      // `failed` while KEEPING `cartId` and reopens the cart on a bumped
+      // version, so a reopened cart legitimately holds older `failed` rows
+      // alongside the row that actually paid. Ordered oldest-first, the
+      // unfiltered read returned one of those `failed` rows and stamped the
+      // live PaymentIntent on it. Both cascades below (charge.refunded,
+      // charge.dispute.created) require the anchor to be `paid` before they
+      // touch siblings, so the stamp landing on a `failed` row meant a refund
+      // resolved that row, the cascade was correctly suppressed, and the
+      // genuinely paid order's tickets stayed valid after the money went back.
       const alreadyPaid = await prisma.order.findFirst({
         where: { cartId, status: 'paid' },
         select: { id: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       });
       if (alreadyPaid) {
         // Backfill the stamp before short-circuiting. Settlement happens before
@@ -186,24 +200,14 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
           select: { id: true },
         });
         if (!alreadyStamped) {
-          const canonical = await prisma.order.findFirst({
-            where: { cartId },
-            select: { id: true },
-            // Same total order as the pending read above, for the same reason:
-            // this backfill and that stamp must agree on which row is
-            // canonical, on every redelivery.
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          await prisma.order.updateMany({
+            where: { id: alreadyPaid.id, providerRef: null },
+            data: { providerRef: piId },
           });
-          if (canonical) {
-            await prisma.order.updateMany({
-              where: { id: canonical.id, providerRef: null },
-              data: { providerRef: piId },
-            });
-            request.log.warn(
-              { cartId, piId, orderId: canonical.id },
-              'stripe webhook: backfilled providerRef on already-paid cart',
-            );
-          }
+          request.log.warn(
+            { cartId, piId, orderId: alreadyPaid.id },
+            'stripe webhook: backfilled providerRef on already-paid cart',
+          );
         }
 
         await markProcessed(webhookEvent.id, webhookEvent);
@@ -239,10 +243,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(200).send({ ok: true, ignored: true });
     }
 
-    // Capture the canonical order BEFORE the settlement re-sort below: after it,
-    // orders[0] is whichever kind settles first, not the oldest row. The
-    // providerRef stamp further down must be deterministic across redeliveries.
-    const canonicalOrderId = orders[0]?.id;
+    const settlementIds = orders.map((o) => o.id);
 
     orders.sort((a, b) => cartSettlementPriority(a.kind) - cartSettlementPriority(b.kind));
 
@@ -301,14 +302,36 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     // PaymentIntent: skip when a sibling already holds this ref (redelivery, or
     // a session-resolved cart whose canonical order was stamped by cart.ts).
     // Writing it unconditionally raises P2002 and 500s the webhook.
-    if (canonicalOrderId) {
+    //
+    // The anchor is chosen HERE, after the loop, and only from rows that
+    // actually reached `paid` — it cannot be captured up front. The loop can
+    // take a row out of `paid` on its way through: a duplicate-ticket or
+    // unavailable-pickup failure partially refunds that order and
+    // `markRefundedAndReleaseReservation` flips it to `refunded`. Both cascades
+    // below require the anchor to be `paid` before they touch siblings (that
+    // guard is deliberate — it stops a stale-sheet PI from revoking a ticket
+    // the customer holds), so anchoring on a row the loop refunded meant a
+    // later refund or dispute resolved that row, the cascade was correctly
+    // suppressed, and the paid siblings kept valid tickets. A pre-loop capture
+    // could not see this, and ordering it made the failure RELIABLE rather
+    // than planner-dependent whenever the lowest-id row was the refunded one.
+    //
+    // Null when nothing survived as `paid` (every order was refunded in the
+    // loop). Correct: there is no live order for this PI to anchor, and a
+    // subsequent charge.refunded has no paid sibling to protect.
+    const anchor = await prisma.order.findFirst({
+      where: { id: { in: settlementIds }, status: 'paid' },
+      select: { id: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    if (anchor) {
       const alreadyStamped = await prisma.order.findFirst({
         where: { provider: 'stripe', providerRef: piId },
         select: { id: true },
       });
       if (!alreadyStamped) {
         await prisma.order.updateMany({
-          where: { id: canonicalOrderId, providerRef: null },
+          where: { id: anchor.id, providerRef: null },
           data: { providerRef: piId },
         });
       }

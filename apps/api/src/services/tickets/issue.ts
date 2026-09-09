@@ -208,6 +208,15 @@ export const issueTicketForPaidOrder = async (
         // signed QR code this function returns. Ordering on `createdAt` alone
         // meant a redelivery could hang the extras on a different ticket than the
         // first delivery did, and hand back a different QR for the same order.
+        //
+        // What `id asc` buys, precisely: the pick is DETERMINISTIC, so every
+        // replay agrees with the first delivery. That the pairing also lands
+        // meta[i] back on the ticket created from meta[i] is a property of the
+        // ID GENERATOR, not of the database — `Ticket.id` is
+        // `@default(cuid())` and cuid v1 is monotonic within a process, so
+        // `id asc` reproduces the creation order of the loop below. Swap the
+        // default to a random uuid and the pairing silently scrambles while
+        // staying deterministic. Pair on a stored index if that ever changes.
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       });
       if (existing.length === 0) throw new OrderPaidWithoutTicketError(orderId);

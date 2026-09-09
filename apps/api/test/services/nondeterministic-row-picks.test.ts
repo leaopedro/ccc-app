@@ -396,5 +396,217 @@ describe('nondeterministic row picks', () => {
       });
       expect(stamped?.id).toBe(LOW_ID);
     });
+
+    // -------------------------------------------------------------------------
+    // 4a. The anchor must be a row that actually paid — reopened cart.
+    // -------------------------------------------------------------------------
+    //
+    // `handleCartFailure` marks pending orders `failed` while KEEPING `cartId`,
+    // then reopens the cart on a bumped version. So a reopened cart holds older
+    // `failed` rows beside the row that later paid. The backfill branch used to
+    // read `{ cartId }` with no status filter and, ordered oldest-first, stamp
+    // the live PaymentIntent on one of those `failed` rows. Both cascades
+    // require the anchor to be `paid`, so the refund then resolved a `failed`
+    // row, the cascade was correctly suppressed, and the paid order's tickets
+    // survived a full refund.
+
+    it('backfills the stamp onto the paid order, not an older failed sibling', async () => {
+      const { user } = await createUser({ verified: true });
+      const cart = await prisma.cart.create({
+        data: { userId: user.id, status: 'checking_out', version: 2 },
+      });
+      const piId = `pi_reopen_${Math.random().toString(36).slice(2, 10)}`;
+
+      const mkOrder = async (o: { id: string; status: 'failed' | 'paid'; createdAt: Date }) => {
+        const event = await seedEvent();
+        const tier = await seedTier(event.id, { name: 'Geral', sortOrder: 0 });
+        const order = await prisma.order.create({
+          data: {
+            id: o.id,
+            userId: user.id,
+            eventId: event.id,
+            tierId: tier.id,
+            cartId: cart.id,
+            kind: 'ticket',
+            amountCents: 5000,
+            quantity: 1,
+            method: 'card',
+            provider: 'stripe',
+            providerRef: null,
+            status: o.status,
+            ...(o.status === 'paid' ? { paidAt: new Date() } : { failedAt: new Date() }),
+          },
+        });
+        await prisma.order.update({ where: { id: order.id }, data: { createdAt: o.createdAt } });
+        if (o.status === 'paid') {
+          await prisma.ticket.create({
+            data: {
+              orderId: order.id,
+              userId: user.id,
+              eventId: event.id,
+              tierId: tier.id,
+              source: 'purchase',
+              status: 'valid',
+            },
+          });
+        }
+        return order;
+      };
+
+      // The failed row is OLDER, so oldest-first without a status filter picks
+      // it. It also has the lower id, so a tiebreak alone does not save this.
+      const failed = await mkOrder({
+        id: LOW_ID,
+        status: 'failed',
+        createdAt: new Date('2026-03-01T10:00:00.000Z'),
+      });
+      const paid = await mkOrder({
+        id: HIGH_ID,
+        status: 'paid',
+        createdAt: new Date('2026-03-01T11:00:00.000Z'),
+      });
+
+      stripe.nextEvent = {
+        id: `evt_${Math.random().toString(36).slice(2, 10)}`,
+        type: 'payment_intent.succeeded',
+        livemode: false,
+        data: { object: { id: piId, metadata: { cartId: cart.id } } },
+      };
+      const res = await app.inject({
+        method: 'POST',
+        url: '/stripe/webhook',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+        payload: rawJson(stripe.nextEvent),
+      });
+      expect(res.statusCode).toBe(200);
+
+      const stamped = await prisma.order.findFirst({
+        where: { provider: 'stripe', providerRef: piId },
+        select: { id: true },
+      });
+      expect(stamped?.id).toBe(paid.id);
+
+      // The consequence, end to end: a full refund on this PI must revoke the
+      // ticket. Anchored on the failed row it could not, because the cascade
+      // gate requires the anchor to be `paid`.
+      stripe.nextEvent = {
+        id: `evt_ref_${Math.random().toString(36).slice(2, 10)}`,
+        type: 'charge.refunded',
+        livemode: false,
+        data: {
+          object: {
+            id: 'ch_reopen',
+            payment_intent: piId,
+            amount: 5000,
+            amount_refunded: 5000,
+            refunded: true,
+          },
+        },
+      };
+      const refundRes = await app.inject({
+        method: 'POST',
+        url: '/stripe/webhook',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+        payload: rawJson(stripe.nextEvent),
+      });
+      expect(refundRes.statusCode).toBe(200);
+
+      const tickets = await prisma.ticket.findMany({
+        where: { orderId: paid.id },
+        select: { status: true },
+      });
+      expect(tickets).toHaveLength(1);
+      expect(tickets[0]!.status).toBe('revoked');
+      void failed;
+    });
+
+    // -------------------------------------------------------------------------
+    // 4b. The anchor must be a row that SURVIVED the settlement loop.
+    // -------------------------------------------------------------------------
+    //
+    // The loop can take a row out of `paid` on its way through: a
+    // duplicate-ticket failure partially refunds that order and flips it to
+    // `refunded`. Anchoring before the loop could pick exactly that row. Adding
+    // the id tiebreak made this RELIABLE rather than planner-dependent whenever
+    // the lowest-id order was the one refunded — which is what this pins.
+
+    it('anchors on an order that survived settlement, not one the loop refunded', async () => {
+      const { user } = await createUser({ verified: true });
+      const cart = await prisma.cart.create({
+        data: { userId: user.id, status: 'checking_out' },
+      });
+      const piId = `pi_dup_${Math.random().toString(36).slice(2, 10)}`;
+
+      // Event E caps at one ticket per user and the buyer already holds one, so
+      // settling its order raises TicketAlreadyExistsForEventError.
+      const eventE = await seedEvent({ maxTicketsPerUser: 1 });
+      const tierE = await seedTier(eventE.id, { name: 'Geral E', sortOrder: 0 });
+      await prisma.ticket.create({
+        data: {
+          userId: user.id,
+          eventId: eventE.id,
+          tierId: tierE.id,
+          source: 'purchase',
+          status: 'valid',
+        },
+      });
+
+      const eventF = await seedEvent();
+      const tierF = await seedTier(eventF.id, { name: 'Geral F', sortOrder: 0 });
+
+      const mkOrder = (id: string, eventId: string, tierId: string) =>
+        prisma.order.create({
+          data: {
+            id,
+            userId: user.id,
+            eventId,
+            tierId,
+            cartId: cart.id,
+            kind: 'ticket',
+            amountCents: 5000,
+            quantity: 1,
+            method: 'card',
+            provider: 'stripe',
+            providerRef: null,
+            status: 'pending',
+          },
+        });
+
+      // LOW_ID is the doomed one, so the pre-loop anchor picks precisely the
+      // row the loop is about to refund.
+      const doomed = await mkOrder(LOW_ID, eventE.id, tierE.id);
+      const survivor = await mkOrder(HIGH_ID, eventF.id, tierF.id);
+      await prisma.order.updateMany({
+        where: { id: { in: [LOW_ID, HIGH_ID] } },
+        data: { createdAt: TIED_AT },
+      });
+
+      stripe.nextEvent = {
+        id: `evt_${Math.random().toString(36).slice(2, 10)}`,
+        type: 'payment_intent.succeeded',
+        livemode: false,
+        data: { object: { id: piId, metadata: { cartId: cart.id } } },
+      };
+      const res = await app.inject({
+        method: 'POST',
+        url: '/stripe/webhook',
+        headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+        payload: rawJson(stripe.nextEvent),
+      });
+      expect(res.statusCode).toBe(200);
+
+      const rows = await prisma.order.findMany({
+        where: { id: { in: [doomed.id, survivor.id] } },
+        select: { id: true, status: true, providerRef: true },
+      });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      expect(byId.get(doomed.id)!.status).toBe('refunded');
+      expect(byId.get(survivor.id)!.status).toBe('paid');
+
+      // The stamp must be on the surviving paid row, or the refund cascade
+      // below is dead.
+      expect(byId.get(doomed.id)!.providerRef).toBeNull();
+      expect(byId.get(survivor.id)!.providerRef).toBe(piId);
+    });
   });
 });

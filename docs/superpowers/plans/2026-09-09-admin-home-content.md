@@ -1137,13 +1137,15 @@ export const SettingsTabs = () => {
 `apps/admin/app/(authed)/configuracoes/layout.tsx`:
 
 ```tsx
+import type { ReactNode } from 'react';
+
 import { SettingsTabs } from './settings-tabs';
 
 import { readRole } from '~/lib/auth-session';
 
 // O bloqueio de staff mora aqui, e nao em cada page: sob um layout, um
 // "Acesso restrito" devolvido pela page apareceria embaixo da barra de abas.
-export default async function ConfiguracoesLayout({ children }: { children: React.ReactNode }) {
+export default async function ConfiguracoesLayout({ children }: { children: ReactNode }) {
   const role = await readRole();
 
   if (role === 'staff') {

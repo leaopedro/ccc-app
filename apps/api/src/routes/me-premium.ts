@@ -290,8 +290,8 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
       // Precedence: 503 (feature off) → 403 (incomplete profile) → 409
       // (already subscribed). An unavailable feature is not a profile problem.
-      const gated = await enforceProfileGate(app, request, sub, reply, 'subscription');
-      if (gated) return gated;
+      const blocked = await enforceProfileGate(app, request, sub, reply, 'subscription');
+      if (blocked) return reply;
 
       const garage = await prisma.garage.findUnique({
         where: { userId: sub },
@@ -394,8 +394,8 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
     // Repeated here on purpose. The precheck is advisory; the window between
     // GET and POST is the same one the AlreadySubscribed check below closes.
-    const gated = await enforceProfileGate(app, request, sub, reply, 'subscription');
-    if (gated) return gated;
+    const blocked = await enforceProfileGate(app, request, sub, reply, 'subscription');
+    if (blocked) return reply;
 
     const pkg = await resolveSubscriptionPackage(request, reply);
     if (!pkg) return reply; // resolveSubscriptionPackage ja respondeu
@@ -603,8 +603,8 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
 
     const { sub } = requireUser(request);
 
-    const gated = await enforceProfileGate(app, request, sub, reply, 'subscription');
-    if (gated) return gated;
+    const blocked = await enforceProfileGate(app, request, sub, reply, 'subscription');
+    if (blocked) return reply;
 
     const pkg = await resolveSubscriptionPackage(request, reply);
     if (!pkg) return reply; // resolveSubscriptionPackage ja respondeu

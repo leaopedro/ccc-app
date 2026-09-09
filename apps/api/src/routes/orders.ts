@@ -382,8 +382,8 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       const { sub } = requireUser(request);
 
       // Gate before anything mutates: below this line stock gets reserved.
-      const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
-      if (gated) return gated;
+      const blocked = await enforceProfileGate(app, request, sub, reply, 'checkout');
+      if (blocked) return reply;
 
       const input = createOrderRequestSchema.parse(request.body);
 
@@ -518,8 +518,8 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
       const { sub } = requireUser(request);
 
       // Gate before anything mutates: below this line stock gets reserved.
-      const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
-      if (gated) return gated;
+      const blocked = await enforceProfileGate(app, request, sub, reply, 'checkout');
+      if (blocked) return reply;
 
       const parsed = createWebCheckoutRequestSchema.safeParse(request.body);
       if (!parsed.success) {

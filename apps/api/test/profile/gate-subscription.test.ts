@@ -79,6 +79,14 @@ describe('subscription profile gate', () => {
     expect(stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession')).toHaveLength(
       0,
     );
+
+    // Still none once the request is fully over: `app.inject` resolves when
+    // the 403 is sent, not when the handler stops, so a handler that ran on
+    // past the gate would only mint the session a few milliseconds later.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    // No Stripe call of ANY kind: a handler that ran on past the gate would
+    // reach findOrCreateCustomer before it ever minted the session.
+    expect(stripe.calls).toHaveLength(0);
   });
 
   it('lets a pending document through — optimistic auto-approval', async () => {

@@ -10,6 +10,15 @@ import { bearer, createUser, makeAppWithFakes, resetDatabase } from '../helpers.
 const CPF = '52998224725';
 const PHONE = '11987654321';
 
+// A blocked handler that keeps running does NOT show up in the assertions
+// right after `app.inject`: inject resolves when the RESPONSE is sent, not
+// when the handler's promise settles, so the stray INSERTs land a few
+// milliseconds later. That is what made this a CI-only flake — the leaked
+// order.create raced the next test's resetDatabase instead of failing here.
+// So the "nothing moved" assertions run twice: once immediately, once after
+// giving any leaked continuation time to finish its DB work.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 250));
+
 // Minimal published event + tier + an open cart holding one ticket line.
 const seedTicketCart = async (userId: string) => {
   const event = await prisma.event.create({
@@ -88,6 +97,14 @@ describe('checkout profile gate', () => {
     const tierRow = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
     expect(tierRow.quantitySold).toBe(0);
     expect(await prisma.order.count({ where: { userId: user.id, cartId: cart.id } })).toBe(0);
+
+    // And it must still be true once the request is fully over.
+    await settle();
+    const cartAfter = await prisma.cart.findUniqueOrThrow({ where: { id: cart.id } });
+    expect(cartAfter.status).toBe('open');
+    const tierAfter = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
+    expect(tierAfter.quantitySold).toBe(0);
+    expect(await prisma.order.count()).toBe(0);
   });
 
   it('reports only phone as missing when the cpf is already set', async () => {
@@ -169,6 +186,11 @@ describe('checkout profile gate', () => {
     expect(incompleteProfileErrorSchema.parse(res.json()).missing).toEqual(['cpf', 'phone']);
     const tierRow = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
     expect(tierRow.quantitySold).toBe(0);
+
+    await settle();
+    const tierAfter = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
+    expect(tierAfter.quantitySold).toBe(0);
+    expect(await prisma.order.count()).toBe(0);
   });
 
   it('blocks POST /orders/checkout', async () => {
@@ -193,6 +215,11 @@ describe('checkout profile gate', () => {
     expect(res.statusCode).toBe(403);
     const tierRow = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
     expect(tierRow.quantitySold).toBe(0);
+
+    await settle();
+    const tierAfter = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
+    expect(tierAfter.quantitySold).toBe(0);
+    expect(await prisma.order.count()).toBe(0);
   });
 
   it('is inert when the flag is off', async () => {

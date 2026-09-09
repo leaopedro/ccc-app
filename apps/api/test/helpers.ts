@@ -85,11 +85,21 @@ export const resetDatabase = async (): Promise<void> => {
   // Segunda passada, mesmo idiom que orderItem/shippingAddress/product* ja usam
   // acima. Order, OrderItem, Ticket e CartItem apontam para TicketTier com
   // onDelete: Restrict, e sao limpos la em cima, ~20 statements antes daqui.
-  // Uma linha que nascesse nessa janela derrubava o delete abaixo com
-  // `Foreign key constraint violated on Order_tierId_fkey`, que foi como o CI
-  // quebrou duas vezes seguidas no afterEach de gate-checkout.test.ts (run
-  // 31438051862 e a re-execucao seguinte), sem nunca reproduzir local. Repetir
-  // os quatro colado no delete de TicketTier fecha a janela.
+  //
+  // Essa passada nasceu como tentativa de fechar a janela do
+  // `Foreign key constraint violated on Order_tierId_fkey` que quebrou o CI no
+  // afterEach de gate-checkout.test.ts (runs 31438051862 e 34352280292). Nao
+  // fechou, e nunca ia fechar: a linha nao aparecia por causa da ordem dos
+  // deletes, e sim porque o handler de POST /orders continuava rodando DEPOIS
+  // de responder 403 e inseria a Order em paralelo com este reset. A causa
+  // estava em enforceProfileGate, que devolvia o FastifyReply — um thenable,
+  // adotado pelo `await` do chamador, que por isso recebia `undefined` e nunca
+  // entrava no early return. Corrigido em src/services/profile/gate.ts
+  // (retorna boolean); veja o comentario de lá.
+  //
+  // Mantida por seguranca, nao por necessidade conhecida: qualquer promise
+  // solta de rota que escreva no banco cairia aqui de novo. Se for remover,
+  // remova sabendo que o valor dela hoje e so esse.
   await prisma.cartItemExtra.deleteMany();
   await prisma.cartItem.deleteMany();
   await prisma.pickupVoucher.deleteMany();

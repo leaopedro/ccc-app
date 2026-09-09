@@ -79,6 +79,40 @@ describe('subscription profile gate', () => {
     expect(stripe.calls.filter((c) => c.kind === 'createSubscriptionCheckoutSession')).toHaveLength(
       0,
     );
+
+    // Still none once the request is fully over: `app.inject` resolves when
+    // the 403 is sent, not when the handler stops, so a handler that ran on
+    // past the gate would only mint the session a few milliseconds later.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    // No Stripe call of ANY kind: a handler that ran on past the gate would
+    // reach findOrCreateCustomer before it ever minted the session.
+    expect(stripe.calls).toHaveLength(0);
+  });
+
+  // checkout-native is the gated path that writes the most past the gate:
+  // Garage upsert, findOrCreateCustomer, then a PremiumSubscriptionAttempt
+  // row inside a FOR UPDATE transaction. `x-ccc-platform: ios` is required
+  // by the requireSubscriptionsEnabled preHandler, which runs BEFORE the
+  // profile gate.
+  it('blocks POST /checkout-native and creates no attempt or Stripe call', async () => {
+    const { user } = await createUser({ verified: true });
+    await setCpfAndPhone(user.id);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/checkout-native',
+      headers: { authorization: bearer(loadEnv(), user.id), 'x-ccc-platform': 'ios' },
+      payload: { cadence: 'monthly' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(incompleteProfileErrorSchema.parse(res.json()).missing).toEqual(['document']);
+    expect(stripe.calls).toHaveLength(0);
+    expect(await prisma.premiumSubscriptionAttempt.count()).toBe(0);
+
+    // Same second pass as above: inject resolves on the 403, not on the
+    // handler, so a leaked continuation only lands milliseconds later.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(stripe.calls).toHaveLength(0);
+    expect(await prisma.premiumSubscriptionAttempt.count()).toBe(0);
   });
 
   it('lets a pending document through — optimistic auto-approval', async () => {

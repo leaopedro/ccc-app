@@ -19,11 +19,27 @@ export const isInRollout = (userId: string, percent: number): boolean => {
 };
 
 /**
- * Returns null when the request may proceed. Returns the already-sent reply
- * when it may not, so callers write:
+ * Returns false when the request may proceed. Returns true when it may not,
+ * and the 401/403 has ALREADY been sent by then, so callers write:
  *
- *   const gated = await enforceProfileGate(app, request, sub, reply, 'checkout');
- *   if (gated) return gated;
+ *   const blocked = await enforceProfileGate(app, request, sub, reply, 'checkout');
+ *   if (blocked) return reply;
+ *
+ * NEVER change this back to returning the FastifyReply. A reply is a thenable
+ * (`Reply.prototype.then`, fastify/lib/reply.js), so an async function that
+ * resolves to one gets ADOPTED by the caller's `await`: the awaited value
+ * comes back as `undefined`, not as the reply. `if (gated) return gated` then
+ * never fires and the handler keeps running past a response it already sent —
+ * a 403 checkout that still reserved tier stock, created a pending Order and
+ * called Stripe. In CI that surfaced as the `blocks POST /orders` request
+ * finishing its order INSERT after the next test had already truncated the
+ * tables, failing gate-checkout.test.ts's afterEach with
+ * `Foreign key constraint violated on Order_tierId_fkey` (runs 31438051862
+ * and 34352280292). A boolean cannot be adopted, so the branch cannot be
+ * silently skipped again.
+ *
+ * The sends are awaited so `true` also means the response has finished: the
+ * caller's `return reply` is then a no-op instead of a second send.
  *
  * MUST be called before any stock reservation, Cart status transition, or
  * payment-provider call. A late block would leave a cart stuck in
@@ -41,18 +57,20 @@ export const enforceProfileGate = async (
   userId: string,
   reply: FastifyReply,
   scope: ProfileScope,
-): Promise<FastifyReply | null> => {
-  if (!app.env.PROFILE_GATE_ENABLED) return null;
-  if (!isInRollout(userId, app.env.PROFILE_GATE_ROLLOUT_PERCENT)) return null;
+): Promise<boolean> => {
+  if (!app.env.PROFILE_GATE_ENABLED) return false;
+  if (!isInRollout(userId, app.env.PROFILE_GATE_ROLLOUT_PERCENT)) return false;
 
   const completeness = await loadProfileCompleteness(userId);
   if (!completeness) {
-    return reply.status(401).send({ error: 'Unauthorized', message: 'user not found' });
+    await reply.status(401).send({ error: 'Unauthorized', message: 'user not found' });
+    return true;
   }
 
   const missing = missingFor(completeness, scope);
-  if (missing.length === 0) return null;
+  if (missing.length === 0) return false;
 
   request.log.info({ userId, scope, missing }, 'profile gate blocked');
-  return reply.status(403).send(buildIncompleteProfileError(missing));
+  await reply.status(403).send(buildIncompleteProfileError(missing));
+  return true;
 };

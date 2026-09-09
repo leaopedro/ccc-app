@@ -209,6 +209,13 @@ Abas seguem a convenção real do repo, que é `layout.tsx` e não import por pa
 - `/configuracoes` — Gerais, o form atual
 - `/configuracoes/home` — Home
 
+A regra de aba ativa não pode ser copiada literalmente de
+`store-section-tabs.tsx:15-16`. Lá nenhum href é prefixo de outro; aqui
+`/configuracoes` é prefixo de `/configuracoes/home`, então
+`pathname.startsWith(href)` marcaria Gerais como ativa nas duas rotas. Gerais
+casa por igualdade exata, as demais por prefixo. O projeto irmão de copy de
+gamificação acrescenta uma terceira aba a este mesmo `TABS`.
+
 Arquivos:
 
 - `configuracoes/layout.tsx`

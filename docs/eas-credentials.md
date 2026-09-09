@@ -195,6 +195,23 @@ Não confundir com a 3.1.5(a): aquela numeração hoje é Criptomoedas.
 - A regra de lint `no-stripe-on-ios` e o teste de isolamento **foram
   removidos** junto com a decisão que os motivava.
 
+**Qual perfil usar para TestFlight.** Use `testflight`, não `production`.
+
+```
+eas build   --profile testflight --platform ios
+eas submit  --profile testflight --platform ios
+```
+
+`testflight` é `extends: production` mais `ALLOW_TEST_STRIPE_KEY=1`. Existe
+porque a guarda do `app.config.ts` derruba um build de `production` que carregue
+`pk_test_`, e hoje ele carrega. Build na nuvem não enxerga variável do shell
+local, então a exceção precisa estar no `eas.json`.
+
+Deixar `production` quebrando é proposital: `production` é o perfil de build para
+venda, e enquanto a stack estiver na conta sandbox ele deve mesmo falhar. Quando
+migrar para a conta do CNPJ com `pk_live_`, `production` volta a buildar sozinho
+e o perfil `testflight` deixa de ser necessário.
+
 **Antes de submeter TestFlight ou App Store:**
 
 1. `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` está definida nos perfis `preview` e

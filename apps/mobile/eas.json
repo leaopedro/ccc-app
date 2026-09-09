@@ -47,6 +47,12 @@
         "EXPO_PUBLIC_CAIXA_ENABLED": "true",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51U4ESaBl1stGgSdsPZflX4kv0chdc1PQ0B8mgdxrxyidhdJWVr93EdCpoLc4FILDzc4yT8TiJMIPUWK0FOt8BYXG00ivhELEGd"
       }
+    },
+    "testflight": {
+      "extends": "production",
+      "env": {
+        "ALLOW_TEST_STRIPE_KEY": "1"
+      }
     }
   },
   "submit": {
@@ -56,6 +62,11 @@
       },
       "android": {
         "serviceAccountKeyPath": "./secrets/play-service-account.json"
+      }
+    },
+    "testflight": {
+      "ios": {
+        "ascAppId": "6798074856"
       }
     }
   }

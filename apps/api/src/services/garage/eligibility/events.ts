@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
+import { attendedTicket, countAttendedEvents, startedPublishedEvent } from '../attendance.js';
+
 export type BadgeCode = string;
 
 /**
@@ -9,16 +11,20 @@ export type BadgeCode = string;
  * is atomic with the attendance.
  *
  * Phase 1 has no dedicated `Checkin` model — attendance lives on `Ticket`
- * via `status === 'used'` + `usedAt`. Every query in this file derives the
- * "check-ins" set from used tickets joined to their event.
+ * via `status === 'used'` + `usedAt`. The "attended event" set is defined
+ * once in `../attendance.ts` and shared with the member-visible
+ * `GarageStats.events` counter; nothing here restates it.
  *
  * Codes:
- *   - EVT-001 — "Primeiro Check-in"   : count(used tickets for user) >= 1
+ *   - EVT-001 — "Primeiro Check-in"   : the user has at least one used ticket
+ *                                       (see the note at the check below —
+ *                                       this one is deliberately NOT
+ *                                       event-based).
  *   - EVT-002 — "Sequência de 3"      : the user attended each of the three
  *                                       most-recently-past published events of
  *                                       the user's ticket set (no missed
  *                                       event). See streak query below.
- *   - EVT-003 — "Lenda da Pista"      : count(used tickets for user) >= 10
+ *   - EVT-003 — "Lenda da Pista"      : count(DISTINCT attended events) >= 10
  *   - CCC-001 — "Curitibano de Coração" : the just-checked-in event has
  *                                       `city === 'Curitiba'` (case-insensitive).
  *   - CCC-002 — "Drift King"          : the just-checked-in event has
@@ -45,12 +51,40 @@ export const checkEligibility = async (
   });
   if (!trigger) return codes;
 
-  // EVT-001 / EVT-003 — raw used-ticket count.
-  const usedCount = await tx.ticket.count({
+  const now = new Date();
+
+  // EVT-001 — "has checked in at least once". Deliberately NOT event-based,
+  // and deliberately an existence probe rather than a count.
+  //
+  // Counting DISTINCT events instead of tickets cannot change a `>= 1` test:
+  // zero used tickets is zero attended events, and one or more used tickets is
+  // at least one event holding a used ticket. The guest-inflation bug that
+  // motivated the events-not-check-ins correction is unreachable at this
+  // threshold, so switching the unit here would be a no-op.
+  //
+  // What WOULD change is the started/published gate that `attendance.ts`
+  // applies, and that gate is wrong for this badge. Staff can select a
+  // published event before it starts (`GET /check-in/events` has no upper
+  // `startsAt` bound) and scan at an early gate; under an event-based rule the
+  // member's actual first check-in would award nothing, and "Primeira
+  // Largada" would fire on some unrelated later scan or never. An event later
+  // reverted to `draft` or `cancelled` would also retroactively un-earn it.
+  // So EVT-001 stays a ticket-existence test.
+  //
+  // A full `count` was never needed for a `>= 1` question — `findFirst` lets
+  // Postgres stop at the first matching row.
+  const anyUsedTicket = await tx.ticket.findFirst({
     where: { userId, status: 'used' },
+    select: { id: true },
   });
-  if (usedCount >= 1) codes.push('EVT-001');
-  if (usedCount >= 10) codes.push('EVT-003');
+  if (anyUsedTicket) codes.push('EVT-001');
+
+  // EVT-003 — ten DISTINCT attended events, not ten check-ins. Five events
+  // attended with a guest each time is ten used tickets and must NOT earn
+  // this. See `countAttendedEvents` for the query-shape rationale (this runs
+  // on every check-in).
+  const attendedEventCount = await countAttendedEvents(tx, userId, now);
+  if (attendedEventCount >= 10) codes.push('EVT-003');
 
   // EVT-002 — streak of 3. Definition (per plan §18 §5239-5247): the three
   // most-recently-past published events the user holds a ticket for must ALL
@@ -81,16 +115,12 @@ export const checkEligibility = async (
   // Prisma's `distinct` over tickets: with `distinct` set, Prisma drops the
   // SQL LIMIT and dedupes in memory, which would read the member's whole
   // ticket history on every check-in.
-  const now = new Date();
-  const startedPublished = {
-    status: 'published',
-    startsAt: { lte: now },
-  } as const;
+  const startedPublished = startedPublishedEvent(now);
 
   const attendedEvents = await tx.event.findMany({
     where: {
       ...startedPublished,
-      tickets: { some: { userId, status: 'used', usedAt: { not: null } } },
+      tickets: { some: attendedTicket(userId) },
     },
     orderBy: [{ startsAt: 'desc' }, { id: 'desc' }],
     take: 3,

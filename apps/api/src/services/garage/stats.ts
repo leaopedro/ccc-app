@@ -1,5 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
+import { countAttendedEvents } from './attendance.js';
+
 /** Either the root client or a transaction client — canon §3 (tx composition). */
 export type StatsReadClient = PrismaClient | Prisma.TransactionClient;
 
@@ -25,8 +27,12 @@ export class GarageNotFoundError extends Error {
  *
  *   1. Garage row — provides `userId` (FK for counters), `likesReceived`
  *      (denormalized, §C4), `createdAt` (`joinedAt`).
- *   2. Ticket.count where status='used' — events attended.
- *      (D1: no `Checkin` model in this repo; ticket-used = checkin.)
+ *   2. `countAttendedEvents` — DISTINCT events attended, NOT used tickets.
+ *      (D1: no `Checkin` model in this repo; attendance lives on `Ticket`.)
+ *      A member who brings a guest scans two tickets at one event and that
+ *      is one event here. `attendance.ts` owns the definition, shared with
+ *      the EVT-* badge rules so the number a member reads on their garage
+ *      and the number the badges score can never disagree.
  *   3. FeedPost.count where status='visible' + authorUserId set.
  *
  * `likesReceived` reads the Garage column directly — NEVER aggregated from
@@ -43,7 +49,7 @@ export const getGarageStats = async (
   if (!garage) throw new GarageNotFoundError(garageId);
 
   const [events, posts] = await Promise.all([
-    client.ticket.count({ where: { userId: garage.userId, status: 'used' } }),
+    countAttendedEvents(client, garage.userId),
     client.feedPost.count({ where: { authorUserId: garage.userId, status: 'visible' } }),
   ]);
 

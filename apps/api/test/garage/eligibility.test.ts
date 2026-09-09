@@ -178,7 +178,7 @@ describe('eligibility/signup.checkEligibility', () => {
   });
 });
 
-describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
+describe('eligibility/events.checkEligibility — EVT-002 streak + EVT-003 event count', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -346,6 +346,112 @@ describe('eligibility/events.checkEligibility — EVT-002 streak query', () => {
     expect(runs[0]).toContain('EVT-002');
     expect(runs[1]).toEqual(runs[0]);
     expect(runs[2]).toEqual(runs[0]);
+  });
+
+  it('EVT-003 — ten used tickets spanning only five events does NOT yield it', async () => {
+    const { user } = await createUser({ email: 'legend-dup@jdm.test', verified: true });
+
+    // Five attended events, two used tickets each (member + guest every time).
+    // Ten used tickets, five events attended — half the bar.
+    let triggerId = '';
+    for (let i = 0; i < 5; i++) {
+      const e = await makeEvent(`legend-dup-e${i}`, new Date(`2026-0${i + 1}-05T10:00:00Z`));
+      const t = await makeTier(e.id, 'GA');
+      await makeUsedTicket(user.id, e.id, t.id, new Date(`2026-0${i + 1}-05T11:00:00Z`));
+      const guest = await makeUsedTicket(
+        user.id,
+        e.id,
+        t.id,
+        new Date(`2026-0${i + 1}-05T11:05:00Z`),
+      );
+      triggerId = guest.id;
+    }
+
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, triggerId));
+    expect(codes).toContain('EVT-001');
+    expect(codes).not.toContain('EVT-003');
+  });
+
+  it('EVT-003 — exactly ten distinct attended events yields it', async () => {
+    const { user } = await createUser({ email: 'legend-ten@jdm.test', verified: true });
+
+    let triggerId = '';
+    for (let i = 0; i < 10; i++) {
+      const day = String(i + 1).padStart(2, '0');
+      const e = await makeEvent(`legend-ten-e${i}`, new Date(`2026-04-${day}T10:00:00Z`));
+      const t = await makeTier(e.id, 'GA');
+      const last = await makeUsedTicket(user.id, e.id, t.id, new Date(`2026-04-${day}T11:00:00Z`));
+      triggerId = last.id;
+    }
+
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, triggerId));
+    expect(codes).toContain('EVT-003');
+  });
+
+  it('EVT-003 — nine events plus one guest ticket is still nine attended events', async () => {
+    const { user } = await createUser({ email: 'legend-guest@jdm.test', verified: true });
+
+    // Nine events, one used ticket each, PLUS a guest ticket at the last one.
+    // Ten used tickets, nine attended events — one short.
+    let lastEventId = '';
+    let lastTierId = '';
+    for (let i = 0; i < 9; i++) {
+      const day = String(i + 1).padStart(2, '0');
+      const e = await makeEvent(`legend-guest-e${i}`, new Date(`2026-04-${day}T10:00:00Z`));
+      const t = await makeTier(e.id, 'GA');
+      await makeUsedTicket(user.id, e.id, t.id, new Date(`2026-04-${day}T11:00:00Z`));
+      lastEventId = e.id;
+      lastTierId = t.id;
+    }
+    // The guest the member brought to the ninth event.
+    const guest = await makeUsedTicket(
+      user.id,
+      lastEventId,
+      lastTierId,
+      new Date('2026-04-09T11:05:00Z'),
+    );
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, guest.id));
+    expect(codes).not.toContain('EVT-003');
+  });
+
+  it('EVT-003 — draft and not-yet-started events do not count as attended', async () => {
+    const { user } = await createUser({ email: 'legend-unpub@jdm.test', verified: true });
+
+    // Eight genuinely attended events.
+    let triggerId = '';
+    for (let i = 0; i < 8; i++) {
+      const day = String(i + 1).padStart(2, '0');
+      const e = await makeEvent(`legend-unpub-e${i}`, new Date(`2026-04-${day}T10:00:00Z`));
+      const t = await makeTier(e.id, 'GA');
+      const last = await makeUsedTicket(user.id, e.id, t.id, new Date(`2026-04-${day}T11:00:00Z`));
+      triggerId = last.id;
+    }
+
+    // A draft event with a used ticket — never publicly an event the member
+    // could attend.
+    const draft = await prisma.event.create({
+      data: {
+        slug: 'legend-unpub-draft',
+        title: 'legend-unpub-draft',
+        description: 'desc',
+        startsAt: new Date('2026-04-20T10:00:00Z'),
+        endsAt: new Date('2026-04-20T14:00:00Z'),
+        type: 'meeting',
+        status: 'draft',
+        capacity: 100,
+      },
+    });
+    const draftTier = await makeTier(draft.id, 'GA');
+    await makeUsedTicket(user.id, draft.id, draftTier.id, new Date('2026-04-20T11:00:00Z'));
+
+    // A published event that has NOT started yet — an early-gate scan.
+    const future = await makeEvent('legend-unpub-future', new Date('2099-01-01T10:00:00Z'));
+    const futureTier = await makeTier(future.id, 'GA');
+    await makeUsedTicket(user.id, future.id, futureTier.id, new Date('2026-04-21T11:00:00Z'));
+
+    // Ten used tickets, eight attended events.
+    const codes = await prisma.$transaction((tx) => checkEventEligibility(tx, user.id, triggerId));
+    expect(codes).not.toContain('EVT-003');
   });
 
   it('startsAt tie — one tied event skipped denies EVT-002 whichever id sorts first', async () => {

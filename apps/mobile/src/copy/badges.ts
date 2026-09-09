@@ -39,8 +39,8 @@ const ptBR = {
       },
       'EVT-003': {
         title: 'Veterano de Pista',
-        description: 'Dez check-ins confirmados na sua trajetória CCC.',
-        criteria: 'Acumule 10 check-ins em eventos publicados.',
+        description: 'Dez eventos CCC na sua trajetória.',
+        criteria: 'Compareça a 10 eventos publicados diferentes.',
       },
       'CAR-001': {
         title: 'Garagem Aberta',
@@ -124,8 +124,8 @@ const en = {
       },
       'EVT-003': {
         title: 'Track Veteran',
-        description: 'Ten confirmed check-ins on your CCC journey.',
-        criteria: 'Accumulate 10 check-ins at published events.',
+        description: 'Ten CCC events on your journey.',
+        criteria: 'Attend 10 different published events.',
       },
       'CAR-001': {
         title: 'Garage Open',

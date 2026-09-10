@@ -1,6 +1,7 @@
 import { prisma } from '@ccc/db';
 import { adminHomeContentSchema, HOME_MEDIA_OBJECT_KEY_PREFIX } from '@ccc/shared/admin-home';
 import { HOME_CONTENT_SINGLETON_ID, homeContentResponseSchema } from '@ccc/shared/home';
+import { presignResponseSchema } from '@ccc/shared/uploads';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -330,5 +331,62 @@ describe('admin home content', () => {
     const publicRes = await app.inject({ method: 'GET', url: '/api/home-content' });
     const body = homeContentResponseSchema.parse(publicRes.json());
     expect(body.hero.bannerUrl).toBeNull();
+  });
+
+  it('presign devolve o shape padrao e uma key sob home-media/', async () => {
+    const user = await organizer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/home/images/presign',
+      headers: { authorization: bearer(loadEnv(), user.id, 'organizer') },
+      payload: { contentType: 'image/jpeg', size: 1024 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = presignResponseSchema.parse(res.json());
+    expect(body.objectKey.startsWith(`${HOME_MEDIA_OBJECT_KEY_PREFIX}/`)).toBe(true);
+  });
+
+  it('presign ignora contentType e size invalidos', async () => {
+    const user = await organizer();
+    for (const payload of [
+      { contentType: 'application/pdf', size: 1024 },
+      { contentType: 'image/jpeg', size: 0 },
+      { contentType: 'image/jpeg', size: 10 * 1024 * 1024 + 1 },
+    ]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/home/images/presign',
+        headers: { authorization: bearer(loadEnv(), user.id, 'organizer') },
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
+  it('presign nao divide quota entre dois usuarios no mesmo IP', async () => {
+    const a = await organizer();
+    const { user: b } = await createUser({
+      email: 'org2@jdm.test',
+      verified: true,
+      role: 'organizer',
+    });
+
+    const call = (id: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/admin/home/images/presign',
+        headers: { authorization: bearer(loadEnv(), id, 'organizer') },
+        payload: { contentType: 'image/jpeg', size: 1024 },
+      });
+
+    // Esgota a cota de A.
+    for (let i = 0; i < 10; i++) await call(a.id);
+    const exhausted = await call(a.id);
+    expect(exhausted.statusCode).toBe(429);
+
+    // B, mesmo IP, ainda passa. E isto que prova o hook: 'preHandler'; sem ele
+    // o keyGenerator roda antes de request.user existir e cai para balde por IP.
+    const other = await call(b.id);
+    expect(other.statusCode).toBe(200);
   });
 });

@@ -10,8 +10,13 @@
  */
 
 import { prisma } from '@ccc/db';
-import { HOME_MEDIA_OBJECT_KEY_RE, homeContentUpdateSchema } from '@ccc/shared/admin-home';
+import {
+  adminHomeImagePresignRequestSchema,
+  HOME_MEDIA_OBJECT_KEY_RE,
+  homeContentUpdateSchema,
+} from '@ccc/shared/admin-home';
 import { HOME_CONTENT_SINGLETON_ID } from '@ccc/shared/home';
+import rateLimit from '@fastify/rate-limit';
 import type { HomeContent as DbHomeContent, Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 
@@ -129,5 +134,43 @@ export const adminHomeContentRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return serializeAdminHomeContent(app, updated);
+  });
+
+  // Bloco proprio para o limiter nao vazar para as outras rotas admin: o bloco
+  // compartilhado de ./index.ts registra 25 plugins. hook: 'preHandler' para o
+  // keyGenerator rodar DEPOIS de a auth popular request.user; sem isso o plugin
+  // corre em onRequest e cai para um balde compartilhado por IP.
+  await app.register(async (scoped) => {
+    await scoped.register(rateLimit, {
+      max: 10,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (request) => {
+        const user = request.user as { sub?: string } | undefined;
+        return user?.sub ? `home-media-presign:${user.sub}` : `home-media-presign-ip:${request.ip}`;
+      },
+    });
+
+    scoped.post('/home/images/presign', async (request) => {
+      const { sub } = requireUser(request);
+      const { contentType, size } = adminHomeImagePresignRequestSchema.parse(request.body);
+
+      // kind injetado aqui, nunca vindo do body: o cliente nao pode repontar o
+      // presign para outra categoria de upload.
+      const result = await app.uploads.presignPut({
+        kind: 'home_media',
+        userId: sub,
+        contentType,
+        size,
+      });
+
+      return {
+        uploadUrl: result.uploadUrl,
+        objectKey: result.objectKey,
+        publicUrl: result.publicUrl,
+        expiresAt: result.expiresAt.toISOString(),
+        headers: result.headers,
+      };
+    });
   });
 };

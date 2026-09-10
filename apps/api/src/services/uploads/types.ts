@@ -9,6 +9,7 @@ export type UploadKind =
   | 'box_item'
   | 'partner_logo'
   | 'partner_module'
+  | 'home_media'
   | 'identity_document';
 
 // Identity documents live behind their own prefix so bucket routing and
@@ -36,6 +37,7 @@ export const UPLOAD_KIND_PATH_PREFIX: Record<UploadKind, string> = {
   box_item: 'box_item',
   partner_logo: 'partner_logo',
   partner_module: 'partner_module',
+  home_media: 'home-media',
   identity_document: DOCUMENT_PATH_PREFIX,
 };
 

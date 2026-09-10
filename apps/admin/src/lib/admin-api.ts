@@ -102,6 +102,11 @@ import {
   type AdminPartnerUpdate,
 } from '@ccc/shared/admin-box';
 import {
+  adminHomeContentSchema,
+  type AdminHomeContent,
+  type HomeContentUpdate,
+} from '@ccc/shared/admin-home';
+import {
   adminSubscriptionActionResponseSchema,
   adminSubscriptionAddonMutationResponseSchema,
   adminSubscriptionDetailSchema,
@@ -706,6 +711,16 @@ export const updateAdminGeneralSettings = (
     method: 'PUT',
     body: JSON.stringify(input),
     schema: generalSettingsSchema,
+  });
+
+export const getAdminHomeContent = (): Promise<AdminHomeContent> =>
+  apiFetch('/admin/home/content', { schema: adminHomeContentSchema });
+
+export const updateAdminHomeContent = (input: HomeContentUpdate): Promise<AdminHomeContent> =>
+  apiFetch('/admin/home/content', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    schema: adminHomeContentSchema,
   });
 
 // ── Admin broadcasts ───────────────────────────────────────────────

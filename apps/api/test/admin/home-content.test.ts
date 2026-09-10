@@ -1,7 +1,7 @@
 import { prisma } from '@ccc/db';
 import { adminHomeContentSchema, HOME_MEDIA_OBJECT_KEY_PREFIX } from '@ccc/shared/admin-home';
 import { HOME_CONTENT_SINGLETON_ID, homeContentResponseSchema } from '@ccc/shared/home';
-import { presignResponseSchema } from '@ccc/shared/uploads';
+import { MAX_UPLOAD_BYTES, presignResponseSchema } from '@ccc/shared/uploads';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -351,7 +351,7 @@ describe('admin home content', () => {
     for (const payload of [
       { contentType: 'application/pdf', size: 1024 },
       { contentType: 'image/jpeg', size: 0 },
-      { contentType: 'image/jpeg', size: 10 * 1024 * 1024 + 1 },
+      { contentType: 'image/jpeg', size: MAX_UPLOAD_BYTES + 1 },
     ]) {
       const res = await app.inject({
         method: 'POST',
@@ -361,6 +361,17 @@ describe('admin home content', () => {
       });
       expect(res.statusCode).toBe(400);
     }
+  });
+
+  it('presign aceita o tamanho maximo exato', async () => {
+    const user = await organizer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/home/images/presign',
+      headers: { authorization: bearer(loadEnv(), user.id, 'organizer') },
+      payload: { contentType: 'image/jpeg', size: MAX_UPLOAD_BYTES },
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('presign nao divide quota entre dois usuarios no mesmo IP', async () => {
@@ -388,5 +399,20 @@ describe('admin home content', () => {
     // o keyGenerator roda antes de request.user existir e cai para balde por IP.
     const other = await call(b.id);
     expect(other.statusCode).toBe(200);
+  });
+
+  it('presign rejeita staff', async () => {
+    const { user: staff } = await createUser({
+      email: 'staff3@jdm.test',
+      verified: true,
+      role: 'staff',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/home/images/presign',
+      headers: { authorization: bearer(loadEnv(), staff.id, 'staff') },
+      payload: { contentType: 'image/jpeg', size: 1024 },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });

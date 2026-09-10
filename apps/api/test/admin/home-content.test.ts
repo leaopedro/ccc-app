@@ -1,6 +1,6 @@
 import { prisma } from '@ccc/db';
 import { adminHomeContentSchema, HOME_MEDIA_OBJECT_KEY_PREFIX } from '@ccc/shared/admin-home';
-import { HOME_CONTENT_SINGLETON_ID } from '@ccc/shared/home';
+import { HOME_CONTENT_SINGLETON_ID, homeContentResponseSchema } from '@ccc/shared/home';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -279,5 +279,49 @@ describe('admin home content', () => {
       payload: { expectedUpdatedAt: new Date().toISOString(), heroTitle: 'X' },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it('edicao no admin aparece no GET publico com a URL resolvida', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+    const key = `${HOME_MEDIA_OBJECT_KEY_PREFIX}/${user.id}/banner.jpg`;
+
+    const saved = await put(user.id, {
+      expectedUpdatedAt: before.updatedAt,
+      heroTitle: 'MOTE PUBLICO',
+      heroSubtitle: 'subtitulo publico',
+      heroBannerObjectKey: key,
+      institutionalBody: 'Corpo institucional novo.',
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const publicRes = await app.inject({ method: 'GET', url: '/api/home-content' });
+    expect(publicRes.statusCode).toBe(200);
+    const body = homeContentResponseSchema.parse(publicRes.json());
+    expect(body.hero.title).toBe('MOTE PUBLICO');
+    expect(body.hero.subtitle).toBe('subtitulo publico');
+    expect(body.hero.bannerUrl).toContain(key);
+    expect(body.institutional.body).toBe('Corpo institucional novo.');
+  });
+
+  it('remover a imagem no admin zera a URL no GET publico', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+    const key = `${HOME_MEDIA_OBJECT_KEY_PREFIX}/${user.id}/banner.jpg`;
+
+    const first = await put(user.id, {
+      expectedUpdatedAt: before.updatedAt,
+      heroBannerObjectKey: key,
+    });
+    const afterFirst = adminHomeContentSchema.parse(first.json());
+
+    await put(user.id, {
+      expectedUpdatedAt: afterFirst.updatedAt,
+      heroBannerObjectKey: '',
+    });
+
+    const publicRes = await app.inject({ method: 'GET', url: '/api/home-content' });
+    const body = homeContentResponseSchema.parse(publicRes.json());
+    expect(body.hero.bannerUrl).toBeNull();
   });
 });

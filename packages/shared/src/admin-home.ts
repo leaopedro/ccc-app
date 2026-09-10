@@ -23,10 +23,14 @@ export const HOME_MEDIA_OBJECT_KEY_PREFIX = 'home-media';
  * Forma estrutural da object key das imagens da home. `isKindKey` compara
  * so o prefixo, entao `home-media/../feed_photo/x.jpg` passaria por ele e o
  * CDN normalizaria o `..` para a foto de outro membro, na primeira tela do
- * app e sem auth. Os segmentos `[a-z0-9]+` e `[^/]+` recusam travessia.
+ * app e sem auth. `[^/]+` no ultimo segmento admite `%2f` codificado, que o
+ * router decodifica antes do path ser resolvido, entao "sem barra" nao
+ * bloqueia a travessia. Os segmentos sao por isso enumerados pelo formato
+ * exato que presignPut emite: userId (cuid do Prisma) e createId() (cuid2)
+ * sao ambos alfanumerico minusculo, e EXT_FOR_MIME so produz jpg/png/webp.
  * Mesmo precedente de garageCoverObjectKeyRe em ./garage.ts.
  */
-export const HOME_MEDIA_OBJECT_KEY_RE = /^home-media\/[a-z0-9]+\/[^/]+$/i;
+export const HOME_MEDIA_OBJECT_KEY_RE = /^home-media\/[a-z0-9]+\/[a-z0-9]+\.(jpg|png|webp)$/;
 
 /**
  * Campos nulaveis coagem vazio para null: o input do form entrega '' e nunca

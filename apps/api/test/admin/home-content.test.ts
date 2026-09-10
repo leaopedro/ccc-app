@@ -170,6 +170,7 @@ describe('admin home content', () => {
       'feed_photo/someone/x.jpg',
       'avatar/someone/x.jpg',
       'home-media/../feed_photo/someone/x.jpg',
+      'home-media/x/..%2f..%2ffeed_photo%2fvictim%2fx.jpg',
     ];
     const imageFields = ['heroBannerObjectKey', 'institutionalImageObjectKey'] as const;
 

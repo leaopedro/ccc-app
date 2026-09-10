@@ -301,6 +301,9 @@ describe('admin home content', () => {
     expect(body.hero.title).toBe('MOTE PUBLICO');
     expect(body.hero.subtitle).toBe('subtitulo publico');
     expect(body.hero.bannerUrl).toContain(key);
+    // toContain sozinho passa para .../home-media/home-media/<id>/banner.jpg,
+    // que e justamente o prefixo duplicado que este teste existe para pegar.
+    expect(body.hero.bannerUrl?.match(/home-media\//g)).toHaveLength(1);
     expect(body.institutional.body).toBe('Corpo institucional novo.');
   });
 
@@ -314,6 +317,10 @@ describe('admin home content', () => {
       heroBannerObjectKey: key,
     });
     const afterFirst = adminHomeContentSchema.parse(first.json());
+    // Sem isto o teste passa mesmo que o PUT nunca tenha gravado a key: a URL
+    // ja estaria nula antes do clear e o toBeNull final nao provaria nada.
+    expect(afterFirst.heroBannerObjectKey).toBe(key);
+    expect(afterFirst.heroBannerUrl).not.toBeNull();
 
     await put(user.id, {
       expectedUpdatedAt: afterFirst.updatedAt,

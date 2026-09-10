@@ -40,6 +40,7 @@ describe('AuthedNav — organizer role', () => {
     expect(html).toContain('href="/broadcasts"');
     expect(html).toContain('href="/support"');
     expect(html).toContain('href="/check-in"');
+    expect(html).toContain('href="/configuracoes"');
   });
 
   it('does not render /groups as a top-level nav item', () => {

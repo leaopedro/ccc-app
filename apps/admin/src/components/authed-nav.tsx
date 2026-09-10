@@ -19,6 +19,7 @@ const ORGANIZER_LINKS = [
   { href: '/broadcasts', label: 'Broadcasts' },
   { href: '/support', label: 'Suporte' },
   { href: '/check-in', label: 'Check-in' },
+  { href: '/configuracoes', label: 'Configurações' },
 ] as const;
 
 const STAFF_LINKS = [{ href: '/check-in', label: 'Check-in' }] as const;

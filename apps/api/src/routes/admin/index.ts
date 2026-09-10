@@ -15,6 +15,7 @@ import { adminFinanceRoutes } from './finance.js';
 import { adminGarageXpAdjustmentRoutes } from './garage-xp-adjustment.js';
 import { adminGeneralSettingsRoutes } from './general-settings.js';
 import { adminGroupRoutes } from './groups.js';
+import { adminHomeContentRoutes } from './home-content.js';
 import { adminMfaRoutes } from './mfa.js';
 import { adminBoxCatalogRoutes } from './box-catalog-admin.js';
 import { adminBoxFulfillmentRoutes } from './box-fulfillment-admin.js';
@@ -67,6 +68,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminStoreProductTypeRoutes);
     await scope.register(adminStoreSettingsRoutes);
     await scope.register(adminGeneralSettingsRoutes);
+    await scope.register(adminHomeContentRoutes);
     await scope.register(adminStoreProductRoutes);
     await scope.register(adminStoreVariantRoutes);
     await scope.register(adminStorePhotoRoutes);

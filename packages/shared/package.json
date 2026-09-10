@@ -26,6 +26,10 @@
       "types": "./src/admin-box.ts",
       "default": "./dist/admin-box.js"
     },
+    "./admin-home": {
+      "types": "./src/admin-home.ts",
+      "default": "./dist/admin-home.js"
+    },
     "./admin-garage-xp": {
       "types": "./src/admin-garage-xp.ts",
       "default": "./dist/admin-garage-xp.js"

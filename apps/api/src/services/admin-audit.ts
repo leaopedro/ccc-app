@@ -17,6 +17,7 @@ export type RecordAuditInput = {
     | 'store_collection'
     | 'store_settings'
     | 'general_settings'
+    | 'home_content'
     | 'product'
     | 'variant'
     | 'product_type'

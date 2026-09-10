@@ -20,6 +20,15 @@ export const HERO_TITLE_MAX = 70;
 export const HOME_MEDIA_OBJECT_KEY_PREFIX = 'home-media';
 
 /**
+ * Forma estrutural da object key das imagens da home. `isKindKey` compara
+ * so o prefixo, entao `home-media/../feed_photo/x.jpg` passaria por ele e o
+ * CDN normalizaria o `..` para a foto de outro membro, na primeira tela do
+ * app e sem auth. Os segmentos `[a-z0-9]+` e `[^/]+` recusam travessia.
+ * Mesmo precedente de garageCoverObjectKeyRe em ./garage.ts.
+ */
+export const HOME_MEDIA_OBJECT_KEY_RE = /^home-media\/[a-z0-9]+\/[^/]+$/i;
+
+/**
  * Campos nulaveis coagem vazio para null: o input do form entrega '' e nunca
  * null, entao um .min(1).nullable() puro tornaria o botao Remover inalcancavel.
  * Mesmo idiom do optionalText de ./admin.ts, redeclarado local porque la ele

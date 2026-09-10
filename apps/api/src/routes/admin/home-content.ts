@@ -10,7 +10,7 @@
  */
 
 import { prisma } from '@ccc/db';
-import { homeContentUpdateSchema } from '@ccc/shared/admin-home';
+import { HOME_MEDIA_OBJECT_KEY_RE, homeContentUpdateSchema } from '@ccc/shared/admin-home';
 import { HOME_CONTENT_SINGLETON_ID } from '@ccc/shared/home';
 import type { HomeContent as DbHomeContent, Prisma } from '@prisma/client';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
@@ -61,10 +61,15 @@ export const adminHomeContentRoutes: FastifyPluginAsync = async (app) => {
     // Prefixo antes de qualquer escrita. Sem isso um organizer aponta o banner
     // para feed_photo/<outro-usuario>/x.jpg e GET /api/home-content, que e
     // publico e sem auth, resolve e publica a foto. Mesma guarda de
-    // box-catalog-admin.ts:52.
+    // box-catalog-admin.ts:52. isKindKey so compara o prefixo, entao
+    // home-media/../feed_photo/x.jpg passaria por ele; o regex exige a forma
+    // estrutural inteira e recusa a travessia.
     for (const field of IMAGE_FIELDS) {
       const key = input[field];
-      if (key && !app.uploads.isKindKey(key, 'home_media')) {
+      if (
+        key &&
+        (!app.uploads.isKindKey(key, 'home_media') || !HOME_MEDIA_OBJECT_KEY_RE.test(key))
+      ) {
         return reply.status(400).send({ error: 'invalid_object_key', field });
       }
     }

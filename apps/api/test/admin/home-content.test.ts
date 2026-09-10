@@ -164,18 +164,27 @@ describe('admin home content', () => {
     const user = await organizer();
     const before = await ensureRowViaGet(app, user.id);
 
-    for (const key of [
+    const badKeys = [
       'identity-document/someone/x.jpg',
       'feed_photo/someone/x.jpg',
       'avatar/someone/x.jpg',
-    ]) {
-      const res = await put(user.id, {
-        expectedUpdatedAt: before.updatedAt,
-        heroBannerObjectKey: key,
-      });
-      expect(res.statusCode).toBe(400);
+      'home-media/../feed_photo/someone/x.jpg',
+    ];
+    const imageFields = ['heroBannerObjectKey', 'institutionalImageObjectKey'] as const;
+
+    for (const field of imageFields) {
+      for (const key of badKeys) {
+        const res = await put(user.id, {
+          expectedUpdatedAt: before.updatedAt,
+          [field]: key,
+        });
+        expect(res.statusCode).toBe(400);
+      }
     }
-    expect((await readRow()).heroBannerObjectKey).toBeNull();
+
+    const after = await readRow();
+    expect(after.heroBannerObjectKey).toBeNull();
+    expect(after.institutionalImageObjectKey).toBeNull();
   });
 
   it('PUT com string vazia limpa a coluna em vez de dar 400', async () => {
@@ -237,6 +246,24 @@ describe('admin home content', () => {
     });
     expect(stale.statusCode).toBe(409);
     expect((await readRow()).heroTitle).toBe('PRIMEIRO');
+  });
+
+  // Serial nao prova nada aqui: ler, comparar em JS e depois escrever passa
+  // em serie e perde update em paralelo, porque Read Committed nao trava
+  // linha no SELECT. Este teste e o unico que falha se o updateMany
+  // condicional virar um update simples.
+  it('duas escritas concorrentes com o mesmo expectedUpdatedAt: uma vence, a outra 409', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const [a, b] = await Promise.all([
+      put(user.id, { expectedUpdatedAt: before.updatedAt, heroTitle: 'A' }),
+      put(user.id, { expectedUpdatedAt: before.updatedAt, heroTitle: 'B' }),
+    ]);
+
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+    const row = await readRow();
+    expect(['A', 'B']).toContain(row.heroTitle);
   });
 
   it('PUT rejeita staff', async () => {

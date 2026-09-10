@@ -234,7 +234,62 @@ mesmo formato.
 `admin/badge-notification.test.ts:21` é o caso especial e fica para a Task 5.
 Por ora só adicione os dois campos para compilar; as asserções de `body` mudam lá.
 
-- [ ] **Step 8: Verificar**
+- [ ] **Step 8: Provar que o seed nao reverte edicao**
+
+Novo arquivo `apps/api/test/garage/badge-seed-preserves-copy.test.ts`. O spec
+trata isso como invariante, e a unica coisa que o sustenta e a clausula
+`update` do `seedBadgeCatalog`, que e facil de alguem "consertar" depois:
+
+```ts
+import { prisma } from '@ccc/db';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { resetDatabase } from '../helpers.js';
+
+describe('seedBadgeCatalog preserva copy editada', () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+
+  it('upsert de catalogo nao sobrescreve title nem description', async () => {
+    await prisma.badge.create({
+      data: {
+        code: 'EVT-001',
+        category: 'eventos',
+        rarity: 'common',
+        icon: 'flag',
+        premiumExclusive: false,
+        title: 'Editado pelo admin',
+        description: 'Descrição editada.',
+      },
+    });
+
+    // Mesma forma do upsert de packages/db/prisma/seed.ts:488-500.
+    await prisma.badge.upsert({
+      where: { code: 'EVT-001' },
+      create: {
+        code: 'EVT-001',
+        category: 'eventos',
+        rarity: 'common',
+        icon: 'flag',
+        premiumExclusive: false,
+        title: 'Primeira Largada',
+        description: 'Desc canônica.',
+      },
+      update: { category: 'eventos', rarity: 'common', icon: 'flag', premiumExclusive: false },
+    });
+
+    const row = await prisma.badge.findUniqueOrThrow({ where: { code: 'EVT-001' } });
+    expect(row.title).toBe('Editado pelo admin');
+    expect(row.description).toBe('Descrição editada.');
+  });
+});
+```
+
+Run: `cd apps/api && pnpm exec vitest run test/garage/badge-seed-preserves-copy.test.ts`
+Expected: PASS.
+
+- [ ] **Step 9: Verificar**
 
 Run: `pnpm --filter @ccc/db typecheck && cd apps/api && pnpm typecheck`
 Expected: sem erro.
@@ -242,7 +297,7 @@ Expected: sem erro.
 Run: `cd apps/api && pnpm exec vitest run test/garage test/admin`
 Expected: PASS. Nenhum comportamento mudou ainda.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 pnpm exec prettier --write packages/db/prisma/seed.ts packages/db/prisma/schema.prisma docs/migration-rollback-gamification-copy.md
@@ -900,15 +955,25 @@ export const rankNamesSchema = z.object({
 });
 export type RankNamesInput = z.infer<typeof rankNamesSchema>;
 
+// Escrita: capada no que renderiza.
 export const badgeCopyEntrySchema = z.object({
   code: badgeCodeSchema,
   title: z.string().trim().min(1).max(BADGE_TITLE_MAX),
   description: z.string().trim().min(1).max(BADGE_DESCRIPTION_MAX),
 });
 
+// Leitura: capada no que a COLUNA aceita, não no cap de escrita. Um título de
+// 60 caracteres gravado por SQL direto cabe na coluna (VarChar(80)) e faria o
+// GET estourar se reusasse o cap de 40, transformando um dado estranho num 500.
+export const badgeCopyReadEntrySchema = z.object({
+  code: badgeCodeSchema,
+  title: z.string().min(1).max(80),
+  description: z.string().min(1).max(BADGE_DESCRIPTION_MAX),
+});
+
 export const adminGamificationCopySchema = z.object({
   version: z.number().int().nonnegative(),
-  badges: z.array(badgeCopyEntrySchema),
+  badges: z.array(badgeCopyReadEntrySchema),
   rankNames: rankNamesSchema,
 });
 export type AdminGamificationCopy = z.infer<typeof adminGamificationCopySchema>;
@@ -1845,14 +1910,42 @@ git commit -m "feat(admin): tela de copy de conquistas e niveis"
 
 - [ ] **Step 1: Escrever o teste que falha**
 
-Em `apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx`, um caso
-novo no molde dos existentes: montar a rota com um catálogo cujo `EVT-001`
-traga `title: 'Título da API'` e afirmar que a sheet renderiza esse texto, não
-o do bundle (`'Primeira Largada'`).
+Em `apps/mobile/src/screens/garage/__tests__/GarageIndexRoute.test.tsx`. O
+`CATALOG` do arquivo (`:356-365`) não traz `title` nem `description`, então
+todos os testes existentes já exercitam o ramo de fallback sem alteração
+nenhuma. Falta o ramo em que a API manda o texto:
 
-O caso inverso já está coberto sem alteração: o `CATALOG` de `:356-365` não traz
-`title` nem `description`, então os testes existentes já exercitam o ramo de
-fallback.
+```tsx
+const CATALOG_WITH_COPY: GarageBadgesOwnerResponse['catalog'] = [
+  {
+    code: 'EVT-001',
+    category: 'eventos',
+    rarity: 'common',
+    premiumExclusive: false,
+    icon: 'flag',
+    title: 'Título da API',
+    description: 'Descrição da API.',
+  },
+  ...CATALOG.slice(1),
+];
+```
+
+e o caso, no mesmo `describe` que já abre a `BadgesSheet` (copiar dele o setup
+de mocks e a forma de abrir a sheet, que este arquivo já define):
+
+```tsx
+it('usa o texto da API quando o catalogo traz title', async () => {
+  // ... mesmo setup dos testes de sheet deste arquivo, trocando o aggregate:
+  // makeBadgesAggregate({ catalog: CATALOG_WITH_COPY, badges: [earnedBadge('EVT-001')] })
+  expect(screen.getByText('Título da API')).toBeTruthy();
+  expect(screen.queryByText('Primeira Largada')).toBeNull();
+});
+```
+
+Ao escrever, copie o setup do teste de sheet vizinho em vez de inventar: este
+arquivo tem mocks de router e de API próprios, e os seletores de acessibilidade
+usados nele (`Conquista EVT-001`, de `packages/ui/src/HexBadge.tsx:85`) são
+baseados em código, não em título, então continuam valendo.
 
 - [ ] **Step 2: Rodar e ver falhar**
 

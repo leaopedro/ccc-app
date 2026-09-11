@@ -93,6 +93,16 @@ export function monthlyPriceCents(plan: PremiumPlan): number | null {
   return price ? price.baseAmountCents : null;
 }
 
+// Price for a specific cadence, or null when the plan has no price point at
+// that cadence. Unlike `monthlyPriceCents`, this never falls back to the
+// first available price — a fallback here would let a plan change screen
+// show a monthly price for an annual member (or vice versa), and the route
+// would 404 with PlanNotFound on submit anyway.
+export function priceForCadence(plan: PremiumPlan, cadence: 'monthly' | 'annual'): number | null {
+  const price = plan.prices.find((p) => p.cadence === cadence);
+  return price ? price.baseAmountCents : null;
+}
+
 // Benefits ordered by sortOrder (defensive — API already orders them).
 export function orderedBenefits(plan: PremiumPlan): string[] {
   return [...plan.benefits].sort((a, b) => a.sortOrder - b.sortOrder).map((b) => b.label);

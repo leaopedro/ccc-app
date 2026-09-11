@@ -14,12 +14,35 @@ import type {
   PremiumPlan,
   PremiumPlanDetailResponse,
 } from '@ccc/shared/premium-catalog';
+import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
+// Task 8 added usePremiumSubscription to ContratarScreen (real hook, only its
+// API call stubbed — same technique as ContratarScreen.test.tsx).
+const getMyPremiumSubscription = vi.fn<() => Promise<MySubscriptionResponse>>();
+
+const NO_SUBSCRIPTION: MySubscriptionResponse = {
+  active: false,
+  tier: null,
+  planSlug: null,
+  planName: null,
+  planDescription: null,
+  cadence: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  status: null,
+  provider: null,
+  baseAmountCents: 0,
+  addonsAmountCents: 0,
+  totalAmountCents: 0,
+  currency: 'BRL',
+  addons: [],
+  benefits: [],
+};
 
 const platform = { OS: 'android' as string };
 
@@ -34,6 +57,25 @@ const hookState = vi.hoisted(() => ({
 
 vi.mock('~/api/premium-catalog', () => ({
   getPremiumPlan: (slug: string) => getPremiumPlan(slug),
+  getMyPremiumSubscription: () => getMyPremiumSubscription(),
+}));
+
+vi.mock('~/lib/premium-runtime', () => ({ PREMIUM_BILLING_ENABLED: true }));
+
+// See ContratarScreen.test.tsx: the real usePremiumSubscription hook imports
+// `ApiError` from '~/api/client', whose real file pulls in `expo-constants` →
+// `expo-modules-core`, which reads `__DEV__` at import time.
+vi.mock('~/api/client', () => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    body?: unknown;
+    constructor(status: number, message: string, body?: unknown) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 vi.mock('~/hooks/usePremiumAddonModules', () => ({
@@ -149,6 +191,8 @@ describe('ContratarScreen platform gate', () => {
 
     platform.OS = 'android';
     getPremiumPlan.mockReset();
+    getMyPremiumSubscription.mockReset();
+    getMyPremiumSubscription.mockResolvedValue(NO_SUBSCRIPTION);
     hookState.modules = {
       modules: [],
       loading: false,

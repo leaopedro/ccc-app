@@ -9,6 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PremiumPlan, PremiumPlanDetailResponse } from '@ccc/shared/premium-catalog';
+import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
 import { assinaturasCopy } from '~/copy/assinaturas';
 
 declare global {
@@ -16,6 +17,10 @@ declare global {
 }
 
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
+// Backs the real usePremiumSubscription hook (not mocked directly — the hook
+// itself is exercised here, only its API call is stubbed). Same technique as
+// ContratarScreen.test.tsx.
+const getMyPremiumSubscription = vi.fn<() => Promise<MySubscriptionResponse>>();
 const routerPush = vi.fn();
 
 // Final review C2 — the caixa paywall copy must not promise a box the build
@@ -28,7 +33,48 @@ vi.mock('~/screens/caixa/caixa-enabled', () => ({
 
 vi.mock('~/api/premium-catalog', () => ({
   getPremiumPlan: (slug: string) => getPremiumPlan(slug),
+  getMyPremiumSubscription: () => getMyPremiumSubscription(),
 }));
+
+vi.mock('~/lib/premium-runtime', () => ({ PREMIUM_BILLING_ENABLED: true }));
+
+// The real usePremiumSubscription hook is exercised here (only its API call
+// is stubbed above). Its module imports `ApiError` from '~/api/client', whose
+// real file pulls in `expo-constants` → `expo-modules-core`, which reads
+// `__DEV__` at import time — undefined under this file's minimal jsdom setup.
+// A real ApiError class (not vi.fn()) so `err instanceof ApiError` still
+// behaves like production.
+vi.mock('~/api/client', () => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    body?: unknown;
+    constructor(status: number, message: string, body?: unknown) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.body = body;
+    }
+  },
+}));
+
+const NO_SUBSCRIPTION: MySubscriptionResponse = {
+  active: false,
+  tier: null,
+  planSlug: null,
+  planName: null,
+  planDescription: null,
+  cadence: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  status: null,
+  provider: null,
+  baseAmountCents: 0,
+  addonsAmountCents: 0,
+  totalAmountCents: 0,
+  currency: 'BRL',
+  addons: [],
+  benefits: [],
+};
 
 vi.mock('react-native', async () => {
   const ReactMod = await import('react');
@@ -142,6 +188,8 @@ describe('PlanoDetalheScreen', () => {
     // Flattened, not nested under `plan` (final review, Important 2) — the
     // real route now returns the plan fields at the top level.
     getPremiumPlan.mockResolvedValue({ ...SAMPLE, subscriptionsEnabled: true });
+    getMyPremiumSubscription.mockReset();
+    getMyPremiumSubscription.mockResolvedValue(NO_SUBSCRIPTION);
   });
 
   afterEach(async () => {
@@ -214,5 +262,58 @@ describe('PlanoDetalheScreen', () => {
     expect(text).not.toContain(assinaturasCopy.caixa.title);
     expect(text).not.toContain(assinaturasCopy.caixa.body);
     expect(text).not.toContain(assinaturasCopy.caixa.delivery);
+  });
+
+  // Task 8 — same gate as PlanosScreen/ContratarScreen applied at the CTA
+  // destination. Own plan: nothing to contract, no CTA at all.
+  it('offers no CTA on the members own current plan', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'active',
+      planSlug: 'fundador',
+    });
+    await renderScreen();
+    expect(container.querySelector('[data-testid="detalhe-assinar"]')).toBeNull();
+    expect(container.textContent ?? '').toContain('Fundador');
+  });
+
+  // A different plan, with the member's OWN membership in good standing:
+  // the CTA sends them to the plan-change screen, not to a contratar flow
+  // that would just 409 AlreadySubscribed.
+  it('sends an eligible member to alterar instead of contratar for a different plan', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'active',
+      planSlug: 'estrada',
+    });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="detalhe-assinar"]') as HTMLElement | null;
+    if (!cta) throw new Error('CTA not rendered');
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+    expect(routerPush).toHaveBeenCalledWith('/assinaturas/alterar?slug=fundador');
+  });
+
+  // past_due keeps the regular contratar → 409 → Stripe portal exit — the
+  // same reason the gate excludes it everywhere else.
+  it('still sends a past_due member to contratar, not alterar', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'past_due',
+      planSlug: 'estrada',
+    });
+    await renderScreen();
+    const cta = container.querySelector('[data-testid="detalhe-assinar"]') as HTMLElement | null;
+    if (!cta) throw new Error('CTA not rendered');
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+    expect(routerPush).toHaveBeenCalledWith('/assinaturas/contratar?slug=fundador');
   });
 });

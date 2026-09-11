@@ -22,6 +22,12 @@ export const assinaturasCopy = {
     perMonth: 'POR MÊS',
     // CTA label is "ASSINAR {TIER}" — tier appended by the screen.
     ctaPrefix: 'ASSINAR',
+    // Shown in place of the CTA on the card matching the member's own live
+    // plan — there is nothing to buy on that card.
+    currentBadge: 'SEU PLANO ATUAL',
+    // CTA label is "TROCAR PARA {TIER}" on every OTHER card, when the member
+    // already has a live membership in good standing (canChangePlan).
+    changePrefix: 'TROCAR PARA',
   },
   modules: {
     eyebrow: 'MÓDULOS ADICIONAIS',
@@ -294,6 +300,12 @@ const ALTERAR_PAST_DUE_BODY_EN =
   'Your subscription has a pending payment. Settle the charge before changing plans.';
 
 export const assinaturasCopyEn = {
+  // Added with Task 8 (plan-change entry points), so both keys carry a twin
+  // from day one.
+  plans: {
+    currentBadge: 'YOUR CURRENT PLAN',
+    changePrefix: 'SWITCH TO',
+  },
   // Mirrors the top-level `caixa` key in `assinaturasCopy` — keep both in
   // sync (fix round 1, Criticals 1+2: opt-in/curated per cycle, no freight
   // claim; see the comment on `assinaturasCopy.caixa` for why).

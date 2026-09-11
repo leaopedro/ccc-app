@@ -20,6 +20,7 @@ import type {
   PremiumPlan,
   PremiumPlanDetailResponse,
 } from '@ccc/shared/premium-catalog';
+import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
 import type { PaymentSheetOutcome } from '~/payments/payment-sheet';
 import type { CheckoutOutcome } from '~/screens/assinaturas/checkout';
 import { assinaturasCopy } from '~/copy/assinaturas';
@@ -30,12 +31,57 @@ declare global {
 }
 
 const getPremiumPlan = vi.fn<(slug: string) => Promise<PremiumPlanDetailResponse>>();
+// Backs the real usePremiumSubscription hook (not mocked directly — the hook
+// itself is exercised here, only its API call is stubbed). The billing flag
+// it reads is forced on below, since EXPO_PUBLIC_PREMIUM_BILLING_ENABLED is
+// unset in the test env and the hook would otherwise never call this at all.
+const getMyPremiumSubscription = vi.fn<() => Promise<MySubscriptionResponse>>();
 const startPremiumCheckout = vi.fn<(input: unknown) => Promise<CheckoutOutcome>>();
 const pollSubscriptionActive = vi.fn<() => Promise<boolean>>();
 const pay = vi.fn<(clientSecret: string) => Promise<PaymentSheetOutcome>>();
 const showToast = vi.fn();
 const routerReplace = vi.fn();
 const routerBack = vi.fn();
+
+vi.mock('~/lib/premium-runtime', () => ({ PREMIUM_BILLING_ENABLED: true }));
+
+// The real usePremiumSubscription hook is exercised here (only its API call
+// is stubbed above). Its module imports `ApiError` from '~/api/client', whose
+// real file pulls in `expo-constants` → `expo-modules-core`, which reads
+// `__DEV__` at import time — undefined under this file's minimal jsdom setup.
+// Same technique as MinhaAssinaturaScreen.test.tsx: a real ApiError class (not
+// vi.fn()) so `err instanceof ApiError` still behaves like production.
+vi.mock('~/api/client', () => ({
+  ApiError: class ApiError extends Error {
+    status: number;
+    body?: unknown;
+    constructor(status: number, message: string, body?: unknown) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.body = body;
+    }
+  },
+}));
+
+const NO_SUBSCRIPTION: MySubscriptionResponse = {
+  active: false,
+  tier: null,
+  planSlug: null,
+  planName: null,
+  planDescription: null,
+  cadence: null,
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  status: null,
+  provider: null,
+  baseAmountCents: 0,
+  addonsAmountCents: 0,
+  totalAmountCents: 0,
+  currency: 'BRL',
+  addons: [],
+  benefits: [],
+};
 
 // Mutable so each test can flip OS before rendering — same technique as
 // checkout.test.ts (Platform.OS is read at render/call time, not at import
@@ -61,6 +107,7 @@ const hookState = vi.hoisted(() => ({
 
 vi.mock('~/api/premium-catalog', () => ({
   getPremiumPlan: (slug: string) => getPremiumPlan(slug),
+  getMyPremiumSubscription: () => getMyPremiumSubscription(),
 }));
 
 vi.mock('~/hooks/usePremiumAddonModules', () => ({
@@ -191,6 +238,8 @@ describe('ContratarScreen', () => {
     // Flattened, not nested under `plan` (final review, Important 2) — the
     // real route now returns the plan fields at the top level.
     getPremiumPlan.mockResolvedValue({ ...PLAN, subscriptionsEnabled: true });
+    getMyPremiumSubscription.mockReset();
+    getMyPremiumSubscription.mockResolvedValue(NO_SUBSCRIPTION);
     startPremiumCheckout.mockReset();
     pollSubscriptionActive.mockReset();
     pay.mockReset();
@@ -564,5 +613,47 @@ describe('ContratarScreen', () => {
 
     expect(container.querySelector('[data-testid="contratar-cta"]')).not.toBeNull();
     expect(text()).not.toContain(assinaturasCopy.minhaAssinatura.unavailableTitle);
+  });
+
+  // A member with a live, in-good-standing membership who reaches Contratar
+  // (any plan, via "VER TODOS OS PLANOS") should never walk this whole screen
+  // to fail on a 409 at the very end — send them to AlterarPlanoScreen instead.
+  it('redirects a member with an active subscription to the plan-change screen', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'active',
+      planSlug: 'estrada',
+    });
+    await renderScreen('fundador');
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/alterar?slug=fundador');
+  });
+
+  // The gate also covers cancel_scheduled — still a live, in-good-standing
+  // membership per canChangePlan.
+  it('redirects a member with a cancel_scheduled subscription to the plan-change screen', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'cancel_scheduled',
+      planSlug: 'estrada',
+    });
+    await renderScreen('fundador');
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/alterar?slug=fundador');
+  });
+
+  it('nao redireciona membro past_due, que precisa do link do portal', async () => {
+    getMyPremiumSubscription.mockResolvedValue({
+      ...NO_SUBSCRIPTION,
+      active: true,
+      status: 'past_due',
+      planSlug: 'fundador',
+    });
+    await renderScreen();
+
+    // O caminho atual termina no 409 AlreadySubscribed, que traz
+    // GERENCIAR ASSINATURA — o portal onde se troca o cartão que falhou.
+    // Mandá-lo para uma tela sem CTA tiraria a única saída que existe.
+    expect(routerReplace).not.toHaveBeenCalledWith(expect.stringContaining('/assinaturas/alterar'));
   });
 });

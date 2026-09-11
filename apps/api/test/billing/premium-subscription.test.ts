@@ -341,6 +341,23 @@ describe('premium subscription + add-ons', () => {
     expect(await prisma.premiumMembershipAddon.findMany()).toHaveLength(0);
   });
 
+  it('attach: provider vem antes de status quando as duas condicoes valem', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    await seedMembership(g.id, { provider: 'apple_revenuecat', status: 'past_due' });
+    await seedModule();
+
+    // Apple + past_due satisfaz os dois guards. A ordem e deliberada: provider
+    // primeiro, porque "gerencie na App Store" e a acao que o membro pode tomar,
+    // enquanto "regularize a cobranca" manda ele para um portal que essa
+    // membership nao tem. Sem este teste, inverter os dois `if` passa batido.
+    const res = await attach(user.id, 'wash');
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'NotStripeSubscription' });
+    expect(res.json()).not.toMatchObject({ error: 'InvalidStatus' });
+  });
+
   // --- DELETE /addons/:addonKey ----------------------------------------------
 
   it('detach: sets cancel_scheduled + recomputes addonsAmountCents to 0', async () => {

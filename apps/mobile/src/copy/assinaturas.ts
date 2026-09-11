@@ -78,7 +78,6 @@ export const assinaturasCopy = {
     pendingTitle: 'Pagamento em processamento.',
     pendingSubcopy: 'Assim que o pagamento for confirmado sua assinatura aparece aqui.',
     pendingCta: 'VER MINHA ASSINATURA',
-    successToast: 'Assinatura ativada.',
     // Final review I4: this used to reuse paymentsCopy.sheet.cancelled, which
     // says "Seu pedido continua aguardando pagamento". There is no *pedido* in
     // the subscription flow — the member closed the sheet on a contratação,
@@ -108,6 +107,36 @@ export const assinaturasCopy = {
     // same plan (which reuses it) or wait for it to clear on its own.
     errorAttemptInFlight:
       'Você tem uma tentativa de assinatura de outro plano em andamento. Tente novamente com o mesmo plano de antes, ou aguarde essa tentativa expirar.',
+  },
+  // Post-purchase welcome. Reached only after the poll confirmed the
+  // membership exists, so this copy may state the activation as a fact — it
+  // is never shown on the pending path (`contratar.pendingTitle` owns that).
+  //
+  // The benefit list is NOT here: it comes from the subscription payload
+  // (DB-registered labels), the same source Minha Assinatura reads. Only the
+  // framing lives in copy, so the two screens can never disagree about what
+  // the member bought.
+  boasVindas: {
+    eyebrow: 'ASSINATURA ATIVA',
+    title: 'Bem-vindo à Casa',
+    subcopy:
+      'Seu pagamento foi confirmado. A partir de agora você é membro, com acesso aos encontros, à garagem e à curadoria da Casa.',
+    planLabel: 'SEU PLANO',
+    benefitsTitle: 'O QUE JÁ É SEU',
+    nextTitle: 'POR ONDE COMEÇAR',
+    // Each step points at something the member can do today. The caixa step
+    // follows the same build flag as the caixa block in `contratar` — a step
+    // linking to a screen that is not in the build is worse than no step.
+    steps: {
+      caixaTitle: 'Monte sua caixa',
+      caixaBody: 'Escolha os itens da curadoria deste ciclo e confirme antes do fechamento.',
+      eventosTitle: 'Reserve seu lugar',
+      eventosBody: 'Veja os próximos encontros e garanta sua vaga antes de lotar.',
+      garagemTitle: 'Apresente seu carro',
+      garagemBody: 'Cadastre seu carro na garagem e seja reconhecido nos encontros.',
+    },
+    cta: 'VER MINHA ASSINATURA',
+    loading: 'Preparando suas boas-vindas...',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -189,6 +218,28 @@ export const assinaturasCopyEn = {
     cancelledToast: 'Payment cancelled. Your membership was not activated.',
     errorAttemptInFlight:
       'You have a subscription attempt for another plan in progress. Try again with the same plan as before, or wait for that attempt to expire.',
+  },
+  // Added with the post-purchase welcome screen, so it carries a twin from
+  // day one. Benefit labels stay out of here for the same reason as in PT:
+  // they come from the subscription payload, not from copy.
+  boasVindas: {
+    eyebrow: 'MEMBERSHIP ACTIVE',
+    title: 'Welcome to the Casa',
+    subcopy:
+      'Your payment is confirmed. From now on you are a member, with access to the meetups, the garage and the Casa curation.',
+    planLabel: 'YOUR PLAN',
+    benefitsTitle: "WHAT'S ALREADY YOURS",
+    nextTitle: 'WHERE TO START',
+    steps: {
+      caixaTitle: 'Build your box',
+      caixaBody: "Pick this cycle's curated items and confirm before the cutoff.",
+      eventosTitle: 'Take your seat',
+      eventosBody: 'See the next meetups and claim your spot before they fill up.',
+      garagemTitle: 'Show your car',
+      garagemBody: 'Add your car to the garage and be recognised at the meetups.',
+    },
+    cta: 'VIEW MY MEMBERSHIP',
+    loading: 'Getting your welcome ready...',
   },
   // `unavailableTitle` / `unavailableSubcopy` were rewritten on this branch
   // (they used to say "em breve"), so they need twins too. State only: no

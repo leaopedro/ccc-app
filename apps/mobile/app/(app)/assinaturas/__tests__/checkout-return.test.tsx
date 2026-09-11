@@ -90,16 +90,16 @@ describe('checkout-return route', () => {
 
   const text = () => container.textContent ?? '';
 
-  // 1. Poll resolves true -> navigate straight to minha-assinatura, no
+  // 1. Poll resolves true -> navigate straight to the welcome screen, no
   // pending UI ever shown. Fails if the `if (active)` branch is dropped or
   // inverted (a paid member would get stuck on the pending screen instead of
-  // landing on their subscription).
-  it('navigates to minha-assinatura when the poll resolves active', async () => {
+  // landing on their welcome).
+  it('navigates to the welcome screen when the poll resolves active', async () => {
     pollSubscriptionActive.mockResolvedValue(true);
     await renderRoute();
 
     expect(pollSubscriptionActive).toHaveBeenCalledTimes(1);
-    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/boas-vindas');
     expect(text()).not.toContain(assinaturasCopy.contratar.pendingTitle);
   });
 

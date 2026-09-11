@@ -27,7 +27,7 @@ export default function CheckoutReturnRoute() {
   const poll = useCallback(async () => {
     const active = await pollSubscriptionActive();
     if (active) {
-      router.replace('/assinaturas/minha-assinatura');
+      router.replace('/assinaturas/boas-vindas');
       return;
     }
     setPending(true);

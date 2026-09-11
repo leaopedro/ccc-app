@@ -219,8 +219,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         setPhase('confirming');
         const active = await pollSubscriptionActive();
         if (active) {
-          showToast(copy.successToast);
-          router.replace('/assinaturas/minha-assinatura');
+          // The welcome screen IS the confirmation (plan, benefits, first
+          // steps), so no success toast on top of it.
+          router.replace('/assinaturas/boas-vindas');
         } else {
           setPhase('pending');
         }
@@ -246,8 +247,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         setPhase('confirming');
         const active = await pollSubscriptionActive();
         if (active) {
-          showToast(copy.successToast);
-          router.replace('/assinaturas/minha-assinatura');
+          // The welcome screen IS the confirmation (plan, benefits, first
+          // steps), so no success toast on top of it.
+          router.replace('/assinaturas/boas-vindas');
         } else {
           setPhase('pending');
         }

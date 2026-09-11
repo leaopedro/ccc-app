@@ -330,11 +330,12 @@ describe('ContratarScreen', () => {
     expect(text()).toContain(assinaturasCopy.contratar.errorAlreadySubscribedCta);
   });
 
-  // 4. A `returned` outcome whose poll resolves true navigates to
-  // minha-assinatura and fires the success toast. Fails if the poll-result
-  // branches are inverted (member who paid gets stuck, or a not-yet-paid
-  // member gets falsely told it worked).
-  it('navigates and toasts when returned + poll resolves active', async () => {
+  // 4. A `returned` outcome whose poll resolves true navigates to the
+  // welcome screen, which is now the confirmation — so the success toast is
+  // gone (BoasVindasScreen states the activation in full). Fails if the
+  // poll-result branches are inverted (member who paid gets stuck, or a
+  // not-yet-paid member gets falsely told it worked).
+  it('navigates to the welcome screen when returned + poll resolves active', async () => {
     startPremiumCheckout.mockResolvedValue({ kind: 'returned' });
     pollSubscriptionActive.mockResolvedValue(true);
     await renderScreen();
@@ -347,8 +348,8 @@ describe('ContratarScreen', () => {
     });
 
     expect(pollSubscriptionActive).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.successToast);
-    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/boas-vindas');
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   // 5. A `returned` outcome whose poll resolves false lands on the pending
@@ -427,8 +428,8 @@ describe('ContratarScreen', () => {
 
     expect(pay).toHaveBeenCalledWith('pi_sub_secret');
     expect(pollSubscriptionActive).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith(assinaturasCopy.contratar.successToast);
-    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
+    expect(routerReplace).toHaveBeenCalledWith('/assinaturas/boas-vindas');
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   // 8. Cancel is not an error: a closed sheet shows the neutral copy via

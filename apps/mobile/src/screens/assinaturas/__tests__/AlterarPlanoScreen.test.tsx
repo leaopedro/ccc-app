@@ -419,6 +419,40 @@ describe('AlterarPlanoScreen', () => {
     expect(changePremiumPlan.fn).not.toHaveBeenCalled();
   });
 
+  // `active: true` with `status: null` is a state mySubscriptionResponseSchema's
+  // own comment declares impossible (status is null exactly when there is no
+  // live membership, i.e. when active is false). This test does not assert
+  // that state is expected — it pins the deliberate fail-closed choice for
+  // when it happens anyway: canChangePlan reads it as "not active/
+  // cancel_scheduled" and blocks, same screen as past_due. The alternative
+  // (fail open) would let the CTA fire a billing mutation the app can't
+  // evaluate — the server's own InvalidStatus guard would reject it after
+  // the tap instead of this screen explaining why beforehand.
+  it('status nulo com active true bloqueia a troca (estado impossível pelo schema, fail-closed)', async () => {
+    hookState.value = subResult({ subscription: { ...activeSub, status: null } });
+    await render();
+
+    expect(text()).toContain(copy.blockedPastDueTitle);
+    expect(cta()).toBeNull();
+  });
+
+  // `blockedStatus` does not only gate JSX — it also gates the effect that
+  // fires GET /api/me/premium/status. Effects run on every render regardless
+  // of which JSX branch is returned, so the subLoading/no-membership guards
+  // further down do NOT protect this call. Pins that "subscription is still
+  // null because it hasn't loaded yet" must read as `blockedStatus: false`,
+  // not `true` — collapsing the check back to bare `!canChangePlan(subscription)`
+  // (canChangePlan(null) is `false`, so its negation is `true`) would fire
+  // this request on every single mount, including for a perfectly fine
+  // active/cancel_scheduled member, and no other test would catch it since
+  // they all mount with the subscription already loaded.
+  it('nao chama getPremiumStatus enquanto a assinatura ainda esta carregando', async () => {
+    hookState.value = subResult({ subscription: null, loading: true });
+    await render();
+
+    expect(getPremiumStatus.fn).not.toHaveBeenCalled();
+  });
+
   it('bloqueia a troca quando o gate de assinaturas está desligado', async () => {
     plansState.value = plansResult({ subscriptionsEnabled: false });
     await render();

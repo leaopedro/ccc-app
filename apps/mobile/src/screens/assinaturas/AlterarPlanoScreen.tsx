@@ -38,6 +38,7 @@ import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
+import { canChangePlan } from '~/screens/assinaturas/can-change-plan';
 import {
   resolvePlanChangeError,
   type PlanChangeError,
@@ -163,12 +164,36 @@ export default function AlterarPlanoScreen({ slug }: { slug: string | undefined 
   // /api/me/premium/status already carries `manageUrl` precomputed
   // (same field PremiumScreen's "onManage" opens) — fetched only when the
   // blocked block is actually showing, and only as a read.
-  const blockedStatus = Boolean(
-    subscription?.active &&
-    subscription.provider === 'stripe' &&
-    subscription.status &&
-    !['active', 'cancel_scheduled'].includes(subscription.status),
-  );
+  //
+  // Uses the same canChangePlan gate as the three purchase-flow entry points
+  // (PlanosScreen/ContratarScreen/PlanoDetalheScreen), rather than a second
+  // inline copy of the rule. By this point `subscription.active` and
+  // `subscription.provider === 'stripe'` are already guaranteed by the
+  // earlier guards above, so this is equivalent to the old three-part check
+  // for every reachable state — except one the schema declares impossible:
+  // `active: true` with `status: null` (mySubscriptionResponseSchema's own
+  // comment ties non-null status to a live membership). The old check let
+  // that combination fall through unblocked; canChangePlan fails closed on
+  // it instead. Deliberate: failing open here would let the CTA fire a
+  // billing mutation the app can't evaluate (the server's own InvalidStatus
+  // guard would then reject it after the tap), while failing closed just
+  // shows the explanatory blocked screen.
+  //
+  // `subscription !== null` is NOT a defensive re-wrap of the old
+  // status-null case above — it guards a different, always-reachable state:
+  // every mount renders once before usePremiumSubscription resolves, with
+  // subscription still null. blockedStatus doesn't only gate JSX (where the
+  // subLoading/no-membership returns above would already have short-circuited
+  // by the time it matters) — it also gates the effect below, which fires a
+  // real GET /api/me/premium/status. Effects run every render regardless of
+  // which JSX branch ends up returned, so without this guard the "still
+  // loading" render would read canChangePlan(null) as `false` → blockedStatus
+  // `true` → fire that request on every single mount, including for a
+  // perfectly fine active/cancel_scheduled member. This clause is what tells
+  // "haven't loaded the subscription yet" apart from "loaded it and it's
+  // blocked" — collapsing it back to bare `!canChangePlan(subscription)`
+  // brings that spurious request back, silently, with no other test to catch it.
+  const blockedStatus = subscription !== null && !canChangePlan(subscription);
   const [manageUrl, setManageUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!blockedStatus) return;

@@ -7,7 +7,7 @@ ALTER TABLE "Badge" ADD COLUMN "description" VARCHAR(240);
 -- sem ninguém ter pedido.
 UPDATE "Badge" SET "title" = 'Primeira Largada',  "description" = 'Seu primeiro check-in confirmado em um encontro CCC.'   WHERE "code" = 'EVT-001';
 UPDATE "Badge" SET "title" = 'Sequência de Três', "description" = 'Três eventos consecutivos sem perder nenhum.'            WHERE "code" = 'EVT-002';
-UPDATE "Badge" SET "title" = 'Veterano de Pista', "description" = 'Dez check-ins confirmados na sua trajetória CCC.'        WHERE "code" = 'EVT-003';
+UPDATE "Badge" SET "title" = 'Veterano de Pista', "description" = 'Dez eventos CCC na sua trajetória.'        WHERE "code" = 'EVT-003';
 UPDATE "Badge" SET "title" = 'Garagem Aberta',    "description" = 'O primeiro carro estacionado na sua garagem.'            WHERE "code" = 'CAR-001';
 UPDATE "Badge" SET "title" = 'Garagem Cheia',     "description" = 'Cinco carros ou mais ocupando suas vagas.'               WHERE "code" = 'CAR-002';
 UPDATE "Badge" SET "title" = 'Curador CCC',       "description" = 'Dez carros ou mais na coleção da sua garagem.'           WHERE "code" = 'CAR-003';

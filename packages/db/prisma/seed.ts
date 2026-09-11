@@ -454,7 +454,7 @@ const BADGES = [
     icon: 'medal',
     premiumExclusive: false,
     title: 'Veterano de Pista',
-    description: 'Dez check-ins confirmados na sua trajetória CCC.',
+    description: 'Dez eventos CCC na sua trajetória.',
   },
   {
     code: 'CAR-001',

@@ -15,6 +15,7 @@
 import { prisma } from '@ccc/db';
 import {
   RANK_KEYS,
+  type RankKey,
   adminGamificationCopySchema,
   gamificationCopyUpdateSchema,
 } from '@ccc/shared/admin-gamification';
@@ -27,8 +28,23 @@ import { RANK_TIERS } from '../../services/garage/progress.js';
 import { ensureGeneralSettings } from '../../services/general-settings.js';
 import { invalidateBadgesCatalogCache } from '../badges-catalog.js';
 
-const codeName = (key: (typeof RANK_KEYS)[number]): string =>
-  RANK_TIERS.find((t) => t.key === key)?.name ?? key;
+const codeName = (key: RankKey): string => RANK_TIERS.find((t) => t.key === key)?.name ?? key;
+
+// Resolução única do nome efetivo de cada nível: `stored[key]` se for uma
+// string não vazia, senão o nome de código. GET e o detector de mudança do
+// PUT precisam concordar nisso — antes cada um tinha sua própria cópia da
+// mesma ternária, e o PUT comparava o valor CRU (undefined numa linha nova)
+// contra o valor que o GET já tinha defaultado, marcando `rankNames` como
+// alterado em todo PUT que só ecoa de volta o que o GET acabou de mandar.
+const resolveRankNames = (stored: Record<string, unknown>): Record<RankKey, string> =>
+  Object.fromEntries(
+    RANK_KEYS.map((key) => [
+      key,
+      typeof stored[key] === 'string' && stored[key] !== ''
+        ? (stored[key] as string)
+        : codeName(key),
+    ]),
+  ) as Record<RankKey, string>;
 
 export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
   const readCopy = async () => {
@@ -43,14 +59,7 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const stored = (settings.rankNames ?? {}) as Record<string, unknown>;
-    const rankNames = Object.fromEntries(
-      RANK_KEYS.map((key) => [
-        key,
-        typeof stored[key] === 'string' && stored[key] !== ''
-          ? (stored[key] as string)
-          : codeName(key),
-      ]),
-    );
+    const rankNames = resolveRankNames(stored);
 
     return adminGamificationCopySchema.parse({
       version: settings.gamificationCopyVersion,
@@ -87,24 +96,38 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
     const settings = await ensureGeneralSettings();
 
     const touched: string[] = [];
-    const badgeWrites = incoming.filter((entry) => {
+    const badgeWrites: typeof incoming = [];
+    for (const entry of incoming) {
       const current = byCode.get(entry.code)!;
       const titleChanged = current.title !== entry.title;
       const descChanged = current.description !== entry.description;
       if (titleChanged) touched.push(`badge.${entry.code}.title`);
       if (descChanged) touched.push(`badge.${entry.code}.description`);
-      return titleChanged || descChanged;
-    });
+      if (titleChanged || descChanged) badgeWrites.push(entry);
+    }
 
+    // Compara contra o nome EFETIVO (mesma resolução do GET), não contra o
+    // valor cru da coluna: numa linha nova a coluna é NULL, então o valor cru
+    // é `undefined` para toda chave, e comparar isso com o que o admin acabou
+    // de receber do GET (já com o default aplicado) marcaria `rankNames` como
+    // alterado em todo PUT que só ecoa de volta o que leu.
+    const rankNamesInput = input.rankNames;
     const storedRanks = (settings.rankNames ?? {}) as Record<string, unknown>;
+    const effectiveRanks = resolveRankNames(storedRanks);
     const ranksChanged =
-      input.rankNames !== undefined &&
-      RANK_KEYS.some((key) => storedRanks[key] !== input.rankNames![key]);
+      rankNamesInput !== undefined &&
+      RANK_KEYS.some((key) => effectiveRanks[key] !== rankNamesInput[key]);
     if (ranksChanged) touched.push('rankNames');
 
     if (touched.length === 0) {
       return readCopy();
     }
+
+    // Calculado fora da transação: com `rankNamesInput` checado aqui, o
+    // narrowing do TS já garante non-undefined dentro do objeto, sem precisar
+    // de `!` no data da transação.
+    const rankUpdate =
+      ranksChanged && rankNamesInput !== undefined ? { rankNames: rankNamesInput } : {};
 
     // A precondição É a escrita. Ler a versão, comparar em JS e depois gravar
     // perde update mesmo dentro de $transaction: o default é Read Committed e
@@ -120,7 +143,7 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
         },
         data: {
           gamificationCopyVersion: { increment: 1 },
-          ...(ranksChanged ? { rankNames: input.rankNames! } : {}),
+          ...rankUpdate,
         },
       });
       if (count !== 1) {

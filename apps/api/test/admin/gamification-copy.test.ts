@@ -175,6 +175,26 @@ describe('admin gamification copy', () => {
     expect(await prisma.adminAudit.count()).toBe(0);
   });
 
+  it('PUT ecoando o GET (badges e rankNames intactos) nao audita e nao incrementa versao', async () => {
+    await seedTwo();
+    const user = await admin();
+    const before = adminGamificationCopySchema.parse((await get(user.id)).json());
+
+    // rankNames aqui vem do GET, ou seja, ja com o default de codigo aplicado
+    // (a coluna esta NULL numa linha nova). Se o detector de mudanca comparar
+    // contra o valor CRU da coluna em vez do nome efetivo, isto falsamente
+    // marca 'rankNames' como alterado.
+    const res = await put(user.id, {
+      expectedVersion: before.version,
+      badges: before.badges,
+      rankNames: before.rankNames,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = adminGamificationCopySchema.parse(res.json());
+    expect(body.version).toBe(before.version);
+    expect(await prisma.adminAudit.count()).toBe(0);
+  });
+
   it('PUT com mudanca audita os campos tocados', async () => {
     await seedTwo();
     const user = await admin();
@@ -215,6 +235,16 @@ describe('admin gamification copy', () => {
       });
       expect(res.statusCode).toBe(403);
     }
+
+    // A fronteira que importa e a escrita: um organizer com um PUT bem
+    // formado tambem tem que tomar 403, nao so o GET.
+    const putRes = await app.inject({
+      method: 'PUT',
+      url: '/admin/gamification/copy',
+      headers: { authorization: bearer(loadEnv(), org.id, 'organizer') },
+      payload: { expectedVersion: 0 },
+    });
+    expect(putRes.statusCode).toBe(403);
   });
 
   it('GET /badges/catalog logo apos o PUT ja mostra o titulo novo', async () => {

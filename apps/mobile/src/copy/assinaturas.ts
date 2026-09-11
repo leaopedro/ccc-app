@@ -1,6 +1,13 @@
 // PT-BR copy for the Assinaturas module (planos, detalhe, minha assinatura).
 // EN scaffold kept minimal per the i18n mandate (CLAUDE.md cross-cutting).
 
+// Shared between `alterar.blockedPastDueBody` (pre-check block, subscription
+// already past_due when the screen loads) and `alterar.errorPastDue` (the
+// same fact surfacing mid-action, from a 409 InvalidStatus race) — one
+// sentence, not two variants of the same state.
+const ALTERAR_PAST_DUE_BODY =
+  'Sua assinatura está com um pagamento pendente. Resolva a cobrança antes de trocar de plano.';
+
 export const assinaturasCopy = {
   header: {
     title: 'ASSINATURA',
@@ -108,6 +115,69 @@ export const assinaturasCopy = {
     errorAttemptInFlight:
       'Você tem uma tentativa de assinatura de outro plano em andamento. Tente novamente com o mesmo plano de antes, ou aguarde essa tentativa expirar.',
   },
+  // Plan-change confirmation screen (troca de plano dentro de Minha
+  // Assinatura). Same rateio mechanism as contratar's add-on attach/detach
+  // (tasks 9 e 10), so `whenBody` is the ONE canonical phrasing — those
+  // screens reuse this key rather than writing their own sentence.
+  alterar: {
+    header: 'TROCAR DE PLANO',
+    back: 'Voltar',
+    fromLabel: 'PLANO ATUAL',
+    toLabel: 'NOVO PLANO',
+    // `baseAmountCents` is the snapshot of the CONTRACTED cadence, not always
+    // monthly — an annual snapshot labelled "mensalidade" would be off by a
+    // factor of twelve. Functions of cadence, not fixed strings.
+    currentValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Valor anual de hoje' : 'Valor mensal de hoje',
+    newValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Novo valor anual' : 'Novo valor mensal',
+    valueTitle: 'VALOR',
+    gainTitle: 'O QUE VOCÊ GANHA',
+    loseTitle: 'O QUE VOCÊ PERDE',
+    keptTitle: 'O QUE CONTINUA',
+    whenTitle: 'QUANDO VALE',
+    // Global Constraint — literal, single formulation. contratar's future
+    // add-on attach/detach copy (tasks 9/10) reads this key instead of
+    // writing a variant.
+    whenBody:
+      'A mudança vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra na sua próxima fatura, que pode ser a que fecha neste ciclo.',
+    cta: 'CONFIRMAR TROCA',
+    ctaLoading: 'CONFIRMANDO...',
+    voltar: 'MANTER PLANO ATUAL',
+    confirming: 'Confirmando a troca de plano...',
+    pendingTitle: 'Troca em processamento.',
+    pendingSubcopy: 'Assim que a troca for confirmada seu plano aparece atualizado aqui.',
+    pendingCta: 'VER MINHA ASSINATURA',
+    successToast: 'Plano alterado.',
+    // Blocked state when the membership is Apple/RevenueCat: no Stripe
+    // subscription to change here, so the screen points at the App Store
+    // instead of offering a CTA that would 409.
+    appleTitle: 'Assinatura pela App Store',
+    appleBody: 'Esta assinatura foi contratada pela App Store. A troca de plano é feita por lá.',
+    appleCta: 'ABRIR APP STORE',
+    // Blocked state for InvalidStatus (subscription status outside
+    // ['active', 'cancel_scheduled']) — past_due is the reachable case today.
+    blockedPastDueTitle: 'Pagamento pendente',
+    blockedPastDueBody: ALTERAR_PAST_DUE_BODY,
+    blockedPastDueCta: 'VER COBRANÇA',
+    // 422 ANNUAL_CADENCE_ADDON_UNSUPPORTED — a combination error, not an
+    // availability one: annual cadence does not accept the monthly-only
+    // add-ons already attached.
+    unavailableCadence:
+      'O plano anual não aceita os módulos adicionais da sua assinatura. Remova os módulos antes de trocar para o anual.',
+    // Informational note when the membership already has a scheduled
+    // cancellation (cancel_scheduled is allowed by the guard, but the member
+    // should know changing plans does not clear the cancellation).
+    cancelScheduledNote:
+      'Sua assinatura tem um cancelamento agendado. Trocar de plano não desfaz esse cancelamento.',
+    errorGeneric: 'Não foi possível trocar de plano. Tente novamente.',
+    errorUnavailable: 'A troca de plano está indisponível agora. Tente mais tarde.',
+    errorPastDue: ALTERAR_PAST_DUE_BODY,
+    errorNoChange: 'Você já está nesse plano.',
+    errorPlanNotFound: 'Esse plano não está mais disponível.',
+    errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
+    errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+  },
   // Post-purchase welcome. Reached only after the poll confirmed the
   // membership exists, so this copy may state the activation as a fact — it
   // is never shown on the pending path (`contratar.pendingTitle` owns that).
@@ -202,6 +272,11 @@ export const assinaturasCopy = {
  * that date on carry an EN twin, so the eventual move to a shared locale package
  * is mechanical instead of a rewrite.
  */
+// Shared between `alterar.blockedPastDueBody` and `alterar.errorPastDue` in
+// the EN twin, same reason as the PT constant above.
+const ALTERAR_PAST_DUE_BODY_EN =
+  'Your subscription has a pending payment. Settle the charge before changing plans.';
+
 export const assinaturasCopyEn = {
   // Mirrors the top-level `caixa` key in `assinaturasCopy` — keep both in
   // sync (fix round 1, Criticals 1+2: opt-in/curated per cycle, no freight
@@ -218,6 +293,50 @@ export const assinaturasCopyEn = {
     cancelledToast: 'Payment cancelled. Your membership was not activated.',
     errorAttemptInFlight:
       'You have a subscription attempt for another plan in progress. Try again with the same plan as before, or wait for that attempt to expire.',
+  },
+  // Brand-new block, so every key carries a twin from day one.
+  alterar: {
+    header: 'CHANGE PLAN',
+    back: 'Back',
+    fromLabel: 'CURRENT PLAN',
+    toLabel: 'NEW PLAN',
+    currentValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? "Today's annual value" : "Today's monthly value",
+    newValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'New annual value' : 'New monthly value',
+    valueTitle: 'VALUE',
+    gainTitle: "WHAT YOU'LL GAIN",
+    loseTitle: "WHAT YOU'LL LOSE",
+    keptTitle: 'WHAT STAYS THE SAME',
+    whenTitle: 'WHEN IT TAKES EFFECT',
+    whenBody:
+      'The change takes effect as soon as you confirm. Nothing is charged now: the pro-rated difference lands on your next invoice, which may be the one closing this cycle.',
+    cta: 'CONFIRM CHANGE',
+    ctaLoading: 'CONFIRMING...',
+    voltar: 'KEEP CURRENT PLAN',
+    confirming: 'Confirming your plan change...',
+    pendingTitle: 'Change in progress.',
+    pendingSubcopy: 'Once the change is confirmed your plan shows up updated here.',
+    pendingCta: 'VIEW MY MEMBERSHIP',
+    successToast: 'Plan changed.',
+    appleTitle: 'App Store subscription',
+    appleBody:
+      'This subscription was purchased through the App Store. Changing plans happens there.',
+    appleCta: 'OPEN APP STORE',
+    blockedPastDueTitle: 'Payment pending',
+    blockedPastDueBody: ALTERAR_PAST_DUE_BODY_EN,
+    blockedPastDueCta: 'VIEW CHARGE',
+    unavailableCadence:
+      "The annual plan doesn't accept the add-on modules on your subscription. Remove the modules before switching to annual.",
+    cancelScheduledNote:
+      'Your subscription has a cancellation scheduled. Changing plans does not undo that cancellation.',
+    errorGeneric: 'Could not change your plan. Try again.',
+    errorUnavailable: 'Changing plans is unavailable right now. Try again later.',
+    errorPastDue: ALTERAR_PAST_DUE_BODY_EN,
+    errorNoChange: "You're already on this plan.",
+    errorPlanNotFound: 'That plan is no longer available.',
+    errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
+    errorUnauthorized: 'Your session expired. Sign in again to continue.',
   },
   // Added with the post-purchase welcome screen, so it carries a twin from
   // day one. Benefit labels stay out of here for the same reason as in PT:

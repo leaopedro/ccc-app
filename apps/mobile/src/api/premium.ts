@@ -53,6 +53,21 @@ export type CancelNotStripeSubscription = {
   manageUrl: string;
 };
 
+/**
+ * POST /api/me/premium/plan — switches the subscription's plan/cadence, with
+ * proration (create_prorations). Answers `pending: true` on purpose: only the
+ * verified webhook writes tier/cadence, so the caller must poll
+ * (`pollSubscriptionTier`) before showing success.
+ */
+export const changePremiumPlan = (input: {
+  planSlug: string;
+  cadence: 'monthly' | 'annual';
+}): Promise<{ ok: boolean; pending: boolean }> =>
+  authedRequest('/api/me/premium/plan', z.object({ ok: z.boolean(), pending: z.boolean() }), {
+    method: 'POST',
+    body: { planSlug: input.planSlug, cadence: input.cadence },
+  });
+
 /** POST /api/me/premium/cancel — schedules cancellation at period end. */
 export const cancelPremiumSubscription = (): Promise<{
   cancelAtPeriodEnd: boolean;

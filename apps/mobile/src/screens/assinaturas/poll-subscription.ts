@@ -23,3 +23,24 @@ export async function pollSubscriptionActive(): Promise<boolean> {
   }
   return false;
 }
+
+/**
+ * Resolve true quando tier E cadencia batem com o alvo. `pollSubscriptionActive`
+ * nao serve para a troca: a assinatura esta viva o tempo todo. E comparar so o
+ * tier daria falso positivo numa troca que nao muda o tier.
+ */
+export async function pollSubscriptionTier(
+  targetTier: string,
+  targetCadence: string,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const sub = await getMyPremiumSubscription();
+      if (sub.tier === targetTier && sub.cadence === targetCadence) return true;
+    } catch {
+      // Falha transitoria — segue tentando; quem chama mostra o estado pendente.
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  return false;
+}

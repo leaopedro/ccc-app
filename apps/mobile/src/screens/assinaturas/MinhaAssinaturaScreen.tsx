@@ -390,6 +390,16 @@ function ActiveSubscription({
         {sub.addons.length > 0 ? (
           <View style={styles.addonsSection}>
             <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
+            {/* Review fix (Task 9): REMOVER/REATIVAR are hidden per-row for
+                an Apple/RevenueCat membership (AddonRow's own `isApple`
+                gate), which otherwise leaves the row with no action and no
+                explanation. One note for the whole section — not per row,
+                and not a link/CTA: the cancel flow already points at the
+                App Store, and a second button to the same place here would
+                be noise. */}
+            {sub.provider === 'apple_revenuecat' ? (
+              <Text style={styles.addonsAppleNote}>{modulosCopy.appleManagedNote}</Text>
+            ) : null}
             <View style={styles.addons}>
               {sub.addons.map((addon) => (
                 <AddonRow
@@ -709,6 +719,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 2.8,
     color: c.goldDeep,
+  },
+  addonsAppleNote: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12.5,
+    color: c.muted55,
+    marginTop: 8,
   },
   addons: { marginTop: 14, gap: 12 },
   addonRow: {

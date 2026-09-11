@@ -783,6 +783,23 @@ describe('MinhaAssinaturaScreen', () => {
       ).toBeNull();
     });
 
+    // Review fix: hiding both actions with no explanation left the Apple
+    // member staring at a module row that does nothing. Mirrors the
+    // cancel flow's own `cancelar.appleBody` pattern for this same screen.
+    it('explains that modules are managed by the App Store when both actions are hidden', async () => {
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(text()).toContain(copy.modulos.appleManagedNote);
+    });
+
+    it('does not show the App Store modules note for a Stripe membership', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(text()).not.toContain(copy.modulos.appleManagedNote);
+    });
+
     it('hides REATIVAR too on an Apple/RevenueCat membership with a cancel_scheduled add-on', async () => {
       hookState.value = result({
         subscription: { ...cancelScheduledSub, provider: 'apple_revenuecat' },

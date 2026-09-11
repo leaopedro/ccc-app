@@ -293,6 +293,12 @@ export const assinaturasCopy = {
       reativarTrigger: 'REATIVAR',
       removerSheetTitle: 'Remover módulo',
       reativarSheetTitle: 'Reativar módulo',
+      // Review fix (Task 9): an Apple/RevenueCat member sees the module row
+      // with no action at all once REMOVER/REATIVAR are hidden — no CTA, no
+      // link (the cancel flow already points at the App Store; a second
+      // button to the same place would be noise), just the reason why.
+      // Mirrors `cancelar.appleBody`'s pattern for this same screen.
+      appleManagedNote: 'Módulos desta assinatura são gerenciados pela App Store.',
       // Truth made possible by Task 4's re-vínculo (attachAddon accepts
       // cancel_scheduled → active again). Before that fix, removing a module
       // was permanent: nothing wrote `cancelled`, so the row stayed locked
@@ -434,6 +440,7 @@ export const assinaturasCopyEn = {
       reativarTrigger: 'REACTIVATE',
       removerSheetTitle: 'Remove module',
       reativarSheetTitle: 'Reactivate module',
+      appleManagedNote: "This subscription's modules are managed through the App Store.",
       removerBody: (nome: string, total: string) =>
         `${nome}'s charge stops now and your total drops to ${total} per month. You keep using this module's quota until the end of the current cycle.`,
       removerReversivel: 'You can reactivate this module whenever you want.',

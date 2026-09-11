@@ -2,46 +2,48 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Dar ao membro com assinatura viva duas ações que hoje só o admin tem: trocar de plano, com uma tela que explica tudo antes de confirmar, e adicionar ou remover módulos.
+**Goal:** Dar ao membro com assinatura viva duas ações que hoje só o admin tem: trocar de plano, com uma tela que explica tudo antes de confirmar, e adicionar, remover ou reativar módulos.
 
-**Architecture:** A API ganha `POST /api/me/premium/plan`, que reusa o serviço `changePlan` já existente e devolve `pending` sem escrever no banco, mantendo a invariante de que só webhook verificado altera assinatura. O payload de assinatura passa a expor `status` e `provider`, que é o que permite ao app decidir elegibilidade e barrar membership Apple antes de qualquer chamada. No mobile, a troca ganha tela própria de confirmação, e os módulos ganham ações sobre endpoints que já existem.
+**Architecture:** A API ganha `POST /api/me/premium/plan`, que reusa `changePlan` e devolve `pending` sem escrever no banco, mantendo a invariante de que só webhook verificado altera assinatura. Antes de qualquer UI, três guards que faltam nas rotas de add-on e a reversibilidade da remoção entram no servidor. O payload passa a expor `status`, `provider` e o preço do add-on, que é o que permite à tela decidir e mostrar números certos.
 
-**Tech Stack:** Fastify + Prisma + Postgres (Testcontainers nos testes), Zod em `@ccc/shared`, Expo Router + React Native, vitest nos dois lados.
+**Tech Stack:** Fastify + Prisma + Postgres (Testcontainers), Zod em `@ccc/shared`, Expo Router + React Native, vitest nos dois lados.
 
 **Spec:** `docs/superpowers/specs/2026-09-11-alterar-assinatura-design.md`
 
 ## Global Constraints
 
-- Toda copy nova entra em `apps/mobile/src/copy/assinaturas.ts` em PT-BR **com twin EN** em `assinaturasCopyEn`. É regra declarada no topo do próprio arquivo.
-- Testes de API são integração contra Postgres real, via o global setup de Testcontainers. Nunca mock de banco.
-- Nenhuma rota escreve em `PremiumMembership` na troca de plano. Só o webhook verificado grava.
-- Entrada de compra segue o gate de plataforma: `requireSubscriptionsEnabled` na API, `subscriptionsEnabled` no app. Reduzir compromisso existente não segue.
-- `pnpm --filter @ccc/mobile typecheck` e `lint` precisam passar. `lint-staged` roda eslint e prettier no commit.
-- Worktree novo precisa de `pnpm install` e do build dos pacotes antes dos testes de mobile: `pnpm --filter @ccc/shared build && pnpm --filter @ccc/design build && pnpm --filter @ccc/ui build`.
+- Copy nova em `apps/mobile/src/copy/assinaturas.ts` em PT-BR **com twin EN para cada chave**. Regra declarada no topo do arquivo.
+- Uma única formulação de rateio, usada na troca de plano e nas ações de módulo: _"A mudança vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra na sua próxima fatura, que pode ser a que fecha neste ciclo."_
+- Testes de API são integração contra Postgres real. Nunca mock de banco.
+- Nenhuma rota escreve em `PremiumMembership` na troca de plano.
+- Entrada de compra segue o gate de plataforma. Reduzir compromisso existente não segue.
+- **Comandos de teste não levam `--`.** Medido: `pnpm --filter @ccc/api test -- premium-change-plan` roda a suíte inteira, porque o pnpm 10.4.1 engole o `--`. A forma correta é `pnpm --filter @ccc/api test premium-change-plan`.
+- `lint-staged` roda eslint e prettier, **não** roda `tsc`. Typecheck quebrado não bloqueia commit, então os passos de typecheck do plano são a única rede.
+- Rotas tipadas estão ligadas (`app.config.ts:268`). Href dinâmico precisa de `as never`, como `PlanoDetalheScreen.tsx:199` já faz.
+- Worktree novo: `pnpm install` e `pnpm --filter @ccc/shared build && pnpm --filter @ccc/design build && pnpm --filter @ccc/ui build` antes dos testes de mobile.
 - Branch a partir de `main`. PR para `main`. Nunca commitar em `production`.
 
 ---
 
-### Task 1: Payload de assinatura expõe `status` e `provider`
-
-Sem esses dois campos o app não consegue nem aplicar a regra de elegibilidade, nem impedir que um assinante Apple anexe módulo pago de graça pelo caminho local-only de `attachAddon`.
+### Task 1: Payload ganha `status`, `provider` e o preço do add-on
 
 **Files:**
 
-- Modify: `packages/shared/src/premium-subscription.ts` (`mySubscriptionResponseSchema`)
-- Modify: `apps/api/src/routes/me-premium-addons.ts` (os dois ramos do GET `/api/me/premium/subscription`)
-- Modify: `apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx` (fixture `activeSub`)
-- Modify: `apps/mobile/src/screens/assinaturas/__tests__/BoasVindasScreen.test.tsx` (fixture `activeSub`)
+- Modify: `packages/shared/src/premium-subscription.ts`
+- Modify: `apps/api/src/routes/me-premium-addons.ts`
+- Modify: `apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx` (duas fixtures)
+- Modify: `apps/mobile/src/screens/assinaturas/__tests__/BoasVindasScreen.test.tsx`
+- Modify: `apps/mobile/src/screens/assinaturas/__tests__/PlanosScreen.test.tsx`
 - Test: `apps/api/test/billing/premium-subscription.test.ts`
 
 **Interfaces:**
 
 - Consumes: nada.
-- Produces: `MySubscriptionResponse.status: LiveMembershipStatus | null` e `MySubscriptionResponse.provider: 'stripe' | 'apple_revenuecat' | null`. Todas as tasks de mobile dependem dos dois.
+- Produces: `MySubscriptionResponse.status: LiveMembershipStatus | null`, `.provider: 'stripe' | 'apple_revenuecat' | null`, e `MySubscriptionAddon.monthlyDeltaCents: number`. Tasks 5, 7, 9 e 10 dependem.
 
 - [ ] **Step 1: Escrever os testes que falham**
 
-Em `apps/api/test/billing/premium-subscription.test.ts`, logo depois do teste `subscription read: live membership resolves plan + base amount`:
+Em `apps/api/test/billing/premium-subscription.test.ts`, depois de `subscription read: live membership resolves plan + base amount`:
 
 ```ts
 it('subscription read: exposes the membership status and provider', async () => {
@@ -53,9 +55,9 @@ it('subscription read: exposes the membership status and provider', async () => 
   const res = await getSubscription(user.id);
   expect(res.statusCode).toBe(200);
   const body = mySubscriptionResponseSchema.parse(res.json());
-  // `active` continua true para qualquer membership viva — e é exatamente
-  // por isso que `status` precisa existir: sem ele o app não distingue um
-  // membro em dia de um inadimplente.
+  // `active` continua true para qualquer membership viva — e é por isso que
+  // `status` precisa existir: sem ele o app não distingue um membro em dia de
+  // um inadimplente.
   expect(body.active).toBe(true);
   expect(body.status).toBe('past_due');
   expect(body.provider).toBe('stripe');
@@ -64,101 +66,115 @@ it('subscription read: exposes the membership status and provider', async () => 
 it('subscription read: status and provider are null without a membership', async () => {
   const { user } = await createUser({ verified: true });
 
-  const res = await getSubscription(user.id);
-  const body = mySubscriptionResponseSchema.parse(res.json());
+  const body = mySubscriptionResponseSchema.parse((await getSubscription(user.id)).json());
   expect(body.status).toBeNull();
   expect(body.provider).toBeNull();
 });
 ```
 
+E no teste que já existe sobre uso de add-on (`attached add-on shows current-cycle usage`), acrescentar a asserção do preço:
+
+```ts
+// O snapshot da linha, não o preço atual do catálogo: editar o catálogo não
+// pode mudar o que a tela diz que está sendo cobrado.
+expect(body.addons[0]?.monthlyDeltaCents).toBe(1990);
+```
+
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-subscription`
-Expected: FAIL. O `parse` do Zod rejeita antes das asserções, porque `status` e `provider` não existem no schema.
+Run: `pnpm --filter @ccc/api test premium-subscription`
+
+Expected: FAIL em `expect(undefined).toBe('past_due')` e no `monthlyDeltaCents`. **Não** é o Zod que rejeita: `mySubscriptionResponseSchema` é `z.object` sem `.strict()`, então chave desconhecida é descartada em silêncio e o `parse` passa. Quem esperar erro de schema vai consertar a coisa errada.
 
 - [ ] **Step 3: Adicionar os campos ao schema**
 
-Em `packages/shared/src/premium-subscription.ts`, dentro de `mySubscriptionResponseSchema`, depois de `cancelAtPeriodEnd`:
+Em `packages/shared/src/premium-subscription.ts`. O arquivo hoje importa **só zod**, então o import é novo:
+
+```ts
+import { LIVE_MEMBERSHIP_STATUSES } from './premium.js';
+```
+
+Sem risco de ciclo: `premium.ts` não importa nada além de zod.
+
+Em `mySubscriptionAddonSchema`, depois de `quotaPerCycle`:
+
+```ts
+  /**
+   * Snapshot do valor cobrado por este add-on, de PremiumMembershipAddon —
+   * NUNCA o preço atual de PremiumAddonModule. Editar o catálogo não muda o
+   * que o membro paga, e a tela precisa dizer o que a fatura vai dizer.
+   */
+  monthlyDeltaCents: z.number().int().nonnegative(),
+```
+
+Em `mySubscriptionResponseSchema`, depois de `cancelAtPeriodEnd`:
 
 ```ts
   /**
    * Status da membership viva, ou null quando não há nenhuma. `active: true`
    * acima significa apenas "existe membership viva" e cobre past_due, paused e
-   * cancel_scheduled — quem precisa decidir o que o membro pode fazer lê este
-   * campo, não aquele.
+   * cancel_scheduled — quem decide o que o membro pode fazer lê este campo.
    */
   status: z.enum([...LIVE_MEMBERSHIP_STATUSES]).nullable(),
   /**
-   * Provider da membership. O app usa para barrar ações que só existem na
-   * Stripe: para Apple, attach/detach de add-on cai no caminho local-only do
-   * serviço (grava no banco, não cobra), então a UI precisa esconder a ação.
+   * Provider da membership. Ações que só existem na Stripe não são oferecidas
+   * para Apple. O servidor também barra; isto é para a UI não oferecer o que
+   * vai ser recusado.
    */
   provider: z.enum(['stripe', 'apple_revenuecat']).nullable(),
 ```
 
-O import de `LIVE_MEMBERSHIP_STATUSES` vem de `./premium.js`. Espalhar com `[...]` é necessário porque a constante é `as const` readonly e `z.enum` pede tupla mutável. Os valores de provider são escritos na mão, como `premiumCheckoutPrecheckResponseSchema` já faz: `@ccc/shared` não depende do client do Prisma.
+- [ ] **Step 4: Preencher o serializer**
 
-- [ ] **Step 4: Preencher os dois ramos do serializer**
-
-Em `apps/api/src/routes/me-premium-addons.ts`, no ramo sem membership (o que devolve `active: false`), acrescentar ao objeto passado para `mySubscriptionResponseSchema.parse`:
-
-```ts
-            status: null,
-            provider: null,
-```
-
-E no ramo com membership viva, junto de `active: true`:
-
-```ts
-          status: membership.status,
-          provider: membership.provider,
-```
+Em `apps/api/src/routes/me-premium-addons.ts`, no ramo sem membership: `status: null,` e `provider: null,`. No ramo com membership viva: `status: membership.status,` e `provider: membership.provider,`. No `map` que serializa cada add-on: `monthlyDeltaCents: addon.monthlyDeltaCents,` (a coluna já existe na linha carregada).
 
 - [ ] **Step 5: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/api test -- premium-subscription`
-Expected: PASS, incluindo os testes que já existiam no arquivo.
+Run: `pnpm --filter @ccc/api test premium-subscription`
+Expected: PASS, incluindo os testes anteriores do arquivo.
 
-- [ ] **Step 6: Consertar as fixtures do mobile**
+- [ ] **Step 6: Consertar as QUATRO fixtures tipadas do mobile**
 
-Os dois arquivos de teste de mobile montam um `MySubscriptionResponse` completo e tipado. Campos novos não-opcionais quebram o typecheck. Em `MinhaAssinaturaScreen.test.tsx` e em `BoasVindasScreen.test.tsx`, dentro do objeto `activeSub`, acrescentar:
+Campo novo não-opcional quebra todo literal anotado como `MySubscriptionResponse`. Varredura do repo: são exatamente quatro, e `apps/admin` não referencia esse tipo.
 
-```ts
-  status: 'active',
-  provider: 'stripe',
-```
+| Arquivo                               | Símbolo               | Acrescentar                            |
+| ------------------------------------- | --------------------- | -------------------------------------- |
+| `MinhaAssinaturaScreen.test.tsx:~253` | `inactiveSub`         | `status: null, provider: null`         |
+| `MinhaAssinaturaScreen.test.tsx`      | `activeSub`           | `status: 'active', provider: 'stripe'` |
+| `BoasVindasScreen.test.tsx`           | `activeSub`           | `status: 'active', provider: 'stripe'` |
+| `PlanosScreen.test.tsx:~321`          | `ACTIVE_SUBSCRIPTION` | `status: 'active', provider: 'stripe'` |
+
+E todo objeto de add-on dentro dessas fixtures ganha `monthlyDeltaCents: 15000`.
 
 - [ ] **Step 7: Verificar os dois lados**
 
 Run: `pnpm --filter @ccc/shared build && pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile test src/screens/assinaturas`
-Expected: PASS.
+Expected: PASS, 0 erro de tipo.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add packages/shared/src/premium-subscription.ts apps/api/src/routes/me-premium-addons.ts apps/api/test/billing/premium-subscription.test.ts apps/mobile/src/screens/assinaturas/__tests__/
-git commit -m "feat(api): assinatura do membro expoe status e provider"
+git commit -m "feat(api): assinatura do membro expoe status, provider e preco do modulo"
 ```
 
 ---
 
-### Task 2: Chave de idempotência de `changePlan` deixa de ser eterna
-
-`plan_change_${membershipId}_${tier}_${cadence}` é estável demais. Gold para silver, silver para gold, gold para silver de novo dentro de 24h: a terceira chamada reusa a chave da primeira, a Stripe devolve a resposta em cache, nada muda, nenhum webhook dispara. Com admin era raro. Com membro, não.
+### Task 2: Chaves de idempotência deixam de ser eternas
 
 **Files:**
 
 - Modify: `apps/api/src/services/billing/subscription-actions.ts` (`changePlan`)
-- Test: `apps/api/test/billing/subscription-actions.test.ts`
+- Modify: `apps/api/src/services/billing/addons.ts` (as duas chaves)
+- Test: `apps/api/test/billing/subscription-actions.test.ts` (**inclui consertar a asserção da linha 107**)
 
 **Interfaces:**
 
-- Consumes: nada.
-- Produces: `changePlan` continua com a mesma assinatura. Só a chave muda.
+- Consumes: nada. Produces: assinaturas inalteradas; só o valor das chaves muda.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Escrever os testes que falham**
 
-Em `apps/api/test/billing/subscription-actions.test.ts`, dentro do describe existente. O `seed()` do arquivo já cria membership gold e catálogo com gold e silver:
+Em `apps/api/test/billing/subscription-actions.test.ts`. `seed()` do arquivo cria membership gold e catálogo com gold e silver; `FakeStripe.nextRetrievedSubscription` é sticky, então uma atribuição serve para as três chamadas:
 
 ```ts
 it('gera chave de idempotencia nova depois que a troca anterior foi aplicada', async () => {
@@ -170,18 +186,10 @@ it('gera chave de idempotencia nova depois que a troca anterior foi aplicada', a
   } as unknown as Stripe.Subscription;
 
   await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
-
   // O webhook aplicou a troca: a linha muda, e com ela o updatedAt.
-  await prisma.premiumMembership.update({
-    where: { id: membershipId },
-    data: { tier: 'silver' },
-  });
+  await prisma.premiumMembership.update({ where: { id: membershipId }, data: { tier: 'silver' } });
   await changePlan({ membershipId, tier: 'gold', cadence: 'monthly', stripe });
-
-  await prisma.premiumMembership.update({
-    where: { id: membershipId },
-    data: { tier: 'gold' },
-  });
+  await prisma.premiumMembership.update({ where: { id: membershipId }, data: { tier: 'gold' } });
   await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
 
   const keys = stripe.calls
@@ -189,8 +197,8 @@ it('gera chave de idempotencia nova depois que a troca anterior foi aplicada', a
     .map((c) => (c.payload as { idempotencyKey: string }).idempotencyKey);
 
   expect(keys).toHaveLength(3);
-  // A terceira troca repete tier e cadencia da primeira. Se a chave repetir,
-  // a Stripe devolve a resposta em cache e a troca nunca acontece.
+  // A terceira troca repete tier e cadência da primeira. Se a chave repetir, a
+  // Stripe devolve a resposta em cache e a troca nunca acontece.
   expect(new Set(keys).size).toBe(3);
 });
 
@@ -209,70 +217,304 @@ it('repete a chave enquanto a troca ainda nao foi aplicada', async () => {
     .filter((c) => c.kind === 'updateSubscriptionItemPrice')
     .map((c) => (c.payload as { idempotencyKey: string }).idempotencyKey);
 
-  // Duplo toque antes do webhook chegar: a chave TEM que repetir. É o caso
-  // que a idempotência existe para cobrir.
+  // Duplo toque antes do webhook chegar: a chave TEM que repetir. É o caso que
+  // a idempotência existe para cobrir, e é o que impede a "correção"
+  // preguiçosa com Date.now() ou uuid.
   expect(keys[0]).toBe(keys[1]);
 });
 ```
 
+**Atenção, escrever num comentário no topo dos dois testes:** eles afirmam a FORMA da chave, não dedupe real. `FakeStripe.updateSubscriptionItemPrice` (`services/stripe/fake.ts:341-343`) só empurra em `calls` e não implementa idempotência, então nenhum teste deste repo pode provar que a Stripe deduplicou.
+
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- subscription-actions`
-Expected: o primeiro teste FALHA com `expected 2 to be 3` (a primeira e a terceira chave são idênticas). O segundo teste passa desde já, e é a rede de proteção contra uma correção que quebre o dedupe.
+Run: `pnpm --filter @ccc/api test subscription-actions`
+Expected: o primeiro teste falha com `expected 2 to be 3`. O segundo já passa, e é a rede.
 
-- [ ] **Step 3: Incluir `updatedAt` na chave**
+- [ ] **Step 3: Incluir `updatedAt` nas três chaves**
 
-Em `apps/api/src/services/billing/subscription-actions.ts`, dentro de `changePlan`:
+Em `subscription-actions.ts`, dentro de `changePlan` (`membership` já está em escopo, vindo de `loadMembership`):
 
 ```ts
 await stripe.updateSubscriptionItemPrice({
   subscriptionItemId: planItemId,
   priceId: targetPriceId,
   // `updatedAt` entra na chave porque tier+cadencia sozinhos se repetem: um
-  // membro que vai de gold para silver, volta, e vai de novo reusaria a
-  // chave da primeira troca dentro da janela de 24h da Stripe, receberia a
-  // resposta em cache, e a assinatura nao mudaria. Enquanto o webhook nao
-  // aplica nada, `updatedAt` fica parado e o duplo toque continua
-  // deduplicando, que e o que a chave existe para fazer.
+  // membro que vai de gold para silver, volta, e vai de novo reusaria a chave
+  // da primeira dentro da janela de 24h da Stripe, receberia a resposta em
+  // cache, e a assinatura nao mudaria. Enquanto o webhook nao aplica nada,
+  // `updatedAt` fica parado e o duplo toque continua deduplicando.
+  //
+  // Ressalva: `recomputeAddonsAmount` tambem escreve nessa linha, entao mexer
+  // num modulo entre dois toques rotaciona a chave. Dano baixo (reaplicar o
+  // mesmo price nao gera rateio novo), mas a rede nao e absoluta.
   idempotencyKey: `plan_change_${membershipId}_${tier}_${cadence}_${membership.updatedAt.getTime()}`,
 });
 ```
 
-`membership` já está em escopo, vindo de `loadMembership` no topo da função.
+Em `addons.ts`, mesma razão, agora que a Task 4 torna o ciclo attach/detach/attach/detach alcançável:
 
-- [ ] **Step 4: Rodar e ver passar**
+```ts
+idempotencyKey: `addon_attach_${membership.id}_${addonKey}_${membership.updatedAt.getTime()}`,
+```
 
-Run: `pnpm --filter @ccc/api test -- subscription-actions`
-Expected: PASS nos dois testes novos e em todos os que já existiam.
+```ts
+idempotencyKey: `addon_detach_${addon.id}_${addon.updatedAt.getTime()}`,
+```
 
-- [ ] **Step 5: Rodar a suíte de admin, que usa o mesmo serviço**
+- [ ] **Step 4: Consertar a asserção existente que o plano anterior quebrava**
 
-Run: `pnpm --filter @ccc/api test -- admin/subscriptions`
-Expected: PASS.
+`apps/api/test/billing/subscription-actions.test.ts:107` afirma a chave inteira dentro de um `toEqual`:
 
-- [ ] **Step 6: Commit**
+```ts
+idempotencyKey: `plan_change_${membershipId}_silver_monthly`,
+```
+
+Trocar por uma asserção que sobreviva ao sufixo, carregando o motivo:
+
+```ts
+// O sufixo é o updatedAt da membership; o que importa aqui é o prefixo estável.
+idempotencyKey: expect.stringContaining(`plan_change_${membershipId}_silver_monthly`),
+```
+
+- [ ] **Step 5: Rodar e ver passar**
+
+Run: `pnpm --filter @ccc/api test subscription-actions`
+Expected: PASS, incluindo o teste da linha 107.
+
+- [ ] **Step 6: Rodar as suítes que usam os mesmos serviços**
+
+Run: `pnpm --filter @ccc/api test admin/subscriptions` e depois `pnpm --filter @ccc/api test premium-addon-billing`
+Expected: PASS nas duas.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/api/src/services/billing/subscription-actions.ts apps/api/test/billing/subscription-actions.test.ts
-git commit -m "fix(api): chave de troca de plano nao sobrevive a troca aplicada"
+git add apps/api/src/services/billing/ apps/api/test/billing/subscription-actions.test.ts
+git commit -m "fix(api): chaves de billing nao sobrevivem a mudanca aplicada"
 ```
 
 ---
 
-### Task 3: `POST /api/me/premium/plan`
+### Task 3: Guards de servidor nas rotas de add-on
+
+Três buracos que só ficam perigosos quando a UI das Tasks 9 e 10 existir, e que precisam ser tapados **antes** dela. Mudança de comportamento em endpoint existente, deliberada (ver Decisões da spec).
+
+**Files:**
+
+- Modify: `apps/api/src/routes/me-premium-addons.ts`
+- Test: `apps/api/test/billing/premium-subscription.test.ts`
+
+**Interfaces:**
+
+- Consumes: nada. Produces: `POST /addons` passa a responder 409 `InvalidStatus` e 409 `NotStripeSubscription`; `DELETE /addons/:key` passa a responder 409 `NotStripeSubscription` e a ter rate limit.
+
+- [ ] **Step 1: Escrever os testes que falham**
+
+No mesmo arquivo, usando os helpers `attach`, `detach`, `seedMembership`, `seedModule` e `seedGoldPlan` que já existem lá. Generalizar `seedMembership` para aceitar `{ status, provider }` em vez de só `status`.
+
+```ts
+it('attach: 409 InvalidStatus para membro past_due', async () => {
+  const { user } = await createUser({ verified: true });
+  const g = await garageOf(user.id);
+  await seedGoldPlan();
+  await seedMembership(g.id, { status: 'past_due' });
+  await seedModule();
+
+  const res = await attach(user.id, 'wash');
+  expect(res.statusCode).toBe(409);
+  expect(res.json()).toMatchObject({ error: 'InvalidStatus', status: 'past_due' });
+});
+
+it('attach: 409 InvalidStatus para membro paused', async () => {
+  const { user } = await createUser({ verified: true });
+  const g = await garageOf(user.id);
+  await seedGoldPlan();
+  await seedMembership(g.id, { status: 'paused' });
+  await seedModule();
+
+  // A Stripe descarta as faturas do período pausado (behavior 'void'), então
+  // anexar aqui é entregar módulo pago com receita zero.
+  expect((await attach(user.id, 'wash')).statusCode).toBe(409);
+});
+
+it('attach: 409 NotStripeSubscription para membership Apple, sem gravar nada', async () => {
+  const { user } = await createUser({ verified: true });
+  const g = await garageOf(user.id);
+  await seedGoldPlan();
+  await seedMembership(g.id, { provider: 'apple_revenuecat' });
+  await seedModule();
+
+  const res = await attach(user.id, 'wash');
+  expect(res.statusCode).toBe(409);
+  expect(res.json()).toMatchObject({ error: 'NotStripeSubscription' });
+  // O buraco que isto fecha: attachAddon cairia no caminho local-only, gravaria
+  // a linha, somaria em addonsAmountCents e não cobraria nada.
+  expect(await prisma.premiumMembershipAddon.findMany()).toHaveLength(0);
+});
+
+it('detach: 409 NotStripeSubscription para membership Apple', async () => {
+  const { user } = await createUser({ verified: true });
+  const g = await garageOf(user.id);
+  await seedGoldPlan();
+  const m = await seedMembership(g.id, { provider: 'apple_revenuecat' });
+  await seedModule();
+  await prisma.premiumMembershipAddon.create({
+    data: {
+      membershipId: m.id,
+      addonKey: 'wash',
+      status: 'active',
+      monthlyDeltaCents: 1990,
+      payoutAmountCents: 0,
+      quotaPerCycle: 4,
+      quotaUnit: 'access',
+      currency: 'BRL',
+    },
+  });
+
+  expect((await detach(user.id, 'wash')).statusCode).toBe(409);
+});
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `pnpm --filter @ccc/api test premium-subscription`
+Expected: FAIL nos quatro. Hoje o attach responde 201 e o detach 200.
+
+- [ ] **Step 3: Implementar os guards**
+
+Em `me-premium-addons.ts`, constante de módulo:
+
+```ts
+/**
+ * Mesma lista da troca de plano (me-premium.ts). Mais estrita que a do admin,
+ * que aceita past_due: quem tem cobranca pendente regulariza antes de assumir
+ * compromisso novo. Vale so para o ATTACH — detach reduz compromisso e nao
+ * pode ser barrado por inadimplencia.
+ */
+const MEMBER_ADDON_ATTACH_STATUS = ['active', 'cancel_scheduled'] as const;
+```
+
+No attach, depois de resolver a membership: recusar `provider !== 'stripe'` com 409 `NotStripeSubscription` + `manageUrl` de `APPLE_MANAGE_URL`, e recusar status fora da lista com 409 `InvalidStatus` carregando `status`. No detach: só o guard de provider.
+
+`APPLE_MANAGE_URL` não existe neste arquivo hoje; importar de onde `me-premium.ts` o define ou duplicar a const com comentário apontando para a origem.
+
+- [ ] **Step 4: Mover o DELETE para dentro do escopo com rate limit**
+
+`me-premium-addons.ts:226` registra o DELETE em `app`, fora do bucket das linhas 269-284, que cobre só o POST. Cada chamada faz `stripe.removeSubscriptionItem` de verdade. Mover o registro para dentro do mesmo `app.register(async (scoped) => ...)`, preservando o `preHandler` atual. Ele **não** ganha `requireSubscriptionsEnabled`: reduzir compromisso não é compra, e o teste `me-premium-addons-platform-gate.test.ts` afirma exatamente isso.
+
+- [ ] **Step 5: Rodar e ver passar**
+
+Run: `pnpm --filter @ccc/api test premium-subscription` e depois `pnpm --filter @ccc/api test me-premium-addons-platform-gate`
+Expected: PASS nas duas, incluindo os testes anteriores de attach e detach.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/api/src/routes/me-premium-addons.ts apps/api/test/billing/premium-subscription.test.ts
+git commit -m "fix(api): attach de modulo valida status e provider, delete ganha rate limit"
+```
+
+---
+
+### Task 4: Remover módulo passa a ser reversível
+
+Hoje `detachAddon` grava `cancel_scheduled` e nada no repo escreve `cancelled`. O módulo removido nunca volta: `attachAddon` recusa para sempre e nem o admin resolve, porque usa o mesmo serviço. Expor a remoção num botão sem isto cria perda permanente.
+
+**Files:**
+
+- Modify: `apps/api/src/services/billing/addons.ts` (guard da linha 82)
+- Test: `apps/api/test/billing/addons-service.test.ts`
+
+**Interfaces:**
+
+- Consumes: nada. Produces: `attachAddon` aceita linha em `cancel_scheduled` e recria o item na Stripe. A Task 9 expõe como `REATIVAR`.
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+Seguindo a montagem que o arquivo já usa:
+
+```ts
+it('reativa um add-on removido, recriando o item na Stripe', async () => {
+  // membership stripe + módulo com stripePriceId
+  await attachAddon({ membershipId, addonKey: 'wash', stripe, logger });
+  await detachAddon({ membershipId, addonKey: 'wash', stripe, logger });
+
+  const result = await attachAddon({ membershipId, addonKey: 'wash', stripe, logger });
+
+  expect(result.status).toBe('active');
+  // O item foi removido da Stripe no detach; reativar precisa criar um novo,
+  // senão a linha fica ativa no banco e ninguém cobra.
+  expect(stripe.calls.filter((c) => c.kind === 'addSubscriptionItem')).toHaveLength(2);
+  const row = await prisma.premiumMembershipAddon.findFirstOrThrow({
+    where: { addonKey: 'wash' },
+  });
+  expect(row.status).toBe('active');
+  expect(row.providerItemRef).not.toBeNull();
+});
+
+it('continua recusando um add-on que ja esta ativo', async () => {
+  await attachAddon({ membershipId, addonKey: 'wash', stripe, logger });
+
+  await expect(
+    attachAddon({ membershipId, addonKey: 'wash', stripe, logger }),
+  ).rejects.toMatchObject({ code: 'AddonAlreadyAttached' });
+});
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `pnpm --filter @ccc/api test addons-service`
+Expected: o primeiro teste falha com `AddonAlreadyAttached`. O segundo passa e impede que o guard seja simplesmente apagado.
+
+- [ ] **Step 3: Afrouxar o guard**
+
+`apps/api/src/services/billing/addons.ts:82`:
+
+```ts
+// `cancelled` e `cancel_scheduled` sao os dois estados a partir dos quais o
+// re-vinculo e legitimo. Sem `cancel_scheduled` aqui, remover um modulo era
+// permanente: nada no repo escreve `cancelled`, entao a linha ficava travada
+// para sempre e nem o admin conseguia desfazer.
+const REATTACHABLE: readonly string[] = ['cancelled', 'cancel_scheduled'];
+if (existing && !REATTACHABLE.includes(existing.status)) {
+  throw new BillingActionError('AddonAlreadyAttached', 'add-on already attached', { addonKey });
+}
+```
+
+O ramo de re-vínculo que já existe (`addons.ts:121-126`) cuida do resto: refresca o snapshot para os termos atuais do catálogo e reabre o ciclo de uso. O `addSubscriptionItem` acima dele roda porque a linha destacada não tem mais item vivo na Stripe.
+
+- [ ] **Step 4: Rodar e ver passar**
+
+Run: `pnpm --filter @ccc/api test addons-service` e depois `pnpm --filter @ccc/api test premium-addon-billing`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api/src/services/billing/addons.ts apps/api/test/billing/addons-service.test.ts
+git commit -m "fix(api): modulo removido pode ser reativado"
+```
+
+---
+
+### Task 5: `POST /api/me/premium/plan`
 
 **Files:**
 
 - Modify: `packages/shared/src/premium-subscription.ts` (request schema)
+- Create: `apps/api/src/routes/billing-error-reply.ts`
+- Modify: `apps/api/src/routes/admin/subscriptions.ts` (passa a importar o helper)
 - Modify: `apps/api/src/routes/me-premium.ts` (rota nova)
 - Test: `apps/api/test/billing/premium-change-plan.test.ts` (criar)
+- Test: `apps/api/test/billing/me-premium-platform-gate.test.ts`
 
 **Interfaces:**
 
-- Consumes: `changePlan` da Task 2, `status`/`provider` da Task 1.
-- Produces: `POST /api/me/premium/plan`, body `{ planSlug: string, cadence: 'monthly' | 'annual' }`, resposta `200 { ok: true, pending: true }`. Erros: 503, 422, 404 `NotFound`, 409 `NotStripeSubscription` (com `manageUrl`), 409 `InvalidStatus` (com `status`), 404 `PlanNotFound`, 409 `NoChange`. A Task 4 consome tudo isso.
+- Consumes: `changePlan` (Task 2), `status`/`provider` (Task 1).
+- Produces: `POST /api/me/premium/plan`, body `{ planSlug: string, cadence: 'monthly' | 'annual' }`, resposta `200 { ok: true, pending: true }`. A Task 6 consome.
 
-- [ ] **Step 1: Escrever o schema de request**
+- [ ] **Step 1: Schema de request**
 
 Em `packages/shared/src/premium-subscription.ts`:
 
@@ -286,28 +528,20 @@ export const memberChangePlanRequestSchema = z.object({
 export type MemberChangePlanRequest = z.infer<typeof memberChangePlanRequestSchema>;
 ```
 
-`planSlug` e não `tier` porque é o vocabulário que o mobile já usa em `createPremiumCheckout`.
-
 - [ ] **Step 2: Escrever os testes que falham**
 
-Criar `apps/api/test/billing/premium-change-plan.test.ts`. O `seedSubscription` de `apps/api/test/admin/subscriptions/seed.ts` já cria membro gold, catálogo com gold (`fundador`) e silver (`estrada`), e devolve `memberId`:
+Criar `apps/api/test/billing/premium-change-plan.test.ts`. `seedSubscription` (`apps/api/test/admin/subscriptions/seed.ts`) cria membro gold (`fundador`), catálogo com silver (`estrada`), módulo `detailing` anexado, e devolve `{ membershipId, memberId, garageId }`. Aceita `{ provider, status, withAddon }`.
+
+Boilerplate do arquivo:
 
 ```ts
-/**
- * POST /api/me/premium/plan — troca de plano iniciada pelo membro.
- *
- * A rota nao escreve em PremiumMembership: quem grava tier e snapshot de preco
- * e o webhook. Por isso a resposta e `pending` e os testes afirmam que a linha
- * NAO mudou.
- */
-
 import { prisma } from '@ccc/db';
 import type Stripe from 'stripe';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
-import { bearer, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 import { seedSubscription } from '../admin/subscriptions/seed.js';
+import { bearer, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 
 const resetCatalog = async (): Promise<void> => {
   await prisma.premiumPlanPrice.deleteMany();
@@ -320,477 +554,219 @@ const planItemSubscription = {
   id: 'sub_secreto_1',
   items: { data: [{ id: 'si_plan', price: { id: 'price_gold' } }] },
 } as unknown as Stripe.Subscription;
+```
 
-describe('POST /api/me/premium/plan', () => {
-  let ctx: Awaited<ReturnType<typeof makeAppWithFakeStripe>>;
-  const env = loadEnv();
+Um `it` por linha da tabela: 401 sem auth; troca válida com `pending` e linha intacta; auditoria com `actorId` do membro e `actorKind: 'member'`; 409 `InvalidStatus` para `past_due`; troca permitida em `cancel_scheduled`; 409 `NotStripeSubscription` com `manageUrl` para Apple; 409 `NoChange`; 404 `PlanNotFound` para slug inexistente; 404 `PlanNotFound` para plano sem `stripePriceId` na cadência; 422 `AnnualCadenceAddonUnsupported` com `cadence: 'annual'` e o `detailing` anexado; 404 sem membership viva; 422 body inválido.
 
-  beforeEach(async () => {
-    await resetDatabase();
-    await resetCatalog();
-    ctx = await makeAppWithFakeStripe();
-  });
+Caminho feliz:
 
-  afterEach(async () => {
-    await ctx.app.close();
-    await resetDatabase();
-    await resetCatalog();
-  });
+```ts
+it('troca valida responde pending e NAO escreve a membership', async () => {
+  const { memberId, membershipId } = await seedSubscription();
+  ctx.stripe.nextRetrievedSubscription = planItemSubscription;
 
-  const change = (userId: string, payload: unknown) =>
-    ctx.app.inject({
-      method: 'POST',
-      url: '/api/me/premium/plan',
-      headers: { authorization: bearer(env, userId) },
-      payload,
-    });
+  const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
 
-  it('401 sem autenticacao', async () => {
-    const res = await ctx.app.inject({ method: 'POST', url: '/api/me/premium/plan', payload: {} });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('troca valida responde pending e NAO escreve a membership', async () => {
-    const { memberId, membershipId } = await seedSubscription();
-    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
-
-    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, pending: true });
-
-    const row = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membershipId } });
-    expect(row.tier).toBe('gold');
-
-    const calls = ctx.stripe.calls.filter((c) => c.kind === 'updateSubscriptionItemPrice');
-    expect(calls).toHaveLength(1);
-  });
-
-  it('grava auditoria com o proprio membro como ator', async () => {
-    const { memberId, membershipId } = await seedSubscription();
-    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
-
-    await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    const audit = await prisma.adminAudit.findMany({
-      where: { entityType: 'premium_membership', entityId: membershipId },
-    });
-    expect(audit).toHaveLength(1);
-    expect(audit[0]?.action).toBe('premium.subscription.plan_changed');
-    expect(audit[0]?.actorId).toBe(memberId);
-  });
-
-  it('409 InvalidStatus para membro past_due', async () => {
-    const { memberId } = await seedSubscription({ status: 'past_due' });
-    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
-
-    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toMatchObject({ error: 'InvalidStatus', status: 'past_due' });
-    expect(ctx.stripe.calls.filter((c) => c.kind === 'updateSubscriptionItemPrice')).toHaveLength(
-      0,
-    );
-  });
-
-  it('permite trocar com cancelamento agendado', async () => {
-    const { memberId } = await seedSubscription({ status: 'cancel_scheduled' });
-    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
-
-    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(200);
-  });
-
-  it('409 NotStripeSubscription para membership Apple, com manageUrl', async () => {
-    const { memberId } = await seedSubscription({ provider: 'apple_revenuecat' });
-
-    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(409);
-    const body = res.json() as { error: string; manageUrl: string };
-    expect(body.error).toBe('NotStripeSubscription');
-    expect(body.manageUrl).toContain('apps.apple.com');
-  });
-
-  it('409 NoChange quando o plano e o mesmo', async () => {
-    const { memberId } = await seedSubscription();
-    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
-
-    const res = await change(memberId, { planSlug: 'fundador', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toMatchObject({ error: 'NoChange' });
-  });
-
-  it('404 PlanNotFound para slug inexistente', async () => {
-    const { memberId } = await seedSubscription();
-
-    const res = await change(memberId, { planSlug: 'nao-existe', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toMatchObject({ error: 'PlanNotFound' });
-  });
-
-  it('404 quando o usuario nao tem membership viva', async () => {
-    const { memberId } = await seedSubscription();
-    await prisma.premiumMembership.updateMany({ data: { status: 'expired' } });
-
-    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
-
-    expect(res.statusCode).toBe(404);
-  });
-
-  it('422 para body invalido', async () => {
-    const { memberId } = await seedSubscription();
-
-    const res = await change(memberId, { planSlug: '', cadence: 'weekly' });
-
-    expect(res.statusCode).toBe(422);
-  });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ ok: true, pending: true });
+  const row = await prisma.premiumMembership.findUniqueOrThrow({ where: { id: membershipId } });
+  expect(row.tier).toBe('gold');
+  expect(ctx.stripe.calls.filter((c) => c.kind === 'updateSubscriptionItemPrice')).toHaveLength(1);
 });
 ```
 
+Todo teste de guard afirma `expect(ctx.stripe.calls).toHaveLength(0)` — a lista **inteira**, não só o `updateSubscriptionItemPrice`. É o que pega uma reordenação de guards que passe a chamar `retrieveSubscription` antes de recusar.
+
 - [ ] **Step 3: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/api test -- premium-change-plan`
-Expected: FAIL. Todas as chamadas devolvem 404 de rota inexistente.
+Run: `pnpm --filter @ccc/api test premium-change-plan`
+Expected: FAIL. Tudo responde 404 de rota inexistente.
 
-- [ ] **Step 4: Implementar a rota**
+- [ ] **Step 4: Extrair `sendBillingError` para a camada de rota**
 
-Em `apps/api/src/routes/me-premium.ts`, junto das outras ações de membro. `APPLE_MANAGE_URL`, `requireUser`, `pickLiveMembership`, `handleStaleRef`, `recordAudit` e `sendBillingError` já existem no arquivo ou nos módulos que ele importa; o handler novo é:
+`sendBillingError` é `const` privado em `admin/subscriptions.ts:64` e recebe `FastifyReply`. Criar `apps/api/src/routes/billing-error-reply.ts` exportando a mesma função, e repontar os sete usos do admin (`:251, :296, :331, :359, :394, :420, :684`).
 
-```ts
-/**
- * POST /api/me/premium/plan
- *
- * Troca de plano iniciada pelo membro. Reusa o mesmo `changePlan` do admin,
- * entao o rateio e o mesmo (create_prorations: a diferenca entra na fatura
- * seguinte, nunca como cobranca imediata).
- *
- * Como /cancel, NAO escreve no banco. O customer.subscription.updated
- * resultante e que grava tier, cadencia e o snapshot de preco. Por isso a
- * resposta e `pending`.
- */
-const changePlanHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-  if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
-    return reply
-      .status(503)
-      .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
-  }
+**Não** colocar em `services/billing/errors.ts`: o cabeçalho daquele arquivo declara que a camada não conhece Fastify e não responde HTTP.
 
-  const { sub } = requireUser(request);
+- [ ] **Step 5: Implementar a rota**
 
-  const parsed = memberChangePlanRequestSchema.safeParse(request.body);
-  if (!parsed.success) {
-    return reply.status(422).send({
-      error: 'UnprocessableEntity',
-      issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
-    });
-  }
+Imports que **faltam** em `me-premium.ts` e precisam ser adicionados: `recordAudit` (`../services/admin-audit.js`), `changePlan` (`../services/billing/subscription-actions.js`), `isBillingActionError` (`../services/billing/errors.js`), `memberChangePlanRequestSchema` (`@ccc/shared/premium-subscription`).
 
-  const garage = await prisma.garage.findUnique({ where: { userId: sub }, select: { id: true } });
-  if (!garage) {
-    return reply.status(404).send({ error: 'NotFound', message: 'no membership found' });
-  }
+Já presentes, não reimportar: `requireUser` (:37), `pickLiveMembership` (:38), `handleStaleRef` (:39), `requireSubscriptionsEnabled` (:41), `APPLE_MANAGE_URL` (const de módulo, :54), `checkAnnualCadenceAddonRejection` (:122).
 
-  const membership = await pickLiveMembership(prisma, garage.id);
-  if (!membership) {
-    return reply.status(404).send({ error: 'NotFound', message: 'no active membership found' });
-  }
+Ordem do handler: 503 se billing off → 422 se body inválido → resolver garagem (404) → **abrir transação e travar a linha da garagem com `SELECT ... FOR UPDATE`, como `me-premium.ts:635` já faz** → `pickLiveMembership` (404) → provider (409 `NotStripeSubscription` + `manageUrl`) → status fora de `['active','cancel_scheduled']` (409 `InvalidStatus` com `status`) → plano por slug ativo (404 `PlanNotFound`) → **preço da cadência no catálogo** (404 `PlanNotFound`) → add-on anexado com `cadence === 'annual'` (422 `AnnualCadenceAddonUnsupported`, reusando `checkAnnualCadenceAddonRejection`) → mesmo tier e cadência (409 `NoChange`) → `changePlan` → auditoria → `200 { ok: true, pending: true }`.
 
-  if (membership.provider !== 'stripe') {
-    return reply.status(409).send({
-      error: 'NotStripeSubscription',
-      message: 'manage your subscription in the App Store',
-      manageUrl: APPLE_MANAGE_URL,
-    });
-  }
+O guard de preço fica **na rota**. Delegar para o `changePlan` produz `PlanPriceMissing` em 422, que nenhum mapeamento de cliente cobre, e que vira "tente novamente" num erro que nunca passa.
 
-  // Mais estrito que ADMIN_SUBSCRIPTION_ALLOWED_STATUS.plan, que tambem
-  // aceita past_due. A regra de membro e propria de proposito: quem esta com
-  // cobranca pendente regulariza antes de mexer no plano. Nao reusar a
-  // constante do admin aqui e deliberado — reusar esconderia a divergencia.
-  const MEMBER_CHANGE_PLAN_STATUS = ['active', 'cancel_scheduled'] as const;
-  if (!(MEMBER_CHANGE_PLAN_STATUS as readonly string[]).includes(membership.status)) {
-    return reply.status(409).send({
-      error: 'InvalidStatus',
-      message: `plan change not allowed while subscription is ${membership.status}`,
-      status: membership.status,
-    });
-  }
-
-  const targetPlan = await prisma.premiumPlan.findFirst({
-    where: { slug: parsed.data.planSlug, active: true },
-    select: { tier: true },
-  });
-  if (!targetPlan) {
-    return reply.status(404).send({ error: 'PlanNotFound', message: 'plan not available' });
-  }
-
-  try {
-    await changePlan({
-      membershipId: membership.id,
-      tier: targetPlan.tier,
-      cadence: parsed.data.cadence,
-      stripe: app.stripe,
-    });
-  } catch (err) {
-    if (sendBillingError(err, reply)) return reply;
-    throw err;
-  }
-
-  await recordAudit({
-    actorId: sub,
-    action: 'premium.subscription.plan_changed',
-    entityType: 'premium_membership',
-    entityId: membership.id,
-    metadata: {
-      fromTier: membership.tier,
-      fromCadence: membership.cadence,
-      toTier: targetPlan.tier,
-      toCadence: parsed.data.cadence,
-    },
-  });
-
-  return reply.status(200).send({ ok: true, pending: true });
-};
-```
-
-Registro, dentro do mesmo escopo com rate limit por usuário que o arquivo já usa para as outras ações de compra (ver o bloco `app.register(async (scoped) => ...)` no fim do arquivo). `requireSubscriptionsEnabled` entra como `preHandler` da rota, porque trocar de plano é entrada de compra:
+O `catch` usa um **mapa explícito**, não o repasse cru:
 
 ```ts
-scoped.post('/api/me/premium/plan', { preHandler: requireSubscriptionsEnabled }, changePlanHandler);
+    } catch (err) {
+      // Mapa explicito, como me-premium-addons.ts:200-216 faz e documenta.
+      // Repassar err.code cru entregaria ao membro `PlanPriceMissing` ("target
+      // plan has no stripePriceId configured") e `AmbiguousPlanItem` ("expected
+      // exactly one plan item, found N"), que sao estado de operador.
+      if (isBillingActionError(err)) {
+        if (err.code === 'NoChange') {
+          return reply.status(409).send({ error: 'NoChange', message: 'already on this plan' });
+        }
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'plan change unavailable' });
+      }
+      throw err;
+    }
 ```
 
-`sendBillingError` hoje mora em `apps/api/src/routes/admin/subscriptions.ts`. Mover para `apps/api/src/services/billing/errors.ts` e importar nos dois lugares, para os códigos (`NoChange`, `PlanPriceMissing`, `PlanItemNotFound`) não divergirem entre as superfícies. Ajustar o import do admin na mesma mudança.
+O código para provider errado é `NotStripeSubscription`, e não o `ProviderNotMutable` do admin, para casar com o que `/cancel` já devolve ao membro.
 
-- [ ] **Step 5: Rodar e ver passar**
+Registro: **escopo novo**, não um dos três que já existem (`:1157`, `:1176`, `:1191`), cada um com `max: 5` próprio — reusar o de checkout faria uma troca consumir tentativa de contratação:
 
-Run: `pnpm --filter @ccc/api test -- premium-change-plan`
-Expected: PASS nos dez testes.
+```ts
+await app.register(async (scoped) => {
+  scoped.addHook('preHandler', app.authenticate);
+  await scoped.register(rateLimit, {
+    max: 5,
+    timeWindow: '1 minute',
+    hook: 'preHandler',
+    keyGenerator: (req) => `premium-change-plan:${req.user?.sub ?? req.ip}`,
+  });
+  scoped.post(
+    '/api/me/premium/plan',
+    { preHandler: requireSubscriptionsEnabled },
+    changePlanHandler,
+  );
+});
+```
 
-- [ ] **Step 6: Confirmar que o admin não quebrou com a mudança do `sendBillingError`**
+Auditoria: `recordAudit({ actorId: sub, action: 'premium.subscription.plan_changed', entityType: 'premium_membership', entityId: membership.id, metadata: { actorKind: 'member', fromTier, fromCadence, toTier, toCadence } })`. O `actorKind` impede a linha de conflar staff e membro.
 
-Run: `pnpm --filter @ccc/api test -- admin/subscriptions`
+- [ ] **Step 6: Rodar e ver passar**
+
+Run: `pnpm --filter @ccc/api test premium-change-plan`
+Expected: PASS nos doze.
+
+- [ ] **Step 7: Confirmar que o admin não quebrou**
+
+Run: `pnpm --filter @ccc/api test admin/subscriptions`
 Expected: PASS.
 
-- [ ] **Step 7: Cobrir o gate de plataforma**
+- [ ] **Step 8: Cobrir o gate de plataforma**
 
-Em `apps/api/test/billing/me-premium-platform-gate.test.ts`, seguindo o padrão dos casos que já existem no arquivo (flipar `PREMIUM_SUBSCRIPTIONS_IOS`, injetar com o header de plataforma que o arquivo já usa), acrescentar um caso afirmando que `POST /api/me/premium/plan` é recusado na plataforma barrada e aceito na liberada. Copiar a mecânica do caso de `/checkout` do mesmo arquivo.
+Em `apps/api/test/billing/me-premium-platform-gate.test.ts`, copiar a mecânica do caso de `/checkout` (flip de `PREMIUM_SUBSCRIPTIONS_IOS`, header de plataforma) e afirmar as duas direções para `POST /api/me/premium/plan`.
 
-Run: `pnpm --filter @ccc/api test -- me-premium-platform-gate`
+Run: `pnpm --filter @ccc/api test me-premium-platform-gate`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add packages/shared/src/premium-subscription.ts apps/api/src/routes/me-premium.ts apps/api/src/routes/admin/subscriptions.ts apps/api/src/services/billing/errors.ts apps/api/test/billing/
+git add packages/shared/src/premium-subscription.ts apps/api/src/routes/ apps/api/test/billing/
 git commit -m "feat(api): membro troca de plano por POST /api/me/premium/plan"
 ```
 
 ---
 
-### Task 4: Cliente mobile, mapeamento de erro e poll por tier
+### Task 6: Cliente mobile, mapeamento de erro e poll por tier + cadência
 
 **Files:**
 
-- Modify: `apps/mobile/src/api/premium.ts` (`changePremiumPlan`)
+- Modify: `apps/mobile/src/api/premium.ts`
 - Create: `apps/mobile/src/screens/assinaturas/plan-change-error.ts`
-- Modify: `apps/mobile/src/screens/assinaturas/poll-subscription.ts` (`pollSubscriptionTier`)
+- Modify: `apps/mobile/src/screens/assinaturas/poll-subscription.ts`
 - Modify: `apps/mobile/src/copy/assinaturas.ts` (bloco `alterar`, PT + twin EN)
+- Modify: `apps/api/src/services/stripe/index.ts` (só o comentário errado)
 - Test: `apps/mobile/src/screens/assinaturas/plan-change-error.test.ts` (criar)
 - Test: `apps/mobile/src/screens/assinaturas/poll-subscription-tier.test.ts` (criar)
 
 **Interfaces:**
 
-- Consumes: a rota da Task 3.
+- Consumes: a rota da Task 5.
 - Produces:
   - `changePremiumPlan(input: { planSlug: string; cadence: 'monthly' | 'annual' }): Promise<{ ok: boolean; pending: boolean }>`
-  - `resolvePlanChangeError(error: unknown): PlanChangeError`, com `PlanChangeError = { reason: 'not_stripe' | 'invalid_status' | 'no_change' | 'plan_not_found' | 'unavailable' | 'rate_limited' | 'unauthorized' | 'generic'; message: string; manageUrl?: string }`
-  - `pollSubscriptionTier(targetTier: string): Promise<boolean>`
+  - `resolvePlanChangeError(error: unknown): PlanChangeError`, com `reason: 'not_stripe' | 'invalid_status' | 'no_change' | 'plan_not_found' | 'annual_addon' | 'unavailable' | 'rate_limited' | 'unauthorized' | 'generic'` e `manageUrl?: string`
+  - `pollSubscriptionTier(targetTier: string, targetCadence: string): Promise<boolean>`
   - `assinaturasCopy.alterar.*`
-  - A Task 5 consome os quatro.
 
-- [ ] **Step 1: Escrever o teste do mapeamento de erro**
+- [ ] **Step 1: Teste do mapeamento de erro**
 
-Criar `apps/mobile/src/screens/assinaturas/plan-change-error.test.ts`, espelhando `checkout-error.test.ts`:
+Criar `plan-change-error.test.ts` espelhando `checkout-error.test.ts`. Casos: 409 `NotStripeSubscription` carrega `manageUrl`; 409 `InvalidStatus` vira `invalid_status` com `copy.errorPastDue`; 409 `NoChange` vira `no_change`; **422 `AnnualCadenceAddonUnsupported` vira `annual_addon`**; 404 vira `plan_not_found`; erro solto vira `generic`.
+
+O caso 422 é o que faltava: sem ele, um erro permanente vira "tente novamente".
+
+- [ ] **Step 2: Teste do poll**
+
+Criar `poll-subscription-tier.test.ts`. `POLL_MAX_ATTEMPTS` é 15 e `POLL_INTERVAL_MS` é 2000 (`poll-subscription.ts`), então `advanceTimersByTimeAsync(4000)` dá exatamente duas chamadas e `2000 * 16` esgota.
 
 ```ts
-import { describe, expect, it } from 'vitest';
+it('resolve true quando tier E cadencia batem com o alvo', async () => {
+  getMyPremiumSubscription
+    .mockResolvedValueOnce({ active: true, tier: 'gold', cadence: 'monthly' })
+    .mockResolvedValueOnce({ active: true, tier: 'silver', cadence: 'monthly' });
 
-import { ApiError } from '~/api/client';
-import { assinaturasCopy } from '~/copy/assinaturas';
-import { resolvePlanChangeError } from './plan-change-error';
+  const promise = pollSubscriptionTier('silver', 'monthly');
+  await vi.advanceTimersByTimeAsync(4000);
 
-const copy = assinaturasCopy.alterar;
-
-describe('resolvePlanChangeError', () => {
-  it('carrega o manageUrl da App Store no caso Apple', () => {
-    const err = new ApiError(409, 'conflict', {
-      error: 'NotStripeSubscription',
-      manageUrl: 'https://apps.apple.com/account/subscriptions',
-    });
-    const resolved = resolvePlanChangeError(err);
-    expect(resolved.reason).toBe('not_stripe');
-    expect(resolved.manageUrl).toBe('https://apps.apple.com/account/subscriptions');
-  });
-
-  it('distingue status invalido de conflito generico', () => {
-    const err = new ApiError(409, 'conflict', { error: 'InvalidStatus', status: 'past_due' });
-    expect(resolvePlanChangeError(err).reason).toBe('invalid_status');
-    expect(resolvePlanChangeError(err).message).toBe(copy.errorPastDue);
-  });
-
-  it('nao manda tentar de novo quando o plano ja e o atual', () => {
-    const err = new ApiError(409, 'conflict', { error: 'NoChange' });
-    const resolved = resolvePlanChangeError(err);
-    expect(resolved.reason).toBe('no_change');
-    expect(resolved.message).toBe(copy.errorNoChange);
-  });
-
-  it('cai no generico para status desconhecido', () => {
-    expect(resolvePlanChangeError(new Error('boom')).reason).toBe('generic');
-  });
+  await expect(promise).resolves.toBe(true);
+  expect(getMyPremiumSubscription).toHaveBeenCalledTimes(2);
 });
-```
 
-- [ ] **Step 2: Escrever o teste do poll por tier**
+it('nao da falso positivo quando so a cadencia muda', async () => {
+  // O tier já é o alvo desde a primeira leitura. Comparar só o tier faria o
+  // poll resolver true antes de qualquer webhook e mostrar sucesso para uma
+  // mudança que não aconteceu.
+  getMyPremiumSubscription.mockResolvedValue({ active: true, tier: 'gold', cadence: 'monthly' });
 
-Criar `apps/mobile/src/screens/assinaturas/poll-subscription-tier.test.ts`:
+  const promise = pollSubscriptionTier('gold', 'annual');
+  await vi.advanceTimersByTimeAsync(2000 * 16);
 
-```ts
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+  await expect(promise).resolves.toBe(false);
+});
 
-const getMyPremiumSubscription = vi.hoisted(() => vi.fn());
+it('resolve false quando as tentativas acabam com o plano antigo', async () => {
+  getMyPremiumSubscription.mockResolvedValue({ active: true, tier: 'gold', cadence: 'monthly' });
 
-vi.mock('~/api/premium-catalog', () => ({ getMyPremiumSubscription }));
+  const promise = pollSubscriptionTier('silver', 'monthly');
+  await vi.advanceTimersByTimeAsync(2000 * 16);
 
-import { pollSubscriptionTier } from './poll-subscription';
-
-describe('pollSubscriptionTier', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    getMyPremiumSubscription.mockReset();
-  });
-
-  it('resolve true assim que o tier do servidor bate com o alvo', async () => {
-    getMyPremiumSubscription
-      .mockResolvedValueOnce({ active: true, tier: 'gold' })
-      .mockResolvedValueOnce({ active: true, tier: 'silver' });
-
-    const promise = pollSubscriptionTier('silver');
-    await vi.advanceTimersByTimeAsync(4000);
-
-    await expect(promise).resolves.toBe(true);
-    expect(getMyPremiumSubscription).toHaveBeenCalledTimes(2);
-  });
-
-  it('resolve false quando as tentativas acabam com o tier antigo', async () => {
-    getMyPremiumSubscription.mockResolvedValue({ active: true, tier: 'gold' });
-
-    const promise = pollSubscriptionTier('silver');
-    await vi.advanceTimersByTimeAsync(2000 * 16);
-
-    await expect(promise).resolves.toBe(false);
-  });
+  await expect(promise).resolves.toBe(false);
 });
 ```
 
 - [ ] **Step 3: Rodar e ver falhar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/plan-change-error.test.ts src/screens/assinaturas/poll-subscription-tier.test.ts`
-Expected: FAIL. `resolvePlanChangeError` e `pollSubscriptionTier` não existem, e `assinaturasCopy.alterar` é `undefined`.
+Expected: FAIL. Os dois módulos não existem e `assinaturasCopy.alterar` é `undefined`.
 
-- [ ] **Step 4: Escrever a copy**
+- [ ] **Step 4: Copy**
 
-Em `apps/mobile/src/copy/assinaturas.ts`, bloco novo `alterar` no mesmo nível de `contratar`:
+Bloco `alterar` no mesmo nível de `contratar`, com twin EN de **cada** chave: `header`, `back`, `fromLabel`, `toLabel`, `valueTitle`, `gainTitle`, `loseTitle`, `keptTitle`, `whenTitle`, `whenBody`, `cta`, `ctaLoading`, `voltar`, `confirming`, `pendingTitle`, `pendingSubcopy`, `pendingCta`, `successToast`, `appleTitle`, `appleBody`, `appleCta`, `blockedPastDueTitle`, `blockedPastDueBody`, `blockedPastDueCta`, `unavailableCadence`, `cancelScheduledNote`, e os `error*`.
+
+Os rótulos de valor são **funções da cadência**, porque `baseAmountCents` é o snapshot da cadência contratada e chamar um snapshot anual de "mensalidade" erra por um fator de doze:
 
 ```ts
-  // Troca de plano de quem ja assina. A tela inteira e a confirmacao: ela
-  // precisa dizer o que muda no valor, o que se ganha, o que se perde, e
-  // quando passa a valer, ANTES de qualquer chamada.
-  alterar: {
-    header: 'ALTERAR ASSINATURA',
-    back: 'Voltar',
-    fromLabel: 'PLANO ATUAL',
-    toLabel: 'NOVO PLANO',
-    valueTitle: 'O QUE MUDA NO VALOR',
-    currentMonthly: 'Mensalidade de hoje',
-    newMonthly: 'Nova mensalidade',
-    difference: 'Diferença',
-    modulesKept: 'Módulos mantidos',
-    newTotal: 'Novo total por mês',
-    gainTitle: 'O QUE VOCÊ GANHA',
-    loseTitle: 'O QUE VOCÊ PERDE',
-    keptTitle: 'SEUS MÓDULOS CONTINUAM',
-    whenTitle: 'QUANDO VALE',
-    // Precisa dizer que nada e cobrado agora: create_prorations lanca a
-    // diferenca na fatura seguinte, nunca fora do ciclo.
-    whenBody:
-      'A troca vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra como crédito ou débito na sua próxima fatura.',
-    cancelScheduledNote:
-      'Seu cancelamento continua agendado. Trocar de plano não desfaz o cancelamento.',
-    cta: 'CONFIRMAR ALTERAÇÃO',
-    ctaLoading: 'ALTERANDO...',
-    back2: 'VOLTAR',
-    confirming: 'Confirmando a alteração...',
-    pendingTitle: 'Alteração em processamento.',
-    pendingSubcopy: 'Assim que ela for confirmada, seu plano novo aparece aqui.',
-    pendingCta: 'VER MINHA ASSINATURA',
-    successToast: 'Plano alterado.',
-    appleTitle: 'Assinatura pela App Store',
-    appleBody: 'Esta assinatura foi contratada pela App Store. A troca de plano é feita por lá.',
-    appleCta: 'ABRIR APP STORE',
-    errorPastDue:
-      'Há uma cobrança pendente na sua assinatura. Regularize o pagamento antes de trocar de plano.',
-    errorNoChange: 'Esse já é o seu plano atual.',
-    errorPlanNotFound: 'Esse plano não está mais disponível.',
-    errorUnavailable: 'A alteração está indisponível agora. Tente mais tarde.',
-    errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
-    errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
-    errorGeneric: 'Não foi possível alterar seu plano. Tente novamente.',
-  },
+    currentValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Valor anual de hoje' : 'Valor mensal de hoje',
+    newValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Novo valor anual' : 'Novo valor mensal',
 ```
 
-E o twin em `assinaturasCopyEn`:
+A frase de rateio é a formulação única da Global Constraint, literal:
 
 ```ts
-  alterar: {
-    header: 'CHANGE MEMBERSHIP',
-    fromLabel: 'CURRENT PLAN',
-    toLabel: 'NEW PLAN',
-    valueTitle: 'WHAT CHANGES IN THE PRICE',
-    currentMonthly: "Today's monthly",
-    newMonthly: 'New monthly',
-    difference: 'Difference',
-    modulesKept: 'Modules kept',
-    newTotal: 'New monthly total',
-    gainTitle: 'WHAT YOU GAIN',
-    loseTitle: 'WHAT YOU LOSE',
-    keptTitle: 'YOUR MODULES STAY',
-    whenTitle: 'WHEN IT APPLIES',
     whenBody:
-      'The change applies as soon as you confirm. Nothing is charged now: the prorated difference lands as a credit or a charge on your next invoice.',
-    cancelScheduledNote:
-      'Your cancellation stays scheduled. Changing plan does not undo the cancellation.',
-    cta: 'CONFIRM CHANGE',
-    successToast: 'Plan changed.',
-    errorPastDue:
-      'Your membership has an outstanding charge. Settle the payment before changing plan.',
-    errorNoChange: 'That is already your current plan.',
-  },
+      'A mudança vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra na sua próxima fatura, que pode ser a que fecha neste ciclo.',
 ```
 
-- [ ] **Step 5: Implementar o cliente, o mapeamento e o poll**
+- [ ] **Step 5: Corrigir o comentário errado que gerou a confusão**
 
-Em `apps/mobile/src/api/premium.ts`:
+`apps/api/src/services/stripe/index.ts:664-666` afirma que `create_prorations` cobra "immediately". Falso: ele cria itens de fatura pendentes, coletados na próxima fatura; cobrar na hora exigiria `always_invoice`. O comentário de `updateSubscriptionItemPrice` (`:190-192`) já diz o certo. Corrigir o de `addSubscriptionItem` para casar, senão a próxima pessoa escreve a copy errada lendo ele.
+
+- [ ] **Step 6: Implementar cliente, mapeamento e poll**
+
+`apps/mobile/src/api/premium.ts`:
 
 ```ts
-/**
- * POST /api/me/premium/plan — troca de plano. A resposta e `pending`: quem
- * grava o tier novo e o webhook, entao a tela poll antes de mostrar sucesso.
- */
 export const changePremiumPlan = (input: {
   planSlug: string;
   cadence: 'monthly' | 'annual';
@@ -801,21 +777,24 @@ export const changePremiumPlan = (input: {
   });
 ```
 
-Criar `apps/mobile/src/screens/assinaturas/plan-change-error.ts` com a mesma estrutura de `checkout-error.ts`: helper `body()` que extrai o corpo de um `ApiError`, `switch` no status, e dentro do 409 um `if` por `b.error` para separar `NotStripeSubscription` (carrega `manageUrl`), `InvalidStatus` (usa `copy.errorPastDue`) e `NoChange`. 503 vira `unavailable`, 429 `rate_limited`, 404 `plan_not_found`, 401 `unauthorized`, resto `generic`.
+`plan-change-error.ts` com a mesma estrutura de `checkout-error.ts`: helper `body()`, `switch` no status, `if` por `b.error` dentro do 409, e um ramo 422 que separa `AnnualCadenceAddonUnsupported` do resto.
 
-Em `poll-subscription.ts`, ao lado do poller que já existe:
+`poll-subscription.ts`:
 
 ```ts
 /**
- * Resolve true quando o tier do servidor bate com o alvo, false quando as
- * tentativas acabam. `pollSubscriptionActive` nao serve para a troca de plano:
- * a assinatura esta viva o tempo todo, e o que muda e o tier.
+ * Resolve true quando tier E cadencia batem com o alvo. `pollSubscriptionActive`
+ * nao serve para a troca: a assinatura esta viva o tempo todo. E comparar so o
+ * tier daria falso positivo numa troca que nao muda o tier.
  */
-export async function pollSubscriptionTier(targetTier: string): Promise<boolean> {
+export async function pollSubscriptionTier(
+  targetTier: string,
+  targetCadence: string,
+): Promise<boolean> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt += 1) {
     try {
       const sub = await getMyPremiumSubscription();
-      if (sub.tier === targetTier) return true;
+      if (sub.tier === targetTier && sub.cadence === targetCadence) return true;
     } catch {
       // Falha transitoria — segue tentando; quem chama mostra o estado pendente.
     }
@@ -825,23 +804,23 @@ export async function pollSubscriptionTier(targetTier: string): Promise<boolean>
 }
 ```
 
-- [ ] **Step 6: Rodar e ver passar**
+- [ ] **Step 7: Rodar e ver passar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/plan-change-error.test.ts src/screens/assinaturas/poll-subscription-tier.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/mobile/src/api/premium.ts apps/mobile/src/screens/assinaturas/plan-change-error.ts apps/mobile/src/screens/assinaturas/plan-change-error.test.ts apps/mobile/src/screens/assinaturas/poll-subscription.ts apps/mobile/src/screens/assinaturas/poll-subscription-tier.test.ts apps/mobile/src/copy/assinaturas.ts
+git add apps/mobile/src/api/premium.ts apps/mobile/src/screens/assinaturas/plan-change-error* apps/mobile/src/screens/assinaturas/poll-subscription* apps/mobile/src/copy/assinaturas.ts apps/api/src/services/stripe/index.ts
 git commit -m "feat(mobile): cliente, erros e poll da troca de plano"
 ```
 
 ---
 
-### Task 5: `AlterarPlanoScreen`, a tela de confirmação
+### Task 7: `AlterarPlanoScreen`
 
-O ponto da task: **nenhuma chamada de mutação sai antes do toque no CTA**, e o membro vê o que perde antes de confirmar.
+O ponto: **nenhuma chamada de mutação sai antes do toque no CTA**, e o membro vê o que perde antes de confirmar.
 
 **Files:**
 
@@ -851,126 +830,85 @@ O ponto da task: **nenhuma chamada de mutação sai antes do toque no CTA**, e o
 
 **Interfaces:**
 
-- Consumes: `changePremiumPlan`, `resolvePlanChangeError`, `pollSubscriptionTier`, `assinaturasCopy.alterar`, `usePremiumSubscription`, `getPremiumPlan`, `usePremiumPlans` (para `subscriptionsEnabled`).
-- Produces: rota `/assinaturas/alterar?slug={slug}`. A Task 6 aponta para ela.
+- Consumes: tudo da Task 6, mais `usePremiumSubscription`, `getPremiumPlan`, `usePremiumPlans`.
+- Produces: rota `/assinaturas/alterar?slug={slug}`. A Task 8 aponta para ela.
 
 - [ ] **Step 1: Escrever os testes que falham**
 
-Criar `apps/mobile/src/screens/assinaturas/__tests__/AlterarPlanoScreen.test.tsx`. Copiar o harness de mocks de `BoasVindasScreen.test.tsx` (mock de `react-native`, de `lucide-react-native`, de `expo-router`) e acrescentar os mocks de `~/api/premium`, `~/api/premium-catalog`, `~/hooks/usePremiumSubscription`, `~/hooks/usePremiumPlans` e `~/screens/assinaturas/poll-subscription`. Os testes:
+Criar o arquivo copiando o harness de `BoasVindasScreen.test.tsx` (mock de `react-native`, `lucide-react-native`, `expo-router`) e acrescentando mocks de `~/api/premium`, `~/api/premium-catalog`, `~/hooks/usePremiumSubscription`, `~/hooks/usePremiumPlans` e `~/screens/assinaturas/poll-subscription`.
+
+**Helpers não existem neste repo.** Não usar `setSubscription`, `setModules`, `click` nem `clickTwice`: nenhum deles aparece em nenhum `__tests__/`. O idioma real é `hookState.value = {...}` no `beforeEach` e `container.querySelector(...)` seguido de `.click()` dentro de `act`, como `MinhaAssinaturaScreen.test.tsx` faz.
+
+Casos: mostra ganho e perda sem chamar nada; esconde o bloco de perda no upgrade puro; só chama a API no CTA e navega após o poll; cai em pendente quando o poll estoura; Apple não chama e oferece App Store; `past_due` bloqueia **com o link do billing-portal**; `slug` igual ao atual sai da tela; membership anual rotula os valores como anuais e envia `cadence: 'annual'`.
+
+O teste do valor anual é o que pega o erro de fator doze:
 
 ```ts
-it('mostra o que ganha e o que perde antes de qualquer chamada', async () => {
-  // assinatura atual gold com dois beneficios; plano alvo silver com um deles
-  // mais um novo.
+it('rotula e envia a cadencia vigente, sem converter assinante anual', async () => {
+  hookState.value = result({ ...activeSub, cadence: 'annual', baseAmountCents: 1490000 });
   await render();
 
-  expect(text()).toContain(copy.gainTitle);
-  expect(text()).toContain('Convite para o track day');
-  expect(text()).toContain(copy.loseTitle);
-  expect(text()).toContain('Estacionamento prioritário em eventos');
-  // O que importa nesta linha: montar a tela nao muda nada no servidor.
-  expect(changePremiumPlan).not.toHaveBeenCalled();
+  expect(text()).toContain(copy.currentValue('annual'));
+  expect(text()).not.toContain(copy.currentValue('monthly'));
+
+  await act(async () => {
+    (container.querySelector('[data-testid="alterar-cta"]') as HTMLElement).click();
+    await flush();
+  });
+
+  expect(changePremiumPlan).toHaveBeenCalledWith({ planSlug: 'estrada', cadence: 'annual' });
 });
+```
 
-it('esconde o bloco de perda quando o upgrade so acrescenta', async () => {
-  // alvo contem todos os beneficios atuais mais um.
-  await render();
+O anti duplo toque precisa ser **dois cliques dentro de um único `act`**, sem flush entre eles. É o único jeito de exercitar um guard por ref; com flush no meio, um `useState` puro também passaria e o teste não provaria nada. `MinhaAssinaturaScreen.test.tsx:534-538` já faz assim, com comentário explicando:
 
-  expect(text()).toContain(copy.gainTitle);
-  expect(text()).not.toContain(copy.loseTitle);
+```ts
+await act(async () => {
+  cta.click();
+  cta.click();
+  await flush();
 });
-
-it('so chama a API no toque do CTA, e navega apos o poll', async () => {
-  changePremiumPlan.mockResolvedValue({ ok: true, pending: true });
-  pollSubscriptionTier.mockResolvedValue(true);
-  await render();
-  expect(changePremiumPlan).not.toHaveBeenCalled();
-
-  await click('alterar-cta');
-
-  expect(changePremiumPlan).toHaveBeenCalledWith({ planSlug: 'estrada', cadence: 'monthly' });
-  expect(pollSubscriptionTier).toHaveBeenCalledWith('silver');
-  expect(showToast).toHaveBeenCalledWith(copy.successToast);
-  expect(replace).toHaveBeenCalledWith('/assinaturas/minha-assinatura');
-});
-
-it('cai no estado pendente quando o poll estoura', async () => {
-  changePremiumPlan.mockResolvedValue({ ok: true, pending: true });
-  pollSubscriptionTier.mockResolvedValue(false);
-  await render();
-
-  await click('alterar-cta');
-
-  expect(text()).toContain(copy.pendingTitle);
-  expect(replace).not.toHaveBeenCalled();
-});
-
-it('nao chama a API para membership Apple, e oferece a App Store', async () => {
-  setSubscription({ provider: 'apple_revenuecat' });
-  await render();
-
-  expect(text()).toContain(copy.appleBody);
-  expect(container.querySelector('[data-testid="alterar-cta"]')).toBeNull();
-  expect(changePremiumPlan).not.toHaveBeenCalled();
-});
-
-it('bloqueia membro past_due com copy propria e sem CTA', async () => {
-  setSubscription({ status: 'past_due' });
-  await render();
-
-  expect(text()).toContain(copy.errorPastDue);
-  expect(container.querySelector('[data-testid="alterar-cta"]')).toBeNull();
-});
-
-it('avisa que o cancelamento agendado continua de pe', async () => {
-  setSubscription({ status: 'cancel_scheduled', cancelAtPeriodEnd: true });
-  await render();
-
-  expect(text()).toContain(copy.cancelScheduledNote);
-});
-
-it('ignora o segundo toque no CTA', async () => {
-  let resolveChange: (v: unknown) => void = () => {};
-  changePremiumPlan.mockImplementation(
-    () =>
-      new Promise((r) => {
-        resolveChange = r;
-      }),
-  );
-  await render();
-
-  await clickTwice('alterar-cta');
-
-  expect(changePremiumPlan).toHaveBeenCalledTimes(1);
-  resolveChange({ ok: true, pending: true });
-});
+expect(changePremiumPlan).toHaveBeenCalledTimes(1);
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/AlterarPlanoScreen.test.tsx`
-Expected: FAIL, com erro de resolução do módulo `../AlterarPlanoScreen`.
+Expected: FAIL, erro de resolução de `../AlterarPlanoScreen`.
 
 - [ ] **Step 3: Implementar a tela**
 
-Criar `apps/mobile/src/screens/assinaturas/AlterarPlanoScreen.tsx`. Estrutura, seguindo o vocabulário visual de `tier-visual.ts` e a forma de `ContratarScreen`:
-
-- `usePremiumSubscription()` para a assinatura atual, `getPremiumPlan(slug)` num `useEffect` para o alvo, `usePremiumPlans()` para `subscriptionsEnabled`. Enquanto qualquer um dos dois carrega, `ActivityIndicator`.
-- Derivar: `visualAtual`, `visualAlvo`, `mensalidadeAtual = subscription.baseAmountCents`, `mensalidadeNova = monthlyPriceCents(planoAlvo)`, `diferenca = nova - atual`, `modulos = subscription.addons`, `modulosCents = subscription.addonsAmountCents`, `novoTotal = nova + modulosCents`.
-- Diff de benefícios por igualdade de texto. Os rótulos vêm do mesmo cadastro em `/premium/catalogo`, então o texto serve de identidade; quem reescrever a redação de um benefício faz ele aparecer como perdido e ganhado ao mesmo tempo, e isso está registrado nos Riscos da spec.
+Derivações. `monthlyPriceCents` (`tier-visual.ts:90`) devolve `number | null`, então a aritmética precisa de guarda — sem ela o typecheck do Step 5 quebra:
 
 ```tsx
-const atuais = subscription?.benefits ?? [];
+const cadence = subscription.cadence ?? 'monthly';
+const valorHoje = subscription.baseAmountCents;
+const valorNovo = priceForCadence(planoAlvo, cadence); // number | null
+// Plano sem preço na cadência vigente não tem troca a oferecer: a rota
+// responderia 404 PlanNotFound. Bloqueia antes, com copy própria.
+if (valorNovo === null) return <BlocoIndisponivel />;
+const diferenca = valorNovo - valorHoje;
+
+// `addons` inclui cancel_scheduled, mas `addonsAmountCents` soma só active
+// (me-premium-addons.ts:37 vs addons.ts:34-38). Sem o filtro, a tela listaria
+// como "continua", com preço, um módulo que não entra no total.
+const modulos = subscription.addons.filter((a) => a.status === 'active');
+const modulosCents = subscription.addonsAmountCents;
+const novoTotal = valorNovo + modulosCents;
+
+const atuais = subscription.benefits;
 const alvos = orderedBenefits(planoAlvo);
 const ganha = alvos.filter((b) => !atuais.includes(b));
 const perde = atuais.filter((b) => !alvos.includes(b));
 ```
 
-Renderizar o bloco `loseTitle` só quando `perde.length > 0`. Num upgrade puro ele não existe; num downgrade ele é o motivo de a tela existir.
+`priceForCadence` é um helper novo ao lado de `monthlyPriceCents` em `tier-visual.ts`, que devolve o preço da cadência pedida ou `null`. `monthlyPriceCents` cai no primeiro preço quando não há linha mensal, o que é aceitável na vitrine e não é aceitável aqui.
 
-- Ordem das seções, exatamente a da spec: header, `DE`/`PARA`, `O QUE MUDA NO VALOR`, ganho, perda, `SEUS MÓDULOS CONTINUAM`, `QUANDO VALE`, nota de cancelamento agendado quando `cancelAtPeriodEnd`, CTA `alterar-cta` e o secundário de voltar.
-- Desvios avaliados antes de renderizar o CTA: `provider !== 'stripe'` troca o CTA pelo bloco Apple com `Linking.openURL(APPLE_MANAGE_URL)`; `status` fora de `active`/`cancel_scheduled` troca por `copy.errorPastDue` sem CTA; `subscriptionsEnabled` false renderiza o bloco de indisponível igual ao de `ContratarScreen`.
-- `onSubmit`, com a guarda de duplo toque no mesmo formato de `ContratarScreen.onSubmit` (ref checada e setada no mesmo tick, antes do primeiro `await`; o state de `submitting` serve só para rótulo e disabled):
+Recusas antes do CTA, nesta ordem: `slug === subscription.planSlug` → `router.replace('/assinaturas/minha-assinatura')`; `provider !== 'stripe'` → bloco App Store; `status` fora de `['active','cancel_scheduled']` → bloco bloqueado **com CTA para o billing-portal**; `subscriptionsEnabled` false → bloco indisponível.
+
+Seções, na ordem da spec: header, `DE`/`PARA`, `O QUE MUDA NO VALOR`, ganho, perda (só se `perde.length > 0`), `SEUS MÓDULOS CONTINUAM`, `QUANDO VALE`, linha de cancelamento agendado, CTA `alterar-cta` e secundário.
+
+`onSubmit`, com a guarda de duplo toque no formato de `ContratarScreen.onSubmit`:
 
 ```tsx
 const onSubmit = async () => {
@@ -979,11 +917,9 @@ const onSubmit = async () => {
   setSubmitting(true);
   setError(null);
   try {
-    await changePremiumPlan({ planSlug: planoAlvo.slug, cadence: 'monthly' });
-    // A resposta e `pending`: quem grava o tier novo e o webhook. Ate ele
-    // chegar, nada mudou do ponto de vista do app.
+    await changePremiumPlan({ planSlug: planoAlvo.slug, cadence });
     setPhase('confirming');
-    const trocou = await pollSubscriptionTier(planoAlvo.tier);
+    const trocou = await pollSubscriptionTier(planoAlvo.tier, cadence);
     if (trocou) {
       showToast(copy.successToast);
       router.replace('/assinaturas/minha-assinatura');
@@ -1000,380 +936,223 @@ const onSubmit = async () => {
 };
 ```
 
-As fases `confirming` e `pending` renderizam como em `ContratarScreen`: spinner com `copy.confirming`, e o estado pendente com `copy.pendingTitle`, `copy.pendingSubcopy` e um CTA para Minha Assinatura.
-
-Criar `apps/mobile/app/(app)/assinaturas/alterar.tsx`:
-
-```tsx
-import { useLocalSearchParams } from 'expo-router';
-
-import AlterarPlanoScreen from '~/screens/assinaturas/AlterarPlanoScreen';
-
-// Confirmacao da troca de plano. Sem gate de rota: quem nao pode trocar ve o
-// motivo dentro da tela (Apple, past_due, plataforma barrada), o que e mais
-// util do que ser jogado para outro lugar sem explicacao.
-export default function AlterarRoute() {
-  const { slug } = useLocalSearchParams<{ slug?: string }>();
-  return <AlterarPlanoScreen slug={slug} />;
-}
-```
+A rota `apps/mobile/app/(app)/assinaturas/alterar.tsx` lê `slug` de `useLocalSearchParams` e renderiza a tela. Sem gate de rota: quem não pode trocar vê o motivo dentro da tela, o que é mais útil do que ser jogado para outro lugar sem explicação.
 
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/AlterarPlanoScreen.test.tsx`
-Expected: PASS nos oito testes.
+Expected: PASS.
 
 - [ ] **Step 5: Typecheck e lint**
 
 Run: `pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint`
-Expected: 0 erros. `typegen.js` precisa ver a rota nova; se algum `router.push` reclamar de tipo, é porque o destino não existe.
+Expected: 0 erros.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/mobile/src/screens/assinaturas/AlterarPlanoScreen.tsx "apps/mobile/app/(app)/assinaturas/alterar.tsx" apps/mobile/src/screens/assinaturas/__tests__/AlterarPlanoScreen.test.tsx
+git add apps/mobile/src/screens/assinaturas/ "apps/mobile/app/(app)/assinaturas/alterar.tsx"
 git commit -m "feat(mobile): tela de confirmacao da troca de plano"
 ```
 
 ---
 
-### Task 6: Entradas para a troca
+### Task 8: Entradas para a troca
 
 **Files:**
 
+- Create: `apps/mobile/src/screens/assinaturas/can-change-plan.ts`
 - Modify: `apps/mobile/src/screens/assinaturas/PlanosScreen.tsx`
 - Modify: `apps/mobile/src/screens/assinaturas/ContratarScreen.tsx`
-- Modify: `apps/mobile/src/copy/assinaturas.ts` (`plans.currentBadge`, `plans.changePrefix`)
-- Test: `apps/mobile/src/screens/assinaturas/__tests__/PlanosScreen.test.tsx`
-- Test: `apps/mobile/src/screens/assinaturas/__tests__/ContratarScreen.test.tsx`
-
-**Interfaces:**
-
-- Consumes: a rota `/assinaturas/alterar` da Task 5.
-- Produces: nada que tasks posteriores consumam.
+- Modify: `apps/mobile/src/screens/assinaturas/PlanoDetalheScreen.tsx`
+- Modify: `apps/mobile/src/copy/assinaturas.ts`
+- Test: os três `__tests__` correspondentes
 
 - [ ] **Step 1: Escrever os testes que falham**
 
-Em `PlanosScreen.test.tsx`, com a assinatura mockada ativa em gold e `showAll` ligado:
+Fatos verificados sobre os harnesses, ao contrário do que a versão anterior deste plano afirmava:
+
+- `PlanosScreen.test.tsx` **já** mocka `usePremiumSubscription` (`:45-47`), **já** tem `push` no mock de `expo-router` (`:128`), e `PlanosScreen.tsx:213` já consome o hook. Não duplicar nada disso.
+- O helper de render é `renderScreen(showAll = false)`. Os testes novos precisam passar `showAll = true`, senão a tela cai no `router.replace` para Minha Assinatura e o selo nunca renderiza.
+- `ContratarScreen.tsx` **não** consome `usePremiumSubscription`. Esta task adiciona o hook, e `ContratarScreen.test.tsx:62-64` mocka `~/api/premium-catalog` com **só** `getPremiumPlan` — assim que o hook entra, `getMyPremiumSubscription` precisa estar nessa factory ou todos os testes do arquivo quebram.
+
+Casos: plano atual com selo e sem CTA; outro plano leva a `/assinaturas/alterar?slug=`; `ContratarScreen` com membership `active` redireciona; `ContratarScreen` com `past_due` **não** redireciona; `PlanoDetalheScreen` do próprio plano não oferece contratar.
+
+O teste de `past_due` protege a saída do inadimplente:
 
 ```ts
-it('marca o plano atual e nao oferece assinar de novo', async () => {
-  await renderWithSubscription({ active: true, tier: 'gold', planSlug: 'fundador' });
-
-  expect(text()).toContain(assinaturasCopy.plans.currentBadge);
-  const atual = container.querySelector('[data-testid="plano-cta-fundador"]');
-  expect(atual).toBeNull();
-});
-
-it('leva para a tela de alteracao nos outros planos', async () => {
-  await renderWithSubscription({ active: true, tier: 'gold', planSlug: 'fundador' });
-
-  const cta = container.querySelector('[data-testid="plano-cta-estrada"]') as HTMLElement;
-  cta.click();
-
-  expect(push).toHaveBeenCalledWith('/assinaturas/alterar?slug=estrada');
-});
-```
-
-Em `ContratarScreen.test.tsx`:
-
-```ts
-it('redireciona assinante ativo para a tela de alteracao', async () => {
-  setSubscription({ active: true, tier: 'gold', planSlug: 'fundador' });
+it('nao redireciona membro past_due, que precisa do link do portal', async () => {
+  hookState.value = result({ active: true, status: 'past_due', planSlug: 'fundador' });
   await renderScreen();
 
-  expect(routerReplace).toHaveBeenCalledWith('/assinaturas/alterar?slug=fundador');
-  expect(container.querySelector('[data-testid="contratar-cta"]')).toBeNull();
+  // O caminho atual termina no 409 AlreadySubscribed, que traz
+  // GERENCIAR ASSINATURA — o portal onde se troca o cartão que falhou.
+  // Mandá-lo para uma tela sem CTA tiraria a única saída que existe.
+  expect(routerReplace).not.toHaveBeenCalledWith(expect.stringContaining('/assinaturas/alterar'));
 });
 ```
-
-Nenhum dos dois arquivos mocka `usePremiumSubscription` hoje. Acrescentar o mock nos dois, com `active: false` como padrão no `beforeEach`, para que todos os testes que já existem continuem vendo a tela de compra. `PlanosScreen.test.tsx` já mocka `expo-router` com `replace`; incluir `push` no mesmo mock, porque é ele que o CTA de troca usa.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
-Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/PlanosScreen.test.tsx src/screens/assinaturas/__tests__/ContratarScreen.test.tsx`
-Expected: FAIL nos três testes novos.
+Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas`
+Expected: FAIL só nos testes novos.
 
-- [ ] **Step 3: Copy nova**
+- [ ] **Step 3: Copy**
 
-Em `assinaturasCopy.plans`:
-
-```ts
-    currentBadge: 'SEU PLANO ATUAL',
-    // Rotulo do CTA quando ja existe assinatura: "TROCAR PARA {TIER}".
-    changePrefix: 'TROCAR PARA',
-```
-
-Twin EN em `assinaturasCopyEn.plans`: `currentBadge: 'YOUR CURRENT PLAN'`, `changePrefix: 'SWITCH TO'`.
+Em `assinaturasCopy.plans`: `currentBadge: 'SEU PLANO ATUAL'` e `changePrefix: 'TROCAR PARA'`. Twins EN: `'YOUR CURRENT PLAN'` e `'SWITCH TO'`.
 
 - [ ] **Step 4: Implementar**
 
-Em `PlanosScreen.tsx`, dentro do map dos cards: quando `subscription?.active` e `plan.slug === subscription.planSlug`, renderizar o selo `currentBadge` no lugar do CTA. Quando `subscription?.active` e o slug é outro, o CTA usa `changePrefix` e navega para `/assinaturas/alterar?slug=${plan.slug}`. Sem assinatura ativa, tudo segue como está hoje.
+Regra compartilhada em `can-change-plan.ts`, para as três telas não divergirem:
 
-Em `ContratarScreen.tsx`, junto dos outros `useEffect` do topo:
+```ts
+/** Troca de plano exige membership viva E em dia. past_due e paused ficam de fora. */
+export const canChangePlan = (sub: MySubscriptionResponse | null): boolean =>
+  Boolean(sub?.active && (sub.status === 'active' || sub.status === 'cancel_scheduled'));
+```
+
+`PlanosScreen`: card cujo `slug === subscription.planSlug` mostra `currentBadge` no lugar do CTA; os outros usam `changePrefix` e navegam com `as never`, como `PlanoDetalheScreen.tsx:199` já faz:
 
 ```tsx
-// Assinante ativo nao monta pacote: ate hoje ele percorria a tela inteira
-// para so no fim bater no 409 AlreadySubscribed do checkout. O redirect leva
-// direto para a confirmacao da troca, inclusive quem chega por deep link.
-useEffect(() => {
-  if (subLoading || !subscription?.active || !slug) return;
-  router.replace(`/assinaturas/alterar?slug=${slug}`);
-}, [subLoading, subscription?.active, slug]);
+router.push(`/assinaturas/alterar?slug=${plan.slug}` as never);
 ```
+
+`ContratarScreen`: adicionar `usePremiumSubscription` e o efeito de redirect, gateado por `canChangePlan`:
+
+```tsx
+useEffect(() => {
+  if (subLoading || !slug || !canChangePlan(subscription)) return;
+  router.replace(`/assinaturas/alterar?slug=${slug}` as never);
+}, [subLoading, subscription, slug]);
+```
+
+`PlanoDetalheScreen`: mesmo gate no destino do CTA, e nada de contratar no próprio plano.
 
 - [ ] **Step 5: Rodar e ver passar**
 
-Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas`
-Expected: PASS, incluindo os testes que já existiam nos dois arquivos.
+Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas && pnpm --filter @ccc/mobile typecheck`
+Expected: PASS, 0 erro de tipo.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/mobile/src/screens/assinaturas/PlanosScreen.tsx apps/mobile/src/screens/assinaturas/ContratarScreen.tsx apps/mobile/src/copy/assinaturas.ts apps/mobile/src/screens/assinaturas/__tests__/
-git commit -m "feat(mobile): planos e contratar levam assinante para a alteracao"
+git add apps/mobile/src/screens/assinaturas/ apps/mobile/src/copy/assinaturas.ts
+git commit -m "feat(mobile): entradas levam assinante em dia para a alteracao"
 ```
 
 ---
 
-### Task 7: Remover módulo em Minha Assinatura
+### Task 9: Remover e reativar módulo
 
 **Files:**
 
-- Modify: `apps/mobile/src/api/premium.ts` (`detachPremiumAddon`)
+- Modify: `apps/mobile/src/api/premium.ts`
 - Create: `apps/mobile/src/screens/assinaturas/addon-error.ts`
 - Modify: `apps/mobile/src/screens/assinaturas/MinhaAssinaturaScreen.tsx`
-- Modify: `apps/mobile/src/copy/assinaturas.ts` (`minhaAssinatura.modulos`, PT + twin EN)
+- Modify: `apps/mobile/src/copy/assinaturas.ts`
 - Test: `apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
 
 **Interfaces:**
 
-- Consumes: `provider` da Task 1.
-- Produces:
-  - `detachPremiumAddon(addonKey: string): Promise<AddonMutationResponse>`
-  - `resolveAddonError(error: unknown, action: 'attach' | 'detach'): { reason: string; message: string }` — a ação é parâmetro porque um 404 significa coisas diferentes nos dois lados: no attach é módulo fora do catálogo, no detach é módulo que não está anexado
-  - `assinaturasCopy.minhaAssinatura.modulos.*`
-  - A Task 8 consome os três.
+- Consumes: `provider` e `monthlyDeltaCents` (Task 1), re-vínculo (Task 4), guards (Task 3).
+- Produces: `detachPremiumAddon(addonKey)`, `attachPremiumAddon(addonKey)`, `resolveAddonError(error, action: 'attach' | 'detach')`. A Task 10 consome.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [ ] **Step 1: Preparar o harness antes dos testes**
 
-Em `MinhaAssinaturaScreen.test.tsx`:
+Quatro ajustes, senão os testes novos nem compilam:
+
+1. `vi.mock('~/api/premium', ...)` (`:77-79`) é factory fechada: acrescentar `detachPremiumAddon` e `attachPremiumAddon`.
+2. `ApiError` é **mockado** no arquivo (`:82-94`), não importado. Usar a classe do mock, não um import novo.
+3. `usePremiumAddonModules` não é mockado e a tela não o consome hoje. Acrescentar o mock agora (a Task 10 depende).
+4. As fixtures de add-on precisam de `monthlyDeltaCents` (feito na Task 1).
+
+- [ ] **Step 2: Escrever os testes que falham**
+
+Casos: confirma antes de remover e só chama no confirmar; o sheet mostra os **números formatados**; módulo `cancel_scheduled` oferece `REATIVAR` e não `REMOVER`; Apple esconde as duas ações; erro não derruba a tela.
+
+A copy de sheet é **função**, então o teste precisa chamá-la. Passar a função crua para `toContain` não compila e não afirma nada:
 
 ```ts
-it('confirma antes de remover, e so chama a API no confirmar', async () => {
-  detachPremiumAddon.mockResolvedValue({
-    addonKey: 'detailing',
-    status: 'cancel_scheduled',
-    addonsAmountCents: 0,
-    totalAmountCents: 29900,
-  });
-  await renderScreen();
-
-  await click('modulo-remover-detailing');
-  expect(detachPremiumAddon).not.toHaveBeenCalled();
-  // O sheet precisa dizer as duas coisas que surpreendem: a cota sobrevive ao
-  // ciclo, e nao da para desfazer antes disso.
-  expect(text()).toContain(copy.modulos.removerBody);
-  expect(text()).toContain(copy.modulos.removerSemVolta);
-
-  await click('modulo-remover-confirmar');
-  expect(detachPremiumAddon).toHaveBeenCalledWith('detailing');
-  expect(refresh).toHaveBeenCalled();
-});
-
-it('nao oferece remover num modulo ja com cancelamento agendado', async () => {
-  setSubscription({ addons: [{ ...addon, status: 'cancel_scheduled' }] });
-  await renderScreen();
-
-  expect(container.querySelector('[data-testid="modulo-remover-detailing"]')).toBeNull();
-});
-
-it('esconde a acao de remover em membership Apple', async () => {
-  setSubscription({ provider: 'apple_revenuecat' });
-  await renderScreen();
-
-  expect(container.querySelector('[data-testid="modulo-remover-detailing"]')).toBeNull();
-  expect(text()).toContain(copy.modulos.appleNote);
-});
-
-it('mostra erro sem derrubar a tela quando a remocao falha', async () => {
-  detachPremiumAddon.mockRejectedValue(new ApiError(404, 'not found', { error: 'NotFound' }));
-  await renderScreen();
-
-  await click('modulo-remover-detailing');
-  await click('modulo-remover-confirmar');
-
-  expect(text()).toContain(copy.modulos.errorNaoAnexado);
-  expect(text()).toContain('Detailing');
-});
+expect(text()).toContain(copy.modulos.removerBody('Detailing', 'R$ 299,00'));
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [ ] **Step 3: Rodar e ver falhar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
-Expected: FAIL nos quatro testes novos.
+Expected: FAIL nos testes novos.
 
-- [ ] **Step 3: Copy nova**
+- [ ] **Step 4: Copy**
 
-Em `assinaturasCopy.minhaAssinatura`, bloco `modulos`:
+Bloco `modulos` em `minhaAssinatura`, com twin EN de cada chave. A de remoção diz a verdade que a Task 4 tornou verdadeira:
 
 ```ts
-    // Add/remove de modulo. Os dois endpoints sao sincronos e escrevem o banco
-    // na hora, diferente da troca de plano — nao ha poll aqui.
-    modulos: {
-      disponiveisTitle: 'MÓDULOS DISPONÍVEIS',
-      adicionar: 'ADICIONAR',
-      remover: 'REMOVER',
-      adicionarTitle: 'Adicionar módulo',
-      adicionarBody: (nome: string, valor: string, total: string) =>
-        `${nome} custa ${valor} por mês. Seu novo total fica ${total} por mês, com a cobrança começando agora e rateada na próxima fatura.`,
-      adicionarConfirmar: 'ADICIONAR MÓDULO',
-      removerTitle: 'Remover módulo',
-      // A cota sobreviver ao ciclo e generosidade do servidor, nao erro: o item
-      // sai da Stripe na hora, mas o add-on fica cancel_scheduled.
       removerBody: (nome: string, total: string) =>
         `A cobrança de ${nome} para agora e seu total cai para ${total} por mês. Você continua usando a cota deste módulo até o fim do ciclo atual.`,
-      removerSemVolta: 'Não é possível desfazer antes do fim do ciclo.',
-      removerConfirmar: 'REMOVER MÓDULO',
-      manter: 'MANTER MÓDULO',
-      loading: 'PROCESSANDO...',
-      appleNote: 'Módulos de assinaturas da App Store são gerenciados por lá.',
-      errorJaAnexado: 'Esse módulo já está na sua assinatura.',
-      errorNaoAnexado: 'Esse módulo não está na sua assinatura.',
-      errorIndisponivel: 'Esse módulo não está disponível agora.',
-      errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
-      errorGeneric: 'Não foi possível atualizar seus módulos. Tente novamente.',
-    },
+      // Verdade a partir da Task 4. Antes dela, o módulo removido ficava
+      // travado em cancel_scheduled para sempre.
+      removerReversivel: 'Você pode reativar este módulo quando quiser.',
 ```
 
-Twin EN com as mesmas chaves em `assinaturasCopyEn.minhaAssinatura`.
+As ações de adicionar e reativar reusam `assinaturasCopy.alterar.whenBody`, a formulação única de rateio.
 
-- [ ] **Step 4: Implementar**
+- [ ] **Step 5: Implementar**
 
-Em `apps/mobile/src/api/premium.ts`:
+Cliente em `api/premium.ts`, com o import de `addonMutationResponseSchema` e `AddonMutationResponse` de `@ccc/shared/premium-subscription` (o arquivo só importa de `@ccc/shared/premium` hoje).
 
-```ts
-/** DELETE /api/me/premium/addons/:key — agenda o cancelamento do modulo. */
-export const detachPremiumAddon = (addonKey: string): Promise<AddonMutationResponse> =>
-  authedRequest(`/api/me/premium/addons/${addonKey}`, addonMutationResponseSchema, {
-    method: 'DELETE',
-  });
-```
+`addon-error.ts` com `resolveAddonError(error: unknown, action: 'attach' | 'detach')`. A ação é parâmetro porque 404 significa coisas diferentes: no attach é módulo fora do catálogo, no detach é módulo não anexado. Mapear também os códigos novos da Task 3: 409 `InvalidStatus` e 409 `NotStripeSubscription`.
 
-Criar `addon-error.ts` com `resolveAddonError(error: unknown, action: 'attach' | 'detach')`, mapeando: 409 com `error: 'AlreadyExists'` → `errorJaAnexado`; 409 `NoActiveMembership` → `errorGeneric`; 404 → `errorNaoAnexado` quando `action === 'detach'` e `errorIndisponivel` quando `'attach'`; 429 → `errorRateLimited`; 503 → `errorIndisponivel`; resto → `errorGeneric`. Nesta task só o caminho `'detach'` é exercido; a Task 8 exercita o outro.
+`AddonRow` precisa da assinatura mudada: hoje é `({ addon }: { addon: MySubscriptionAddon })` (`MinhaAssinaturaScreen.tsx:71`) e não enxerga `sub`. Passar `provider` e `subscriptionsEnabled` por prop.
 
-Em `MinhaAssinaturaScreen.tsx`, dentro de `AddonRow`: quando `addon.status === 'active'` e `sub.provider === 'stripe'`, renderizar o `REMOVER` com `testID={'modulo-remover-' + addon.key}`. O `SheetShell` de confirmação reusa o padrão do sheet de cancelamento que já existe no arquivo, com o mesmo guard de duplo toque por ref. No confirmar: `detachPremiumAddon(addon.key)`, e em seguida `refresh()` do hook. Em erro, `resolveAddonError` e a mensagem dentro do sheet, sem fechar. Quando `sub.provider !== 'stripe'`, a seção mostra `appleNote` e nenhuma ação.
-
-- [ ] **Step 5: Rodar e ver passar**
+- [ ] **Step 6: Rodar e ver passar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/mobile/src/api/premium.ts apps/mobile/src/screens/assinaturas/addon-error.ts apps/mobile/src/screens/assinaturas/MinhaAssinaturaScreen.tsx apps/mobile/src/copy/assinaturas.ts apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx
-git commit -m "feat(mobile): remover modulo em minha assinatura"
+git add apps/mobile/src/api/premium.ts apps/mobile/src/screens/assinaturas/ apps/mobile/src/copy/assinaturas.ts
+git commit -m "feat(mobile): remover e reativar modulo em minha assinatura"
 ```
 
 ---
 
-### Task 8: Adicionar módulo em Minha Assinatura
+### Task 10: Adicionar módulo
 
 **Files:**
 
-- Modify: `apps/mobile/src/api/premium.ts` (`attachPremiumAddon`)
 - Modify: `apps/mobile/src/screens/assinaturas/MinhaAssinaturaScreen.tsx`
 - Test: `apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
 
-**Interfaces:**
-
-- Consumes: `resolveAddonError` e a copy da Task 7, `subscriptionsEnabled` de `usePremiumPlans` (o hook já é consumido por esta tela), `usePremiumAddonModules` para o catálogo.
-- Produces: `attachPremiumAddon(addonKey: string): Promise<AddonMutationResponse>`.
-
 - [ ] **Step 1: Escrever os testes que falham**
 
-```ts
-  it('lista so os modulos do catalogo que ainda nao estao anexados', async () => {
-    setModules([{ key: 'detailing', ... }, { key: 'lavagem', ... }]);
-    setSubscription({ addons: [addonDetailing] });
-    await renderScreen();
+Casos: lista só o que não está anexado; **o bloco aparece com zero add-ons**; o sheet mostra os números antes de chamar; gate desligado esconde `ADICIONAR` e mantém `REMOVER`; Apple esconde `ADICIONAR`.
 
-    expect(text()).toContain(copy.modulos.disponiveisTitle);
-    expect(container.querySelector('[data-testid="modulo-adicionar-lavagem"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="modulo-adicionar-detailing"]')).toBeNull();
-  });
-
-  it('confirma com os numeros antes de adicionar', async () => {
-    attachPremiumAddon.mockResolvedValue({
-      addonKey: 'lavagem',
-      status: 'active',
-      addonsAmountCents: 1990,
-      totalAmountCents: 31890,
-    });
-    await renderScreen();
-
-    await click('modulo-adicionar-lavagem');
-    expect(attachPremiumAddon).not.toHaveBeenCalled();
-    expect(text()).toContain('R$ 19,90');
-
-    await click('modulo-adicionar-confirmar');
-    expect(attachPremiumAddon).toHaveBeenCalledWith('lavagem');
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  it('esconde adicionar quando o gate de plataforma esta desligado', async () => {
-    plansState.current.subscriptionsEnabled = false;
-    await renderScreen();
-
-    expect(container.querySelector('[data-testid="modulo-adicionar-lavagem"]')).toBeNull();
-    // Remover continua: reduzir o que ja se paga nunca foi compra, e a API
-    // tambem nao gateia o DELETE.
-    expect(container.querySelector('[data-testid="modulo-remover-detailing"]')).not.toBeNull();
-  });
-
-  it('esconde adicionar em membership Apple', async () => {
-    setSubscription({ provider: 'apple_revenuecat' });
-    await renderScreen();
-
-    expect(container.querySelector('[data-testid="modulo-adicionar-lavagem"]')).toBeNull();
-  });
-```
+O caso de zero add-ons pega a condição existente: `MinhaAssinaturaScreen.tsx:251` renderiza a seção de módulos só quando `sub.addons.length > 0`, e o bloco de disponíveis precisa aparecer justamente para quem não tem nenhum.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
-Expected: FAIL nos quatro testes novos.
+Expected: FAIL nos cinco.
 
 - [ ] **Step 3: Implementar**
 
-Em `apps/mobile/src/api/premium.ts`:
-
-```ts
-/** POST /api/me/premium/addons — vincula um modulo. Cobra na hora, com rateio. */
-export const attachPremiumAddon = (addonKey: string): Promise<AddonMutationResponse> =>
-  authedRequest('/api/me/premium/addons', addonMutationResponseSchema, {
-    method: 'POST',
-    body: { addonKey },
-  });
-```
-
-Em `MinhaAssinaturaScreen.tsx`, bloco `MÓDULOS DISPONÍVEIS` depois da lista de módulos anexados. Fonte: `usePremiumAddonModules()`, filtrando fora as chaves que já aparecem em `sub.addons` com status `active` ou `cancel_scheduled`. Renderiza só quando `subscriptionsEnabled` **e** `sub.provider === 'stripe'`. Cada linha traz nome, descrição, `formatBRL(monthlyDeltaCents)` e o botão `modulo-adicionar-{key}`. O sheet usa `copy.modulos.adicionarBody(nome, valor, novoTotal)`, com `novoTotal = sub.totalAmountCents + module.monthlyDeltaCents`. Mesmo guard de duplo toque, mesmo `refresh()` no sucesso, mesmo `resolveAddonError` no erro.
+Bloco `MÓDULOS DISPONÍVEIS` fora da condição de `addons.length > 0`. Fonte: `usePremiumAddonModules()`, filtrando as chaves já anexadas com status `active` ou `cancel_scheduled` (essas aparecem como `REATIVAR` na lista de cima, não aqui). Renderiza só com `subscriptionsEnabled` **e** `provider === 'stripe'`. Sheet com `monthlyDeltaCents` do catálogo (aqui o preço do catálogo é o correto: é o que vai ser cobrado ao anexar) e `novoTotal = sub.totalAmountCents + module.monthlyDeltaCents`.
 
 - [ ] **Step 4: Rodar e ver passar**
 
 Run: `pnpm --filter @ccc/mobile test src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Suíte inteira, typecheck e lint**
+- [ ] **Step 5: Suíte inteira**
 
-Run: `pnpm --filter @ccc/mobile test && pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint && pnpm --filter @ccc/api test -- billing`
-Expected: PASS em tudo, 0 erros de lint.
+Run: `pnpm --filter @ccc/mobile test && pnpm --filter @ccc/mobile typecheck && pnpm --filter @ccc/mobile lint && pnpm --filter @ccc/api test billing`
+Expected: PASS em tudo, 0 erro de lint.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/mobile/src/api/premium.ts apps/mobile/src/screens/assinaturas/MinhaAssinaturaScreen.tsx apps/mobile/src/screens/assinaturas/__tests__/MinhaAssinaturaScreen.test.tsx
+git add apps/mobile/src/screens/assinaturas/
 git commit -m "feat(mobile): adicionar modulo em minha assinatura"
 ```
 
@@ -1381,13 +1160,15 @@ git commit -m "feat(mobile): adicionar modulo em minha assinatura"
 
 ## Cobertura da spec
 
-| Seção da spec                                    | Task          |
-| ------------------------------------------------ | ------------- |
-| 1. Contrato compartilhado (`status`, `provider`) | 1             |
-| 2. `POST /api/me/premium/plan`                   | 3             |
-| 3. Chave de idempotência                         | 2             |
-| 4. Tela de confirmação e entradas                | 4, 5, 6       |
-| 5. Editar módulos                                | 7, 8          |
-| Copy PT + twin EN                                | 4, 6, 7       |
-| Testes de API com Postgres real                  | 1, 2, 3       |
-| Testes de mobile                                 | 4, 5, 6, 7, 8 |
+| Seção da spec                     | Task    |
+| --------------------------------- | ------- |
+| 1. Contrato compartilhado         | 1       |
+| 2. `POST /api/me/premium/plan`    | 5       |
+| 3. Chaves de idempotência         | 2       |
+| 4. Tela de confirmação e entradas | 6, 7, 8 |
+| 5. Editar módulos (servidor)      | 3, 4    |
+| 5. Editar módulos (app)           | 9, 10   |
+| Copy PT + twin EN                 | 6, 8, 9 |
+| Comentário errado de proration    | 6       |
+| Testes de API com Postgres real   | 1–5     |
+| Testes de mobile                  | 6–10    |

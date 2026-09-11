@@ -162,15 +162,26 @@ describe('premium add-on billing (Stripe subscription items)', () => {
     expect(row.providerItemRef).toBeNull();
   });
 
-  it('attach: apple_revenuecat membership → local-only even when module has stripePriceId', async () => {
+  it('attach: apple_revenuecat membership → route recusa com 409 NotStripeSubscription, sem linha e sem chamada a Stripe', async () => {
+    // Este teste afirmava o contrario ate a rota ganhar o guard de provider: uma
+    // membership Apple caia no caminho local-only do attachAddon, que grava a
+    // linha e soma em addonsAmountCents sem cobrar ninguem. Entregar modulo pago
+    // de graca nao era contrato, era buraco. Se um dia Apple precisar mesmo de
+    // add-on local-only, e decisao nova, e o caminho volta com cobranca propria.
     const { user } = await createUser({ verified: true });
     const g = await garageOf(user.id);
-    await seedMembership(g.id, { provider: 'apple_revenuecat' });
+    const membership = await seedMembership(g.id, { provider: 'apple_revenuecat' });
     await seedModule({ key: 'wash', stripePriceId: 'price_addon_wash' });
 
     const res = await attach(user.id, 'wash');
-    expect(res.statusCode).toBe(201);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'NotStripeSubscription' });
     expect(stripe.calls.find((c) => c.kind === 'addSubscriptionItem')).toBeUndefined();
+    const rows = await prisma.premiumMembershipAddon.findMany({
+      where: { membershipId: membership.id },
+    });
+    expect(rows).toHaveLength(0);
   });
 
   it('detach: stripe item removed via removeSubscriptionItem with stored ref', async () => {

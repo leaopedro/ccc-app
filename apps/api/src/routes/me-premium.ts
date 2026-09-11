@@ -1043,120 +1043,115 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
     }
 
-    // Lock + guards + chamada a Stripe numa transacao so, com SELECT ... FOR
-    // UPDATE na linha da garagem — mesma mecanica do checkout nativo acima.
-    // O lock precisa cobrir a chamada a Stripe, nao so as leituras: esta rota
-    // nao escreve nada no banco, entao soltar o lock antes do
-    // updateSubscriptionItemPrice nao serializaria nada. Dois POST simultaneos
-    // para planos diferentes passariam os dois guards, gerariam chaves de
-    // idempotencia distintas (tier entra na chave), chegariam os dois na
-    // Stripe, e o membro levaria dois rateios com o tier final decidido por
-    // ordem de chegada — nao pelo que a tela confirmou.
-    const outcome = await prisma
-      .$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garage.id} FOR UPDATE`;
-
-        const membership = await pickLiveMembership(tx, garage.id);
-        if (!membership) return { kind: 'no-membership' as const };
-
-        if (membership.provider !== 'stripe') {
-          return { kind: 'not-stripe' as const };
-        }
-
-        if (!(MEMBER_CHANGE_PLAN_STATUS as readonly string[]).includes(membership.status)) {
-          return { kind: 'invalid-status' as const, status: membership.status };
-        }
-
-        const plan = await tx.premiumPlan.findUnique({
-          where: { slug: planSlug },
-          select: { id: true, tier: true, active: true },
-        });
-        if (!plan || !plan.active) return { kind: 'plan-not-found' as const };
-
-        const price = await tx.premiumPlanPrice.findUnique({
-          where: { planId_cadence: { planId: plan.id, cadence } },
-          select: { stripePriceId: true },
-        });
-        if (!price?.stripePriceId) return { kind: 'plan-not-found' as const };
-
-        // Mesmo guard do checkout: add-on e mensal por construcao, e a Stripe
-        // recusa uma assinatura com intervalos misturados. Sem isto a recusa
-        // vem da Stripe, nao e BillingActionError, escapa do catch e vira 500.
-        const attached = await tx.premiumMembershipAddon.findMany({
-          where: { membershipId: membership.id, status: { in: ['active', 'cancel_scheduled'] } },
-          orderBy: { addonKey: 'asc' },
-          select: { addonKey: true },
-        });
-        const rejection = checkAnnualCadenceAddonRejection(
-          cadence,
-          attached.map((a) => a.addonKey),
-        );
-        if (rejection) return { kind: 'annual-addon' as const, rejection };
-
-        // NoChange fica com o `changePlan` (primeira coisa que ele checa, antes
-        // de qualquer chamada a Stripe) para nao duplicar a comparacao em dois
-        // lugares que poderiam divergir. O catch abaixo o traduz.
-        await changePlan({
-          membershipId: membership.id,
-          tier: plan.tier,
-          cadence,
-          stripe: app.stripe,
-        });
-
-        return {
-          kind: 'changed' as const,
-          membershipId: membership.id,
-          fromTier: membership.tier,
-          fromCadence: membership.cadence,
-          toTier: plan.tier,
-        };
-      })
-      .catch((err: unknown) => {
-        // Mapa explicito, como me-premium-addons.ts:200-216 faz e documenta.
-        // Repassar err.code cru entregaria ao membro `PlanPriceMissing` ("target
-        // plan has no stripePriceId configured") e `AmbiguousPlanItem` ("expected
-        // exactly one plan item, found N"), que sao estado de operador.
-        if (isBillingActionError(err)) {
-          if (err.code === 'NoChange') return { kind: 'no-change' as const };
-          request.log.error(
-            { err, code: err.code, garageId: garage.id },
-            'me-premium: troca de plano recusada pela camada de billing',
-          );
-          return { kind: 'unavailable' as const };
-        }
-        throw err;
-      });
-
-    if (outcome.kind === 'no-membership') {
+    // Leituras soltas, sem transacao e sem SELECT ... FOR UPDATE na linha de
+    // Garage. A versao anterior segurava esse lock por cima da chamada a
+    // Stripe, e estava errada por tres motivos:
+    //
+    //  1. O lock nao serializava nada. Nem esta transacao nem o `changePlan`
+    //     escrevem linha alguma (a invariante e que so o webhook grava), entao
+    //     nao existe token que o segundo request possa observar: ele pegava o
+    //     lock, relia a mesma membership gold/monthly, passava pelo NoChange e
+    //     chegava na Stripe com a chave dele. As duas trocas aplicavam, igual
+    //     a sem lock nenhum.
+    //  2. `packages/db` nao define `transactionOptions`, entao valem os 5s
+    //     padrao do Prisma. Uma chamada ACEITA pela Stripe que responde em
+    //     mais de 5s aborta a transacao com P2028 — a troca aconteceu la fora,
+    //     o membro ve erro, e o `recordAudit` (que roda depois) nunca escreve:
+    //     troca real sem rastro nenhum. Mesmo bug que admin/refunds.ts:49-60
+    //     ja cometeu e ja consertou, com o mesmo desenho de claim-then-call.
+    //  3. stripe-billing-webhook.ts:434 pede FOR UPDATE na MESMA linha de
+    //     Garage. Segurar o lock durante o round-trip bloqueia o webhook que
+    //     esta propria chamada dispara.
+    //
+    // Decisao registrada: a corrida entre dois POST para planos alvo
+    // DIFERENTES fica em aberto. Para o mesmo plano alvo a chave de
+    // idempotencia de `changePlan` ja colapsa o segundo toque. Serializar de
+    // verdade exigiria uma linha de claim+settle (o desenho de refunds.ts),
+    // que e trabalho proprio, fora do escopo desta rota.
+    const membership = await pickLiveMembership(prisma, garage.id);
+    if (!membership) {
       return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
     }
-    if (outcome.kind === 'not-stripe') {
+
+    if (membership.provider !== 'stripe') {
       return reply.status(409).send({
         error: 'NotStripeSubscription',
         message: 'manage your subscription in the App Store',
         manageUrl: APPLE_MANAGE_URL,
       });
     }
-    if (outcome.kind === 'invalid-status') {
+
+    if (!(MEMBER_CHANGE_PLAN_STATUS as readonly string[]).includes(membership.status)) {
       return reply.status(409).send({
         error: 'InvalidStatus',
-        message: `plan change not allowed while subscription is ${outcome.status}`,
-        status: outcome.status,
+        message: `plan change not allowed while subscription is ${membership.status}`,
+        status: membership.status,
       });
     }
-    if (outcome.kind === 'plan-not-found') {
+
+    const plan = await prisma.premiumPlan.findUnique({
+      where: { slug: planSlug },
+      select: { id: true, tier: true, active: true },
+    });
+    // `!plan.active` conta como inexistente: um plano desativado saiu do
+    // catalogo vendavel, e migrar para ele e exatamente o que a desativacao
+    // existe para impedir.
+    if (!plan || !plan.active) {
       return reply.status(404).send({ error: 'PlanNotFound', message: 'plan not found' });
     }
-    if (outcome.kind === 'annual-addon') {
-      return reply.status(422).send(outcome.rejection);
+
+    const price = await prisma.premiumPlanPrice.findUnique({
+      where: { planId_cadence: { planId: plan.id, cadence } },
+      select: { stripePriceId: true },
+    });
+    if (!price?.stripePriceId) {
+      return reply.status(404).send({ error: 'PlanNotFound', message: 'plan not found' });
     }
-    if (outcome.kind === 'no-change') {
-      return reply.status(409).send({ error: 'NoChange', message: 'already on this plan' });
+
+    // Mesmo guard do checkout: add-on e mensal por construcao, e a Stripe
+    // recusa uma assinatura com intervalos misturados. Sem isto a recusa vem
+    // da Stripe, nao e BillingActionError, escapa do catch e vira 500.
+    const attached = await prisma.premiumMembershipAddon.findMany({
+      where: { membershipId: membership.id, status: { in: ['active', 'cancel_scheduled'] } },
+      orderBy: { addonKey: 'asc' },
+      select: { addonKey: true },
+    });
+    const rejection = checkAnnualCadenceAddonRejection(
+      cadence,
+      attached.map((a) => a.addonKey),
+    );
+    if (rejection) {
+      return reply.status(422).send(rejection);
     }
-    if (outcome.kind === 'unavailable') {
-      return reply
-        .status(503)
-        .send({ error: 'ServiceUnavailable', message: 'plan change unavailable' });
+
+    // NoChange fica com o `changePlan` (primeira coisa que ele checa, antes de
+    // qualquer chamada a Stripe) para nao duplicar a comparacao em dois lugares
+    // que poderiam divergir. O catch abaixo o traduz.
+    try {
+      await changePlan({
+        membershipId: membership.id,
+        tier: plan.tier,
+        cadence,
+        stripe: app.stripe,
+      });
+    } catch (err) {
+      // Mapa explicito, como me-premium-addons.ts:200-216 faz e documenta.
+      // Repassar err.code cru entregaria ao membro `PlanPriceMissing` ("target
+      // plan has no stripePriceId configured") e `AmbiguousPlanItem` ("expected
+      // exactly one plan item, found N"), que sao estado de operador.
+      if (isBillingActionError(err)) {
+        if (err.code === 'NoChange') {
+          return reply.status(409).send({ error: 'NoChange', message: 'already on this plan' });
+        }
+        request.log.error(
+          { err, code: err.code, garageId: garage.id },
+          'me-premium: troca de plano recusada pela camada de billing',
+        );
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'plan change unavailable' });
+      }
+      throw err;
     }
 
     // `actorKind` impede a linha de conflar staff e membro: a mesma acao
@@ -1165,12 +1160,12 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       actorId: sub,
       action: 'premium.subscription.plan_changed',
       entityType: 'premium_membership',
-      entityId: outcome.membershipId,
+      entityId: membership.id,
       metadata: {
         actorKind: 'member',
-        fromTier: outcome.fromTier,
-        fromCadence: outcome.fromCadence,
-        toTier: outcome.toTier,
+        fromTier: membership.tier,
+        fromCadence: membership.cadence,
+        toTier: plan.tier,
         toCadence: cadence,
       },
     });

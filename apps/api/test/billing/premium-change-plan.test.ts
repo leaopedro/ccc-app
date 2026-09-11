@@ -194,6 +194,18 @@ describe('POST /api/me/premium/plan', () => {
     expect(ctx.stripe.calls).toHaveLength(0);
   });
 
+  it('404 PlanNotFound para plano desativado', async () => {
+    const { memberId } = await seedSubscription();
+    await prisma.premiumPlan.update({ where: { slug: 'estrada' }, data: { active: false } });
+    ctx.stripe.nextRetrievedSubscription = planItemSubscription;
+
+    const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: 'PlanNotFound' });
+    expect(ctx.stripe.calls).toHaveLength(0);
+  });
+
   it('404 PlanNotFound quando o plano nao tem stripePriceId na cadencia pedida', async () => {
     const { memberId } = await seedSubscription({ withAddon: false });
     await addSilverAnnualPrice(null);
@@ -228,6 +240,10 @@ describe('POST /api/me/premium/plan', () => {
     const res = await change(memberId, { planSlug: 'estrada', cadence: 'monthly' });
 
     expect(res.statusCode).toBe(404);
+    // Afirma o CORPO, nao so o status: um 404 de rota inexistente tambem
+    // satisfaria o statusCode, e foi exatamente o que aconteceu enquanto a rota
+    // ainda nao existia. O corpo distingue o guard da ausencia de rota.
+    expect(res.json()).toEqual({ error: 'NotFound', message: 'no live membership' });
     expect(ctx.stripe.calls).toHaveLength(0);
   });
 

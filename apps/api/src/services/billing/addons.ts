@@ -5,8 +5,15 @@ import type { StripeClient } from '../stripe/index.js';
 
 import { BillingActionError } from './errors.js';
 
-/** Add-on statuses que ainda contam como vinculado (cobravel ou em encerramento). */
-const ATTACHED_ADDON_STATUSES = ['active', 'cancel_scheduled'] as const;
+/**
+ * Unico status a partir do qual um detach e valido. `cancel_scheduled` ja foi
+ * destacado (o item da Stripe nao existe mais) e so volta a ficar destacavel
+ * depois de um re-vinculo via attachAddon, que o leva de volta a `active`.
+ * Sem este guard, um segundo detach do mesmo add-on bateria em
+ * stripe.removeSubscriptionItem de um item ja removido — a Stripe recusa com
+ * resource_missing e isso vira 500 para o membro.
+ */
+const DETACHABLE_ADDON_STATUSES = ['active'] as const;
 
 export type AddonMutationResult = {
   addonKey: string;
@@ -79,7 +86,12 @@ export const attachAddon = async ({
   const existing = await prisma.premiumMembershipAddon.findUnique({
     where: { membershipId_addonKey: { membershipId, addonKey } },
   });
-  if (existing && existing.status !== 'cancelled') {
+  // `cancelled` e `cancel_scheduled` sao os dois estados a partir dos quais o
+  // re-vinculo e legitimo. Sem `cancel_scheduled` aqui, remover um modulo era
+  // permanente: nada no repo escreve `cancelled`, entao a linha ficava travada
+  // para sempre e nem o admin conseguia desfazer.
+  const REATTACHABLE: readonly string[] = ['cancelled', 'cancel_scheduled'];
+  if (existing && !REATTACHABLE.includes(existing.status)) {
     throw new BillingActionError('AddonAlreadyAttached', 'add-on already attached', { addonKey });
   }
 
@@ -186,7 +198,7 @@ export const detachAddon = async ({
   const addon = await prisma.premiumMembershipAddon.findUnique({
     where: { membershipId_addonKey: { membershipId, addonKey } },
   });
-  if (!addon || !(ATTACHED_ADDON_STATUSES as readonly string[]).includes(addon.status)) {
+  if (!addon || !(DETACHABLE_ADDON_STATUSES as readonly string[]).includes(addon.status)) {
     throw new BillingActionError('AddonNotAttached', 'add-on not attached', { addonKey });
   }
 

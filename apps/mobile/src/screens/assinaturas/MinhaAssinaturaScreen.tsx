@@ -22,16 +22,18 @@ import {
 } from 'react-native';
 
 import { ApiError } from '~/api/client';
-import { cancelPremiumSubscription } from '~/api/premium';
+import { attachPremiumAddon, cancelPremiumSubscription, detachPremiumAddon } from '~/api/premium';
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { usePremiumInvoices } from '~/hooks/usePremiumInvoices';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
+import { resolveAddonError } from '~/screens/assinaturas/addon-error';
 import { c, TIER_VISUAL, type ApiTier } from '~/screens/assinaturas/tier-visual';
 
 const copy = assinaturasCopy.minhaAssinatura;
+const modulosCopy = copy.modulos;
 
 const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
 
@@ -68,7 +70,19 @@ function Header() {
   );
 }
 
-function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
+function AddonRow({
+  addon,
+  provider,
+  subscriptionsEnabled,
+  totalAmountCents,
+  refresh,
+}: {
+  addon: MySubscriptionAddon;
+  provider: MySubscriptionResponse['provider'];
+  subscriptionsEnabled: boolean;
+  totalAmountCents: number;
+  refresh: () => Promise<void>;
+}) {
   const cycle = addon.currentCycle;
   let usageText: string = copy.usageNoCycle;
   let remainingText: string | null = null;
@@ -82,6 +96,55 @@ function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
         ? copy.usageRemainingHours(cycle.quotaRemaining)
         : copy.usageRemainingAccess(cycle.quotaRemaining);
   }
+
+  // Both actions are refused by the server for an Apple/RevenueCat
+  // membership (409 NotStripeSubscription), so neither is offered here.
+  // REMOVER does NOT follow the platform gate — reducing an existing
+  // commitment is never blocked by it. REATIVAR DOES: it resumes billing,
+  // the same purchase-shaped split the API makes between attach and detach.
+  const isApple = provider === 'apple_revenuecat';
+  const canRemove = !isApple && addon.status === 'active';
+  const canReactivate = !isApple && addon.status === 'cancel_scheduled' && subscriptionsEnabled;
+
+  const [sheetAction, setSheetAction] = useState<'remove' | 'reactivate' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  const onConfirm = async () => {
+    if (submittingRef.current || !sheetAction) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      if (sheetAction === 'remove') {
+        await detachPremiumAddon(addon.key);
+      } else {
+        await attachPremiumAddon(addon.key);
+      }
+      setSheetAction(null);
+      showToast(sheetAction === 'remove' ? modulosCopy.removedToast : modulosCopy.reativadoToast);
+      // The mutation itself already succeeded here — the response's
+      // recomputed totals are correct but do not carry the add-on's
+      // current-cycle usage, so the state is refreshed from the source of
+      // truth instead of being patched locally.
+      try {
+        await refresh();
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
+    } catch (err) {
+      setActionError(
+        resolveAddonError(err, sheetAction === 'remove' ? 'detach' : 'attach').message,
+      );
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const newTotalAfterRemove = formatBRL(Math.max(0, totalAmountCents - addon.monthlyDeltaCents));
+
   return (
     <View style={styles.addonRow}>
       <View style={styles.addonHeaderRow}>
@@ -93,6 +156,82 @@ function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
       <Text style={styles.addonUsageLabel}>{copy.usageLabel}</Text>
       <Text style={styles.addonUsage}>{usageText}</Text>
       {remainingText ? <Text style={styles.addonRemaining}>{remainingText}</Text> : null}
+
+      {canRemove || canReactivate ? (
+        <Pressable
+          onPress={() => {
+            setActionError(null);
+            setSheetAction(canRemove ? 'remove' : 'reactivate');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={canRemove ? modulosCopy.removerTrigger : modulosCopy.reativarTrigger}
+          style={styles.addonActionTrigger}
+          testID={`assinatura-modulo-${addon.key}-${canRemove ? 'remover' : 'reativar'}`}
+        >
+          <Text style={styles.addonActionTriggerText}>
+            {canRemove ? modulosCopy.removerTrigger : modulosCopy.reativarTrigger}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <SheetShell
+        visible={sheetAction !== null}
+        title={
+          sheetAction === 'remove' ? modulosCopy.removerSheetTitle : modulosCopy.reativarSheetTitle
+        }
+        onClose={() => setSheetAction(null)}
+        theme={{
+          surface: c.surface,
+          border: c.hairline,
+          titleColor: c.cream,
+          titleFontFamily: 'Inter_600SemiBold',
+        }}
+        testID={`assinatura-modulo-${addon.key}-sheet`}
+      >
+        <View style={styles.sheetBody}>
+          {sheetAction === 'remove' ? (
+            <>
+              <Text style={styles.sheetText}>
+                {modulosCopy.removerBody(addon.name, newTotalAfterRemove)}
+              </Text>
+              <Text style={styles.sheetText}>{modulosCopy.removerReversivel}</Text>
+            </>
+          ) : (
+            // The ONE rateio phrasing (Global Constraint) — no variant here.
+            <Text style={styles.sheetText}>{assinaturasCopy.alterar.whenBody}</Text>
+          )}
+          {actionError ? <Text style={styles.sheetError}>{actionError}</Text> : null}
+          <Pressable
+            onPress={() => setSheetAction(null)}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.keep}
+            style={styles.sheetKeep}
+          >
+            <Text style={styles.sheetKeepText}>{modulosCopy.keep}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm()}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={
+              sheetAction === 'remove' ? modulosCopy.removerConfirm : modulosCopy.reativarConfirm
+            }
+            accessibilityState={{ disabled: submitting, busy: submitting }}
+            style={[styles.sheetConfirm, submitting && styles.dimmed]}
+            testID={`assinatura-modulo-${addon.key}-confirmar`}
+          >
+            <Text style={styles.sheetConfirmText}>
+              {submitting
+                ? sheetAction === 'remove'
+                  ? modulosCopy.removerLoading
+                  : modulosCopy.reativarLoading
+                : sheetAction === 'remove'
+                  ? modulosCopy.removerConfirm
+                  : modulosCopy.reativarConfirm}
+            </Text>
+          </Pressable>
+        </View>
+      </SheetShell>
     </View>
   );
 }
@@ -253,7 +392,14 @@ function ActiveSubscription({
             <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
             <View style={styles.addons}>
               {sub.addons.map((addon) => (
-                <AddonRow key={addon.key} addon={addon} />
+                <AddonRow
+                  key={addon.key}
+                  addon={addon}
+                  provider={sub.provider}
+                  subscriptionsEnabled={subscriptionsEnabled}
+                  totalAmountCents={sub.totalAmountCents}
+                  refresh={refresh}
+                />
               ))}
             </View>
           </View>
@@ -598,6 +744,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: c.goldLight,
     marginTop: 3,
+  },
+  addonActionTrigger: { marginTop: 12, alignSelf: 'flex-start' },
+  addonActionTriggerText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: c.goldLight,
   },
 
   // Shared section title (benefits + history)

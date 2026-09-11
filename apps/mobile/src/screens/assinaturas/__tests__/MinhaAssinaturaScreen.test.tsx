@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MySubscriptionResponse, PremiumInvoice } from '@ccc/shared/premium-subscription';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { formatBRL } from '~/lib/format';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -57,6 +58,8 @@ const plansState = vi.hoisted(() => ({
 }));
 
 const cancelMock = vi.hoisted(() => ({ fn: vi.fn() }));
+const detachMock = vi.hoisted(() => ({ fn: vi.fn() }));
+const attachMock = vi.hoisted(() => ({ fn: vi.fn() }));
 const openURLMock = vi.hoisted(() => ({ fn: vi.fn() }));
 
 vi.mock('~/hooks/usePremiumSubscription', () => ({
@@ -77,8 +80,22 @@ vi.mock('~/hooks/usePremiumInvoices', () => ({
   usePremiumInvoices: () => invoicesState.value,
 }));
 
+// Task 10 does not touch this screen's mocks — it consumes the same test
+// file, so the mock is added now rather than left for that task to discover
+// missing. The screen itself does not read this hook yet.
+vi.mock('~/hooks/usePremiumAddonModules', () => ({
+  usePremiumAddonModules: () => ({
+    modules: [],
+    loading: false,
+    error: false,
+    refresh: () => Promise.resolve(),
+  }),
+}));
+
 vi.mock('~/api/premium', () => ({
   cancelPremiumSubscription: (...args: unknown[]) => cancelMock.fn(...args),
+  detachPremiumAddon: (...args: unknown[]) => detachMock.fn(...args),
+  attachPremiumAddon: (...args: unknown[]) => attachMock.fn(...args),
 }));
 
 // Real ApiError class (not vi.fn()) so `err instanceof ApiError` inside the
@@ -253,6 +270,13 @@ const activeSub: MySubscriptionResponse = {
   ],
 };
 
+// Same membership, but the add-on is already cancel_scheduled — the state
+// that offers REATIVAR instead of REMOVER.
+const cancelScheduledSub: MySubscriptionResponse = {
+  ...activeSub,
+  addons: [{ ...activeSub.addons[0]!, status: 'cancel_scheduled' }],
+};
+
 const inactiveSub: MySubscriptionResponse = {
   active: false,
   tier: null,
@@ -339,6 +363,8 @@ describe('MinhaAssinaturaScreen', () => {
     replace.mockClear();
     push.mockClear();
     cancelMock.fn.mockReset();
+    detachMock.fn.mockReset();
+    attachMock.fn.mockReset();
     openURLMock.fn.mockReset();
     invoicesState.value = invoicesResult({});
     plansState.current = { subscriptionsEnabled: true, loading: false };
@@ -621,5 +647,185 @@ describe('MinhaAssinaturaScreen', () => {
 
     expect(text()).toContain(copy.cancelar.error);
     expect(text()).not.toContain(copy.cancelar.appleBody);
+  });
+
+  // Task 9: remove/reactivate a module from Minha Assinatura.
+  describe('module remove / reactivate', () => {
+    // 7. REMOVER opens a confirm sheet with the formatted numbers; detach is
+    // only called after the confirm tap, never on the trigger tap itself.
+    it('opens a confirm sheet before removing an add-on and calls detach only on confirm', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(detachMock.fn).not.toHaveBeenCalled();
+      const expectedTotal = formatBRL(
+        activeSub.totalAmountCents - activeSub.addons[0]!.monthlyDeltaCents,
+      );
+      expect(text()).toContain(copy.modulos.removerBody('Detailing', expectedTotal));
+      expect(text()).toContain(copy.modulos.removerReversivel);
+
+      detachMock.fn.mockResolvedValue({
+        addonKey: 'detailing',
+        status: 'cancel_scheduled',
+        addonsAmountCents: 0,
+        totalAmountCents: activeSub.baseAmountCents,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(detachMock.fn).toHaveBeenCalledWith('detailing');
+    });
+
+    // 8. A cancel_scheduled add-on offers REATIVAR, not REMOVER.
+    it('offers REATIVAR (not REMOVER) for a cancel_scheduled add-on', async () => {
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+    });
+
+    // Reactivating reuses the ONE rateio phrasing (`alterar.whenBody`), calls
+    // attach on confirm, and refreshes after — the same refresh contract as
+    // cancel. The route's own response totals are not applied locally: only
+    // refresh() picks up the fresh cycle usage.
+    it('reactivating reuses the rateio copy, calls attach on confirm, and refreshes after', async () => {
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: cancelScheduledSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-reativar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('reactivate trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(text()).toContain(assinaturasCopy.alterar.whenBody);
+      expect(attachMock.fn).not.toHaveBeenCalled();
+
+      attachMock.fn.mockResolvedValue({
+        addonKey: 'detailing',
+        status: 'active',
+        addonsAmountCents: 15000,
+        totalAmountCents: 164000,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledWith('detailing');
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    // Global constraint: REMOVER does not follow the platform gate — reducing
+    // an existing commitment is never blocked by it (same split the API makes
+    // between attach and detach).
+    it('keeps REMOVER visible on an active add-on even when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+    });
+
+    // Global constraint: REATIVAR DOES follow the platform gate — it resumes
+    // billing, so it is a purchase-shaped action.
+    it('hides REATIVAR on a cancel_scheduled add-on when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // 9. Apple/RevenueCat memberships hide both actions: the API 409s
+    // NotStripeSubscription for attach and detach alike.
+    it('hides both REMOVER and REATIVAR for an Apple/RevenueCat membership', async () => {
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    it('hides REATIVAR too on an Apple/RevenueCat membership with a cancel_scheduled add-on', async () => {
+      hookState.value = result({
+        subscription: { ...cancelScheduledSub, provider: 'apple_revenuecat' },
+      });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // 10. An add-on mutation failure degrades to an inline message — it must
+    // never take the whole screen down.
+    it('shows an inline error and keeps the screen up when the detach call fails', async () => {
+      const { ApiError } = (await import('~/api/client')) as unknown as {
+        ApiError: new (status: number, message: string, body?: unknown) => Error;
+      };
+      detachMock.fn.mockRejectedValue(new ApiError(500, 'internal error'));
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      // The screen (and the plan card) survives the failure.
+      expect(text()).toContain('Fundador');
+      expect(text()).toContain(copy.modulos.errorGeneric);
+      expect(refresh).not.toHaveBeenCalled();
+    });
   });
 });

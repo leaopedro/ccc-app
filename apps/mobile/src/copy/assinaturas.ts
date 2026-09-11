@@ -286,6 +286,37 @@ export const assinaturasCopy = {
       appleBody: 'Esta assinatura foi contratada pela App Store. O cancelamento é feito por lá.',
       appleCta: 'ABRIR APP STORE',
     },
+    // Task 9 (remove/reactivate) + Task 10 (add). One block for the three
+    // add-on actions on Minha Assinatura, all synchronous (no webhook/poll).
+    modulos: {
+      removerTrigger: 'REMOVER',
+      reativarTrigger: 'REATIVAR',
+      removerSheetTitle: 'Remover módulo',
+      reativarSheetTitle: 'Reativar módulo',
+      // Truth made possible by Task 4's re-vínculo (attachAddon accepts
+      // cancel_scheduled → active again). Before that fix, removing a module
+      // was permanent: nothing wrote `cancelled`, so the row stayed locked
+      // forever and not even the admin could undo it.
+      removerBody: (nome: string, total: string) =>
+        `A cobrança de ${nome} para agora e seu total cai para ${total} por mês. Você continua usando a cota deste módulo até o fim do ciclo atual.`,
+      removerReversivel: 'Você pode reativar este módulo quando quiser.',
+      keep: 'MANTER MÓDULO',
+      removerConfirm: 'REMOVER',
+      removerLoading: 'REMOVENDO...',
+      reativarConfirm: 'REATIVAR',
+      reativarLoading: 'REATIVANDO...',
+      removedToast: 'Módulo removido.',
+      reativadoToast: 'Módulo reativado.',
+      errorGeneric: 'Não foi possível concluir a ação. Tente novamente.',
+      errorNotStripe:
+        'Esta assinatura foi contratada pela App Store. Módulos são gerenciados por lá.',
+      errorAlreadyAttached: 'Este módulo já está na sua assinatura.',
+      errorModuleNotFound: 'Este módulo não está mais disponível.',
+      errorNotAttached: 'Este módulo não está mais na sua assinatura.',
+      errorUnavailable: 'Ação indisponível agora. Tente mais tarde.',
+      errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
+      errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+    },
   },
 } as const;
 
@@ -397,6 +428,32 @@ export const assinaturasCopyEn = {
   minhaAssinatura: {
     unavailableTitle: 'Memberships are unavailable right now.',
     unavailableSubcopy: 'Please try again later.',
+    // Brand-new block (Task 9/10), so every key carries a twin from day one.
+    modulos: {
+      removerTrigger: 'REMOVE',
+      reativarTrigger: 'REACTIVATE',
+      removerSheetTitle: 'Remove module',
+      reativarSheetTitle: 'Reactivate module',
+      removerBody: (nome: string, total: string) =>
+        `${nome}'s charge stops now and your total drops to ${total} per month. You keep using this module's quota until the end of the current cycle.`,
+      removerReversivel: 'You can reactivate this module whenever you want.',
+      keep: 'KEEP MODULE',
+      removerConfirm: 'REMOVE',
+      removerLoading: 'REMOVING...',
+      reativarConfirm: 'REACTIVATE',
+      reativarLoading: 'REACTIVATING...',
+      removedToast: 'Module removed.',
+      reativadoToast: 'Module reactivated.',
+      errorGeneric: 'Could not complete the action. Try again.',
+      errorNotStripe:
+        'This subscription was purchased through the App Store. Modules are managed there.',
+      errorAlreadyAttached: 'This module is already on your subscription.',
+      errorModuleNotFound: 'This module is no longer available.',
+      errorNotAttached: 'This module is no longer on your subscription.',
+      errorUnavailable: 'This action is unavailable right now. Try again later.',
+      errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
+      errorUnauthorized: 'Your session expired. Sign in again to continue.',
+    },
   },
 } as const;
 

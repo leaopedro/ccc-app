@@ -213,12 +213,44 @@ O guard de cadência anual reusa a mesma verificação do checkout
 (`me-premium.ts:122-133`). Sem ele, a Stripe recusa a mistura de intervalos, o
 erro não é `BillingActionError`, escapa do `catch` e vira 500.
 
-**Serialização.** O guard e o `changePlan` rodam dentro de uma transação que
-trava a linha de `Garage` com `SELECT ... FOR UPDATE`, o mesmo que o checkout
-nativo já faz (`me-premium.ts:635`). Sem isso, dois POST simultâneos para planos
-diferentes passam os dois guards, geram chaves de idempotência distintas, e
-chegam os dois na Stripe: vence o último, saem dois rateios e duas linhas de
-auditoria, e o tier final não é o que a tela confirmou.
+**Serialização — corrigido depois do review da Task 5.** A versão anterior desta
+spec mandava rodar o guard e o `changePlan` dentro de uma transação que trava a
+linha de `Garage` com `SELECT ... FOR UPDATE`. Isso estava errado, por três
+motivos que o review levantou e que eu confirmei no código.
+
+Primeiro, o lock não serializa nada. A transação não escreve linha nenhuma, e
+`changePlan` também não — a invariante desta spec é justamente que só o webhook
+grava. Sem escrita, não existe token que o segundo request possa observar: ele
+adquire o lock, relê a membership, encontra o mesmo `gold`/`monthly` de antes,
+passa o `NoChange` e chega na Stripe com a chave dele. As duas trocas aplicam,
+exatamente como aplicariam sem lock.
+
+Segundo, o caso que o lock cobriria já está coberto. Dois requests para o
+**mesmo** plano alvo leem o mesmo `updatedAt`, produzem a mesma chave de
+idempotência, e a Stripe deduplica. O lock é redundante onde funciona e
+impotente onde importaria.
+
+Terceiro, o custo é um bug que este repo já cometeu e já consertou.
+`apps/api/src/routes/admin/refunds.ts:49-60` documenta o fix round 2 da mesma
+classe: chamada Stripe dentro da transação, timeout padrão de 5s do Prisma
+(`packages/db` não define `transactionOptions`), e uma chamada **aceita** que
+responde em mais de 5s aborta com P2028. Aqui o estrago seria: a troca acontece
+na Stripe, o membro recebe 500, e o `recordAudit` — que roda depois da
+transação — nunca grava. Uma troca real sem rastro nenhum. Pior, o lock da
+`Garage` é o mesmo que `stripe-billing-webhook.ts:434` pede, então a rota
+bloquearia a ingestão do webhook que ela própria dispara.
+
+Regra desta spec: **nenhuma chamada à Stripe dentro de transação.** Os guards
+leem, a transação fecha, e só então `changePlan` roda.
+
+Isso deixa a corrida entre planos alvo diferentes em aberto, e isso é
+consciente. Serializar de verdade exige um token persistido — uma linha de
+claim seguida de settle, que é o desenho do `refunds.ts` e do checkout nativo,
+onde a `PremiumSubscriptionAttempt` faz esse papel. A troca de plano não tem
+linha equivalente, criar uma é desenho novo, e fica como trabalho próprio fora
+desta spec. O dano da corrida em aberto é um membro que toca em dois planos
+diferentes em segundos receber o último; o dano do lock era troca silenciosa sem
+auditoria e webhook bloqueado.
 
 **Erros.** Mapa explícito de `BillingActionCode` para resposta, dentro da rota,
 como `me-premium-addons.ts:200-216` já faz e documenta. Repassar `err.code` cru

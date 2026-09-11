@@ -24,7 +24,7 @@ export default async function ConfiguracoesLayout({ children }: { children: Reac
 
   return (
     <div className="flex flex-col gap-6">
-      <SettingsTabs />
+      <SettingsTabs isAdmin={role === 'admin'} />
       {children}
     </div>
   );

@@ -141,25 +141,37 @@ describe('admin gamification copy', () => {
 
   // Serial nao prova nada aqui: ler-comparar-escrever passa em serie e perde
   // update em paralelo, porque Read Committed nao trava linha no SELECT.
+  //
+  // Cinco escritores, nao dois: com apenas dois, um read-compare-write
+  // sabotado (ler versao, comparar em JS, so entao gravar) ainda serializa
+  // por acaso boa parte das vezes e o teste passa pelo motivo errado. Cinco
+  // escritores todos serializando sem nenhuma sobreposicao e muito menos
+  // provavel, entao a deteccao fica muito mais sensivel para um custo de
+  // poucas centenas de ms. Sem sleep/timer/retry: se precisasse de sleep
+  // para detectar, estaria medindo o sleep, nao o lock.
   it('duas escritas concorrentes com a mesma versao: uma vence, a outra 409', async () => {
     await seedTwo();
     const user = await admin();
-    const [a, b] = await Promise.all([
-      put(user.id, {
-        expectedVersion: 0,
-        badges: [{ code: 'EVT-001', title: 'A', description: 'D' }],
-      }),
-      put(user.id, {
-        expectedVersion: 0,
-        badges: [{ code: 'EVT-001', title: 'B', description: 'D' }],
-      }),
-    ]);
-    const codes = [a.statusCode, b.statusCode].sort();
-    expect(codes).toEqual([200, 409]);
+    const titles = ['A', 'B', 'C', 'D', 'E'];
+    const results = await Promise.all(
+      titles.map((title) =>
+        put(user.id, {
+          expectedVersion: 0,
+          badges: [{ code: 'EVT-001', title, description: 'D' }],
+        }),
+      ),
+    );
+    const codes = results.map((r) => r.statusCode).sort();
+    expect(codes).toEqual([200, 409, 409, 409, 409]);
+
     const settings = await prisma.generalSettings.findUniqueOrThrow({
       where: { id: GENERAL_SETTINGS_SINGLETON_ID },
     });
     expect(settings.gamificationCopyVersion).toBe(1);
+
+    const winnerIndex = results.findIndex((r) => r.statusCode === 200);
+    const row = await prisma.badge.findUniqueOrThrow({ where: { code: 'EVT-001' } });
+    expect(row.title).toBe(titles[winnerIndex]);
   });
 
   it('PUT sem mudanca nao audita e nao incrementa versao', async () => {

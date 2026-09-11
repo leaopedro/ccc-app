@@ -12,6 +12,8 @@ export const RANK_KEYS = [
 export type RankKey = (typeof RANK_KEYS)[number];
 
 // Tabela server-only. Os cortes continuam em código; só o nome sai daqui.
+// Não reexporte esta tabela via `@ccc/shared`: `min`/`nextAt` são detalhe
+// de servidor e não devem vazar para mobile/admin.
 // A linha de topo NÃO tem `nextAt`: sem o campo, nenhuma leitura futura
 // consegue tipar `null` como `number` no cálculo abaixo.
 export const RANK_TIERS: { key: RankKey; name: string; min: number; nextAt?: number }[] = [
@@ -126,10 +128,11 @@ export const deriveProgress = (xp: number, names: RankNames = {}): GarageProgres
 export const getGarageProgress = async (
   client: ReadClient,
   garageId: string,
+  names: RankNames = {},
 ): Promise<GarageProgress> => {
   const row = await client.garage.findUniqueOrThrow({
     where: { id: garageId },
     select: { xp: true },
   });
-  return deriveProgress(row.xp);
+  return deriveProgress(row.xp, names);
 };

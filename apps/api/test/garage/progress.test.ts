@@ -1,6 +1,8 @@
 import { prisma } from '@ccc/db';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { readRankNames } from '../../src/services/garage/rank-names.js';
 import { deriveProgress, getGarageProgress } from '../../src/services/garage/progress.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
@@ -179,5 +181,47 @@ describe('getGarageProgress (real Postgres)', () => {
     await expect(getGarageProgress(prisma, 'nonexistent-garage-id')).rejects.toMatchObject({
       code: 'P2025',
     });
+  });
+});
+
+describe('readRankNames', () => {
+  beforeEach(async () => {
+    await resetDatabase();
+    await prisma.generalSettings.deleteMany();
+  });
+
+  it('devolve mapa vazio quando a linha nao existe', async () => {
+    expect(await readRankNames()).toEqual({});
+  });
+
+  it('devolve mapa vazio quando rankNames e nulo', async () => {
+    await prisma.generalSettings.create({ data: { id: GENERAL_SETTINGS_SINGLETON_ID } });
+    expect(await readRankNames()).toEqual({});
+  });
+
+  it('devolve o mapa quando valido', async () => {
+    await prisma.generalSettings.create({
+      data: {
+        id: GENERAL_SETTINGS_SINGLETON_ID,
+        rankNames: {
+          iniciante: 'Novato',
+          pilotador: 'Piloto',
+          veterano: 'Veterano',
+          lendario: 'Lenda',
+          hall_of_fame: 'Panteão',
+        },
+      },
+    });
+    expect((await readRankNames()).iniciante).toBe('Novato');
+  });
+
+  // A coluna e Json sem forma no banco: migration, psql na mao ou um writer
+  // futuro podem deixar lixo la. As duas rotas que consomem isso fazem parse
+  // da propria resposta, entao um throw aqui e 500 em caminho quente.
+  it('nao explode com forma invalida, cai no mapa vazio', async () => {
+    await prisma.generalSettings.create({
+      data: { id: GENERAL_SETTINGS_SINGLETON_ID, rankNames: { iniciante: 42 } },
+    });
+    expect(await readRankNames()).toEqual({});
   });
 });

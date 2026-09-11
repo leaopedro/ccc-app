@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '@ccc/db';
 import * as Sentry from '@sentry/node';
 import {
+  APPLE_MANAGE_URL,
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRejectionSchema,
@@ -49,9 +50,6 @@ import {
 const billingPortalBodySchema = z.object({
   returnUrl: z.string().url().optional(),
 });
-
-/** App Store deep link to subscription management — used when the user pays via Apple IAP. */
-const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
 
 /**
  * How many times to re-mint a checkout session whose idempotency key replayed a

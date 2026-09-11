@@ -5,6 +5,13 @@
 import { z } from 'zod';
 
 /**
+ * App Store deep link to subscription management — used when the user pays
+ * via Apple IAP. Single source: me-premium.ts and me-premium-addons.ts both
+ * import this instead of keeping their own copy of the URL.
+ */
+export const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
+
+/**
  * POST /api/me/premium/checkout — request body.
  * Client sends cadence; server resolves priceId server-side (never trusts
  * client-supplied Stripe price IDs). `planSlug` is optional and additive.

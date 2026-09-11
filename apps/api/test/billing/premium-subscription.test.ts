@@ -73,12 +73,15 @@ const seedModule = (
     },
   });
 
-const seedMembership = (garageId: string, overrides: { status?: string } = {}) => {
+const seedMembership = (
+  garageId: string,
+  overrides: { status?: string; provider?: 'stripe' | 'apple_revenuecat' } = {},
+) => {
   const now = new Date();
   return prisma.premiumMembership.create({
     data: {
       garageId,
-      provider: 'stripe',
+      provider: overrides.provider ?? 'stripe',
       providerCustomerRef: 'cus_test123',
       providerSubRef: `sub_test_${garageId.slice(0, 6)}_${Date.now()}`,
       tier: 'gold',
@@ -299,6 +302,45 @@ describe('premium subscription + add-ons', () => {
     expect(res.json<{ error: string }>().error).toBe('NotFound');
   });
 
+  it('attach: 409 InvalidStatus para membro past_due', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    await seedMembership(g.id, { status: 'past_due' });
+    await seedModule();
+
+    const res = await attach(user.id, 'wash');
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'InvalidStatus', status: 'past_due' });
+  });
+
+  it('attach: 409 InvalidStatus para membro paused', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    await seedMembership(g.id, { status: 'paused' });
+    await seedModule();
+
+    // A Stripe descarta as faturas do período pausado (behavior 'void'), então
+    // anexar aqui é entregar módulo pago com receita zero.
+    expect((await attach(user.id, 'wash')).statusCode).toBe(409);
+  });
+
+  it('attach: 409 NotStripeSubscription para membership Apple, sem gravar nada', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    await seedMembership(g.id, { provider: 'apple_revenuecat' });
+    await seedModule();
+
+    const res = await attach(user.id, 'wash');
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ error: 'NotStripeSubscription' });
+    // O buraco que isto fecha: attachAddon cairia no caminho local-only, gravaria
+    // a linha, somaria em addonsAmountCents e não cobraria nada.
+    expect(await prisma.premiumMembershipAddon.findMany()).toHaveLength(0);
+  });
+
   // --- DELETE /addons/:addonKey ----------------------------------------------
 
   it('detach: sets cancel_scheduled + recomputes addonsAmountCents to 0', async () => {
@@ -332,6 +374,28 @@ describe('premium subscription + add-ons', () => {
 
     const res = await detach(user.id, 'wash');
     expect(res.statusCode).toBe(404);
+  });
+
+  it('detach: 409 NotStripeSubscription para membership Apple', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    const m = await seedMembership(g.id, { provider: 'apple_revenuecat' });
+    await seedModule();
+    await prisma.premiumMembershipAddon.create({
+      data: {
+        membershipId: m.id,
+        addonKey: 'wash',
+        status: 'active',
+        monthlyDeltaCents: 1990,
+        payoutAmountCents: 0,
+        quotaPerCycle: 4,
+        quotaUnit: 'access',
+        currency: 'BRL',
+      },
+    });
+
+    expect((await detach(user.id, 'wash')).statusCode).toBe(409);
   });
 
   // --- POST /admin/premium/addons/:id/redeem ---------------------------------

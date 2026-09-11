@@ -9,6 +9,7 @@ import {
 import {
   PendingTicketOrderForEventError,
   findPendingTicketOrderForEvent,
+  supersedePendingTicketOrder,
 } from '../orders/pending-guard.js';
 import { reserveExtras, validateTickets } from '../orders/validate-tickets.js';
 import { applyDevFee } from '../pricing/dev-fee.js';
@@ -540,7 +541,14 @@ async function prepareTicketCartItem(
   if (!isExtrasOnly) {
     const pending = await findPendingTicketOrderForEvent(tx, userId, item.eventId);
     if (pending) {
-      throw new PendingTicketOrderForEventError(userId, item.eventId, pending.id);
+      // The member's own abandoned attempt must not lock them out of retrying.
+      // Supersede it here, before the reservation below, so the tier is never
+      // double-counted. Only a concurrent settlement still refuses.
+      const superseded = await supersedePendingTicketOrder(tx, pending.id);
+      if (!superseded) {
+        throw new PendingTicketOrderForEventError(userId, item.eventId, pending.id);
+      }
+      expiredRefs.push(...superseded.providerRefs);
     }
   }
 

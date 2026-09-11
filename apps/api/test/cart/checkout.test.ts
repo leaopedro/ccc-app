@@ -502,10 +502,135 @@ describe('POST /cart/checkout', () => {
     expect(tierAfter.quantitySold).toBe(1);
   });
 
-  // JDMA-485: cart checkout must also block if a live pending ticket order exists
-  // for any event represented in the cart.
-  describe('pending ticket order guard (JDMA-485)', () => {
-    it('409 PENDING_TICKET_ORDER_FOR_EVENT when user has live pending order for one of the cart events', async () => {
+  // Um tier gratis existe no catalogo, e ate aqui nao havia como compra-lo: o
+  // carrinho fechava em zero, a Stripe recusa `amount: 0`, e o app mostrava o
+  // erro generico de checkout. Reproduzido contra a API de producao antes do
+  // fix (HTTP 400, "The amount must be greater than or equal to the minimum
+  // charge amount").
+  describe('zero-amount cart', () => {
+    it('settles without any provider call and issues the ticket', async () => {
+      const { user } = await createUser({ verified: true });
+      const token = bearer(env, user.id);
+      const { event, tier } = await seedPublishedEvent({ priceCents: 0 });
+
+      await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/cart/checkout',
+        headers: { authorization: token },
+        payload: { paymentMethod: 'card', flow: 'native' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = beginCheckoutResponseSchema.parse(res.json());
+      expect(body.status).toBe('succeeded');
+      expect(body.cart.totals.amountCents).toBe(0);
+      // Nada para abrir: sem PaymentSheet e sem checkout hospedado.
+      expect(body.clientSecret).toBeNull();
+      expect(body.checkoutUrl).toBeNull();
+
+      // A Stripe nunca e chamada. Era exatamente a chamada que estourava.
+      expect(stripe.calls.some((c) => c.kind === 'createPaymentIntent')).toBe(false);
+
+      const order = await prisma.order.findFirstOrThrow({ where: { userId: user.id } });
+      expect(order.status).toBe('paid');
+
+      const ticket = await prisma.ticket.findFirst({ where: { userId: user.id } });
+      expect(ticket).not.toBeNull();
+
+      // Deixar o carrinho em `checking_out` e o que prende o membro para sempre.
+      const cartAfter = await prisma.cart.findFirstOrThrow({ where: { id: body.checkoutId } });
+      expect(cartAfter.status).toBe('converted');
+    });
+
+    it('still charges when a paid item makes the total non-zero', async () => {
+      const { user } = await createUser({ verified: true });
+      const token = bearer(env, user.id);
+      const { event, tier } = await seedPublishedEvent({ priceCents: 1990 });
+
+      stripe.nextPaymentIntent = { id: 'pi_paid', clientSecret: 'pi_paid_secret_abc' };
+      await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/cart/checkout',
+        headers: { authorization: token },
+        payload: { paymentMethod: 'card', flow: 'native' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = beginCheckoutResponseSchema.parse(res.json());
+      expect(body.status).toBe('pending');
+      expect(body.clientSecret).toBe('pi_paid_secret_abc');
+
+      const order = await prisma.order.findFirstOrThrow({ where: { userId: user.id } });
+      expect(order.status).toBe('pending');
+    });
+  });
+
+  // JDMA-485 created this guard so a member could never hold two live
+  // reservations for one event. It blocked the member's OWN retry too: an
+  // abandoned PaymentSheet leaves a `pending` order behind, and every later
+  // attempt for that event 409'd until it expired (15 min on the native flow,
+  // forever when `expiresAt` is null). The cart screen renders that 409 as the
+  // generic "Erro ao iniciar o pagamento", so the member sees a payment that
+  // simply stopped working.
+  //
+  // Checkout now supersedes its own stale pending order instead of refusing.
+  // The JDMA-485 invariant is unchanged: the old order is cancelled and its
+  // reservation released BEFORE the new one reserves, so there is still never
+  // more than one live reservation per user per event.
+  describe('pending ticket order supersede', () => {
+    it('cancels the live pending order and proceeds instead of 409', async () => {
+      const { user } = await createUser({ verified: true });
+      const token = bearer(env, user.id);
+      const { event, tier } = await seedPublishedEvent();
+
+      stripe.nextPaymentIntent = { id: 'pi_stale', clientSecret: 'pi_stale_secret_abc' };
+      const directOrder = await app.inject({
+        method: 'POST',
+        url: '/orders',
+        headers: { authorization: token },
+        payload: { eventId: event.id, tierId: tier.id, method: 'card', tickets: [{}] },
+      });
+      expect(directOrder.statusCode).toBe(201);
+      const staleOrderId = z.object({ orderId: z.string() }).parse(directOrder.json()).orderId;
+
+      stripe.nextPaymentIntent = { id: 'pi_test_2', clientSecret: 'pi_test_2_secret_abc' };
+      await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/cart/checkout',
+        headers: { authorization: token },
+        payload: { paymentMethod: 'card', flow: 'native' },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = beginCheckoutResponseSchema.parse(res.json());
+      expect(body.clientSecret).toBe('pi_test_2_secret_abc');
+
+      const stale = await prisma.order.findUniqueOrThrow({ where: { id: staleOrderId } });
+      expect(stale.status).toBe('cancelled');
+
+      // The invariant JDMA-485 protects: the superseded reservation is released
+      // before the new one is taken, so the tier never double-counts.
+      const tierAfter2 = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
+      expect(tierAfter2.quantitySold).toBe(1);
+
+      // Two live PaymentIntents for one ticket is the failure mode that makes
+      // superseding dangerous, so the stale one must be cancelled at Stripe.
+      expect(
+        stripe.calls.some(
+          (c) =>
+            c.kind === 'cancelPaymentIntent' &&
+            (c.payload as { paymentIntentId?: string }).paymentIntentId === 'pi_stale',
+        ),
+      ).toBe(true);
+    });
+
+    it('leaves a PAID order alone — supersede only touches pending', async () => {
       const { user } = await createUser({ verified: true });
       const token = bearer(env, user.id);
       const { event, tier } = await seedPublishedEvent();
@@ -517,26 +642,22 @@ describe('POST /cart/checkout', () => {
         payload: { eventId: event.id, tierId: tier.id, method: 'card', tickets: [{}] },
       });
       expect(directOrder.statusCode).toBe(201);
+      const paidOrderId = z.object({ orderId: z.string() }).parse(directOrder.json()).orderId;
+      await prisma.order.update({ where: { id: paidOrderId }, data: { status: 'paid' } });
 
-      stripe.nextPaymentIntent = { id: 'pi_test_2', clientSecret: 'pi_test_2_secret_abc' };
+      stripe.nextPaymentIntent = { id: 'pi_test_3', clientSecret: 'pi_test_3_secret_abc' };
       await addCartItem(app, token, { eventId: event.id, tierId: tier.id });
 
       const res = await app.inject({
         method: 'POST',
         url: '/cart/checkout',
         headers: { authorization: token },
-        payload: { paymentMethod: 'card' },
+        payload: { paymentMethod: 'card', flow: 'native' },
       });
 
-      expect(res.statusCode).toBe(409);
-      const body = errorSchema.extend({ code: z.string().optional() }).parse(res.json());
-      expect(body.code).toBe('PENDING_TICKET_ORDER_FOR_EVENT');
-
-      const cartAfter = await prisma.cart.findFirstOrThrow({ where: { userId: user.id } });
-      expect(cartAfter.status).toBe('open');
-      const tierAfter2 = await prisma.ticketTier.findUniqueOrThrow({ where: { id: tier.id } });
-      // Only the first /orders reservation, none for the cart.
-      expect(tierAfter2.quantitySold).toBe(1);
+      expect(res.statusCode).toBe(201);
+      const paid = await prisma.order.findUniqueOrThrow({ where: { id: paidOrderId } });
+      expect(paid.status).toBe('paid');
     });
   });
 });

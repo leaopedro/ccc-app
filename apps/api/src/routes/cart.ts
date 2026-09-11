@@ -17,6 +17,7 @@ import {
   reserveAndCreateOrders,
   rollbackCartCheckout,
 } from '../services/cart/checkout.js';
+import { settleCartOrders } from '../services/orders/settle-cart.js';
 import {
   CART_INCLUDE_FOR_SERIALIZE,
   computeAvailableFulfillmentMethods,
@@ -673,6 +674,56 @@ export const cartRoutes: FastifyPluginAsync = async (app) => {
       app.stripe.cancelPaymentIntent(ref).catch((cancelErr) => {
         request.log.warn({ err: cancelErr, providerRef: ref }, 'cart checkout: PI cancel failed');
       });
+    }
+
+    // Um carrinho que fecha em zero (tier de ingresso gratis) nao tem o que
+    // cobrar. Stripe e AbacatePay recusam pedido de valor zero, e ate aqui isso
+    // chegava ao membro como "Erro ao iniciar o pagamento", sem saida: o tier
+    // existe no catalogo e nao havia como compra-lo.
+    //
+    // Este e o UNICO ponto em que um pedido vira `paid` sem webhook de
+    // provedor. O invariante existe para impedir que o cliente declare um
+    // pagamento que nao houve; aqui nao ha pagamento a declarar, e o valor vem
+    // de `data.totalAmountCents`, calculado no servidor a partir do carrinho,
+    // nunca do corpo da requisicao. Um item pago no carrinho torna o total
+    // maior que zero e este ramo nao roda.
+    if (data.totalAmountCents === 0) {
+      const settlement = await settleCartOrders({
+        cartId: cart.id,
+        provider: input.paymentMethod === 'pix' ? 'abacatepay' : 'stripe',
+        // settlePaidOrder exige uma referencia; sem provedor, a do carrinho e a
+        // unica estavel. `version` mantem uma tentativa anterior distinguivel.
+        providerRef: `free_${cart.id}_v${cart.version}`,
+        env: app.env,
+      });
+      request.log.info(
+        { cartId: cart.id, orderIds: settlement.orders.map((o) => o.id) },
+        'cart checkout: zero-amount cart settled without provider',
+      );
+
+      const updatedCart = await prisma.cart.findUniqueOrThrow({
+        where: { id: cart.id },
+        include: CART_INCLUDE_FOR_SERIALIZE,
+      });
+
+      return reply.status(201).send(
+        beginCheckoutResponseSchema.parse({
+          checkoutId: cart.id,
+          // O cliente ramifica nisto: nao ha clientSecret nem checkoutUrl para
+          // abrir, o pedido ja esta pago.
+          status: 'succeeded',
+          cart: serializeCart(updatedCart, fulfillmentContext, {
+            devFeePercent: app.env.DEV_FEE_PERCENT,
+          }),
+          orderIds: data.orders.map((o) => o.id),
+          provider: input.paymentMethod === 'pix' ? 'abacatepay' : 'stripe',
+          providerRef: null,
+          clientSecret: null,
+          checkoutUrl: null,
+          brCode: null,
+          reservationExpiresAt: null,
+        }),
+      );
     }
 
     if (input.paymentMethod === 'pix') {

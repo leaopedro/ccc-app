@@ -9,10 +9,17 @@ export type CartPaymentAction =
   | { kind: 'pix'; orderId: string; brCode: string; expiresAt: string }
   | { kind: 'sheet'; clientSecret: string }
   | { kind: 'redirect'; url: string }
+  // Carrinho que fechou em zero: a API ja liquidou e emitiu o ingresso, nao ha
+  // pagamento a abrir.
+  | { kind: 'done' }
   | { kind: 'error' };
 
 export const resolveCartPaymentAction = (args: {
   paymentMethod: 'card' | 'pix';
+  // 'succeeded' so vem do ramo de valor zero da API. Sem este ramo, um
+  // carrinho gratuito cai no `error` final por nao ter clientSecret nem
+  // checkoutUrl, que era o bug: o tier gratis nao tinha como ser comprado.
+  checkoutStatus: 'pending' | 'requires_action' | 'succeeded';
   isWeb: boolean;
   // False when the native publishable key is absent (production regression,
   // final review C1): the caller must have requested `flow: 'hosted'` in that
@@ -24,6 +31,7 @@ export const resolveCartPaymentAction = (args: {
   reservationExpiresAt: string | null;
   firstOrderId: string | undefined;
 }): CartPaymentAction => {
+  if (args.checkoutStatus === 'succeeded') return { kind: 'done' };
   if (args.paymentMethod === 'pix') {
     if (!args.brCode || !args.reservationExpiresAt || !args.firstOrderId) return { kind: 'error' };
     return {

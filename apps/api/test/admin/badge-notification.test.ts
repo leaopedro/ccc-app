@@ -20,14 +20,30 @@ import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 const seedCatalog = async () => {
   await prisma.badge.createMany({
     data: [
-      { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
-      { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
+      {
+        code: 'EVT-001',
+        category: 'eventos',
+        rarity: 'common',
+        icon: 'flag',
+        title: 'Conquista EVT-001',
+        description: 'Descrição de EVT-001',
+      },
+      {
+        code: 'CAR-001',
+        category: 'carros',
+        rarity: 'common',
+        icon: 'car',
+        title: 'Conquista CAR-001',
+        description: 'Descrição de CAR-001',
+      },
       {
         code: 'CAR-003',
         category: 'carros',
         rarity: 'legendary',
         icon: 'curator',
         premiumExclusive: true,
+        title: 'Conquista CAR-003',
+        description: 'Descrição de CAR-003',
       },
     ],
   });

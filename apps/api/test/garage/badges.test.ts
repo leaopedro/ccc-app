@@ -12,33 +12,38 @@ import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 // have something to assert against. resetDatabase() drops the badge tables
 // between tests, so each block re-seeds explicitly.
 const seedCatalog = async () => {
+  const rows = [
+    { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
+    { code: 'EVT-002', category: 'eventos', rarity: 'rare', icon: 'streak' },
+    { code: 'EVT-003', category: 'eventos', rarity: 'legendary', icon: 'medal' },
+    { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
+    { code: 'CAR-002', category: 'carros', rarity: 'rare', icon: 'garageFull' },
+    {
+      code: 'CAR-003',
+      category: 'carros',
+      rarity: 'legendary',
+      icon: 'curator',
+      premiumExclusive: true,
+    },
+    { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
+    { code: 'COM-002', category: 'comunidade', rarity: 'rare', icon: 'chat' },
+    { code: 'COM-003', category: 'comunidade', rarity: 'legendary', icon: 'fire' },
+    { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
+    { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
+    {
+      code: 'CCC-003',
+      category: 'ccc',
+      rarity: 'legendary',
+      icon: 'founder',
+      premiumExclusive: true,
+    },
+  ] as const;
   await prisma.badge.createMany({
-    data: [
-      { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
-      { code: 'EVT-002', category: 'eventos', rarity: 'rare', icon: 'streak' },
-      { code: 'EVT-003', category: 'eventos', rarity: 'legendary', icon: 'medal' },
-      { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
-      { code: 'CAR-002', category: 'carros', rarity: 'rare', icon: 'garageFull' },
-      {
-        code: 'CAR-003',
-        category: 'carros',
-        rarity: 'legendary',
-        icon: 'curator',
-        premiumExclusive: true,
-      },
-      { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
-      { code: 'COM-002', category: 'comunidade', rarity: 'rare', icon: 'chat' },
-      { code: 'COM-003', category: 'comunidade', rarity: 'legendary', icon: 'fire' },
-      { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
-      { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
-      {
-        code: 'CCC-003',
-        category: 'ccc',
-        rarity: 'legendary',
-        icon: 'founder',
-        premiumExclusive: true,
-      },
-    ],
+    data: rows.map((r) => ({
+      ...r,
+      title: `Conquista ${r.code}`,
+      description: `Descrição de ${r.code}`,
+    })),
   });
 };
 

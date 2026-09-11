@@ -22,6 +22,8 @@ const seedBadge = async (
       rarity: 'common',
       icon: 'flag',
       premiumExclusive: opts.premiumExclusive ?? false,
+      title: `Conquista ${code}`,
+      description: `Descrição de ${code}`,
     },
   });
 };

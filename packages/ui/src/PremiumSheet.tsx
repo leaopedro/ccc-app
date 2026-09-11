@@ -71,7 +71,7 @@ export function PremiumSheet({
               marginTop: 6,
               color: '#F5F5F5',
               fontSize: 28,
-              lineHeight: 30,
+              lineHeight: 35,
               fontWeight: '800',
               letterSpacing: -0.5,
             }}

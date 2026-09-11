@@ -230,7 +230,7 @@ export function XPScoreboard({ progress, onPressHint, testID }: XPScoreboardProp
           style={{
             fontFamily: brand.typography.displayFontNative,
             fontSize: 46,
-            lineHeight: 46,
+            lineHeight: 67,
             color: '#F5F5F5',
             letterSpacing: -1.5,
             textShadowColor: 'rgba(212,175,55,0.18)',

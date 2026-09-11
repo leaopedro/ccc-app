@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   mote: {
     fontFamily: 'Jost_700Bold',
     fontSize: 29,
-    lineHeight: 30,
+    lineHeight: 43,
     letterSpacing: -0.29,
     color: p.cream,
   },

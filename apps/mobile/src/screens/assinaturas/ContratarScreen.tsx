@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   planName: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 24,
-    lineHeight: 26,
+    lineHeight: 30,
     color: c.cream,
     marginTop: 10,
   },

@@ -137,6 +137,11 @@ export const assinaturasCopy = {
     newValue: (cadence: 'monthly' | 'annual') =>
       cadence === 'annual' ? 'Novo valor anual' : 'Novo valor mensal',
     valueTitle: 'O QUE MUDA NO VALOR',
+    // Row captions inside `valueTitle` that are NOT functions of cadence —
+    // "diferença" and "novo total" are neutral words, unlike "mensalidade",
+    // so a fixed string here does not reproduce the factor-twelve bug.
+    differenceLabel: 'Diferença',
+    newTotalLabel: 'Novo total',
     gainTitle: 'O QUE VOCÊ GANHA',
     loseTitle: 'O QUE VOCÊ PERDE',
     // Lists add-ons that stay attached (status === 'active') with their
@@ -316,6 +321,8 @@ export const assinaturasCopyEn = {
     newValue: (cadence: 'monthly' | 'annual') =>
       cadence === 'annual' ? 'New annual value' : 'New monthly value',
     valueTitle: 'WHAT CHANGES IN THE VALUE',
+    differenceLabel: 'Difference',
+    newTotalLabel: 'New total',
     gainTitle: "WHAT YOU'LL GAIN",
     loseTitle: "WHAT YOU'LL LOSE",
     keptTitle: 'YOUR MODULES CONTINUE',

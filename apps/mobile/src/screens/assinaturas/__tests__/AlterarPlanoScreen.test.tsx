@@ -419,6 +419,14 @@ describe('AlterarPlanoScreen', () => {
     expect(changePremiumPlan.fn).not.toHaveBeenCalled();
   });
 
+  it('bloqueia a troca quando o gate de assinaturas está desligado', async () => {
+    plansState.value = plansResult({ subscriptionsEnabled: false });
+    await render();
+
+    expect(cta()).toBeNull();
+    expect(changePremiumPlan.fn).not.toHaveBeenCalled();
+  });
+
   it('sai da tela quando o slug já é o plano atual', async () => {
     await render('membro');
 

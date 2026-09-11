@@ -242,17 +242,20 @@ export default function AlterarPlanoScreen({ slug }: { slug: string | undefined 
   }
 
   // Refusal 3: status outside active/cancel_scheduled (past_due, paused,
-  // trialing). The CTA points at the billing portal — the actual fix.
+  // trialing). The CTA points at the billing portal — the actual fix. A
+  // silent dead button here would be the worst possible spot for one: it is
+  // the only way out for a past_due member. Same pattern as
+  // PremiumScreen.tsx's `showManageLink` — hide the CTA rather than render
+  // one that does nothing when the portal URL failed to load.
   if (blockedStatus) {
     return (
       <BlockedState
         title={copy.blockedPastDueTitle}
         body={copy.blockedPastDueBody}
-        cta={copy.blockedPastDueCta}
-        onPress={() => {
-          if (manageUrl) void Linking.openURL(manageUrl);
-        }}
         testID="alterar-billing-portal-cta"
+        {...(manageUrl
+          ? { cta: copy.blockedPastDueCta, onPress: () => void Linking.openURL(manageUrl) }
+          : {})}
       />
     );
   }
@@ -411,12 +414,7 @@ export default function AlterarPlanoScreen({ slug }: { slug: string | undefined 
             <Text style={styles.valueAmount}>{formatBRL(valorNovo)}</Text>
           </View>
           <View style={styles.valueRow}>
-            {/* "Diferença" / "Novo total" are cadence-neutral words, not
-                cadence-specific claims like "mensalidade" — safe to keep as
-                plain labels. The alterar copy block has no dedicated key for
-                either, and the task's instructions are to use only the
-                existing alterar keys as-is, not add new ones. */}
-            <Text style={styles.valueLabel}>Diferença</Text>
+            <Text style={styles.valueLabel}>{copy.differenceLabel}</Text>
             <Text style={styles.valueAmount}>{signedDiferenca}</Text>
           </View>
           {modulosCents > 0 ? (
@@ -427,7 +425,7 @@ export default function AlterarPlanoScreen({ slug }: { slug: string | undefined 
           ) : null}
           <View style={styles.valueDivider} />
           <View style={styles.valueRow}>
-            <Text style={styles.valueTotalLabel}>Novo total</Text>
+            <Text style={styles.valueTotalLabel}>{copy.newTotalLabel}</Text>
             <Text style={styles.valueTotalAmount}>{formatBRL(novoTotal)}</Text>
           </View>
         </View>

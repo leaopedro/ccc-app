@@ -99,6 +99,39 @@ describe('deriveProgress', () => {
       expect(deriveProgress(xp).xpInTier).toBeGreaterThanOrEqual(0);
     }
   });
+
+  it('resolve rank e nextRank pelo mapa de nomes', () => {
+    const names = { pilotador: 'Piloto', veterano: 'Mestre' };
+    expect(deriveProgress(100, names)).toEqual({
+      xp: 100,
+      rank: 'Piloto',
+      nextRank: 'Mestre',
+      xpInTier: 0,
+      xpToNextRank: 400,
+      tierSpan: 400,
+    });
+  });
+
+  it('cai no nome de codigo quando a chave falta no mapa', () => {
+    expect(deriveProgress(100, { veterano: 'Mestre' }).rank).toBe('Pilotador');
+  });
+
+  // Guard de topo: com o encadeamento por indice, um `next === undefined`
+  // passaria pelo antigo `=== null` e produziria xpToNextRank negativo, que
+  // garageProgressSchema recusa e vira 500 em GET /me/garage.
+  it('mantem o sentinela de topo mesmo com os nomes remapeados', () => {
+    const names = { hall_of_fame: 'Panteão' };
+    expect(deriveProgress(5000, names)).toEqual({
+      xp: 5000,
+      rank: 'Panteão',
+      nextRank: null,
+      xpInTier: 0,
+      xpToNextRank: 0,
+      tierSpan: 1,
+    });
+    expect(deriveProgress(999999, names).xpToNextRank).toBe(0);
+    expect(deriveProgress(999999, names).tierSpan).toBe(1);
+  });
 });
 
 describe('getGarageProgress (real Postgres)', () => {

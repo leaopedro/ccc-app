@@ -3,7 +3,6 @@ import {
   BADGE_AWARDED_NOTIFICATION_KIND,
   BADGE_AWARDED_NOTIFICATION_TITLE,
   badgeAwardedDedupeKey,
-  badgeTitlePtBr,
 } from '@ccc/shared/badges-copy';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -25,8 +24,10 @@ const seedCatalog = async () => {
         category: 'eventos',
         rarity: 'common',
         icon: 'flag',
-        title: 'Conquista EVT-001',
-        description: 'Descrição de EVT-001',
+        // Título deliberadamente diferente do canônico: é o que prova que o
+        // corpo da notificação vem da linha do banco, e não de uma constante.
+        title: 'Título Vindo do Banco',
+        description: 'Descrição da fixture.',
       },
       {
         code: 'CAR-001',
@@ -92,7 +93,7 @@ describe('badge notification — admin manual grant', () => {
     expect(inbox).toHaveLength(1);
     const row = inbox[0]!;
     expect(row.title).toBe(BADGE_AWARDED_NOTIFICATION_TITLE);
-    expect(row.body).toBe(badgeTitlePtBr('EVT-001'));
+    expect(row.body).toBe('Título Vindo do Banco');
     expect(row.dedupeKey).toBe(badgeAwardedDedupeKey('EVT-001', target.id));
     expect(row.data).toEqual({ kind: 'badge_awarded', code: 'EVT-001' });
     // Push deferred to Phase 2D — the inbox row must NOT have sentAt set.
@@ -124,7 +125,7 @@ describe('badge notification — admin manual grant', () => {
       where: { userId: target.id, kind: BADGE_AWARDED_NOTIFICATION_KIND },
     });
     expect(inbox).toHaveLength(1);
-    expect(inbox[0]!.body).toBe(badgeTitlePtBr('CAR-003'));
+    expect(inbox[0]!.body).toBe('Conquista CAR-003');
   });
 
   it('auto-award (write-path hook) does NOT mint a notification', async () => {

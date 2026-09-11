@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BADGE_TITLE_MAX,
   RANK_NAME_MAX,
+  adminGamificationCopySchema,
   gamificationCopyUpdateSchema,
   rankNamesSchema,
 } from '../admin-gamification.js';
@@ -59,5 +60,26 @@ describe('gamificationCopyUpdateSchema', () => {
     expect(() =>
       rankNamesSchema.parse({ ...full, iniciante: 'a'.repeat(RANK_NAME_MAX + 1) }),
     ).toThrow();
+  });
+});
+
+describe('adminGamificationCopySchema', () => {
+  // Mesma degradacao do badge title: um nome de nivel gravado por fora do
+  // admin, mais longo que RANK_NAME_MAX, nao pode fazer o GET (leitura)
+  // estourar so porque o cap de escrita e mais apertado.
+  it('aceita um rankName mais longo que o cap de escrita', () => {
+    const longName = 'a'.repeat(RANK_NAME_MAX + 30);
+    const parsed = adminGamificationCopySchema.parse({
+      version: 1,
+      badges: [],
+      rankNames: {
+        iniciante: longName,
+        pilotador: 'B',
+        veterano: 'C',
+        lendario: 'D',
+        hall_of_fame: 'E',
+      },
+    });
+    expect(parsed.rankNames.iniciante).toBe(longName);
   });
 });

@@ -41,6 +41,19 @@ export const rankNamesSchema = z.object({
 });
 export type RankNamesInput = z.infer<typeof rankNamesSchema>;
 
+// Leitura: rankNames é JSONB, sem largura de coluna para espelhar como no
+// badge. Mesmo assim mantém um teto frouxo, e não ilimitado, pelo mesmo
+// motivo: um nome gravado por fora do admin (SQL direto) mais longo que
+// RANK_NAME_MAX não pode fazer o GET (e por tabela o PUT) devolver 400 e
+// travar a tela inteira.
+export const rankNamesReadSchema = z.object({
+  iniciante: z.string().min(1).max(200),
+  pilotador: z.string().min(1).max(200),
+  veterano: z.string().min(1).max(200),
+  lendario: z.string().min(1).max(200),
+  hall_of_fame: z.string().min(1).max(200),
+});
+
 // Escrita: capada no que renderiza.
 export const badgeCopyEntrySchema = z.object({
   code: badgeCodeSchema,
@@ -60,7 +73,7 @@ export const badgeCopyReadEntrySchema = z.object({
 export const adminGamificationCopySchema = z.object({
   version: z.number().int().nonnegative(),
   badges: z.array(badgeCopyReadEntrySchema),
-  rankNames: rankNamesSchema,
+  rankNames: rankNamesReadSchema,
 });
 export type AdminGamificationCopy = z.infer<typeof adminGamificationCopySchema>;
 

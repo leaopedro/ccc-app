@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '/configuracoes', label: 'Gerais' },
   { href: '/configuracoes/home', label: 'Home' },
+  { href: '/configuracoes/conquistas', label: 'Conquistas' },
 ] as const;
 
 // '/configuracoes' e prefixo de '/configuracoes/home', entao a aba Gerais so

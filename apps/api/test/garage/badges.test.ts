@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { garageBadgesOwnerResponseSchema } from '@ccc/shared/badges';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -208,6 +209,25 @@ describe('GET /me/garage/badges', () => {
   it('returns 401 when unauthenticated', async () => {
     const res = await app.inject({ method: 'GET', url: '/me/garage/badges' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('catalogo carrega title e description do banco', async () => {
+    await seedCatalog();
+    const { user } = await createUser({ email: 'copy@jdm.test', verified: true });
+    await prisma.badge.update({
+      where: { code: 'EVT-001' },
+      data: { title: 'Título Editado', description: 'Descrição editada.' },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/garage/badges',
+      headers: { authorization: bearer(loadEnv(), user.id, 'user') },
+    });
+    const body = garageBadgesOwnerResponseSchema.parse(res.json());
+    const entry = body.catalog.find((c) => c.code === 'EVT-001');
+    expect(entry?.title).toBe('Título Editado');
+    expect(entry?.description).toBe('Descrição editada.');
   });
 });
 

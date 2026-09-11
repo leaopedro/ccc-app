@@ -29,3 +29,12 @@ export function getCartTabBadge(itemCount: number) {
 export function getPrimaryTabName(runtimeStoreEnabled: boolean | null): 'store' | 'tickets' {
   return resolveStoreSlot(runtimeStoreEnabled);
 }
+
+// Tapping the tab you are already on used to replay the navigation
+// animation: the tabPress handlers `replace` unconditionally, so the router
+// re-entered the same route. Replace only when the current path is not
+// already the tab root. Deep routes inside the tab still pop back.
+export function shouldReplaceOnTabPress(pathname: string, tabRoot: string): boolean {
+  const strip = (p: string) => (p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p);
+  return strip(pathname) !== strip(tabRoot);
+}

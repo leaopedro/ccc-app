@@ -136,3 +136,11 @@ export const premiumInvoicesResponseSchema = z.object({
 });
 
 export type PremiumInvoicesResponse = z.infer<typeof premiumInvoicesResponseSchema>;
+
+/** POST /api/me/premium/plan — troca de plano iniciada pelo membro. */
+export const memberChangePlanRequestSchema = z.object({
+  planSlug: z.string().min(1),
+  cadence: z.enum(['monthly', 'annual']),
+});
+
+export type MemberChangePlanRequest = z.infer<typeof memberChangePlanRequestSchema>;

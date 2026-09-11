@@ -84,7 +84,11 @@ describe('GamificationCopyForm', () => {
   });
 
   it('usa a versao nova depois de salvar', async () => {
-    updateMock.mockResolvedValue({ ok: true, copy: { ...initial, version: 4 } });
+    // version: 10 e nao 4 de proposito: 4 tambem seria o resultado de um bug
+    // que so incrementa a versao local (3 + 1) em vez de adotar a do
+    // servidor. Um valor inalcancavel por incremento faz o teste falhar alto
+    // se a implementacao regredir para isso.
+    updateMock.mockResolvedValue({ ok: true, copy: { ...initial, version: 10 } });
     await act(async () => {
       root.render(<GamificationCopyForm initial={initial} />);
       await Promise.resolve();
@@ -99,7 +103,7 @@ describe('GamificationCopyForm', () => {
       await Promise.resolve();
     });
 
-    expect(updateMock.mock.calls[1]![0]).toEqual(expect.objectContaining({ expectedVersion: 4 }));
+    expect(updateMock.mock.calls[1]![0]).toEqual(expect.objectContaining({ expectedVersion: 10 }));
   });
 
   it('mostra a mensagem de conflito', async () => {

@@ -92,7 +92,7 @@ export const attachAddon = async ({
     const item = await stripe.addSubscriptionItem({
       subscriptionId: membership.providerSubRef,
       priceId: addonModule.stripePriceId,
-      idempotencyKey: `addon_attach_${membership.id}_${addonKey}`,
+      idempotencyKey: `addon_attach_${membership.id}_${addonKey}_${membership.updatedAt.getTime()}`,
     });
     providerItemRef = item.subscriptionItemId;
   } else {
@@ -193,7 +193,7 @@ export const detachAddon = async ({
   if (membership.provider === 'stripe' && addon.providerItemRef) {
     await stripe.removeSubscriptionItem({
       subscriptionItemId: addon.providerItemRef,
-      idempotencyKey: `addon_detach_${addon.id}`,
+      idempotencyKey: `addon_detach_${addon.id}_${addon.updatedAt.getTime()}`,
     });
   } else {
     logger.info(

@@ -10,6 +10,7 @@ import { ArrowLeft, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { getPremiumPlan } from '~/api/premium-catalog';
@@ -46,8 +47,11 @@ function OuroBackground() {
 }
 
 function Header() {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <Pressable
         onPress={onBack}
         accessibilityRole="button"

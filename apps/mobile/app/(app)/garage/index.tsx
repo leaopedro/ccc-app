@@ -118,6 +118,7 @@ export default function GarageIndex() {
   // is fetched inside the consolidated useFocusEffect above. The garage
   // payload's inline `badges` field is unused for badge rendering on this
   // surface.
+  // Desde esta branch, o catálogo também carrega title/description editáveis, consumidos pelo badgeCopy logo abaixo.
   const gamificationEnabled = garage?.garage.gamification.enabled ?? false;
 
   const refetchBadges = useCallback(async () => {

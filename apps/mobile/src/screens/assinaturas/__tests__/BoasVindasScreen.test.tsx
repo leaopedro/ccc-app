@@ -99,6 +99,8 @@ const activeSub: MySubscriptionResponse = {
   cadence: 'monthly',
   currentPeriodEnd: '2026-08-22T00:00:00.000Z',
   cancelAtPeriodEnd: false,
+  status: 'active',
+  provider: 'stripe',
   baseAmountCents: 29900,
   addonsAmountCents: 0,
   totalAmountCents: 29900,

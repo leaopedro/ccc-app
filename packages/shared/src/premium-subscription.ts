@@ -8,6 +8,8 @@
 
 import { z } from 'zod';
 
+import { LIVE_MEMBERSHIP_STATUSES } from './premium.js';
+
 /** Per-cycle usage snapshot for an attached add-on. null when no open cycle. */
 export const mySubscriptionAddonCycleSchema = z.object({
   cycleStart: z.string().datetime(),
@@ -27,6 +29,12 @@ export const mySubscriptionAddonSchema = z.object({
   quotaUnit: z.enum(['access', 'hours']),
   quotaPerCycle: z.number().int(),
   currentCycle: mySubscriptionAddonCycleSchema.nullable(),
+  /**
+   * Snapshot do valor cobrado por este add-on, de PremiumMembershipAddon —
+   * NUNCA o preço atual de PremiumAddonModule. Editar o catálogo não muda o
+   * que o membro paga, e a tela precisa dizer o que a fatura vai dizer.
+   */
+  monthlyDeltaCents: z.number().int().nonnegative(),
 });
 
 export type MySubscriptionAddon = z.infer<typeof mySubscriptionAddonSchema>;
@@ -45,6 +53,18 @@ export const mySubscriptionResponseSchema = z.object({
   cadence: z.enum(['monthly', 'annual']).nullable(),
   currentPeriodEnd: z.string().datetime().nullable(),
   cancelAtPeriodEnd: z.boolean(),
+  /**
+   * Status da membership viva, ou null quando não há nenhuma. `active: true`
+   * acima significa apenas "existe membership viva" e cobre past_due, paused e
+   * cancel_scheduled — quem decide o que o membro pode fazer lê este campo.
+   */
+  status: z.enum([...LIVE_MEMBERSHIP_STATUSES]).nullable(),
+  /**
+   * Provider da membership. Ações que só existem na Stripe não são oferecidas
+   * para Apple. O servidor também barra; isto é para a UI não oferecer o que
+   * vai ser recusado.
+   */
+  provider: z.enum(['stripe', 'apple_revenuecat']).nullable(),
   baseAmountCents: z.number().int().nonnegative(),
   addonsAmountCents: z.number().int().nonnegative(),
   totalAmountCents: z.number().int().nonnegative(),

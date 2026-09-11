@@ -79,6 +79,8 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
             cadence: null,
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
+            status: null,
+            provider: null,
             baseAmountCents: 0,
             addonsAmountCents: 0,
             totalAmountCents: 0,
@@ -121,6 +123,8 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
           cadence: membership.cadence,
           currentPeriodEnd: membership.currentPeriodEnd.toISOString(),
           cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
+          status: membership.status,
+          provider: membership.provider,
           baseAmountCents: membership.baseAmountCents,
           addonsAmountCents,
           totalAmountCents,
@@ -133,6 +137,7 @@ export const mePremiumAddonRoutes: FastifyPluginAsync = async (app) => {
               status: addon.status,
               quotaUnit: addon.quotaUnit,
               quotaPerCycle: addon.quotaPerCycle,
+              monthlyDeltaCents: addon.monthlyDeltaCents,
               currentCycle: cycle
                 ? {
                     cycleStart: cycle.cycleStart.toISOString(),

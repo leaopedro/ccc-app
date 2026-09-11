@@ -168,6 +168,31 @@ describe('premium subscription + add-ons', () => {
     expect(body.addons).toEqual([]);
   });
 
+  it('subscription read: exposes the membership status and provider', async () => {
+    const { user } = await createUser({ verified: true });
+    const g = await garageOf(user.id);
+    await seedGoldPlan();
+    await seedMembership(g.id, { status: 'past_due' });
+
+    const res = await getSubscription(user.id);
+    expect(res.statusCode).toBe(200);
+    const body = mySubscriptionResponseSchema.parse(res.json());
+    // `active` continua true para qualquer membership viva — e é por isso que
+    // `status` precisa existir: sem ele o app não distingue um membro em dia de
+    // um inadimplente.
+    expect(body.active).toBe(true);
+    expect(body.status).toBe('past_due');
+    expect(body.provider).toBe('stripe');
+  });
+
+  it('subscription read: status and provider are null without a membership', async () => {
+    const { user } = await createUser({ verified: true });
+
+    const body = mySubscriptionResponseSchema.parse((await getSubscription(user.id)).json());
+    expect(body.status).toBeNull();
+    expect(body.provider).toBeNull();
+  });
+
   it('subscription read: attached add-on shows current-cycle usage', async () => {
     const { user } = await createUser({ verified: true });
     const g = await garageOf(user.id);
@@ -192,6 +217,9 @@ describe('premium subscription + add-ons', () => {
     expect(addon.currentCycle?.quotaRemaining).toBe(4);
     expect(body.addonsAmountCents).toBe(1990);
     expect(body.totalAmountCents).toBe(2990 + 1990);
+    // O snapshot da linha, não o preço atual do catálogo: editar o catálogo não
+    // pode mudar o que a tela diz que está sendo cobrado.
+    expect(body.addons[0]?.monthlyDeltaCents).toBe(1990);
   });
 
   it('returns the plan benefits ordered by sortOrder and the plan description', async () => {

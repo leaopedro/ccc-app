@@ -327,6 +327,8 @@ describe('PlanosScreen', () => {
     cadence: 'monthly',
     currentPeriodEnd: '2026-08-22T00:00:00.000Z',
     cancelAtPeriodEnd: false,
+    status: 'active',
+    provider: 'stripe',
     baseAmountCents: 149000,
     addonsAmountCents: 0,
     totalAmountCents: 149000,

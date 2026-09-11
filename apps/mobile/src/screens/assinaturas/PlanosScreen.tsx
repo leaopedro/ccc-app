@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   heading: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 30,
-    lineHeight: 33,
+    lineHeight: 37,
     color: c.cream,
     marginTop: 8,
     textAlign: 'center',
@@ -437,12 +437,12 @@ const styles = StyleSheet.create({
   planName: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 26,
-    lineHeight: 26,
+    lineHeight: 32,
     color: c.cream,
     marginTop: 8,
   },
   cardHeaderRight: { alignItems: 'flex-end' },
-  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 32, lineHeight: 32, color: c.cream },
+  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 32, lineHeight: 40, color: c.cream },
   perMonth: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 10,

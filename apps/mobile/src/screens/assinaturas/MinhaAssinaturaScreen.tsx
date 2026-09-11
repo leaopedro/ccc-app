@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  planName: { fontFamily: 'Inter_600SemiBold', fontSize: 26, lineHeight: 28, color: c.cream },
+  planName: { fontFamily: 'Inter_600SemiBold', fontSize: 26, lineHeight: 32, color: c.cream },
   periodText: {
     fontFamily: 'Inter_400Regular',
     fontSize: 12.5,

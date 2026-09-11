@@ -284,12 +284,12 @@ const styles = StyleSheet.create({
   planName: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 30,
-    lineHeight: 32,
+    lineHeight: 37,
     color: c.cream,
     marginTop: 10,
   },
   priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 14 },
-  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 34, lineHeight: 34, color: c.cream },
+  planPrice: { fontFamily: 'Inter_600SemiBold', fontSize: 34, lineHeight: 42, color: c.cream },
   perMonth: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 10,

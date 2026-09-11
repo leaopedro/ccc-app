@@ -55,7 +55,7 @@ const numValueStyle = {
   fontWeight: '700' as const,
   fontSize: 17,
   letterSpacing: -0.4,
-  lineHeight: 17,
+  lineHeight: 23,
   color: '#F5F5F5',
 } as const;
 
@@ -63,7 +63,7 @@ const dateValueStyle = {
   fontWeight: '700' as const,
   fontSize: 13,
   letterSpacing: -0.1,
-  lineHeight: 13,
+  lineHeight: 16,
   color: '#F5F5F5',
 } as const;
 

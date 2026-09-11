@@ -94,8 +94,14 @@ const loadOwnerView = async (userId: string, uploads: Uploads) => {
   const garage = await ensureGarageForUser(userId);
   const reconciled = await reconcileGarageSpots(userId);
   // §C5: synchronous per-request killswitch read, no TTL cache.
-  const gamificationEnabled = await readGamificationEnabled();
-  const rankNames = gamificationEnabled ? await readRankNames() : {};
+  // Both reads are independent, so run them together instead of serially;
+  // rankNames is read even when the killswitch is off (one extra cheap PK
+  // read) and just discarded below.
+  const [gamificationEnabled, rankNamesRaw] = await Promise.all([
+    readGamificationEnabled(),
+    readRankNames(),
+  ]);
+  const rankNames = gamificationEnabled ? rankNamesRaw : {};
 
   const [cars, spots, badgesState, progress, stats] = await Promise.all([
     prisma.car.findMany({
@@ -508,8 +514,14 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // §C5: synchronous per-request killswitch read, no TTL cache.
-      const gamificationEnabled = await readGamificationEnabled();
-      const rankNames = gamificationEnabled ? await readRankNames() : {};
+      // Both reads are independent, so run them together instead of serially;
+      // rankNames is read even when the killswitch is off (one extra cheap PK
+      // read) and just discarded below.
+      const [gamificationEnabled, rankNamesRaw] = await Promise.all([
+        readGamificationEnabled(),
+        readRankNames(),
+      ]);
+      const rankNames = gamificationEnabled ? rankNamesRaw : {};
 
       // Exclude any premium "extra-only" car semantics if/when they exist —
       // currently every car is publishable. Photos use existing public URLs.

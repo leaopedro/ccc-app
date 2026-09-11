@@ -71,8 +71,18 @@ describe('resolvePlanChangeError', () => {
     );
   });
 
-  it('maps 404 NotFound (no live membership) to plan_not_found as well', () => {
-    expect(resolvePlanChangeError(err(404, { error: 'NotFound' })).reason).toBe('plan_not_found');
+  // The two 404s are different facts: PlanNotFound means the plan is gone,
+  // NotFound means the member has no live membership at all — the plan is
+  // still there. Collapsing them into one reason/message tells the member
+  // the wrong thing is broken and sends them retrying a different plan that
+  // was never the problem.
+  it('separates 404 NotFound (no live membership) from 404 PlanNotFound', () => {
+    const noMembership = resolvePlanChangeError(err(404, { error: 'NotFound' }));
+    const planGone = resolvePlanChangeError(err(404, { error: 'PlanNotFound' }));
+
+    expect(noMembership.reason).toBe('no_membership');
+    expect(planGone.reason).toBe('plan_not_found');
+    expect(noMembership.message).not.toBe(planGone.message);
   });
 
   it('maps 503 to unavailable', () => {
@@ -102,6 +112,7 @@ describe('resolvePlanChangeError', () => {
       err(409, { error: 'NoChange' }),
       err(422, { error: 'PremiumCheckoutRejected', code: 'ANNUAL_CADENCE_ADDON_UNSUPPORTED' }),
       err(404, { error: 'PlanNotFound' }),
+      err(404, { error: 'NotFound' }),
       err(503, {}),
       err(429, {}),
       err(401, {}),

@@ -120,10 +120,15 @@ export const assinaturasCopy = {
   // (tasks 9 e 10), so `whenBody` is the ONE canonical phrasing — those
   // screens reuse this key rather than writing their own sentence.
   alterar: {
-    header: 'TROCAR DE PLANO',
+    // Names the spec fixes verbatim (design doc, seção 4) — the feature is
+    // "alterar assinatura", not "trocar de plano", and Task 7 builds the
+    // screen against these exact strings.
+    header: 'ALTERAR ASSINATURA',
     back: 'Voltar',
-    fromLabel: 'PLANO ATUAL',
-    toLabel: 'NOVO PLANO',
+    // `DE`/`PARA` label two side-by-side cards (current plan vs target
+    // plan), not section titles — kept terse on purpose.
+    fromLabel: 'DE',
+    toLabel: 'PARA',
     // `baseAmountCents` is the snapshot of the CONTRACTED cadence, not always
     // monthly — an annual snapshot labelled "mensalidade" would be off by a
     // factor of twelve. Functions of cadence, not fixed strings.
@@ -131,19 +136,21 @@ export const assinaturasCopy = {
       cadence === 'annual' ? 'Valor anual de hoje' : 'Valor mensal de hoje',
     newValue: (cadence: 'monthly' | 'annual') =>
       cadence === 'annual' ? 'Novo valor anual' : 'Novo valor mensal',
-    valueTitle: 'VALOR',
+    valueTitle: 'O QUE MUDA NO VALOR',
     gainTitle: 'O QUE VOCÊ GANHA',
     loseTitle: 'O QUE VOCÊ PERDE',
-    keptTitle: 'O QUE CONTINUA',
+    // Lists add-ons that stay attached (status === 'active') with their
+    // monthlyDeltaCents — not "what stays the same" in general.
+    keptTitle: 'SEUS MÓDULOS CONTINUAM',
     whenTitle: 'QUANDO VALE',
     // Global Constraint — literal, single formulation. contratar's future
     // add-on attach/detach copy (tasks 9/10) reads this key instead of
     // writing a variant.
     whenBody:
       'A mudança vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra na sua próxima fatura, que pode ser a que fecha neste ciclo.',
-    cta: 'CONFIRMAR TROCA',
+    cta: 'CONFIRMAR ALTERAÇÃO',
     ctaLoading: 'CONFIRMANDO...',
-    voltar: 'MANTER PLANO ATUAL',
+    voltar: 'VOLTAR',
     confirming: 'Confirmando a troca de plano...',
     pendingTitle: 'Troca em processamento.',
     pendingSubcopy: 'Assim que a troca for confirmada seu plano aparece atualizado aqui.',
@@ -175,6 +182,10 @@ export const assinaturasCopy = {
     errorPastDue: ALTERAR_PAST_DUE_BODY,
     errorNoChange: 'Você já está nesse plano.',
     errorPlanNotFound: 'Esse plano não está mais disponível.',
+    // Distinct from errorPlanNotFound: this is the 404 for "no live
+    // membership at all" (route's plain `NotFound`), not "plan not found".
+    // The plan is still there — there is no subscription to change it on.
+    errorNoMembership: 'Você não tem uma assinatura ativa para alterar.',
     errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
     errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
   },
@@ -296,24 +307,24 @@ export const assinaturasCopyEn = {
   },
   // Brand-new block, so every key carries a twin from day one.
   alterar: {
-    header: 'CHANGE PLAN',
+    header: 'CHANGE MEMBERSHIP',
     back: 'Back',
-    fromLabel: 'CURRENT PLAN',
-    toLabel: 'NEW PLAN',
+    fromLabel: 'FROM',
+    toLabel: 'TO',
     currentValue: (cadence: 'monthly' | 'annual') =>
       cadence === 'annual' ? "Today's annual value" : "Today's monthly value",
     newValue: (cadence: 'monthly' | 'annual') =>
       cadence === 'annual' ? 'New annual value' : 'New monthly value',
-    valueTitle: 'VALUE',
+    valueTitle: 'WHAT CHANGES IN THE VALUE',
     gainTitle: "WHAT YOU'LL GAIN",
     loseTitle: "WHAT YOU'LL LOSE",
-    keptTitle: 'WHAT STAYS THE SAME',
+    keptTitle: 'YOUR MODULES CONTINUE',
     whenTitle: 'WHEN IT TAKES EFFECT',
     whenBody:
       'The change takes effect as soon as you confirm. Nothing is charged now: the pro-rated difference lands on your next invoice, which may be the one closing this cycle.',
     cta: 'CONFIRM CHANGE',
     ctaLoading: 'CONFIRMING...',
-    voltar: 'KEEP CURRENT PLAN',
+    voltar: 'BACK',
     confirming: 'Confirming your plan change...',
     pendingTitle: 'Change in progress.',
     pendingSubcopy: 'Once the change is confirmed your plan shows up updated here.',
@@ -335,6 +346,7 @@ export const assinaturasCopyEn = {
     errorPastDue: ALTERAR_PAST_DUE_BODY_EN,
     errorNoChange: "You're already on this plan.",
     errorPlanNotFound: 'That plan is no longer available.',
+    errorNoMembership: "You don't have an active subscription to change.",
     errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
     errorUnauthorized: 'Your session expired. Sign in again to continue.',
   },

@@ -3,10 +3,10 @@
 //
 // Mirrors checkout-error.ts. Status codes and bodies come from
 // apps/api/src/routes/me-premium.ts (changePlanHandler) — see the guard order
-// documented there: provider (NotStripeSubscription) before status
-// (InvalidStatus), both before the catalog (PlanNotFound), then the
-// annual-cadence/add-on combination check (422 PremiumCheckoutRejected), then
-// NoChange from the billing layer.
+// documented there: no live membership (404 NotFound) before provider (409
+// NotStripeSubscription) before status (409 InvalidStatus), all before the
+// catalog (404 PlanNotFound), then the annual-cadence/add-on combination
+// check (422 PremiumCheckoutRejected), then NoChange from the billing layer.
 
 import { ApiError } from '~/api/client';
 import { assinaturasCopy } from '~/copy/assinaturas';
@@ -16,6 +16,7 @@ export type PlanChangeErrorReason =
   | 'invalid_status'
   | 'no_change'
   | 'plan_not_found'
+  | 'no_membership'
   | 'annual_addon'
   | 'unavailable'
   | 'rate_limited'
@@ -74,9 +75,15 @@ export function resolvePlanChangeError(error: unknown): PlanChangeError {
     case 429:
       return { reason: 'rate_limited', message: copy.errorRateLimited };
     case 404:
-      // Both `NotFound` (no live membership) and `PlanNotFound` (target plan
-      // gone / no price for that cadence) read the same to the member: the
-      // thing they asked for is not there to buy.
+      // `NotFound` (no live membership — no garage, or pickLiveMembership
+      // found nothing) is a different fact from `PlanNotFound` (target plan
+      // deactivated / no price for that cadence). The plan is fine in the
+      // NotFound case; there is simply no subscription to change it on.
+      // Collapsing them told the member the plan was the problem when it was
+      // their own membership state.
+      if (b.error === 'NotFound') {
+        return { reason: 'no_membership', message: copy.errorNoMembership };
+      }
       return { reason: 'plan_not_found', message: copy.errorPlanNotFound };
     case 401:
       return { reason: 'unauthorized', message: copy.errorUnauthorized };

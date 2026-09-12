@@ -67,17 +67,26 @@ const cartSettlementPriority = (kind: OrderKind): number => {
   return 2;
 };
 
-export const settleAbacatePayCart = async (params: {
+/**
+ * Settle every pending order of a cart and convert the cart, for ONE provider.
+ *
+ * Parameterised on `provider` because a cart that totals zero (a free ticket
+ * tier) settles through this same path without any provider call at all — see
+ * the zero-amount branch in routes/cart.ts. Its orders still carry the
+ * provider the payment method mapped to, so the filter has to follow.
+ */
+export const settleCartOrders = async (params: {
   cartId: string;
+  provider: 'stripe' | 'abacatepay';
   providerRef: string;
   env: IssueEnv;
   /** See settlePaidOrder's `livemode` param. Omitted ⇒ column keeps its default. */
   livemode?: boolean;
 }): Promise<CartSettlementResult> => {
-  const { cartId, providerRef, env, livemode } = params;
+  const { cartId, provider, providerRef, env, livemode } = params;
 
   const cartOrders = await prisma.order.findMany({
-    where: { cartId, provider: 'abacatepay', status: 'pending' },
+    where: { cartId, provider, status: 'pending' },
     select: { id: true, userId: true, eventId: true, amountCents: true, kind: true },
     // `id` tiebreak, same as the Stripe path. Every order of a cart is written
     // in one transaction and so shares a `createdAt`; without it the settlement
@@ -158,3 +167,15 @@ export const settleAbacatePayCart = async (params: {
 
   return { orders: ordered, issuedAnyTicket, userId: firstUserId };
 };
+
+/**
+ * The AbacatePay entry point, unchanged for its two callers (the webhook and
+ * workers/pix-reconcile.ts). Kept as a named wrapper so neither has to learn
+ * about the `provider` parameter.
+ */
+export const settleAbacatePayCart = async (params: {
+  cartId: string;
+  providerRef: string;
+  env: IssueEnv;
+  livemode?: boolean;
+}): Promise<CartSettlementResult> => settleCartOrders({ ...params, provider: 'abacatepay' });

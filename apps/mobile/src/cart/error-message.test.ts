@@ -54,3 +54,27 @@ describe('getCartAddErrorMessage', () => {
     expect(getCartAddErrorMessage(new Error('boom'))).toBe('Erro ao adicionar item ao carrinho.');
   });
 });
+
+describe('getCartCheckoutErrorMessage', () => {
+  const apiError = (code: string) =>
+    new ApiError(409, 'request failed', { error: 'Conflict', code, message: 'falhou' });
+
+  it('mostra copy propria para pedido pendente em vez do erro generico', async () => {
+    const { getCartCheckoutErrorMessage } = await import('./error-message');
+    expect(getCartCheckoutErrorMessage(apiError('PENDING_TICKET_ORDER_FOR_EVENT'))).toBe(
+      'Você já tem um pedido de ingresso pendente para este evento. Conclua o pagamento ou aguarde expirar.',
+    );
+  });
+
+  it('mantem a copy do item digital bloqueado no iOS', async () => {
+    const { getCartCheckoutErrorMessage } = await import('./error-message');
+    expect(getCartCheckoutErrorMessage(apiError('VIRTUAL_ITEM_IOS_BLOCKED'))).toBe(
+      'Este item não pode ser comprado pelo aplicativo iOS. Remova-o do carrinho para continuar.',
+    );
+  });
+
+  it('cai no erro de checkout, nao no de adicionar item, quando o codigo e desconhecido', async () => {
+    const { getCartCheckoutErrorMessage } = await import('./error-message');
+    expect(getCartCheckoutErrorMessage(new Error('boom'))).toBe('Erro ao iniciar o pagamento.');
+  });
+});

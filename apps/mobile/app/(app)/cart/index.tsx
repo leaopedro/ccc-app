@@ -23,7 +23,7 @@ import { beginCheckout } from '~/api/cart';
 import { getEventById, getEventCommerceById } from '~/api/events';
 import { getStoreSettings } from '~/api/store';
 import { listMyTickets } from '~/api/tickets';
-import { getApiErrorCode } from '~/api/errors';
+import { getCartCheckoutErrorMessage } from '~/cart/error-message';
 import { useCart } from '~/cart/context';
 import { redirectToStripeCheckout } from '~/cart/web-stripe-redirect';
 import { cartCopy } from '~/copy/cart';
@@ -554,6 +554,7 @@ export default function CartScreen() {
 
       const action = resolveCartPaymentAction({
         paymentMethod,
+        checkoutStatus: result.status,
         isWeb,
         nativeStripeAvailable,
         clientSecret: result.clientSecret,
@@ -565,6 +566,13 @@ export default function CartScreen() {
 
       if (action.kind === 'error') {
         showError(cartCopy.errors.checkout);
+        return;
+      }
+      if (action.kind === 'done') {
+        // Carrinho gratuito: a API ja liquidou e emitiu o ingresso. Nao ha
+        // sheet nem checkout hospedado para abrir.
+        showMessage(cartCopy.freeCheckoutDone);
+        router.replace('/profile/orders' as never);
         return;
       }
       if (action.kind === 'pix') {
@@ -613,16 +621,11 @@ export default function CartScreen() {
       // and never writes order state from the client).
       router.replace('/profile/orders' as never);
     } catch (err) {
-      // Final review I3: a virtual (digital) item refused at checkout on iOS
-      // stays in the cart — tell the member so they can remove it, instead of
-      // the generic message that leaves them stuck retrying forever. The
-      // buy-a-spot tile is hidden on iOS (garage-slots.ts) so this should
-      // only fire for a cart that already held the item before that fix.
-      if (getApiErrorCode(err) === 'VIRTUAL_ITEM_IOS_BLOCKED') {
-        showError(cartCopy.errors.virtualItemIosBlocked);
-        return;
-      }
-      showError(cartCopy.errors.checkout);
+      // Todo erro de checkout passa pelo mapa de codigos. Antes so
+      // VIRTUAL_ITEM_IOS_BLOCKED tinha tratamento e o resto virava "Erro ao
+      // iniciar o pagamento", incluindo o 409 de pedido pendente, que ja tinha
+      // copy propria e ninguem via.
+      showError(getCartCheckoutErrorMessage(err));
     } finally {
       checkingOutRef.current = false;
       setCheckingOut(false);

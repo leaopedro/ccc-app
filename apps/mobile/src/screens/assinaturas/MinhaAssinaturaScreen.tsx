@@ -21,9 +21,12 @@ import {
   View,
 } from 'react-native';
 
+import type { PremiumAddonModule } from '@ccc/shared/premium-catalog';
+
 import { ApiError } from '~/api/client';
 import { attachPremiumAddon, cancelPremiumSubscription, detachPremiumAddon } from '~/api/premium';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { usePremiumInvoices } from '~/hooks/usePremiumInvoices';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
@@ -236,6 +239,159 @@ function AddonRow({
   );
 }
 
+// Task 10: one row per catalog module NOT already on the membership. Price
+// comes from the catalog (`module.monthlyDeltaCents`), never from a
+// subscription snapshot — it is what gets charged the moment the member
+// attaches now, unlike REMOVER's `addon.monthlyDeltaCents` (what is already
+// being charged).
+function AvailableModuleRow({
+  module,
+  totalAmountCents,
+  refresh,
+}: {
+  module: PremiumAddonModule;
+  totalAmountCents: number;
+  refresh: () => Promise<void>;
+}) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  const onConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await attachPremiumAddon(module.key);
+      setSheetOpen(false);
+      showToast(modulosCopy.adicionadoToast);
+      // Same contract as REMOVER/REATIVAR: the mutation already succeeded
+      // here — only refresh() carries the fresh cycle usage, so a failure to
+      // refresh must never be reported as a failed add.
+      try {
+        await refresh();
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
+    } catch (err) {
+      setActionError(resolveAddonError(err, 'attach').message);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const novoTotal = formatBRL(totalAmountCents + module.monthlyDeltaCents);
+
+  return (
+    <View style={styles.addonRow}>
+      <View style={styles.addonHeaderRow}>
+        <Text style={styles.addonName}>{module.name}</Text>
+      </View>
+
+      <Pressable
+        onPress={() => {
+          setActionError(null);
+          setSheetOpen(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={modulosCopy.adicionarTrigger}
+        style={styles.addonActionTrigger}
+        testID={`assinatura-modulo-${module.key}-adicionar`}
+      >
+        <Text style={styles.addonActionTriggerText}>{modulosCopy.adicionarTrigger}</Text>
+      </Pressable>
+
+      <SheetShell
+        visible={sheetOpen}
+        title={modulosCopy.adicionarSheetTitle}
+        onClose={() => setSheetOpen(false)}
+        theme={{
+          surface: c.surface,
+          border: c.hairline,
+          titleColor: c.cream,
+          titleFontFamily: 'Inter_600SemiBold',
+        }}
+        testID={`assinatura-modulo-${module.key}-sheet`}
+      >
+        <View style={styles.sheetBody}>
+          <Text style={styles.sheetText}>{modulosCopy.adicionarBody(module.name, novoTotal)}</Text>
+          {actionError ? <Text style={styles.sheetError}>{actionError}</Text> : null}
+          <Pressable
+            onPress={() => setSheetOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.keep}
+            style={styles.sheetKeep}
+          >
+            <Text style={styles.sheetKeepText}>{modulosCopy.keep}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm()}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.adicionarConfirm}
+            accessibilityState={{ disabled: submitting, busy: submitting }}
+            style={[styles.sheetConfirm, submitting && styles.dimmed]}
+            testID={`assinatura-modulo-${module.key}-confirmar`}
+          >
+            <Text style={styles.sheetConfirmText}>
+              {submitting ? modulosCopy.adicionarLoading : modulosCopy.adicionarConfirm}
+            </Text>
+          </Pressable>
+        </View>
+      </SheetShell>
+    </View>
+  );
+}
+
+// The catalog block — deliberately rendered OUTSIDE the
+// `sub.addons.length > 0` condition that gates the ATTACHED add-ons section
+// below: a member with zero add-ons is exactly who most needs to see what
+// they can add. Gated on `subscriptionsEnabled` AND `provider === 'stripe'`
+// (ADICIONAR is a purchase-shaped action, same split the API makes between
+// attach and detach) — unlike REMOVER, which is never gated.
+function AvailableModules({
+  sub,
+  subscriptionsEnabled,
+  refresh,
+}: {
+  sub: MySubscriptionResponse;
+  subscriptionsEnabled: boolean;
+  refresh: () => Promise<void>;
+}) {
+  const { modules } = usePremiumAddonModules();
+
+  if (!subscriptionsEnabled || sub.provider !== 'stripe') return null;
+
+  // A `cancel_scheduled` add-on already appears above as REATIVAR — it must
+  // not also show up here as "available".
+  const attachedKeys = new Set(
+    sub.addons
+      .filter((addon) => addon.status === 'active' || addon.status === 'cancel_scheduled')
+      .map((addon) => addon.key),
+  );
+  const available = modules.filter((module) => !attachedKeys.has(module.key));
+  if (available.length === 0) return null;
+
+  return (
+    <View style={styles.addonsSection}>
+      <Text style={styles.addonsTitle}>{modulosCopy.disponiveisTitle}</Text>
+      <View style={styles.addons}>
+        {available.map((module) => (
+          <AvailableModuleRow
+            key={module.key}
+            module={module}
+            totalAmountCents={sub.totalAmountCents}
+            refresh={refresh}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function InvoiceHistory() {
   const { invoices, loading, error } = usePremiumInvoices();
 
@@ -414,6 +570,11 @@ function ActiveSubscription({
             </View>
           </View>
         ) : null}
+
+        {/* Task 10: deliberately OUTSIDE the `sub.addons.length > 0` block
+            above — a member with zero add-ons is exactly who needs to see
+            what they can add. */}
+        <AvailableModules sub={sub} subscriptionsEnabled={subscriptionsEnabled} refresh={refresh} />
 
         <InvoiceHistory />
 

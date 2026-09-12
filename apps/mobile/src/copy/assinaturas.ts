@@ -322,6 +322,18 @@ export const assinaturasCopy = {
       errorUnavailable: 'Ação indisponível agora. Tente mais tarde.',
       errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
       errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+      // Task 10 (add). The catalog block that lists modules NOT yet on the
+      // membership — price here comes from `usePremiumAddonModules` (the
+      // catalog), never from a snapshot: it is what gets charged the moment
+      // the member attaches.
+      disponiveisTitle: 'MÓDULOS DISPONÍVEIS',
+      adicionarTrigger: 'ADICIONAR',
+      adicionarSheetTitle: 'Adicionar módulo',
+      adicionarBody: (nome: string, total: string) =>
+        `${nome} entra na sua assinatura agora e seu total sobe para ${total} por mês.`,
+      adicionarConfirm: 'ADICIONAR',
+      adicionarLoading: 'ADICIONANDO...',
+      adicionadoToast: 'Módulo adicionado.',
     },
   },
 } as const;
@@ -460,6 +472,14 @@ export const assinaturasCopyEn = {
       errorUnavailable: 'This action is unavailable right now. Try again later.',
       errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
       errorUnauthorized: 'Your session expired. Sign in again to continue.',
+      disponiveisTitle: 'AVAILABLE MODULES',
+      adicionarTrigger: 'ADD',
+      adicionarSheetTitle: 'Add module',
+      adicionarBody: (nome: string, total: string) =>
+        `${nome} joins your subscription now and your total goes up to ${total} per month.`,
+      adicionarConfirm: 'ADD',
+      adicionarLoading: 'ADDING...',
+      adicionadoToast: 'Module added.',
     },
   },
 } as const;

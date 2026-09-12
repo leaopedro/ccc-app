@@ -80,14 +80,32 @@ vi.mock('~/hooks/usePremiumInvoices', () => ({
   usePremiumInvoices: () => invoicesState.value,
 }));
 
-// Task 10 does not touch this screen's mocks — it consumes the same test
-// file, so the mock is added now rather than left for that task to discover
-// missing. The screen itself does not read this hook yet.
-vi.mock('~/hooks/usePremiumAddonModules', () => ({
-  usePremiumAddonModules: () => ({
-    modules: [],
+// Task 10: catalog source for the "MÓDULOS DISPONÍVEIS" block. Defaults to an
+// empty catalog so every pre-existing test above (none of which cares about
+// available modules) renders exactly as before — the section is a no-op with
+// an empty list.
+const modulesState = vi.hoisted(() => ({
+  current: {
+    modules: [] as {
+      key: string;
+      name: string;
+      description: string;
+      monthlyDeltaCents: number;
+      currency: string;
+      quotaPerCycle: number;
+      quotaUnit: 'access' | 'hours';
+      sortOrder: number;
+    }[],
     loading: false,
     error: false,
+  },
+}));
+
+vi.mock('~/hooks/usePremiumAddonModules', () => ({
+  usePremiumAddonModules: () => ({
+    modules: modulesState.current.modules,
+    loading: modulesState.current.loading,
+    error: modulesState.current.error,
     refresh: () => Promise.resolve(),
   }),
 }));
@@ -277,6 +295,43 @@ const cancelScheduledSub: MySubscriptionResponse = {
   addons: [{ ...activeSub.addons[0]!, status: 'cancel_scheduled' }],
 };
 
+// Same membership, but with zero add-ons attached — the case that pins the
+// "MÓDULOS DISPONÍVEIS" block against the pre-existing
+// `sub.addons.length > 0` condition (MinhaAssinaturaScreen.tsx:251), which
+// gates the OTHER (attached) section and must never gate this one too.
+const zeroAddonsSub: MySubscriptionResponse = {
+  ...activeSub,
+  addonsAmountCents: 0,
+  totalAmountCents: activeSub.baseAmountCents,
+  addons: [],
+};
+
+// Catalog fixtures (usePremiumAddonModules). `detailingModule` shares its key
+// with the already-attached add-on above — used to prove the available block
+// excludes it. `estacionamentoModule` is never attached in any fixture, so it
+// always qualifies as available.
+const detailingModule = {
+  key: 'detailing',
+  name: 'Detailing',
+  description: 'Lavagem e detalhamento do carro.',
+  monthlyDeltaCents: 15000,
+  currency: 'BRL',
+  quotaPerCycle: 3,
+  quotaUnit: 'access' as const,
+  sortOrder: 1,
+};
+
+const estacionamentoModule = {
+  key: 'estacionamento',
+  name: 'Estacionamento Coberto',
+  description: 'Vaga coberta nos encontros.',
+  monthlyDeltaCents: 8000,
+  currency: 'BRL',
+  quotaPerCycle: 10,
+  quotaUnit: 'hours' as const,
+  sortOrder: 2,
+};
+
 const inactiveSub: MySubscriptionResponse = {
   active: false,
   tier: null,
@@ -368,6 +423,7 @@ describe('MinhaAssinaturaScreen', () => {
     openURLMock.fn.mockReset();
     invoicesState.value = invoicesResult({});
     plansState.current = { subscriptionsEnabled: true, loading: false };
+    modulesState.current = { modules: [], loading: false, error: false };
   });
 
   afterEach(async () => {
@@ -840,6 +896,188 @@ describe('MinhaAssinaturaScreen', () => {
       });
 
       // The screen (and the plan card) survives the failure.
+      expect(text()).toContain('Fundador');
+      expect(text()).toContain(copy.modulos.errorGeneric);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  // Task 10: add a module from Minha Assinatura. Source is the catalog
+  // (usePremiumAddonModules), not the subscription snapshot — the catalog
+  // price is what gets charged the moment the member attaches now.
+  describe('add module', () => {
+    // 1. The available block lists only what is NOT already attached: an
+    // already-attached key (active or cancel_scheduled) never shows an
+    // ADICIONAR trigger, while an unattached catalog module does.
+    it('lists only modules not already attached', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-adicionar"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).not.toBeNull();
+    });
+
+    // A cancel_scheduled add-on offers REATIVAR up top, and must NOT also
+    // reappear in the available block — it is not "available", it is already
+    // on the membership with billing paused.
+    it('excludes a cancel_scheduled add-on from the available block too', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-adicionar"]'),
+      ).toBeNull();
+    });
+
+    // 2. The block appears even with ZERO add-ons attached — the trap in
+    // MinhaAssinaturaScreen.tsx:251, which wraps the EXISTING (attached)
+    // section in `sub.addons.length > 0`. The available block must live
+    // outside that condition, since a member with nothing attached is
+    // exactly who needs to see what they can add.
+    it('shows the available modules block even with zero add-ons attached', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: zeroAddonsSub });
+      await renderScreen();
+
+      expect(text()).toContain(copy.modulos.disponiveisTitle);
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).not.toBeNull();
+    });
+
+    // 3. The sheet shows the catalog price and the new total BEFORE calling
+    // attach — the call only fires on confirm.
+    it('opens a confirm sheet with the catalog numbers before adding and calls attach only on confirm', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).not.toHaveBeenCalled();
+      const expectedTotal = formatBRL(
+        activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+      );
+      expect(text()).toContain(
+        copy.modulos.adicionarBody(estacionamentoModule.name, expectedTotal),
+      );
+
+      attachMock.fn.mockResolvedValue({
+        addonKey: 'estacionamento',
+        status: 'active',
+        addonsAmountCents: 23000,
+        totalAmountCents: activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledWith('estacionamento');
+    });
+
+    // 4. ADICIONAR follows the platform gate — it is a purchase-shaped
+    // action, same split as REATIVAR. REMOVER must stay unaffected.
+    it('hides ADICIONAR when subscriptions are gated but keeps REMOVER visible', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+    });
+
+    // 5. ADICIONAR also requires provider === 'stripe' — an Apple/RevenueCat
+    // membership hides it even when the platform gate is on, same as REATIVAR.
+    it('hides ADICIONAR for an Apple/RevenueCat membership', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+    });
+
+    // An add-on attach failure degrades to an inline message — must never
+    // take the whole screen down, and must not call refresh.
+    it('shows an inline error and keeps the screen up when the attach call fails', async () => {
+      const { ApiError } = (await import('~/api/client')) as unknown as {
+        ApiError: new (status: number, message: string, body?: unknown) => Error;
+      };
+      attachMock.fn.mockRejectedValue(new ApiError(500, 'internal error'));
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
       expect(text()).toContain('Fundador');
       expect(text()).toContain(copy.modulos.errorGeneric);
       expect(refresh).not.toHaveBeenCalled();

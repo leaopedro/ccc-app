@@ -963,9 +963,14 @@ describe('MinhaAssinaturaScreen', () => {
       ).not.toBeNull();
     });
 
-    // 3. The sheet shows the catalog price and the new total BEFORE calling
-    // attach — the call only fires on confirm.
-    it('opens a confirm sheet with the catalog numbers before adding and calls attach only on confirm', async () => {
+    // 3. Spec §5: the sheet must state, before any call goes out, the
+    // module's monthly value, the new total, the quota being bought, and the
+    // ONE rateio phrasing (`alterar.whenBody`) — same four facts as the
+    // plan-change screen's value block. Review fix (Task 10 round 1): the
+    // original `adicionarBody` covered only name + new total and silently
+    // omitted the rateio disclosure and the quota; this test pins all four
+    // so that omission cannot come back unnoticed.
+    it('shows the monthly value, new total, quota, and rateio phrasing in the sheet before adding, and calls attach only on confirm', async () => {
       modulesState.current = {
         modules: [estacionamentoModule],
         loading: false,
@@ -984,12 +989,20 @@ describe('MinhaAssinaturaScreen', () => {
       });
 
       expect(attachMock.fn).not.toHaveBeenCalled();
+
+      // 1. Monthly value of the module (catalog price).
+      expect(text()).toContain(formatBRL(estacionamentoModule.monthlyDeltaCents));
+      // 2. New total (subscription total + catalog price).
       const expectedTotal = formatBRL(
         activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
       );
+      expect(text()).toContain(expectedTotal);
+      // 3. The quota the member is buying (module.quotaUnit === 'hours').
       expect(text()).toContain(
-        copy.modulos.adicionarBody(estacionamentoModule.name, expectedTotal),
+        assinaturasCopy.contratar.quotaHours(estacionamentoModule.quotaPerCycle),
       );
+      // 4. The ONE rateio phrasing — no variant sentence.
+      expect(text()).toContain(assinaturasCopy.alterar.whenBody);
 
       attachMock.fn.mockResolvedValue({
         addonKey: 'estacionamento',
@@ -1007,6 +1020,67 @@ describe('MinhaAssinaturaScreen', () => {
       });
 
       expect(attachMock.fn).toHaveBeenCalledWith('estacionamento');
+    });
+
+    // Minor fix: ADICIONAR must be immune to a rapid double tap, same guard
+    // (submittingRef) and same test shape as the cancel flow's own
+    // double-tap test above. Two clicks inside one `act`, no flush between.
+    it('calls attachPremiumAddon exactly once on a rapid double tap and refreshes after', async () => {
+      let resolveAttach: (v: {
+        addonKey: string;
+        status: 'active';
+        addonsAmountCents: number;
+        totalAmountCents: number;
+      }) => void = () => {};
+      attachMock.fn.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveAttach = resolve;
+          }),
+      );
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+
+      await act(async () => {
+        confirm.click();
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledTimes(1);
+      expect(refresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveAttach({
+          addonKey: 'estacionamento',
+          status: 'active',
+          addonsAmountCents: 23000,
+          totalAmountCents: activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+        });
+        await flush();
+      });
+
+      expect(refresh).toHaveBeenCalledTimes(1);
     });
 
     // 4. ADICIONAR follows the platform gate — it is a purchase-shaped

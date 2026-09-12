@@ -284,6 +284,14 @@ function AvailableModuleRow({
   };
 
   const novoTotal = formatBRL(totalAmountCents + module.monthlyDeltaCents);
+  // Spec §5: the sheet must state the module's monthly value, the new total,
+  // the quota the member is buying, and the ONE rateio phrasing — same four
+  // facts as the plan-change screen's "O QUE MUDA NO VALOR" block, reusing
+  // its labels rather than inventing a new sentence for this one action.
+  const quotaText =
+    module.quotaUnit === 'hours'
+      ? assinaturasCopy.contratar.quotaHours(module.quotaPerCycle)
+      : assinaturasCopy.contratar.quotaAccess(module.quotaPerCycle);
 
   return (
     <View style={styles.addonRow}>
@@ -317,7 +325,16 @@ function AvailableModuleRow({
         testID={`assinatura-modulo-${module.key}-sheet`}
       >
         <View style={styles.sheetBody}>
-          <Text style={styles.sheetText}>{modulosCopy.adicionarBody(module.name, novoTotal)}</Text>
+          <Text style={styles.sheetText}>
+            {assinaturasCopy.alterar.differenceLabel}: {formatBRL(module.monthlyDeltaCents)}
+          </Text>
+          <Text style={styles.sheetText}>
+            {assinaturasCopy.alterar.newTotalLabel}: {novoTotal}
+          </Text>
+          <Text style={styles.sheetText}>{quotaText}</Text>
+          {/* The ONE rateio phrasing (Global Constraint) — same key REATIVAR
+              uses below, no variant here either. */}
+          <Text style={styles.sheetText}>{assinaturasCopy.alterar.whenBody}</Text>
           {actionError ? <Text style={styles.sheetError}>{actionError}</Text> : null}
           <Pressable
             onPress={() => setSheetOpen(false)}

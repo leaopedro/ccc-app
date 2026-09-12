@@ -325,12 +325,15 @@ export const assinaturasCopy = {
       // Task 10 (add). The catalog block that lists modules NOT yet on the
       // membership — price here comes from `usePremiumAddonModules` (the
       // catalog), never from a snapshot: it is what gets charged the moment
-      // the member attaches.
+      // the member attaches. The sheet itself has no dedicated body copy: it
+      // is composed from `alterar.differenceLabel`/`newTotalLabel`,
+      // `contratar.quotaAccess`/`quotaHours`, and the ONE rateio phrasing
+      // (`alterar.whenBody`) — review fix (Task 10 round 1): a standalone
+      // `adicionarBody` omitted the rateio disclosure and the quota, both
+      // required by spec §5.
       disponiveisTitle: 'MÓDULOS DISPONÍVEIS',
       adicionarTrigger: 'ADICIONAR',
       adicionarSheetTitle: 'Adicionar módulo',
-      adicionarBody: (nome: string, total: string) =>
-        `${nome} entra na sua assinatura agora e seu total sobe para ${total} por mês.`,
       adicionarConfirm: 'ADICIONAR',
       adicionarLoading: 'ADICIONANDO...',
       adicionadoToast: 'Módulo adicionado.',
@@ -475,8 +478,6 @@ export const assinaturasCopyEn = {
       disponiveisTitle: 'AVAILABLE MODULES',
       adicionarTrigger: 'ADD',
       adicionarSheetTitle: 'Add module',
-      adicionarBody: (nome: string, total: string) =>
-        `${nome} joins your subscription now and your total goes up to ${total} per month.`,
       adicionarConfirm: 'ADD',
       adicionarLoading: 'ADDING...',
       adicionadoToast: 'Module added.',

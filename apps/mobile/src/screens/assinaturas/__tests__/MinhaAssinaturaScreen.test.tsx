@@ -306,10 +306,12 @@ const zeroAddonsSub: MySubscriptionResponse = {
   addons: [],
 };
 
-// Final review (Conserto 1): past_due is a LIVE membership (`active: true`)
-// but outside canChangePlan's status list. The server 409s InvalidStatus for
-// attach at this status (me-premium-addons.ts:223) — ADICIONAR/REMOVER/
-// REATIVAR must all be hidden, not just offered-then-refused.
+// Final review (Conserto 1, corrected): past_due is a LIVE membership
+// (`active: true`) but outside canChangePlan's status list. The server 409s
+// InvalidStatus for ATTACH at this status (me-premium-addons.ts:223) — only
+// the purchase-shaped actions (ADICIONAR/REATIVAR) must be hidden. REMOVER
+// stays visible on purpose: the server's detach is never status-gated,
+// specifically so a member behind on payment can still cut cost.
 const pastDueSub: MySubscriptionResponse = { ...activeSub, status: 'past_due' };
 const pastDueCancelScheduledSub: MySubscriptionResponse = {
   ...cancelScheduledSub,
@@ -1204,13 +1206,19 @@ describe('MinhaAssinaturaScreen', () => {
     });
   });
 
-  // Final review (Conserto 1): past_due is a LIVE membership
+  // Final review (Conserto 1, corrected): past_due is a LIVE membership
   // (`subscription.active` stays true) but outside canChangePlan's status
-  // list. The server 409s InvalidStatus for attach at this status
-  // (me-premium-addons.ts:223) — the member surface must not offer what the
-  // server refuses, for any of the three module actions.
+  // list. The server 409s InvalidStatus for ATTACH at this status
+  // (me-premium-addons.ts:223) — the two purchase-shaped actions (ADICIONAR,
+  // REATIVAR) must not offer what the server refuses. REMOVER is the
+  // opposite case on purpose: the server's detach is NEVER status-gated
+  // (me-premium-addons.ts's own comment: "reducing a commitment is never
+  // blocked by status"), because a past_due member needs to be able to cut
+  // cost precisely BECAUSE they're behind on payment. Blocking REMOVER here
+  // would trap that member with a module they can least afford — the
+  // opposite of what the server's asymmetry exists to guarantee.
   describe('past_due status gate (Conserto 1)', () => {
-    it('shows neither ADICIONAR nor REMOVER for a past_due member', async () => {
+    it('shows REMOVER but not ADICIONAR for a past_due member', async () => {
       modulesState.current = {
         modules: [detailingModule, estacionamentoModule],
         loading: false,
@@ -1219,9 +1227,12 @@ describe('MinhaAssinaturaScreen', () => {
       hookState.value = result({ subscription: pastDueSub });
       await renderScreen();
 
+      // REMOVER stays available — cutting cost while behind on payment is
+      // exactly what the server's status-blind detach is for.
       expect(
         container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
-      ).toBeNull();
+      ).not.toBeNull();
+      // ADICIONAR is a purchase — the server would 409 InvalidStatus.
       expect(
         container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
       ).toBeNull();
@@ -1232,6 +1243,8 @@ describe('MinhaAssinaturaScreen', () => {
       hookState.value = result({ subscription: pastDueCancelScheduledSub });
       await renderScreen();
 
+      // REATIVAR resumes billing — purchase-shaped, same family as
+      // ADICIONAR, so it follows the status gate too.
       expect(
         container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
       ).toBeNull();

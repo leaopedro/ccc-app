@@ -86,7 +86,9 @@ function AddonRow({
   addon: MySubscriptionAddon;
   provider: MySubscriptionResponse['provider'];
   subscriptionsEnabled: boolean;
-  /** canChangePlan(sub) — the membership status check, NOT the platform gate. */
+  /** canChangePlan(sub) — the membership status check, NOT the platform
+   * gate. Gates REATIVAR only (purchase-shaped, like ADICIONAR) — REMOVER
+   * deliberately ignores it, same as the server's own detach. */
   planActionsAllowed: boolean;
   /** Catalog entry matching addon.key, used only for REATIVAR's price/total
    * (the catalog's CURRENT price, since re-attach re-snapshots it — see
@@ -115,14 +117,20 @@ function AddonRow({
   // commitment is never blocked by it. REATIVAR DOES: it resumes billing,
   // the same purchase-shaped split the API makes between attach and detach.
   //
-  // Final review (Conserto 1): both also require `planActionsAllowed`
-  // (canChangePlan(sub) — status in ['active','cancel_scheduled']), NOT the
-  // platform gate. Attach (REATIVAR) 409s InvalidStatus outside that status
-  // set (me-premium-addons.ts:223); the member surface hides REMOVER too for
-  // the same statuses, by product decision, even though detach itself is not
-  // status-gated server-side.
+  // Final review (Conserto 1, corrected): REATIVAR requires
+  // `planActionsAllowed` (canChangePlan(sub) — status in
+  // ['active','cancel_scheduled']) because attach 409s InvalidStatus outside
+  // that set (me-premium-addons.ts:223) — REATIVAR is purchase-shaped, same
+  // family as ADICIONAR. REMOVER deliberately does NOT: the server's detach
+  // is never status-gated (me-premium-addons.ts's own comment: "reducing a
+  // commitment is never blocked by status"), on purpose — a past_due member
+  // needs to be able to cut cost precisely BECAUSE they're behind. Gating
+  // REMOVER on membership status here would trap that member with the
+  // module they can least afford. `addon.status === 'active'` below is the
+  // add-on's OWN status (not the membership's) — it just keeps REMOVER off a
+  // row that's already cancel_scheduled.
   const isApple = provider === 'apple_revenuecat';
-  const canRemove = !isApple && addon.status === 'active' && planActionsAllowed;
+  const canRemove = !isApple && addon.status === 'active';
   // Final review (Conserto 2): also requires the module to still be in the
   // catalog — REATIVAR always charges the catalog's CURRENT price
   // (addons.ts re-snapshots on re-attach), so with no catalog entry there is

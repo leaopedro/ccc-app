@@ -5,17 +5,19 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { readGamificationEnabled } from '../services/garage/killswitch.js';
 
-// Module-level catalog cache. The badge catalog is immutable at runtime
-// (seeded once, never mutated by an API path), so a coarse TTL is safe.
-// The killswitch is NOT cached — it MUST propagate in < 1s per kickoff lock.
+// Module-level catalog cache. O catálogo passou a ser mutável pelo admin
+// (PUT /admin/gamification/copy), então o TTL não é mais seguro por premissa:
+// aquele handler chama invalidateBadgesCatalogCache() depois de commitar. O
+// killswitch continua fora do cache — ele MUST propagar em < 1s.
 const TTL_MS = 5 * 60 * 1000;
 let cached: Badge[] | null = null;
 let cachedAt = 0;
 
 /**
- * Drop the in-memory catalog cache. Called from the admin general-settings
- * PUT handler after a successful write touches `gamificationEnabled`, so the
- * next read sees fresh state. Safe to call when the cache is already empty.
+ * Drop the in-memory catalog cache. Called by admin PUT handlers after a
+ * successful write touches catalog-affecting state (e.g. `gamificationEnabled`
+ * or the badge copy), so the next read sees fresh state. Safe to call when
+ * the cache is already empty.
  */
 export const invalidateBadgesCatalogCache = (): void => {
   cached = null;
@@ -48,6 +50,8 @@ export const badgesCatalogRoute: FastifyPluginAsync = async (app) => {
         rarity: b.rarity,
         premiumExclusive: b.premiumExclusive,
         icon: b.icon,
+        title: b.title,
+        description: b.description,
       })),
     };
   });

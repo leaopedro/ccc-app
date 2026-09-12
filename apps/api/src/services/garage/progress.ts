@@ -1,25 +1,32 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-// ── Server-authoritative rank table ─────────────────────────────────────
-//
-// Five cosmetic tiers. The top tier ("Hall of Fame") is open-ended:
-// `next === null` and `nextAt === null`. The §C14 correction requires
-// `deriveProgress` to check `next === null` BEFORE reading `nextAt!`,
-// and to emit `tierSpan = 1` (not 0) at the top so the UI progress bar
-// can divide without a guard.
-//
-// This constant is SERVER-ONLY by design (skeleton chunk 26 + outline
-// §260): clients never receive the thresholds, only the resolved
-// payload. Do NOT re-export through `@ccc/shared`.
-export const RANK_TIERS = [
-  { name: 'Iniciante', min: 0, next: 'Pilotador', nextAt: 100 },
-  { name: 'Pilotador', min: 100, next: 'Veterano', nextAt: 500 },
-  { name: 'Veterano', min: 500, next: 'Lendário', nextAt: 2000 },
-  { name: 'Lendário', min: 2000, next: 'Hall of Fame', nextAt: 5000 },
-  { name: 'Hall of Fame', min: 5000, next: null, nextAt: null },
+// Chaves estáveis dos níveis. O NOME é editável pelo admin
+// (GeneralSettings.rankNames), então nada pode encadear ou comparar por nome.
+export const RANK_KEYS = [
+  'iniciante',
+  'pilotador',
+  'veterano',
+  'lendario',
+  'hall_of_fame',
 ] as const;
+export type RankKey = (typeof RANK_KEYS)[number];
 
-export type RankName = (typeof RANK_TIERS)[number]['name'];
+// Tabela server-only. Os cortes continuam em código; só o nome sai daqui.
+// Não reexporte esta tabela via `@ccc/shared`: `min`/`nextAt` são detalhe
+// de servidor e não devem vazar para mobile/admin.
+// A linha de topo NÃO tem `nextAt`: sem o campo, nenhuma leitura futura
+// consegue tipar `null` como `number` no cálculo abaixo.
+export const RANK_TIERS: { key: RankKey; name: string; min: number; nextAt?: number }[] = [
+  { key: 'iniciante', name: 'Iniciante', min: 0, nextAt: 100 },
+  { key: 'pilotador', name: 'Pilotador', min: 100, nextAt: 500 },
+  { key: 'veterano', name: 'Veterano', min: 500, nextAt: 2000 },
+  { key: 'lendario', name: 'Lendário', min: 2000, nextAt: 5000 },
+  { key: 'hall_of_fame', name: 'Hall of Fame', min: 5000 },
+];
+
+// Era uma união literal derivada de RANK_TIERS[number]['name']. Com nome
+// editável isso vira mentira, então alarga para string.
+export type RankName = string;
 
 /**
  * The derived progress shape sent on the wire to mobile + admin clients.
@@ -36,18 +43,28 @@ export type GarageProgress = {
   tierSpan: number;
 };
 
+export type RankNames = Partial<Record<RankKey, string>>;
+
 // Either the global Prisma client or a transaction client. Callers
 // already inside a `$transaction` MUST pass the tx client so the read
 // participates in the surrounding snapshot. Same shape as canon §3 in
 // `2026-05-24-phase2-fix-canon.md` (matches `getGarageStats` in chunk 25).
 type ReadClient = PrismaClient | Prisma.TransactionClient;
 
+// Parcial, não total: a resolução é `names[key] ?? nome de código`, e um
+// Record total não teria chave ausente para cair no fallback.
+const resolveName = (index: number, names: RankNames): string => {
+  const tier = RANK_TIERS[index];
+  if (!tier) return '';
+  return names[tier.key] ?? tier.name;
+};
+
 /**
  * Pure rank-derivation over the `RANK_TIERS` table. No DB access.
  *
  *  - Picks the highest tier whose `min` is ≤ `xp`.
- *  - Top-tier guard (§C14): when `tier.next === null`, returns
- *    `nextRank: null`, `xpToNextRank: 0`, and the `tierSpan = 1`
+ *  - Top-tier guard (§C14): positional (index === RANK_TIERS.length - 1),
+ *    returns `nextRank: null`, `xpToNextRank: 0`, and the `tierSpan = 1`
  *    sentinel so the UI can divide without dividing by zero.
  *  - Non-top tiers: `xpToNextRank = tier.nextAt - xp` (always ≥ 0
  *    because the iteration above already picked the matching tier),
@@ -56,27 +73,29 @@ type ReadClient = PrismaClient | Prisma.TransactionClient;
  * `xp` is treated as a non-negative integer (Garage.xp is `Int @default(0)`
  * and the awarder enforces non-negative writes — see chunk 27).
  */
-export const deriveProgress = (xp: number): GarageProgress => {
-  // Iterate from the highest tier down so the first match is correct.
-  // `RANK_TIERS` is short + immutable; an indexed loop avoids a
-  // throwaway `[...RANK_TIERS].reverse()` allocation per call.
-  // `noUncheckedIndexedAccess` widens `RANK_TIERS[i]` to `T | undefined`,
-  // so we bind the row to a local before the `min` compare.
-  let tier: (typeof RANK_TIERS)[number] = RANK_TIERS[0];
+export const deriveProgress = (xp: number, names: RankNames = {}): GarageProgress => {
+  // Preserva o índice: o guard de topo é posicional agora.
+  let index = 0;
   for (let i = RANK_TIERS.length - 1; i >= 0; i--) {
     const row = RANK_TIERS[i];
     if (row !== undefined && xp >= row.min) {
-      tier = row;
+      index = i;
       break;
     }
   }
 
-  // §C14: top-tier guard must come BEFORE any `nextAt!` non-null read.
-  const atTop = tier.next === null;
+  const tier = RANK_TIERS[index]!;
+
+  // §C14: o topo sai antes de qualquer leitura de nextAt. Posicional, e não
+  // `next === null`: derivar `next` da linha seguinte produz `undefined`, que
+  // não é `null`, e o topo cairia no cálculo abaixo com nextAt indefinido,
+  // gerando xpToNextRank negativo. garageProgressSchema recusa negativo, o
+  // que vira 500 em GET /me/garage e GET /g/:slug.
+  const atTop = index === RANK_TIERS.length - 1;
   if (atTop) {
     return {
       xp,
-      rank: tier.name,
+      rank: resolveName(index, names),
       nextRank: null,
       xpInTier: xp - tier.min,
       xpToNextRank: 0,
@@ -84,12 +103,11 @@ export const deriveProgress = (xp: number): GarageProgress => {
     };
   }
 
-  // `tier.nextAt` is non-null on non-top rows by construction.
   const nextAt = tier.nextAt as number;
   return {
     xp,
-    rank: tier.name,
-    nextRank: tier.next,
+    rank: resolveName(index, names),
+    nextRank: resolveName(index + 1, names),
     xpInTier: xp - tier.min,
     xpToNextRank: nextAt - xp,
     tierSpan: nextAt - tier.min,
@@ -110,10 +128,11 @@ export const deriveProgress = (xp: number): GarageProgress => {
 export const getGarageProgress = async (
   client: ReadClient,
   garageId: string,
+  names: RankNames = {},
 ): Promise<GarageProgress> => {
   const row = await client.garage.findUniqueOrThrow({
     where: { id: garageId },
     select: { xp: true },
   });
-  return deriveProgress(row.xp);
+  return deriveProgress(row.xp, names);
 };

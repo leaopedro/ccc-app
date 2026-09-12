@@ -25,16 +25,6 @@ import { useBuySpotFlow } from '~/screens/garage/useBuySpotFlow';
 import { isCaixaBuildEnabled } from '~/screens/caixa/caixa-enabled';
 import { theme } from '~/theme';
 
-// Chunk 19 — PT-BR copy mapped to the BadgesSheet `copy` prop shape.
-// Source: `apps/mobile/src/copy/badges.ts` (PT-BR primary). Missing entries
-// fall back to the bare badge code in BadgeDetail.
-const BADGE_COPY: Record<string, BadgesSheetCopy | undefined> = Object.fromEntries(
-  Object.entries(badgesCopy.badges.catalog).map(([code, entry]) => [
-    code,
-    { title: entry.title, description: entry.description },
-  ]),
-);
-
 // Chunk 19 — BadgeRow visibility: hidden when (a) gamification killswitch is
 // off OR (b) the user has zero earned badges AND is still a fresh signup
 // (no cars, no premium). Avoids the empty-teaser on day-1 users; otherwise
@@ -128,6 +118,7 @@ export default function GarageIndex() {
   // is fetched inside the consolidated useFocusEffect above. The garage
   // payload's inline `badges` field is unused for badge rendering on this
   // surface.
+  // Desde esta branch, o catálogo também carrega title/description editáveis, consumidos pelo badgeCopy logo abaixo.
   const gamificationEnabled = garage?.garage.gamification.enabled ?? false;
 
   const refetchBadges = useCallback(async () => {
@@ -155,6 +146,33 @@ export default function GarageIndex() {
     },
     [badgesAggregate, refetchBadges],
   );
+
+  // Task 9 — copy vem da API quando disponível, com fallback para o bundle.
+  // O fallback não é zelo: `title`/`description` são opcionais no wire de
+  // propósito, para um app novo contra uma API velha não ficar sem texto.
+  const badgeCopy = useMemo<Record<string, BadgesSheetCopy | undefined>>(() => {
+    const catalog = badgesAggregate?.catalog ?? [];
+    // Cast: the bundled catalog is a literal-keyed object (known codes only),
+    // but `entry.code` off the wire is a plain string. The fallback lookup is
+    // still safe — missing keys just yield `undefined` at runtime.
+    const bundled = badgesCopy.badges.catalog as Record<
+      string,
+      { title: string; description: string } | undefined
+    >;
+    return Object.fromEntries(
+      catalog.map((entry) => {
+        const title = entry.title ?? bundled[entry.code]?.title;
+        const description = entry.description ?? bundled[entry.code]?.description;
+        // exactOptionalPropertyTypes: omit the key rather than assign
+        // `undefined` when neither the API nor the bundle has a value.
+        const value: BadgesSheetCopy = {
+          ...(title !== undefined ? { title } : {}),
+          ...(description !== undefined ? { description } : {}),
+        };
+        return [entry.code, value];
+      }),
+    );
+  }, [badgesAggregate]);
 
   const pinCount = useMemo(() => {
     if (!badgesAggregate) return 0;
@@ -249,7 +267,7 @@ export default function GarageIndex() {
           onTogglePin={handleTogglePin}
           pinCount={pinCount}
           pinCap={3}
-          copy={BADGE_COPY}
+          copy={badgeCopy}
           testID="garage-badges-sheet"
         />
       ) : null}

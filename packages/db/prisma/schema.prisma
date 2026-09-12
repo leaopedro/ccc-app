@@ -329,6 +329,8 @@ enum BadgeRarity {
 model Badge {
   id               String        @id @default(cuid())
   code             String        @unique @db.VarChar(20)
+  title            String        @db.VarChar(80)
+  description      String        @db.VarChar(240)
   category         BadgeCategory
   rarity           BadgeRarity
   premiumExclusive Boolean       @default(false)
@@ -1293,6 +1295,8 @@ model GeneralSettings {
   productCapacityThresholdPercent Int                 @default(15)
   defaultFreeGarageSpots          Int?
   gamificationEnabled             Boolean             @default(true)
+  rankNames                       Json?
+  gamificationCopyVersion         Int                 @default(0)
   createdAt                       DateTime            @default(now())
   updatedAt                       DateTime            @updatedAt
 }

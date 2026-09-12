@@ -2,7 +2,6 @@ import {
   BADGE_AWARDED_NOTIFICATION_KIND,
   BADGE_AWARDED_NOTIFICATION_TITLE,
   badgeAwardedDedupeKey,
-  badgeTitlePtBr,
 } from '@ccc/shared/badges-copy';
 import type { Prisma } from '@prisma/client';
 
@@ -163,7 +162,7 @@ export const awardBadge = async (
             userId: garage.userId,
             kind: BADGE_AWARDED_NOTIFICATION_KIND,
             title: BADGE_AWARDED_NOTIFICATION_TITLE,
-            body: badgeTitlePtBr(code),
+            body: badge.title,
             data: { kind: BADGE_AWARDED_NOTIFICATION_KIND, code } as Prisma.InputJsonValue,
             dedupeKey: badgeAwardedDedupeKey(code, garage.userId),
           },

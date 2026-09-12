@@ -29,6 +29,7 @@ import {
 } from '../services/garage/index.js';
 import { readGamificationEnabled } from '../services/garage/killswitch.js';
 import { getGarageProgress } from '../services/garage/progress.js';
+import { readRankNames } from '../services/garage/rank-names.js';
 import { getGarageStats } from '../services/garage/stats.js';
 import type { Uploads } from '../services/uploads/index.js';
 
@@ -93,7 +94,14 @@ const loadOwnerView = async (userId: string, uploads: Uploads) => {
   const garage = await ensureGarageForUser(userId);
   const reconciled = await reconcileGarageSpots(userId);
   // §C5: synchronous per-request killswitch read, no TTL cache.
-  const gamificationEnabled = await readGamificationEnabled();
+  // Both reads are independent, so run them together instead of serially;
+  // rankNames is read even when the killswitch is off (one extra cheap PK
+  // read) and just discarded below.
+  const [gamificationEnabled, rankNamesRaw] = await Promise.all([
+    readGamificationEnabled(),
+    readRankNames(),
+  ]);
+  const rankNames = gamificationEnabled ? rankNamesRaw : {};
 
   const [cars, spots, badgesState, progress, stats] = await Promise.all([
     prisma.car.findMany({
@@ -113,7 +121,7 @@ const loadOwnerView = async (userId: string, uploads: Uploads) => {
     // Canon §3: service called as (prisma, garageId) — prisma FIRST.
     // Owner ALWAYS renders both blocks when killswitch is on (no hide-on-
     // empty for /me/garage per "Locked invariants" #2).
-    gamificationEnabled ? getGarageProgress(prisma, garage.id) : Promise.resolve(null),
+    gamificationEnabled ? getGarageProgress(prisma, garage.id, rankNames) : Promise.resolve(null),
     gamificationEnabled ? getGarageStats(prisma, garage.id) : Promise.resolve(null),
   ]);
 
@@ -226,7 +234,6 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
       keyGenerator: (request) => `garage-cover-presets:${request.ip}`,
     });
 
-    // eslint-disable-next-line @typescript-eslint/require-await
     scoped.get('/me/garage/cover/presets', async () => {
       const presets = GARAGE_COVER_PRESETS.map((p) => ({
         slug: p.slug,
@@ -507,7 +514,14 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // §C5: synchronous per-request killswitch read, no TTL cache.
-      const gamificationEnabled = await readGamificationEnabled();
+      // Both reads are independent, so run them together instead of serially;
+      // rankNames is read even when the killswitch is off (one extra cheap PK
+      // read) and just discarded below.
+      const [gamificationEnabled, rankNamesRaw] = await Promise.all([
+        readGamificationEnabled(),
+        readRankNames(),
+      ]);
+      const rankNames = gamificationEnabled ? rankNamesRaw : {};
 
       // Exclude any premium "extra-only" car semantics if/when they exist —
       // currently every car is publishable. Photos use existing public URLs.
@@ -519,7 +533,9 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
         }),
         gamificationEnabled ? readPublicBadges(garage) : Promise.resolve([]),
         // Canon §3: service called as (prisma, garageId) — prisma FIRST.
-        gamificationEnabled ? getGarageProgress(prisma, garage.id) : Promise.resolve(null),
+        gamificationEnabled
+          ? getGarageProgress(prisma, garage.id, rankNames)
+          : Promise.resolve(null),
         gamificationEnabled ? getGarageStats(prisma, garage.id) : Promise.resolve(null),
       ]);
 

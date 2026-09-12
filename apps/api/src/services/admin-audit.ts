@@ -18,6 +18,7 @@ export type RecordAuditInput = {
     | 'store_settings'
     | 'general_settings'
     | 'home_content'
+    | 'gamification_copy'
     | 'product'
     | 'variant'
     | 'product_type'

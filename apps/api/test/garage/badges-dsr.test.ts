@@ -8,7 +8,14 @@ import { createUser, makeApp, resetDatabase } from '../helpers.js';
 
 const seedBadge = async (code: string) => {
   await prisma.badge.create({
-    data: { code, category: 'eventos', rarity: 'common', icon: 'flag' },
+    data: {
+      code,
+      category: 'eventos',
+      rarity: 'common',
+      icon: 'flag',
+      title: `Conquista ${code}`,
+      description: `Descrição de ${code}`,
+    },
   });
 };
 
@@ -95,7 +102,14 @@ describe('data-export collector — Conquistas inclusion (§C17)', () => {
   it("includes the user's GarageBadge rows in the export bundle", async () => {
     await seedBadge('EVT-001');
     await prisma.badge.create({
-      data: { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
+      data: {
+        code: 'CAR-001',
+        category: 'carros',
+        rarity: 'common',
+        icon: 'car',
+        title: 'Conquista CAR-001',
+        description: 'Descrição de CAR-001',
+      },
     });
     const { user } = await createUser({ email: 'export-badges@jdm.test', verified: true });
     const gid = await garageId(user.id);

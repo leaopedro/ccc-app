@@ -54,11 +54,16 @@ export function resolveAddonError(error: unknown, action: 'attach' | 'detach'): 
         };
       }
       // 409 InvalidStatus (attach only — the membership's status is outside
-      // MEMBER_ADDON_ATTACH_STATUS). past_due is the reachable case today,
-      // same fact `alterar.errorPastDue` already states — reused rather
-      // than writing a variant.
+      // MEMBER_ADDON_ATTACH_STATUS). Both past_due and paused are reachable
+      // here, unlike the plan-change route's own InvalidStatus (past_due
+      // only) — `alterar.errorPastDue` asserts a pending charge, which is
+      // false for paused. Own copy, state-only, no cause asserted.
       if (b.error === 'InvalidStatus') {
-        return { reason: 'invalid_status', message: assinaturasCopy.alterar.errorPastDue };
+        return {
+          reason: 'invalid_status',
+          message:
+            action === 'attach' ? copy.errorInvalidStatus : assinaturasCopy.alterar.errorPastDue,
+        };
       }
       // 409 AlreadyExists (attach only — AddonAlreadyAttached).
       if (b.error === 'AlreadyExists') {

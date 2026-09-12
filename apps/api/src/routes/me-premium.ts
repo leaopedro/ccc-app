@@ -1144,7 +1144,7 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
           return reply.status(409).send({ error: 'NoChange', message: 'already on this plan' });
         }
         request.log.error(
-          { err, code: err.code, garageId: garage.id },
+          { err, code: err.code, garageId: garage.id, membershipId: membership.id },
           'me-premium: troca de plano recusada pela camada de billing',
         );
         return reply

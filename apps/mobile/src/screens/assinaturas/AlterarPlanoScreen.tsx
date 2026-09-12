@@ -455,17 +455,19 @@ export default function AlterarPlanoScreen({ slug }: { slug: string | undefined 
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{copy.gainTitle}</Text>
-          <View style={styles.benefits}>
-            {ganha.map((benefit) => (
-              <View key={benefit} style={styles.benefitRow}>
-                <Check color={c.goldLight} size={18} strokeWidth={2} style={styles.benefitIcon} />
-                <Text style={styles.benefitText}>{benefit}</Text>
-              </View>
-            ))}
+        {ganha.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{copy.gainTitle}</Text>
+            <View style={styles.benefits}>
+              {ganha.map((benefit) => (
+                <View key={benefit} style={styles.benefitRow}>
+                  <Check color={c.goldLight} size={18} strokeWidth={2} style={styles.benefitIcon} />
+                  <Text style={styles.benefitText}>{benefit}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         {perde.length > 0 ? (
           <View style={styles.section}>

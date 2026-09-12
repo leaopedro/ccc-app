@@ -224,6 +224,14 @@ const upgradePlan: PremiumPlanDetailResponse = {
   ],
 };
 
+// Pure downgrade: every target benefit is already in the current plan's
+// list, so `ganha` is empty and the gain section must not render (final
+// review, Conserto 4 — `gainTitle`'s block used to render unconditionally).
+const downgradePlan: PremiumPlanDetailResponse = {
+  ...targetPlan,
+  benefits: [{ label: 'Acesso a eventos', sortOrder: 0 }],
+};
+
 const subResult = (over: Partial<SubscriptionHookResult>): SubscriptionHookResult => ({
   subscription: activeSub,
   loading: false,
@@ -315,6 +323,17 @@ describe('AlterarPlanoScreen', () => {
     await render();
 
     expect(text()).not.toContain(copy.loseTitle);
+  });
+
+  // Final review (Conserto 4): `gainTitle`'s block rendered unconditionally
+  // while the loss block above was already conditional — a pure downgrade
+  // showed an empty "O QUE VOCÊ GANHA" section.
+  it('esconde o bloco de ganho num downgrade puro', async () => {
+    getPremiumPlan.fn.mockResolvedValue(downgradePlan);
+    await render();
+
+    expect(text()).not.toContain(copy.gainTitle);
+    expect(text()).toContain(copy.loseTitle);
   });
 
   it('só chama a API no toque do CTA, e navega para Minha Assinatura após o poll confirmar', async () => {

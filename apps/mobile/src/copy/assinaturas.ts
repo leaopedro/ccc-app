@@ -316,6 +316,12 @@ export const assinaturasCopy = {
       errorGeneric: 'Não foi possível concluir a ação. Tente novamente.',
       errorNotStripe:
         'Esta assinatura foi contratada pela App Store. Módulos são gerenciados por lá.',
+      // Fix round (final review, Conserto 1): the 409 InvalidStatus for
+      // module attach used to reuse `alterar.errorPastDue`, which asserts a
+      // pending charge — true for past_due, false for paused. This copy
+      // states no cause, so it holds for either reachable status.
+      errorInvalidStatus:
+        'Sua assinatura não está em um status que permite adicionar módulos agora.',
       errorAlreadyAttached: 'Este módulo já está na sua assinatura.',
       errorModuleNotFound: 'Este módulo não está mais disponível.',
       errorNotAttached: 'Este módulo não está mais na sua assinatura.',
@@ -337,6 +343,13 @@ export const assinaturasCopy = {
       adicionarConfirm: 'ADICIONAR',
       adicionarLoading: 'ADICIONANDO...',
       adicionadoToast: 'Módulo adicionado.',
+      // Fix round (final review, Conserto 5): the module blocks do monthly
+      // math (removerBody's "por mês", the catalog's monthlyDeltaCents) on
+      // top of `baseAmountCents`, which for an annual membership is the
+      // ANNUAL snapshot — the displayed numbers would be wrong. The app only
+      // sells monthly, so this is admin/web-only territory; hide the blocks
+      // rather than show a wrong total.
+      annualManagedNote: 'Módulos de assinaturas anuais são tratados pelo suporte.',
     },
   },
 } as const;
@@ -469,6 +482,8 @@ export const assinaturasCopyEn = {
       errorGeneric: 'Could not complete the action. Try again.',
       errorNotStripe:
         'This subscription was purchased through the App Store. Modules are managed there.',
+      errorInvalidStatus:
+        "Your subscription isn't in a status that allows adding modules right now.",
       errorAlreadyAttached: 'This module is already on your subscription.',
       errorModuleNotFound: 'This module is no longer available.',
       errorNotAttached: 'This module is no longer on your subscription.',
@@ -481,6 +496,7 @@ export const assinaturasCopyEn = {
       adicionarConfirm: 'ADD',
       adicionarLoading: 'ADDING...',
       adicionadoToast: 'Module added.',
+      annualManagedNote: 'Modules on annual subscriptions are handled by support.',
     },
   },
 } as const;

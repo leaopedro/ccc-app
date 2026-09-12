@@ -306,6 +306,22 @@ const zeroAddonsSub: MySubscriptionResponse = {
   addons: [],
 };
 
+// Final review (Conserto 1): past_due is a LIVE membership (`active: true`)
+// but outside canChangePlan's status list. The server 409s InvalidStatus for
+// attach at this status (me-premium-addons.ts:223) — ADICIONAR/REMOVER/
+// REATIVAR must all be hidden, not just offered-then-refused.
+const pastDueSub: MySubscriptionResponse = { ...activeSub, status: 'past_due' };
+const pastDueCancelScheduledSub: MySubscriptionResponse = {
+  ...cancelScheduledSub,
+  status: 'past_due',
+};
+
+// Final review (Conserto 5): an annual membership's `baseAmountCents` is the
+// ANNUAL snapshot — the module blocks' monthly math (removerBody's "por
+// mês", catalog monthlyDeltaCents) would misstate the real total on top of
+// it. The app only sells monthly; annual only reaches here via admin/web.
+const annualSub: MySubscriptionResponse = { ...activeSub, cadence: 'annual' };
+
 // Catalog fixtures (usePremiumAddonModules). `detailingModule` shares its key
 // with the already-attached add-on above — used to prove the available block
 // excludes it. `estacionamentoModule` is never attached in any fixture, so it
@@ -747,8 +763,11 @@ describe('MinhaAssinaturaScreen', () => {
       expect(detachMock.fn).toHaveBeenCalledWith('detailing');
     });
 
-    // 8. A cancel_scheduled add-on offers REATIVAR, not REMOVER.
+    // 8. A cancel_scheduled add-on offers REATIVAR, not REMOVER. REATIVAR
+    // requires the module to still be in the catalog (Conserto 2) — no
+    // catalog price means no honest number to confirm.
     it('offers REATIVAR (not REMOVER) for a cancel_scheduled add-on', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
       hookState.value = result({ subscription: cancelScheduledSub });
       await renderScreen();
 
@@ -764,7 +783,13 @@ describe('MinhaAssinaturaScreen', () => {
     // attach on confirm, and refreshes after — the same refresh contract as
     // cancel. The route's own response totals are not applied locally: only
     // refresh() picks up the fresh cycle usage.
-    it('reactivating reuses the rateio copy, calls attach on confirm, and refreshes after', async () => {
+    //
+    // Final review (Conserto 2): the sheet must also show the module's
+    // monthly value and the new total, from the CATALOG price (never the
+    // add-on's own snapshot) — re-attach re-prices to the catalog's current
+    // value (addons.ts:134-139).
+    it('reactivating shows the catalog value and new total, reuses the rateio copy, calls attach on confirm, and refreshes after', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
       const refresh = vi.fn(() => Promise.resolve());
       hookState.value = result({ subscription: cancelScheduledSub, refresh });
       await renderScreen();
@@ -778,6 +803,14 @@ describe('MinhaAssinaturaScreen', () => {
         await flush();
       });
 
+      // Catalog monthly value.
+      expect(text()).toContain(formatBRL(detailingModule.monthlyDeltaCents));
+      // New total = subscription total (which excludes the cancel_scheduled
+      // add-on already) + catalog price.
+      const expectedTotal = formatBRL(
+        cancelScheduledSub.totalAmountCents + detailingModule.monthlyDeltaCents,
+      );
+      expect(text()).toContain(expectedTotal);
       expect(text()).toContain(assinaturasCopy.alterar.whenBody);
       expect(attachMock.fn).not.toHaveBeenCalled();
 
@@ -798,6 +831,19 @@ describe('MinhaAssinaturaScreen', () => {
 
       expect(attachMock.fn).toHaveBeenCalledWith('detailing');
       expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    // Final review (Conserto 2): with the module no longer in the catalog,
+    // there is no honest price to confirm — REATIVAR must not be offered at
+    // all, rather than opening a sheet with no numbers.
+    it('does not offer REATIVAR when the module has left the catalog', async () => {
+      modulesState.current = { modules: [], loading: false, error: false };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
     });
 
     // Global constraint: REMOVER does not follow the platform gate — reducing
@@ -1155,6 +1201,113 @@ describe('MinhaAssinaturaScreen', () => {
       expect(text()).toContain('Fundador');
       expect(text()).toContain(copy.modulos.errorGeneric);
       expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  // Final review (Conserto 1): past_due is a LIVE membership
+  // (`subscription.active` stays true) but outside canChangePlan's status
+  // list. The server 409s InvalidStatus for attach at this status
+  // (me-premium-addons.ts:223) — the member surface must not offer what the
+  // server refuses, for any of the three module actions.
+  describe('past_due status gate (Conserto 1)', () => {
+    it('shows neither ADICIONAR nor REMOVER for a past_due member', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: pastDueSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+    });
+
+    it('shows no REATIVAR for a past_due member with a cancel_scheduled add-on', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
+      hookState.value = result({ subscription: pastDueCancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+  });
+
+  // Final review (Conserto 3): `removerReversivel` promises the member can
+  // reactivate whenever they want — a promise REATIVAR's own platform gate
+  // can break. It must track that gate, not render unconditionally.
+  describe('removerReversivel follows the platform gate (Conserto 3)', () => {
+    it('shows removerReversivel in the remove sheet when subscriptions are enabled', async () => {
+      plansState.current = { subscriptionsEnabled: true, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(text()).toContain(copy.modulos.removerReversivel);
+    });
+
+    it('omits removerReversivel in the remove sheet when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(text()).not.toContain(copy.modulos.removerReversivel);
+    });
+  });
+
+  // Final review (Conserto 5): an annual membership's `baseAmountCents` is
+  // the ANNUAL snapshot. The module blocks do monthly math on top of it
+  // (removerBody's "por mês", catalog monthlyDeltaCents) — the app only
+  // sells monthly, so the displayed numbers would misstate the real total.
+  describe('annual cadence hides the module blocks (Conserto 5)', () => {
+    it('hides the attached-modules and available-modules blocks for an annual membership', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: annualSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+      expect(text()).toContain(copy.modulos.annualManagedNote);
+    });
+
+    it('shows the module blocks for a monthly membership', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(text()).not.toContain(copy.modulos.annualManagedNote);
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
     });
   });
 });

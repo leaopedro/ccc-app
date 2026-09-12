@@ -12,6 +12,7 @@ import { adminEventRoutes } from './events.js';
 import { adminExtraRoutes } from './extras.js';
 import { adminFeedModerationRoutes } from './feed-moderation.js';
 import { adminFinanceRoutes } from './finance.js';
+import { adminGamificationCopyRoutes } from './gamification-copy.js';
 import { adminGarageXpAdjustmentRoutes } from './garage-xp-adjustment.js';
 import { adminGeneralSettingsRoutes } from './general-settings.js';
 import { adminGroupRoutes } from './groups.js';
@@ -267,5 +268,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     await scope.register(adminSubscriptionGrantRoutes);
+  });
+
+  // Copy de gamificação: admin-only (o título vira corpo de notificação que
+  // organizer consegue disparar via grant manual) com balde isolado de
+  // 30/min/ator. hook: 'preHandler' para o keyGenerator rodar DEPOIS de a auth
+  // popular request.user — sem isso o plugin corre em onRequest e cai num
+  // balde compartilhado por IP.
+  await app.register(async (scope) => {
+    scope.addHook('preHandler', scope.requireRole('admin'));
+    await scope.register(rateLimit, {
+      max: 30,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => {
+        const auth = (req as unknown as { user?: { sub?: string } }).user;
+        return auth?.sub
+          ? `admin-gamification-copy:${auth.sub}`
+          : `admin-gamification-copy-ip:${req.ip}`;
+      },
+    });
+    await scope.register(adminGamificationCopyRoutes);
   });
 };

@@ -102,6 +102,11 @@ import {
   type AdminPartnerUpdate,
 } from '@ccc/shared/admin-box';
 import {
+  adminGamificationCopySchema,
+  type AdminGamificationCopy,
+  type GamificationCopyUpdate,
+} from '@ccc/shared/admin-gamification';
+import {
   adminHomeContentSchema,
   type AdminHomeContent,
   type HomeContentUpdate,
@@ -721,6 +726,18 @@ export const updateAdminHomeContent = (input: HomeContentUpdate): Promise<AdminH
     method: 'PUT',
     body: JSON.stringify(input),
     schema: adminHomeContentSchema,
+  });
+
+export const getAdminGamificationCopy = (): Promise<AdminGamificationCopy> =>
+  apiFetch('/admin/gamification/copy', { schema: adminGamificationCopySchema });
+
+export const updateAdminGamificationCopy = (
+  input: GamificationCopyUpdate,
+): Promise<AdminGamificationCopy> =>
+  apiFetch('/admin/gamification/copy', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    schema: adminGamificationCopySchema,
   });
 
 // ── Admin broadcasts ───────────────────────────────────────────────

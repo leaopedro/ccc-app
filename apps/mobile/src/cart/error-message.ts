@@ -30,3 +30,35 @@ export function getCartAddErrorMessage(error: unknown): string {
       return getApiErrorMessage(error, cartCopy.errors.add);
   }
 }
+
+/**
+ * O mesmo mapa, para o BOTAO DE PAGAR.
+ *
+ * `handlePay` so tratava VIRTUAL_ITEM_IOS_BLOCKED e mandava todo o resto para
+ * `cartCopy.errors.checkout` ("Erro ao iniciar o pagamento"). Um 409
+ * PENDING_TICKET_ORDER_FOR_EVENT, que tem copy propria desde sempre logo
+ * acima, chegava ao membro como erro generico, sem dizer o que fazer. Era o
+ * que fazia o pagamento de evento parecer simplesmente quebrado.
+ *
+ * O default e o de checkout, nao o de adicionar item: a acao que falhou aqui e
+ * pagar.
+ */
+export function getCartCheckoutErrorMessage(error: unknown): string {
+  const code = getApiErrorCode(error);
+  switch (code) {
+    case 'VIRTUAL_ITEM_IOS_BLOCKED':
+      return cartCopy.errors.virtualItemIosBlocked;
+    case 'PENDING_TICKET_ORDER_FOR_EVENT':
+      return cartCopy.errors.pendingTicketOrderForEvent;
+    case 'TIER_SOLD_OUT':
+      return cartCopy.errors.tierSoldOut;
+    case 'EXTRA_SOLD_OUT':
+      return cartCopy.errors.extraSoldOut;
+    case 'VARIANT_SOLD_OUT':
+      return cartCopy.errors.variantSoldOut;
+    case 'CART_INCOMPATIBLE_FULFILLMENT':
+      return cartCopy.errors.cartIncompatibleFulfillment;
+    default:
+      return cartCopy.errors.checkout;
+  }
+}

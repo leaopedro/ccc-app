@@ -26,6 +26,10 @@
       "types": "./src/admin-box.ts",
       "default": "./dist/admin-box.js"
     },
+    "./admin-gamification": {
+      "types": "./src/admin-gamification.ts",
+      "default": "./dist/admin-gamification.js"
+    },
     "./admin-home": {
       "types": "./src/admin-home.ts",
       "default": "./dist/admin-home.js"

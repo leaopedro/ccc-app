@@ -19,6 +19,12 @@ export const badgeCatalogEntrySchema = z.object({
   rarity: badgeRaritySchema,
   premiumExclusive: z.boolean(),
   icon: z.string().min(1).max(40),
+  // Opcionais no wire mesmo sendo NOT NULL no banco. É o que dá o fallback do
+  // bundle: um app novo contra uma API velha não recebe os campos e usa a copy
+  // embutida, em vez de estourar no parse. O caminho inverso já era seguro,
+  // porque este objeto não é .strict() e app velho descarta chave nova.
+  title: z.string().min(1).max(80).optional(),
+  description: z.string().min(1).max(240).optional(),
 });
 export type BadgeCatalogEntry = z.infer<typeof badgeCatalogEntrySchema>;
 

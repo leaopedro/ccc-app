@@ -105,7 +105,12 @@ export const cartCopy = {
     variantSoldOut: 'Este produto está esgotado.',
     pendingTicketOrderForEvent:
       'Você já tem um pedido de ingresso pendente para este evento. Conclua o pagamento ou aguarde expirar.',
+    cartIncompatibleFulfillment: 'Itens no carrinho não compartilham nenhum método de entrega.',
+    storeDisabled: 'A loja está indisponível no momento. Tente mais tarde.',
   },
+  // Carrinho que fecha em zero: nao passa por pagamento nenhum, entao a tela
+  // nao pode dizer "pagamento aprovado" nem abrir sheet.
+  freeCheckoutDone: 'Pedido confirmado. Seu ingresso já está disponível.',
   badge: (n: number) => (n > 9 ? '9+' : `${n}`),
   stockWarning: {
     tier_low_stock: 'Poucas unidades restantes',

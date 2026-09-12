@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('expo-constants', () => ({ default: { expoConfig: { extra: {} } } }));
 vi.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
-const { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName, tabTitle } = await import('./app-tabs');
+const { APP_TAB_SPECS, getCartTabBadge, getPrimaryTabName, shouldReplaceOnTabPress, tabTitle } =
+  await import('./app-tabs');
 
 describe('APP_TAB_SPECS', () => {
   it('keeps the approved bottom-nav order, hiding only garage from the static spec', () => {
@@ -67,5 +68,21 @@ describe('tabTitle', () => {
     expect(tabTitle('cart')).toBe('Carrinho');
     expect(tabTitle('garage')).toBe('Garagem');
     expect(tabTitle('profile')).toBe('Perfil');
+  });
+});
+
+describe('shouldReplaceOnTabPress', () => {
+  it('skips the replace when the tab root is already the current route', () => {
+    expect(shouldReplaceOnTabPress('/inicio', '/inicio')).toBe(false);
+    expect(shouldReplaceOnTabPress('/store/', '/store')).toBe(false);
+  });
+
+  it('replaces from a deep route inside the same tab, so the stack pops', () => {
+    expect(shouldReplaceOnTabPress('/events/rolezinho', '/events')).toBe(true);
+    expect(shouldReplaceOnTabPress('/assinaturas/ouro', '/assinaturas')).toBe(true);
+  });
+
+  it('replaces when the current route belongs to another tab', () => {
+    expect(shouldReplaceOnTabPress('/store', '/inicio')).toBe(true);
   });
 });

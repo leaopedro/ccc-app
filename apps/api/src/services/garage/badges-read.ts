@@ -42,6 +42,8 @@ export const readOwnerBadgesState = async (garage: Garage): Promise<OwnerBadgesS
     rarity: b.rarity,
     premiumExclusive: b.premiumExclusive,
     icon: b.icon,
+    title: b.title,
+    description: b.description,
   }));
 
   const badges: GarageBadgeOwnerState[] = catalogRows.map((b) => {

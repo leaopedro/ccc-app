@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { garageBadgesOwnerResponseSchema } from '@ccc/shared/badges';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -12,33 +13,38 @@ import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 // have something to assert against. resetDatabase() drops the badge tables
 // between tests, so each block re-seeds explicitly.
 const seedCatalog = async () => {
+  const rows = [
+    { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
+    { code: 'EVT-002', category: 'eventos', rarity: 'rare', icon: 'streak' },
+    { code: 'EVT-003', category: 'eventos', rarity: 'legendary', icon: 'medal' },
+    { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
+    { code: 'CAR-002', category: 'carros', rarity: 'rare', icon: 'garageFull' },
+    {
+      code: 'CAR-003',
+      category: 'carros',
+      rarity: 'legendary',
+      icon: 'curator',
+      premiumExclusive: true,
+    },
+    { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
+    { code: 'COM-002', category: 'comunidade', rarity: 'rare', icon: 'chat' },
+    { code: 'COM-003', category: 'comunidade', rarity: 'legendary', icon: 'fire' },
+    { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
+    { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
+    {
+      code: 'CCC-003',
+      category: 'ccc',
+      rarity: 'legendary',
+      icon: 'founder',
+      premiumExclusive: true,
+    },
+  ] as const;
   await prisma.badge.createMany({
-    data: [
-      { code: 'EVT-001', category: 'eventos', rarity: 'common', icon: 'flag' },
-      { code: 'EVT-002', category: 'eventos', rarity: 'rare', icon: 'streak' },
-      { code: 'EVT-003', category: 'eventos', rarity: 'legendary', icon: 'medal' },
-      { code: 'CAR-001', category: 'carros', rarity: 'common', icon: 'car' },
-      { code: 'CAR-002', category: 'carros', rarity: 'rare', icon: 'garageFull' },
-      {
-        code: 'CAR-003',
-        category: 'carros',
-        rarity: 'legendary',
-        icon: 'curator',
-        premiumExclusive: true,
-      },
-      { code: 'COM-001', category: 'comunidade', rarity: 'common', icon: 'post' },
-      { code: 'COM-002', category: 'comunidade', rarity: 'rare', icon: 'chat' },
-      { code: 'COM-003', category: 'comunidade', rarity: 'legendary', icon: 'fire' },
-      { code: 'CCC-001', category: 'ccc', rarity: 'common', icon: 'pin' },
-      { code: 'CCC-002', category: 'ccc', rarity: 'rare', icon: 'flagCheck' },
-      {
-        code: 'CCC-003',
-        category: 'ccc',
-        rarity: 'legendary',
-        icon: 'founder',
-        premiumExclusive: true,
-      },
-    ],
+    data: rows.map((r) => ({
+      ...r,
+      title: `Conquista ${r.code}`,
+      description: `Descrição de ${r.code}`,
+    })),
   });
 };
 
@@ -203,6 +209,25 @@ describe('GET /me/garage/badges', () => {
   it('returns 401 when unauthenticated', async () => {
     const res = await app.inject({ method: 'GET', url: '/me/garage/badges' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('catalogo carrega title e description do banco', async () => {
+    await seedCatalog();
+    const { user } = await createUser({ email: 'copy@jdm.test', verified: true });
+    await prisma.badge.update({
+      where: { code: 'EVT-001' },
+      data: { title: 'Título Editado', description: 'Descrição editada.' },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/garage/badges',
+      headers: { authorization: bearer(loadEnv(), user.id, 'user') },
+    });
+    const body = garageBadgesOwnerResponseSchema.parse(res.json());
+    const entry = body.catalog.find((c) => c.code === 'EVT-001');
+    expect(entry?.title).toBe('Título Editado');
+    expect(entry?.description).toBe('Descrição editada.');
   });
 });
 

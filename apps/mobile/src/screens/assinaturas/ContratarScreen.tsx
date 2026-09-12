@@ -22,6 +22,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
@@ -54,8 +55,11 @@ function onBack() {
 }
 
 function Header() {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
       <Pressable
         onPress={onBack}
         accessibilityRole="button"

@@ -374,6 +374,21 @@ const makeBadgesAggregate = (
   ...overrides,
 });
 
+// Task 9 — catalog entry that carries API-supplied copy. The API's
+// title/description must win over the bundled PT-BR fallback.
+const CATALOG_WITH_COPY: GarageBadgesOwnerResponse['catalog'] = [
+  {
+    code: 'EVT-001',
+    category: 'eventos',
+    rarity: 'common',
+    premiumExclusive: false,
+    icon: 'flag',
+    title: 'Título da API',
+    description: 'Descrição da API.',
+  },
+  ...CATALOG.slice(1),
+];
+
 const earnedBadge = (code: string, pinned = false) => ({
   code,
   state: 'earned' as const,
@@ -555,6 +570,43 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
     });
     // BadgesSheet renders with testID "garage-badges-sheet" once visible.
     expect(container.querySelector('[data-testid="garage-badges-sheet"]')).not.toBeNull();
+  });
+
+  it('usa o texto da API quando o catalogo traz title', async () => {
+    setApi({
+      garage: makeGarage({
+        garage: makeGarageOwner({ badges: [earnedBadge('EVT-001', true)] }),
+        cars: [],
+      }),
+      badges: makeBadgesAggregate({
+        catalog: CATALOG_WITH_COPY,
+        badges: [earnedBadge('EVT-001', true)],
+      }),
+    });
+    await mount();
+    const earnedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
+    );
+    expect(earnedBtn).not.toBeUndefined();
+    await act(async () => {
+      earnedBtn!.click();
+      await flush();
+    });
+    const sheet = container.querySelector('[data-testid="garage-badges-sheet"]');
+    expect(sheet).not.toBeNull();
+    // Drill into the tile so BadgeDetail (the copy consumer) renders — the
+    // top-level grid does not show title/description, only the detail view.
+    const insideSheetBtn = Array.from(sheet!.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
+    );
+    expect(insideSheetBtn).not.toBeUndefined();
+    await act(async () => {
+      insideSheetBtn!.click();
+      await flush();
+    });
+    const sheetText = sheet!.textContent ?? '';
+    expect(sheetText).toContain('Título da API');
+    expect(sheetText).not.toContain('Primeira Largada');
   });
 
   it('opens PremiumSheet (NOT BadgesSheet) when a locked tile is tapped', async () => {

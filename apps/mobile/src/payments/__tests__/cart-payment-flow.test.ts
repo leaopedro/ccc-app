@@ -7,6 +7,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'pix',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: true,
         clientSecret: null,
@@ -29,6 +30,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'pix',
+        checkoutStatus: 'pending',
         isWeb: true,
         nativeStripeAvailable: false,
         clientSecret: null,
@@ -49,6 +51,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: true,
         clientSecret: 'pi_1_secret_x',
@@ -65,6 +68,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
+        checkoutStatus: 'pending',
         isWeb: true,
         nativeStripeAvailable: false,
         clientSecret: null,
@@ -84,6 +88,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: false,
         clientSecret: null,
@@ -99,6 +104,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: false,
         clientSecret: null,
@@ -117,6 +123,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'card',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: true,
         clientSecret: null,
@@ -132,6 +139,7 @@ describe('resolveCartPaymentAction', () => {
     expect(
       resolveCartPaymentAction({
         paymentMethod: 'pix',
+        checkoutStatus: 'pending',
         isWeb: false,
         nativeStripeAvailable: true,
         clientSecret: null,
@@ -165,5 +173,58 @@ describe('resolveCartSheetOutcomeAction', () => {
 
   it('resolves a paid sheet to navigate, with no message or error text', () => {
     expect(resolveCartSheetOutcomeAction({ kind: 'paid' })).toEqual({ kind: 'navigate' });
+  });
+});
+
+// Um carrinho que fecha em zero volta da API ja liquidado: sem clientSecret e
+// sem checkoutUrl. Antes deste ramo ele caia no `error` final, e o tier gratis
+// nao tinha como ser comprado pelo app.
+describe('carrinho gratuito', () => {
+  it('resolve para done quando a API ja liquidou', () => {
+    expect(
+      resolveCartPaymentAction({
+        paymentMethod: 'card',
+        checkoutStatus: 'succeeded',
+        isWeb: false,
+        nativeStripeAvailable: true,
+        clientSecret: null,
+        checkoutUrl: null,
+        brCode: null,
+        reservationExpiresAt: null,
+        firstOrderId: 'o1',
+      }),
+    ).toEqual({ kind: 'done' });
+  });
+
+  it('vale na web tambem, onde nao ha sheet nativo', () => {
+    expect(
+      resolveCartPaymentAction({
+        paymentMethod: 'card',
+        checkoutStatus: 'succeeded',
+        isWeb: true,
+        nativeStripeAvailable: false,
+        clientSecret: null,
+        checkoutUrl: null,
+        brCode: null,
+        reservationExpiresAt: null,
+        firstOrderId: 'o1',
+      }),
+    ).toEqual({ kind: 'done' });
+  });
+
+  it('nao sequestra um checkout pago: status pending segue para o sheet', () => {
+    expect(
+      resolveCartPaymentAction({
+        paymentMethod: 'card',
+        checkoutStatus: 'pending',
+        isWeb: false,
+        nativeStripeAvailable: true,
+        clientSecret: 'cs_1',
+        checkoutUrl: null,
+        brCode: null,
+        reservationExpiresAt: null,
+        firstOrderId: 'o1',
+      }),
+    ).toEqual({ kind: 'sheet', clientSecret: 'cs_1' });
   });
 });

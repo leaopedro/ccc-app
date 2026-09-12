@@ -1,4 +1,4 @@
-import { router, Tabs } from 'expo-router';
+import { router, Tabs, usePathname } from 'expo-router';
 import {
   CalendarDays,
   Home,
@@ -14,7 +14,12 @@ import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
 import { usePremiumSlot } from '~/hooks/usePremiumSlot';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
-import { getCartTabBadge, getPrimaryTabName, tabTitle } from '~/navigation/app-tabs';
+import {
+  getCartTabBadge,
+  getPrimaryTabName,
+  shouldReplaceOnTabPress,
+  tabTitle,
+} from '~/navigation/app-tabs';
 import { useStoreRuntime } from '~/store/runtime-context';
 
 const ACTIVE = brand.color.brand;
@@ -45,6 +50,7 @@ const screenOptions = getAppTabScreenOptions(Platform.OS === 'web' ? 'web' : 'na
 
 function AppTabs() {
   const { itemCount } = useCart();
+  const pathname = usePathname();
   const cartBadge = getCartTabBadge(itemCount);
   const { runtimeStoreEnabled } = useStoreRuntime();
   const primaryTabName = getPrimaryTabName(runtimeStoreEnabled);
@@ -57,10 +63,12 @@ function AppTabs() {
   // links still resolve. When the slot is 'none' (gated iOS, caixa off),
   // neither is visible, but both stay registered with href: null so deep
   // links still resolve — Task 10 redirects them.
+  const premiumTabRoot = slot === 'caixa' ? '/caixa' : '/assinaturas';
   const premiumTabListeners = {
     tabPress: (e: { preventDefault: () => void }) => {
       e.preventDefault();
-      router.replace((slot === 'caixa' ? '/caixa' : '/assinaturas') as never);
+      if (!shouldReplaceOnTabPress(pathname, premiumTabRoot)) return;
+      router.replace(premiumTabRoot as never);
     },
   };
   const premiumTab =
@@ -100,6 +108,7 @@ function AppTabs() {
             // tab-press behavior on web preserves dynamic params and fails
             // to pop deep routes. Force a clean replace to /inicio.
             e.preventDefault();
+            if (!shouldReplaceOnTabPress(pathname, '/inicio')) return;
             router.replace('/inicio');
           },
         }}
@@ -113,6 +122,7 @@ function AppTabs() {
             // (e.g. /events?eventSlug=...) which fails to pop deep routes
             // like /events/buy/[eventSlug]. Force a clean replace to /events.
             e.preventDefault();
+            if (!shouldReplaceOnTabPress(pathname, '/events')) return;
             router.replace('/events');
           },
         }}
@@ -124,6 +134,7 @@ function AppTabs() {
           listeners={{
             tabPress: (e) => {
               e.preventDefault();
+              if (!shouldReplaceOnTabPress(pathname, '/store')) return;
               router.replace('/store');
             },
           }}

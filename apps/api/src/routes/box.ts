@@ -15,6 +15,7 @@ import { buildBoxCatalog } from '../services/box/catalog.js';
 import { checkoutBoxOrder } from '../services/box/checkout.js';
 import { confirmBox } from '../services/box/confirm.js';
 import { listBoxHistory } from '../services/box/history.js';
+import { ensureCurrentCycleBox } from '../services/box/open.js';
 import { setBoxPreferences } from '../services/box/preferences.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { serializeBox } from '../services/box/serialize.js';
@@ -137,6 +138,10 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     if (!membership) {
       return reply.status(403).send({ error: 'box_not_eligible' });
     }
+    // Backfill first: a member who subscribed before the box was enabled in
+    // admin has no row for this cycle and would otherwise 404 until renewal.
+    // Idempotent and best-effort, so the read below is the only source of truth.
+    await ensureCurrentCycleBox(prisma, membership.id);
     const box = await prisma.monthlyBox.findFirst({
       where: { membershipId: membership.id },
       orderBy: { cycleStart: 'desc' },

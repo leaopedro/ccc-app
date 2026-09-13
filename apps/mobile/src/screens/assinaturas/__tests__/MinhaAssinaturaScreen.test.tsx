@@ -249,6 +249,10 @@ vi.mock('lucide-react-native', async () => {
     MessageCircle: icon,
     MessageSquare: icon,
     ShieldCheck: icon,
+    Images: icon,
+    Megaphone: icon,
+    ShoppingBag: icon,
+    Star: icon,
     TrendingUp: icon,
     Trophy: icon,
   };

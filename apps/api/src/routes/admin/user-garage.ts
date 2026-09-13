@@ -149,6 +149,21 @@ export const adminUserGarageRoutes: FastifyPluginAsync = async (app) => {
         await awardXp(tx, garage.id, 'premium_activation', {
           sourceRef: `garage:${garage.id}`,
         });
+
+        // CCC-004 "Sócio CCC" — mesma porta do XP e mesmo sourceRef, porque é
+        // o mesmo evento: a transição inativo → ativo. O unique
+        // (garageId, badgeCode) faz a re-ativação ser no-op, então o gate de
+        // `wasActive` aqui é sobre não gastar a query, não sobre duplicar.
+        // Best-effort: um throw do awarder não pode desfazer o grant de
+        // premium que o admin acabou de dar.
+        try {
+          await awardBadge(tx, garage.id, 'CCC-004', `garage:${garage.id}`);
+        } catch (err) {
+          request.log.warn(
+            { err, garageId: garage.id },
+            'awardBadge CCC-004 failed on admin grant',
+          );
+        }
       }
 
       return u;

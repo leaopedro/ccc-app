@@ -10,6 +10,7 @@ import type { Prisma, PremiumProvider, PrismaClient } from '@prisma/client';
 import * as Sentry from '@sentry/node';
 
 import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
+import { awardBadge } from '../garage/awarder.js';
 import { awardXp } from '../garage/xp-awarder.js';
 
 import type { BillingEvent } from './types.js';
@@ -637,6 +638,19 @@ async function handleActivated(
     sourceRef: `garage:${garageId}`,
     delta: 200,
   });
+
+  // CCC-004 "Sócio CCC" — mesmo evento e mesmo sourceRef do XP acima, para o
+  // caminho self-serve ficar igual ao grant do admin. O unique
+  // (garageId, badgeCode) torna a renovação um no-op. Best-effort: uma
+  // conquista não pode derrubar o processamento de um evento de cobrança que
+  // o provedor já confirmou.
+  try {
+    await awardBadge(tx, garageId, 'CCC-004', `garage:${garageId}`);
+  } catch {
+    // Silencioso de propósito: este módulo não tem logger, e o próximo evento
+    // de assinatura reavalia. Deixar o throw subir abortaria a transação do
+    // webhook e o provedor reentregaria o evento em laço.
+  }
 
   return 'applied';
 }

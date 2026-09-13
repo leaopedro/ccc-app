@@ -49,10 +49,12 @@ Sem isto, ~20 arquivos de teste falham com `Failed to resolve entry for package 
 
 ```bash
 cp packages/db/.env.example packages/db/.env
-docker compose up -d postgres
+docker ps --filter name=jdm-postgres --format '{{.Names}} {{.Status}}'
 ```
 
 `packages/db/prisma/schema.prisma:8` lê `env("DATABASE_URL")`; a worktree só tem `.env.example`. A Task 2 precisa disso para gerar a migration.
+
+O container `jdm-postgres` é único por máquina e compartilhado com o checkout principal. Se já estiver `Up` e saudável na 5433, use esse. Só rode `docker compose up -d postgres` se ele não existir. NUNCA remova ou recrie o container: ele pode ter o banco de dev de outra sessão.
 
 - [ ] **Step 4: Docker para a suíte de testes**
 
@@ -73,15 +75,18 @@ Anote as três contagens de warnings e errors. A Task 11 compara contra elas. N�
 ## File Structure
 
 **packages/shared**
+
 - Modificar `src/feed.ts` — `HOME_FEED_POOL_SIZE`, `homeFeedItemSchema`, `homeFeedResponseSchema`, registro em `FEED_PUBLIC_RESPONSE_SCHEMAS`.
 - Criar `src/__tests__/home-feed-schema.test.ts`.
 - Modificar `src/admin-home.ts` — `feedPostCount` na leitura e na escrita.
 
 **packages/db**
+
 - Modificar `prisma/schema.prisma` — `feedPostCount` no model `HomeContent`.
 - Criar `prisma/migrations/<timestamp>_home_feed_post_count/migration.sql`.
 
 **apps/api**
+
 - Criar `src/services/feed/serialize.ts` — seleção e serialização de post, extraídas de `routes/feed.ts`.
 - Modificar `src/routes/feed.ts` — usa o módulo acima nos três call sites.
 - Criar `src/routes/home-feed.ts` — só o `GET /api/home-feed`.
@@ -91,9 +96,11 @@ Anote as três contagens de warnings e errors. A Task 11 compara contra elas. N�
 - Modificar `test/home-content.route.test.ts` e `test/admin/home-content.test.ts`.
 
 **apps/admin**
+
 - Modificar `app/(authed)/configuracoes/home-content-form.tsx` e o `.interaction.test.tsx` ao lado.
 
 **apps/mobile**
+
 - Criar `src/api/home-feed.ts`, `src/hooks/useHomeFeed.ts`.
 - Criar `src/screens/inicio/components/FeedTeaserCard.tsx` e `src/screens/inicio/sections/CommunityFeedSection.tsx`.
 - Modificar `src/copy/inicio.ts`, `src/screens/inicio/MemberHome.tsx`, `src/screens/inicio/GuestHome.tsx`, `app/(app)/events/[slug].tsx`.
@@ -101,6 +108,7 @@ Anote as três contagens de warnings e errors. A Task 11 compara contra elas. N�
 - Modificar `src/screens/inicio/__tests__/MemberHome.test.tsx` e `GuestHome.test.tsx`.
 
 **docs**
+
 - Modificar `docs/ropa.md` e `LGPD_scan.md`.
 
 ---
@@ -108,10 +116,12 @@ Anote as três contagens de warnings e errors. A Task 11 compara contra elas. N�
 ### Task 1: Schemas compartilhados do home-feed
 
 **Files:**
+
 - Modify: `packages/shared/src/feed.ts`
 - Create: `packages/shared/src/__tests__/home-feed-schema.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `HOME_FEED_POOL_SIZE: number`; `homeFeedItemSchema` (= `feedPostResponseSchema` + `event: { slug: string; title: string }`); `homeFeedResponseSchema` (= `{ posts: HomeFeedItem[] }`); tipos `HomeFeedItem` e `HomeFeedResponse`.
 
@@ -243,11 +253,13 @@ git commit -m "feat(shared): schemas do feed da Inicio"
 ### Task 2: Campo feedPostCount no HomeContent
 
 **Files:**
+
 - Modify: `packages/db/prisma/schema.prisma` (model `HomeContent`, `:2085-2095`)
 - Create: `packages/db/prisma/migrations/<timestamp>_home_feed_post_count/migration.sql`
 - Modify: `apps/api/test/home-content.route.test.ts`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces: `HomeContent.feedPostCount: number` no client do Prisma, default 5.
 
@@ -256,12 +268,12 @@ git commit -m "feat(shared): schemas do feed da Inicio"
 Em `apps/api/test/home-content.route.test.ts`, dentro do `describe('GET /api/home-content')`:
 
 ```ts
-  it('cria o singleton com feedPostCount 5', async () => {
-    await app.inject(GET);
+it('cria o singleton com feedPostCount 5', async () => {
+  await app.inject(GET);
 
-    const row = await prisma.homeContent.findUnique({ where: { id: HOME_CONTENT_SINGLETON_ID } });
-    expect(row?.feedPostCount).toBe(5);
-  });
+  const row = await prisma.homeContent.findUnique({ where: { id: HOME_CONTENT_SINGLETON_ID } });
+  expect(row?.feedPostCount).toBe(5);
+});
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -280,10 +292,18 @@ Em `packages/db/prisma/schema.prisma`, no model `HomeContent`, antes de `created
   feedPostCount               Int      @default(5)
 ```
 
-Gerar a migration (a Task 0 já criou o `.env` e subiu o Postgres):
+Gerar a migration em dois passos. NÃO use `prisma migrate dev` sozinho: o Postgres de dev na porta 5433 é um container compartilhado com o checkout principal e com outras sessões, e `migrate dev` pode propor um reset do banco se detectar drift. `--create-only` escreve o arquivo sem aplicar, e `migrate deploy` aplica só o que está pendente e nunca reseta.
 
 ```bash
-pnpm --filter @ccc/db exec prisma migrate dev --name home_feed_post_count
+pnpm --filter @ccc/db exec prisma migrate dev --create-only --name home_feed_post_count
+```
+
+Se este comando pedir para resetar o banco, RESPONDA NÃO e reporte. Não é o seu banco.
+
+Conferir o SQL gerado, depois aplicar:
+
+```bash
+pnpm --filter @ccc/db exec prisma migrate deploy
 ```
 
 O SQL gerado tem que ser exatamente:
@@ -317,11 +337,13 @@ Refatoração. O comportamento observável muda em dois pontos, ambos corrigindo
 Existe porque a rota nova precisa exatamente do mesmo `POST_SELECT` e da mesma serialização. Atenção ao escopo: hoje `routes/feed.ts` monta o payload de post à mão em TRÊS lugares — o GET (por volta de `:173`), o POST (`:383-406`) e o PATCH (`:484-508`) — todos repetindo o `photos.sort().map()`, o `reactions`, o `commentCount` e os dois `toISOString()`. Extrair só para o GET criaria uma terceira fonte de verdade em vez de eliminar a duplicação. Os três passam a usar o módulo.
 
 **Files:**
+
 - Create: `apps/api/src/services/feed/serialize.ts`
 - Modify: `apps/api/src/routes/feed.ts` — declarações locais em `:37-101`, o import de `computeIsPremiumActive` em `:24`, e os três call sites
 - Test: `apps/api/test/feed/` (já existe, tem que continuar verde)
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces:
   - `CAR_SELECT`, `POST_SELECT` — objetos `select` do Prisma.
@@ -492,6 +514,7 @@ export const serializeFeedPost = (
 ```
 
 Mudanças de comportamento deliberadas, ambas corrigindo bug:
+
 1. Desempate por `id` na escolha da foto primária do carro e na ordem das fotos do post.
 2. `CAR_SELECT.photos` passa a selecionar `id`, necessário para o desempate.
 
@@ -555,11 +578,13 @@ git commit -m "refactor(api): extrai o serializador de post do feed"
 ### Task 4: Rota GET /api/home-feed
 
 **Files:**
+
 - Create: `apps/api/src/routes/home-feed.ts`
 - Modify: `apps/api/src/app.ts:29` (import) e `:169` (registro)
 - Create: `apps/api/test/home-feed.route.test.ts`
 
 **Interfaces:**
+
 - Consumes: `POST_SELECT`, `serializeFeedPost` da Task 3; `homeFeedResponseSchema`, `HOME_FEED_POOL_SIZE` da Task 1; `HomeContent.feedPostCount` da Task 2.
 - Produces: `homeFeedRoutes: FastifyPluginAsync`, servindo `GET /api/home-feed` com corpo `{ posts: HomeFeedItem[] }`.
 
@@ -1002,7 +1027,7 @@ import { homeFeedRoutes } from './routes/home-feed.js';
 E logo depois de `await app.register(homeContentRoutes);` (`:169`):
 
 ```ts
-  await app.register(homeFeedRoutes);
+await app.register(homeFeedRoutes);
 ```
 
 - [ ] **Step 5: Rodar e ver passar**
@@ -1024,6 +1049,7 @@ git commit -m "feat(api): GET /api/home-feed"
 ### Task 5: feedPostCount editável no admin
 
 **Files:**
+
 - Modify: `packages/shared/src/admin-home.ts` (`adminHomeContentSchema` e `homeContentUpdateSchema`)
 - Modify: `apps/api/src/routes/admin/home-content.ts` (serializer `:27-40`, `CONTENT_FIELDS` `:50-58`, auditoria `:118-135`)
 - Modify: `apps/admin/app/(authed)/configuracoes/home-content-form.tsx`
@@ -1031,6 +1057,7 @@ git commit -m "feat(api): GET /api/home-feed"
 - Modify: `apps/admin/app/(authed)/configuracoes/home-content-form.interaction.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `HomeContent.feedPostCount` da Task 2.
 - Produces: `feedPostCount: number` em `adminHomeContentSchema`; `feedPostCount?: number` em `homeContentUpdateSchema`.
 
@@ -1039,68 +1066,68 @@ git commit -m "feat(api): GET /api/home-feed"
 O arquivo tem um `describe('admin home content')` só, sem sub-describe por método. Os helpers reais são `organizer()` (`:33`), `ensureRowViaGet(app, userId)` (`:11`), `readRow()` (`:36`) e `put(userId, payload)` — **dois** argumentos (`:39`). Acrescentar:
 
 ```ts
-  it('PUT persiste feedPostCount', async () => {
-    const user = await organizer();
-    const before = await ensureRowViaGet(app, user.id);
+it('PUT persiste feedPostCount', async () => {
+  const user = await organizer();
+  const before = await ensureRowViaGet(app, user.id);
 
-    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 8 });
+  const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 8 });
 
-    expect(res.statusCode).toBe(200);
-    expect(adminHomeContentSchema.parse(res.json()).feedPostCount).toBe(8);
-    expect((await readRow()).feedPostCount).toBe(8);
+  expect(res.statusCode).toBe(200);
+  expect(adminHomeContentSchema.parse(res.json()).feedPostCount).toBe(8);
+  expect((await readRow()).feedPostCount).toBe(8);
+});
+
+it('PUT recusa feedPostCount acima do teto', async () => {
+  const user = await organizer();
+  const before = await ensureRowViaGet(app, user.id);
+
+  const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 21 });
+
+  expect(res.statusCode).toBe(400);
+});
+
+it('PUT aceita feedPostCount zero', async () => {
+  const user = await organizer();
+  const before = await ensureRowViaGet(app, user.id);
+
+  const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 0 });
+
+  expect(res.statusCode).toBe(200);
+  expect((await readRow()).feedPostCount).toBe(0);
+});
+
+it('PUT trata string vazia como nao alterar, e nao como zero', async () => {
+  const user = await organizer();
+  const before = await ensureRowViaGet(app, user.id);
+
+  const res = await put(user.id, {
+    expectedUpdatedAt: before.updatedAt,
+    heroTitle: 'OUTRO MOTE',
+    feedPostCount: '',
   });
 
-  it('PUT recusa feedPostCount acima do teto', async () => {
-    const user = await organizer();
-    const before = await ensureRowViaGet(app, user.id);
+  // Catches: z.coerce.number() puro, onde Number('') === 0 passa em min(0).
+  // O organizer que limpa o campo para redigitar e clica Salvar apagaria a
+  // secao da Inicio de todo mundo, com 200 e sem aviso.
+  expect(res.statusCode).toBe(200);
+  expect((await readRow()).feedPostCount).toBe(5);
+});
 
-    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 21 });
+it('PUT audita o valor anterior e o novo de feedPostCount', async () => {
+  const user = await organizer();
+  const before = await ensureRowViaGet(app, user.id);
 
-    expect(res.statusCode).toBe(400);
+  await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 12 });
+
+  const entry = await prisma.adminAudit.findFirst({
+    where: { action: 'home_content.update' },
+    orderBy: { createdAt: 'desc' },
   });
-
-  it('PUT aceita feedPostCount zero', async () => {
-    const user = await organizer();
-    const before = await ensureRowViaGet(app, user.id);
-
-    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 0 });
-
-    expect(res.statusCode).toBe(200);
-    expect((await readRow()).feedPostCount).toBe(0);
-  });
-
-  it('PUT trata string vazia como nao alterar, e nao como zero', async () => {
-    const user = await organizer();
-    const before = await ensureRowViaGet(app, user.id);
-
-    const res = await put(user.id, {
-      expectedUpdatedAt: before.updatedAt,
-      heroTitle: 'OUTRO MOTE',
-      feedPostCount: '',
-    });
-
-    // Catches: z.coerce.number() puro, onde Number('') === 0 passa em min(0).
-    // O organizer que limpa o campo para redigitar e clica Salvar apagaria a
-    // secao da Inicio de todo mundo, com 200 e sem aviso.
-    expect(res.statusCode).toBe(200);
-    expect((await readRow()).feedPostCount).toBe(5);
-  });
-
-  it('PUT audita o valor anterior e o novo de feedPostCount', async () => {
-    const user = await organizer();
-    const before = await ensureRowViaGet(app, user.id);
-
-    await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 12 });
-
-    const entry = await prisma.adminAuditLog.findFirst({
-      where: { action: 'home_content.update' },
-      orderBy: { createdAt: 'desc' },
-    });
-    expect(entry?.metadata).toMatchObject({ values: { feedPostCount: { previous: 5, next: 12 } } });
-  });
+  expect(entry?.metadata).toMatchObject({ values: { feedPostCount: { previous: 5, next: 12 } } });
+});
 ```
 
-Antes de escrever o último teste, abra `apps/api/src/routes/admin/home-content.ts:118-135` e confira o nome real da `action`, o formato do `metadata` que `recordAudit` grava e o nome do model de auditoria no Prisma. Use os nomes reais; se a forma for outra, ajuste a asserção à forma real em vez de mudar o handler.
+Referências verificadas para estes testes: o model de auditoria é `AdminAudit` (`schema.prisma:1048`), a `action` é `'home_content.update'` e o `metadata` hoje é `{ fields: touched, images }` (`routes/admin/home-content.ts:128-133`). 400 em entrada inválida é o comportamento estabelecido do handler — `test/admin/home-content.test.ts:226` e `:232` já dependem dele.
 
 - [ ] **Step 2: Teste do form que falha**
 
@@ -1110,25 +1137,25 @@ Em `apps/admin/app/(authed)/configuracoes/home-content-form.interaction.test.tsx
 2. Acrescentar o teste. Renderizar dentro de `act` ANTES de tocar no DOM, e clicar com `clickByText('Salvar')` (`:52`): `container.querySelector('button')` pegaria o primeiro botão da página, que vem do `HomeImageUploader` renderizado antes do Salvar.
 
 ```tsx
-  it('envia feedPostCount como numero no save', async () => {
-    updateMock.mockResolvedValue({ ok: true, content: { ...initial, feedPostCount: 3 } });
+it('envia feedPostCount como numero no save', async () => {
+  updateMock.mockResolvedValue({ ok: true, content: { ...initial, feedPostCount: 3 } });
 
-    await act(async () => {
-      root.render(<HomeContentForm initial={initial} />);
-      await Promise.resolve();
-    });
-
-    setValue(input('Posts no feed da Início'), '3');
-
-    await act(async () => {
-      clickByText('Salvar');
-      await Promise.resolve();
-    });
-
-    // Numero, nao string: HomeContentUpdate e o tipo de SAIDA do zod, entao
-    // feedPostCount e `number | undefined`, e o estado do form e string.
-    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ feedPostCount: 3 }));
+  await act(async () => {
+    root.render(<HomeContentForm initial={initial} />);
+    await Promise.resolve();
   });
+
+  setValue(input('Posts no feed da Início'), '3');
+
+  await act(async () => {
+    clickByText('Salvar');
+    await Promise.resolve();
+  });
+
+  // Numero, nao string: HomeContentUpdate e o tipo de SAIDA do zod, entao
+  // feedPostCount e `number | undefined`, e o estado do form e string.
+  expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ feedPostCount: 3 }));
+});
 ```
 
 Confira em `:36-70` as assinaturas reais de `input`, `setValue` e `clickByText` e use-as como estão.
@@ -1191,24 +1218,30 @@ Em `apps/api/src/routes/admin/home-content.ts`:
 3. Auditoria com valor. Ao lado de `IMAGE_FIELDS`:
 
 ```ts
-  // feedPostCount controla quanto UGC vai para a vitrine do app, então a
-  // trilha precisa do antes/depois. Texto continua de fora: institutionalBody
-  // tem 1000 chars. Mesmo tratamento que IMAGE_FIELDS já recebe.
-  const VALUE_FIELDS = ['feedPostCount'] as const;
+// feedPostCount controla quanto UGC vai para a vitrine do app, então a
+// trilha precisa do antes/depois. Texto continua de fora: institutionalBody
+// tem 1000 chars. Mesmo tratamento que IMAGE_FIELDS já recebe.
+const VALUE_FIELDS = ['feedPostCount'] as const;
 ```
 
-E no objeto de `metadata` do `recordAudit`, acrescentar a chave `values`, no mesmo molde do `images`:
+O bloco atual (`:121-133`) monta `images` com um loop e passa `metadata: { fields: touched, images }`. Acrescentar o loop irmão logo depois do de `images`, e a chave no `metadata`:
 
 ```ts
-    values: Object.fromEntries(
-      VALUE_FIELDS.filter((f) => touched.includes(f)).map((f) => [
-        f,
-        { previous: existing[f], next: updated[f] },
-      ]),
-    ),
-```
+const values: Record<string, { previous: number; next: number }> = {};
+for (const field of VALUE_FIELDS) {
+  if (touched.includes(field)) {
+    values[field] = { previous: existing[field], next: updated[field] };
+  }
+}
 
-Leia o bloco real em `:118-135` antes de editar e encaixe no formato que já está lá.
+await recordAudit({
+  actorId: sub,
+  action: 'home_content.update',
+  entityType: 'home_content',
+  entityId: HOME_CONTENT_SINGLETON_ID,
+  metadata: { fields: touched, images, values },
+});
+```
 
 - [ ] **Step 6: Form do admin**
 
@@ -1217,7 +1250,7 @@ Em `apps/admin/app/(authed)/configuracoes/home-content-form.tsx`:
 1. Novo estado, junto dos outros:
 
 ```ts
-  const [feedPostCount, setFeedPostCount] = useState(String(initial.feedPostCount));
+const [feedPostCount, setFeedPostCount] = useState(String(initial.feedPostCount));
 ```
 
 2. No payload de `save`, depois de `institutionalImageObjectKey`:
@@ -1233,30 +1266,30 @@ Em `apps/admin/app/(authed)/configuracoes/home-content-form.tsx`:
 3. No `if (result.ok)`, junto dos outros setters:
 
 ```ts
-        setFeedPostCount(String(result.content.feedPostCount));
+setFeedPostCount(String(result.content.feedPostCount));
 ```
 
 4. Nova seção, antes do bloco do botão Salvar:
 
 ```tsx
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Feed da comunidade</h2>
-        <label className={labelCls}>
-          <span>Posts no feed da Início (0 a 20, zero esconde a seção)</span>
-          <input
-            className={inputCls}
-            aria-label="Posts no feed da Início"
-            type="number"
-            min={0}
-            max={20}
-            value={feedPostCount}
-            onChange={(e) => setFeedPostCount(e.target.value)}
-          />
-        </label>
-        <p className="text-xs opacity-70">
-          Só entram posts de eventos publicados e com o feed marcado como público.
-        </p>
-      </section>
+<section className="flex flex-col gap-3">
+  <h2 className="text-lg font-semibold">Feed da comunidade</h2>
+  <label className={labelCls}>
+    <span>Posts no feed da Início (0 a 20, zero esconde a seção)</span>
+    <input
+      className={inputCls}
+      aria-label="Posts no feed da Início"
+      type="number"
+      min={0}
+      max={20}
+      value={feedPostCount}
+      onChange={(e) => setFeedPostCount(e.target.value)}
+    />
+  </label>
+  <p className="text-xs opacity-70">
+    Só entram posts de eventos publicados e com o feed marcado como público.
+  </p>
+</section>
 ```
 
 - [ ] **Step 7: Rodar e ver passar**
@@ -1279,11 +1312,13 @@ git commit -m "feat(admin): quantidade de posts do feed da Inicio"
 ### Task 6: Cliente e hook do home-feed no mobile
 
 **Files:**
+
 - Create: `apps/mobile/src/api/home-feed.ts`
 - Create: `apps/mobile/src/hooks/useHomeFeed.ts`
 - Create: `apps/mobile/src/api/__tests__/home-feed.test.ts`
 
 **Interfaces:**
+
 - Consumes: `homeFeedResponseSchema`, `HomeFeedItem` da Task 1.
 - Produces: `listHomeFeed(): Promise<HomeFeedResponse>`; `useHomeFeed(): { posts: HomeFeedItem[]; loading: boolean; refresh: () => Promise<void> }`.
 
@@ -1455,6 +1490,7 @@ git commit -m "feat(mobile): cliente e hook do feed da Inicio"
 ### Task 7: Card e seção do feed na Início
 
 **Files:**
+
 - Create: `apps/mobile/src/screens/inicio/components/FeedTeaserCard.tsx`
 - Create: `apps/mobile/src/screens/inicio/sections/CommunityFeedSection.tsx`
 - Modify: `apps/mobile/src/copy/inicio.ts` (objeto `sections`, `:8-21`)
@@ -1463,6 +1499,7 @@ git commit -m "feat(mobile): cliente e hook do feed da Inicio"
 O teste vai em `sections/__tests__/`, não em `inicio/__tests__/`: é ali que moram todos os testes de seção.
 
 **Interfaces:**
+
 - Consumes: `HomeFeedItem` da Task 1.
 - Produces:
   - `FeedTeaserCard({ post, onPress }: { post: HomeFeedItem; onPress: () => void })`
@@ -1760,11 +1797,13 @@ git commit -m "feat(mobile): secao do feed da comunidade na Inicio"
 ### Task 8: Ligar a seção nas duas homes
 
 **Files:**
+
 - Modify: `apps/mobile/src/screens/inicio/MemberHome.tsx` — hooks em `:51-58`, `refreshing` em `:63-64`, render depois do `NextEventCard` (`:125`)
 - Modify: `apps/mobile/src/screens/inicio/GuestHome.tsx` — hooks em `:58-60`, render depois do `HighlightsSection`
 - Modify: `apps/mobile/src/screens/inicio/__tests__/MemberHome.test.tsx` e `GuestHome.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useHomeFeed` da Task 6, `CommunityFeedSection` da Task 7.
 - Produces: nada que outra task use.
 
@@ -1788,32 +1827,32 @@ Abra `MemberHome.test.tsx:190-231` e `GuestHome.test.tsx:124-167` e encaixe no f
 Em cada um dos dois arquivos. Use a função de render que o arquivo já tem — `renderMemberHome()` em `MemberHome.test.tsx:438` e `render()` SEM argumentos em `GuestHome.test.tsx:301` — e asserção por `container.textContent`:
 
 ```tsx
-  it('renderiza o feed da comunidade quando ha posts', async () => {
-    homeFeedState.value = {
-      posts: [
-        {
-          id: 'p1',
-          eventId: 'e1',
-          car: null,
-          body: 'que encontro bom',
-          status: 'visible',
-          photos: [],
-          reactions: { likes: 0, mine: false },
-          commentCount: 0,
-          isOwn: false,
-          createdAt: '2026-09-13T12:00:00.000Z',
-          updatedAt: '2026-09-13T12:00:00.000Z',
-          event: { slug: 'encontro-setembro', title: 'Encontro de Setembro' },
-        },
-      ],
-      loading: false,
-      refresh: async () => {},
-    };
+it('renderiza o feed da comunidade quando ha posts', async () => {
+  homeFeedState.value = {
+    posts: [
+      {
+        id: 'p1',
+        eventId: 'e1',
+        car: null,
+        body: 'que encontro bom',
+        status: 'visible',
+        photos: [],
+        reactions: { likes: 0, mine: false },
+        commentCount: 0,
+        isOwn: false,
+        createdAt: '2026-09-13T12:00:00.000Z',
+        updatedAt: '2026-09-13T12:00:00.000Z',
+        event: { slug: 'encontro-setembro', title: 'Encontro de Setembro' },
+      },
+    ],
+    loading: false,
+    refresh: async () => {},
+  };
 
-    await renderMemberHome();
+  await renderMemberHome();
 
-    expect(container.textContent).toContain('que encontro bom');
-  });
+  expect(container.textContent).toContain('que encontro bom');
+});
 ```
 
 No `GuestHome.test.tsx`, trocar `renderMemberHome()` por `render()`.
@@ -1837,19 +1876,19 @@ import { CommunityFeedSection } from '~/screens/inicio/sections/CommunityFeedSec
 2. Junto dos outros hooks:
 
 ```ts
-  const { posts: feedPosts, loading: feedLoading, refresh: refreshFeed } = useHomeFeed();
+const { posts: feedPosts, loading: feedLoading, refresh: refreshFeed } = useHomeFeed();
 ```
 
 3. Somar ao `refreshing` (`:63-64`), que hoje é a disjunção dos cinco loadings da fase 1:
 
 ```ts
-  const refreshing =
-    profile.loading ||
-    nextEvent.loading ||
-    tickets.loading ||
-    garage.loading ||
-    premium.loading ||
-    feedLoading;
+const refreshing =
+  profile.loading ||
+  nextEvent.loading ||
+  tickets.loading ||
+  garage.loading ||
+  premium.loading ||
+  feedLoading;
 ```
 
 Sem isso o spinner some antes do feed voltar, e o carrossel troca de conteúdo sozinho com a tela já parecendo pronta.
@@ -1863,12 +1902,12 @@ Sem isso o spinner some antes do feed voltar, e o carrossel troca de conteúdo s
 5. Logo depois do `<NextEventCard ... />`:
 
 ```tsx
-        <CommunityFeedSection
-          posts={feedPosts}
-          onOpenEvent={(slug) =>
-            router.push({ pathname: '/events/[slug]', params: { slug, focus: 'feed' } } as never)
-          }
-        />
+<CommunityFeedSection
+  posts={feedPosts}
+  onOpenEvent={(slug) =>
+    router.push({ pathname: '/events/[slug]', params: { slug, focus: 'feed' } } as never)
+  }
+/>
 ```
 
 A forma-objeto com `as never` é o idiom de `app/(app)/events/[slug].tsx:157-160`. `MemberHome.tsx:125` usa template string sem cast, mas aquela forma não carrega params extras.
@@ -1881,21 +1920,21 @@ Em `apps/mobile/src/screens/inicio/GuestHome.tsx`:
 2. Junto de `useHomeContent`:
 
 ```ts
-  const { posts: feedPosts } = useHomeFeed();
+const { posts: feedPosts } = useHomeFeed();
 ```
 
 3. Logo depois do `<HighlightsSection ... />`:
 
 ```tsx
-            <CommunityFeedSection
-              posts={feedPosts}
-              onOpenEvent={(slug) =>
-                router.push({
-                  pathname: '/events/[slug]',
-                  params: { slug, focus: 'feed' },
-                } as never)
-              }
-            />
+<CommunityFeedSection
+  posts={feedPosts}
+  onOpenEvent={(slug) =>
+    router.push({
+      pathname: '/events/[slug]',
+      params: { slug, focus: 'feed' },
+    } as never)
+  }
+/>
 ```
 
 - [ ] **Step 6: Rodar e ver passar**
@@ -1916,9 +1955,11 @@ git commit -m "feat(mobile): feed da comunidade nas duas homes"
 ### Task 9: Scroll até o feed na página do evento
 
 **Files:**
+
 - Modify: `apps/mobile/app/(app)/events/[slug].tsx` — params em `:44-47`, `ScrollView` em `:215`, bloco do feed em `:348-362`
 
 **Interfaces:**
+
 - Consumes: o param `focus: 'feed'` que a Task 8 passa no push.
 - Produces: nada.
 
@@ -1927,14 +1968,18 @@ git commit -m "feat(mobile): feed da comunidade nas duas homes"
 A desestruturação atual (`:44-47`) é `{ slug, tierId: requestedTierId }`. Trocar por:
 
 ```ts
-  const { slug, tierId: requestedTierId, focus } = useLocalSearchParams<{
-    slug: string;
-    tierId?: string;
-    // string | string[]: useLocalSearchParams devolve array para param
-    // repetido, e na web ?focus=a&focus=b faria um `focus !== 'feed'` puro
-    // passar sempre.
-    focus?: string | string[];
-  }>();
+const {
+  slug,
+  tierId: requestedTierId,
+  focus,
+} = useLocalSearchParams<{
+  slug: string;
+  tierId?: string;
+  // string | string[]: useLocalSearchParams devolve array para param
+  // repetido, e na web ?focus=a&focus=b faria um `focus !== 'feed'` puro
+  // passar sempre.
+  focus?: string | string[];
+}>();
 ```
 
 - [ ] **Step 2: Ref e estado**
@@ -1942,12 +1987,12 @@ A desestruturação atual (`:44-47`) é `{ slug, tierId: requestedTierId }`. Tro
 Junto dos outros hooks do componente:
 
 ```ts
-  const scrollRef = useRef<ScrollView>(null);
-  // Guarda de disparo único, latcheada DENTRO do timer (ver Step 3).
-  const didFocusFeedRef = useRef(false);
-  // Estado, não só ref: o onLayout do bloco do feed chega depois do primeiro
-  // render, e um ref puro não acordaria o efeito.
-  const [feedPosition, setFeedPosition] = useState<number | null>(null);
+const scrollRef = useRef<ScrollView>(null);
+// Guarda de disparo único, latcheada DENTRO do timer (ver Step 3).
+const didFocusFeedRef = useRef(false);
+// Estado, não só ref: o onLayout do bloco do feed chega depois do primeiro
+// render, e um ref puro não acordaria o efeito.
+const [feedPosition, setFeedPosition] = useState<number | null>(null);
 ```
 
 Acrescentar `useRef` ao import de `react` no topo.
@@ -1957,23 +2002,23 @@ Acrescentar `useRef` ao import de `react` no topo.
 Depois dos efeitos de carregamento existentes:
 
 ```ts
-  useEffect(() => {
-    if (focus !== 'feed' || didFocusFeedRef.current) return;
-    if (feedPosition === null || !event) return;
+useEffect(() => {
+  if (focus !== 'feed' || didFocusFeedRef.current) return;
+  if (feedPosition === null || !event) return;
 
-    const timer = setTimeout(() => {
-      // Latchear AQUI, e não antes do setTimeout. `event` é
-      // `commerceEvent ?? publicEvent` (linha 101) e getEventCommerce resolve
-      // numa request separada de getEvent: latchear antes faz o cleanup deste
-      // efeito cancelar o timer enquanto a guarda já bloqueia a reexecução, e
-      // o scroll nunca acontece. Latcheando dentro, reagendar com o y mais
-      // novo vira o comportamento em vez do bug.
-      didFocusFeedRef.current = true;
-      scrollRef.current?.scrollTo({ y: feedPosition, animated: true });
-    }, 50);
+  const timer = setTimeout(() => {
+    // Latchear AQUI, e não antes do setTimeout. `event` é
+    // `commerceEvent ?? publicEvent` (linha 101) e getEventCommerce resolve
+    // numa request separada de getEvent: latchear antes faz o cleanup deste
+    // efeito cancelar o timer enquanto a guarda já bloqueia a reexecução, e
+    // o scroll nunca acontece. Latcheando dentro, reagendar com o y mais
+    // novo vira o comportamento em vez do bug.
+    didFocusFeedRef.current = true;
+    scrollRef.current?.scrollTo({ y: feedPosition, animated: true });
+  }, 50);
 
-    return () => clearTimeout(timer);
-  }, [focus, event, feedPosition]);
+  return () => clearTimeout(timer);
+}, [focus, event, feedPosition]);
 ```
 
 O `y` do `onLayout` é relativo ao content container do `ScrollView`, a mesma origem de `scrollTo`: o bloco do feed é filho direto dele e `styles.container` não tem `paddingTop`. O atraso de 50ms existe porque no Android o `onLayout` chega antes de o `ScrollView` conhecer a altura total e o `scrollTo` é engolido.
@@ -1985,23 +2030,25 @@ No `<ScrollView>` da linha 215, acrescentar `ref={scrollRef}`.
 Trocar o bloco `{event.feedEnabled ? (...) : null}` (`:348-362`) por:
 
 ```tsx
-        {event.feedEnabled ? (
-          <View onLayout={(e) => setFeedPosition(e.nativeEvent.layout.y)}>
-            <EventFeedSection
-              eventSlug={event.slug}
-              eventId={event.id}
-              feedSettings={{
-                feedEnabled: event.feedEnabled,
-                feedAccess: event.feedAccess,
-                postingAccess: event.postingAccess,
-                maxPostsPerUser: null,
-                maxPhotosPerUser: 5,
-              }}
-              ticketSource={ticketSource}
-              embedded
-            />
-          </View>
-        ) : null}
+{
+  event.feedEnabled ? (
+    <View onLayout={(e) => setFeedPosition(e.nativeEvent.layout.y)}>
+      <EventFeedSection
+        eventSlug={event.slug}
+        eventId={event.id}
+        feedSettings={{
+          feedEnabled: event.feedEnabled,
+          feedAccess: event.feedAccess,
+          postingAccess: event.postingAccess,
+          maxPostsPerUser: null,
+          maxPhotosPerUser: 5,
+        }}
+        ticketSource={ticketSource}
+        embedded
+      />
+    </View>
+  ) : null;
+}
 ```
 
 - [ ] **Step 5: Verificar**
@@ -2037,6 +2084,7 @@ git commit -m "feat(mobile): rola ate o feed ao abrir evento pela Inicio"
 Não é burocracia opcional. A rota nova muda quem recebe UGC do feed, e os dois documentos hoje descrevem outra coisa.
 
 **Files:**
+
 - Modify: `docs/ropa.md` (linha COMM-01)
 - Modify: `LGPD_scan.md` (a linha que descreve o feed, hoje `:134`)
 

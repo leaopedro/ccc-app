@@ -76,11 +76,33 @@ export const boxConfirmSchema = z.object({
 });
 export type BoxConfirm = z.infer<typeof boxConfirmSchema>;
 
-export const boxCheckoutResponseSchema = z.object({
-  brCode: z.string(),
-  amountCents: z.number().int(),
-  expiresAt: z.string(),
+export const boxCheckoutRequestSchema = z.object({
+  method: z.enum(['pix', 'card']).default('pix'),
 });
+export type BoxCheckoutRequest = z.infer<typeof boxCheckoutRequestSchema>;
+
+// Uniao discriminada por `method` porque a tela de pagamento renderiza coisas
+// diferentes: QR + copia-e-cola no Pix, PaymentSheet no cartao. O cliente
+// decide pelo `method` da RESPOSTA, nunca pelo que pediu — o metodo trava na
+// primeira cobranca e um segundo checkout devolve o que ja existe.
+//
+// Consequencia de deploy: uma API antiga responde sem `method` e este schema
+// lanca `invalid_union_discriminator`, quebrando a tela ate no Pix. A API tem
+// de subir ANTES de qualquer build ou OTA que carregue este schema.
+export const boxCheckoutResponseSchema = z.discriminatedUnion('method', [
+  z.object({
+    method: z.literal('pix'),
+    brCode: z.string(),
+    amountCents: z.number().int(),
+    expiresAt: z.string(),
+  }),
+  z.object({
+    method: z.literal('card'),
+    clientSecret: z.string(),
+    amountCents: z.number().int(),
+    expiresAt: z.string(),
+  }),
+]);
 export type BoxCheckoutResponse = z.infer<typeof boxCheckoutResponseSchema>;
 
 export const boxCatalogItemSchema = z.object({

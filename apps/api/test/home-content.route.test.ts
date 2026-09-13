@@ -56,6 +56,13 @@ describe('GET /api/home-content', () => {
     await app.close();
   });
 
+  it('cria o singleton com feedPostCount 5', async () => {
+    await app.inject(GET);
+
+    const row = await prisma.homeContent.findUnique({ where: { id: HOME_CONTENT_SINGLETON_ID } });
+    expect(row?.feedPostCount).toBe(5);
+  });
+
   it('responds 200 without auth and satisfies the shared schema', async () => {
     const res = await app.inject(GET);
     expect(res.statusCode).toBe(200);

@@ -2090,6 +2090,10 @@ model HomeContent {
   institutionalTitle          String   @default("A Casa") @db.VarChar(120)
   institutionalBody           String   @default("Um clubhouse automotivo privado em Curitiba, feito para quem dirige, conecta e pertence.") @db.VarChar(1000)
   institutionalImageObjectKey String?  @db.VarChar(300)
+  /// Quantos posts o feed da Início sorteia. Zero desliga a seção sem exigir
+  /// uma flag separada. O teto de 20 vive na validação do admin, não aqui: a
+  /// coluna não precisa de migration se a decisão de produto mudar.
+  feedPostCount               Int      @default(5)
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 }

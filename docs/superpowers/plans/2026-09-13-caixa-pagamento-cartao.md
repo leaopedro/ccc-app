@@ -44,7 +44,7 @@ Decididas antes do plano. Não reabrir durante a execução.
 - Order de caixa **nunca** tem `expiresAt` (`services/box/confirm.ts:112-127`), e `workers/order-expiry.ts:54` filtra `expiresAt: { not: null }`. Logo uma Order de caixa nunca chega em `'expired'`.
 - Nenhuma migration é necessária: `enum PaymentMethod { card pix }` e `enum PaymentProvider { stripe abacatepay }` já existem (`packages/db/prisma/schema.prisma:1089-1097`). `brCode` é nullable (`:1327`). `MonthlyBox.orderId` é `@unique` (`:816`).
 - **`apps/mobile` não tem `@testing-library/react-native`.** Os testes usam `react-dom` + `jsdom` com `createRoot(...).render()` e queries de DOM cru. Ver `apps/mobile/app/__tests__/cart-checkout-stripe-unavailable.test.tsx:281-282`.
-- Nenhum teste existente renderiza `caixa/pagar.tsx`. `payment-screen-wiring.test.tsx` cobre só `CartScreen` e `ProfileOrdersScreen`.
+- Nenhum teste existente **renderiza** `caixa/pagar.tsx` (`payment-screen-wiring.test.tsx` cobre só `CartScreen` e `ProfileOrdersScreen`), mas existem `src/hooks/useBoxPay.test.tsx` e `src/api/box.test.ts`, que cobrem as peças alteradas na Task 6. Rode os dois.
 
 ---
 
@@ -1229,7 +1229,7 @@ git add apps/mobile/src/screens/caixa/pay-method.ts apps/mobile/src/screens/caix
 git commit -m "feat(caixa): cliente mobile envia o metodo de pagamento"
 ```
 
-O typecheck **tem** de ficar verde: o default `'pix'` mantém as chamadas existentes de `pagar.tsx` válidas.
+O typecheck **tem** de ficar verde, mas o default `'pix'` sozinho não basta. Medido na execução: o erro real não é a chamada sem argumento e sim `data.brCode` em `pagar.tsx:97`, que deixa de existir na união. Estreite a condição para `data.method === 'pix'` neste commit; a Task 7 reescreve o bloco inteiro.
 
 ---
 
@@ -1551,7 +1551,7 @@ git commit -m "feat(caixa): seletor de metodo e PaymentSheet na tela de pagament
 
 ## Verificação final antes do PR
 
-- [ ] Suíte inteira da API: `cd apps/api && pnpm exec vitest run`. ~13 min. Este trabalho toca settle, cutoff, webhook, resume e refund, caminhos compartilhados com ingressos, loja e garagem.
+- [ ] Suíte inteira da API: `cd apps/api && pnpm exec vitest run`. ~13 min. Se o runner for morto pelo limite de tempo do ambiente, rode em blocos por diretório e some os totais; `test/stripe` como filtro casa também com `test/stripe-webhook-push.test.ts`, então a soma dos blocos passa do numero de arquivos no disco. Este trabalho toca settle, cutoff, webhook, resume e refund, caminhos compartilhados com ingressos, loja e garagem.
 - [ ] `pnpm --filter @ccc/shared test && pnpm --filter @ccc/mobile test`
 - [ ] Lint e typecheck nos três pacotes; warnings não sobem.
 - [ ] **QA do caminho infeliz, que é o motivo da Task 2 existir.** No sandbox: confirmar uma caixa, gerar o PI, esperar o cutoff cancelar a Order, e só então pagar. Esperado: webhook 200, estorno automático, Order segue `cancelled`, caixa não envia. Se der 500, a Task 2 não ficou certa.

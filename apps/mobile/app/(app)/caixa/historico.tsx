@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { ArrowLeft, ChevronRight, WifiOff } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { FlatList, Image, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { caixaCopy } from '~/copy/caixa';
 import { useBoxHistory } from '~/hooks/useBoxHistory';
@@ -34,8 +35,11 @@ function onBack() {
 }
 
 function Header() {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <Pressable
         onPress={onBack}
         accessibilityRole="button"

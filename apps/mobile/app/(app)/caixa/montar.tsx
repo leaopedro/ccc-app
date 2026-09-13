@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { caixaCopy } from '~/copy/caixa';
 import { useBox } from '~/hooks/useBox';
@@ -53,8 +54,11 @@ function goBack() {
 /* ------------------------------------------------------------------ */
 
 function SimpleHeader() {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <Pressable
         onPress={goBack}
         accessibilityRole="button"
@@ -76,6 +80,9 @@ function SimpleHeader() {
 /* ------------------------------------------------------------------ */
 
 function BuilderHeader({ cutoffAt, onBack }: { cutoffAt: string; onBack: () => void }) {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   // Recomputed once a minute — this is a status readout, not a stopwatch
   // (same cadence as CutoffBanner on the home screen).
   const [now, setNow] = useState(() => Date.now());
@@ -88,7 +95,7 @@ function BuilderHeader({ cutoffAt, onBack }: { cutoffAt: string; onBack: () => v
   const urgent = isUrgent(msRemaining);
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <Pressable
         onPress={onBack}
         accessibilityRole="button"

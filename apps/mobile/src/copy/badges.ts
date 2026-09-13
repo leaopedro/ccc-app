@@ -102,6 +102,41 @@ const ptBR = {
         description: 'Você entrou antes de a comunidade decolar.',
         criteria: 'Ter criado a conta antes de 01/06/2026.',
       },
+      'CAR-004': {
+        title: 'Álbum da Garagem',
+        description: 'Três carros seus retratados.',
+        criteria: 'Tenha foto em 3 carros diferentes da sua garagem.',
+      },
+      'COM-004': {
+        title: 'Bom de Papo',
+        description: 'Seu primeiro comentário no feed.',
+        criteria: 'Comente em uma postagem do feed.',
+      },
+      'COM-005': {
+        title: 'Voz da Comunidade',
+        description: 'Dez comentários seus nas conversas dos encontros.',
+        criteria: 'Publique 10 comentários no feed.',
+      },
+      'COM-006': {
+        title: 'Em Chamas',
+        description: 'Cinquenta curtidas nas suas postagens.',
+        criteria: 'Receba 50 curtidas nas suas postagens do feed.',
+      },
+      'COM-007': {
+        title: 'Ídolo da Garagem',
+        description: 'Duzentas e cinquenta curtidas nas suas postagens.',
+        criteria: 'Receba 250 curtidas nas suas postagens do feed.',
+      },
+      'CCC-004': {
+        title: 'Sócio CCC',
+        description: 'Assinatura Premium ativa.',
+        criteria: 'Ative uma assinatura Premium.',
+      },
+      'CCC-005': {
+        title: 'Cliente da Casa',
+        description: 'Seu primeiro pedido pago na loja.',
+        criteria: 'Pague um pedido na loja.',
+      },
     },
   },
 } as const;
@@ -191,6 +226,41 @@ const en = {
         title: 'Founder',
         description: 'You joined before the community took off.',
         criteria: 'Account created before 2026-06-01.',
+      },
+      'CAR-004': {
+        title: 'Garage Album',
+        description: 'Three of your cars photographed.',
+        criteria: 'Add a photo to 3 different cars in your garage.',
+      },
+      'COM-004': {
+        title: 'Chatty',
+        description: 'Your first comment on the feed.',
+        criteria: 'Comment on a feed post.',
+      },
+      'COM-005': {
+        title: 'Community Voice',
+        description: 'Ten comments of yours across the meet conversations.',
+        criteria: 'Publish 10 comments on the feed.',
+      },
+      'COM-006': {
+        title: 'On Fire',
+        description: 'Fifty likes on your posts.',
+        criteria: 'Receive 50 likes on your feed posts.',
+      },
+      'COM-007': {
+        title: 'Garage Idol',
+        description: 'Two hundred and fifty likes on your posts.',
+        criteria: 'Receive 250 likes on your feed posts.',
+      },
+      'CCC-004': {
+        title: 'CCC Member',
+        description: 'Active Premium subscription.',
+        criteria: 'Activate a Premium subscription.',
+      },
+      'CCC-005': {
+        title: 'House Regular',
+        description: 'Your first paid store order.',
+        criteria: 'Pay for a store order.',
       },
     },
   },

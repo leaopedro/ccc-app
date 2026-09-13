@@ -113,12 +113,16 @@ vi.mock('lucide-react-native', async () => {
     HelpCircle: make('HelpCircle'),
     Home: make('Home'),
     Library: make('Library'),
+    Images: make('Images'),
     Lock: make('Lock'),
     MapPin: make('MapPin'),
     Medal: make('Medal'),
     MessageCircle: make('MessageCircle'),
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
+    Megaphone: make('Megaphone'),
+    ShoppingBag: make('ShoppingBag'),
+    Star: make('Star'),
     TrendingUp: make('TrendingUp'),
     Trophy: make('Trophy'),
   };
@@ -169,6 +173,10 @@ describe('HexBadge', () => {
     ['calendar', 'CalendarDays'],
     ['trophy', 'Trophy'],
     ['camera', 'Camera'],
+    ['album', 'Images'],
+    ['megaphone', 'Megaphone'],
+    ['star', 'Star'],
+    ['bag', 'ShoppingBag'],
   ])('mapeia o ícone %s do catálogo', async (wire, expected) => {
     const { HexBadge } = await import('@ccc/ui');
     await renderEl(

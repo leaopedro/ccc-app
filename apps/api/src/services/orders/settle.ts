@@ -1,6 +1,8 @@
 import { prisma } from '@ccc/db';
 
 import { enqueueBoxNotification } from '../box/notifications.js';
+import { awardBadge } from '../garage/awarder.js';
+import { checkEligibility as checkOrderEligibility } from '../garage/eligibility/orders.js';
 import { assignEventPickupTicket } from '../store/event-pickup.js';
 import {
   issueTicketForPaidOrder,
@@ -13,6 +15,44 @@ import {
 import { fulfillGarageSpotsForOrder } from './garage-fulfillment.js';
 
 type IssueEnv = { readonly TICKET_CODE_SECRET: string };
+
+/**
+ * Conquistas de loja (CCC-005), avaliadas DEPOIS que o pedido virou `paid`.
+ *
+ * Fora da transação que liquida, e não dentro dela, de propósito. O flip de
+ * `product` roda em `Serializable` junto do fulfillment de vagas; enfiar mais
+ * escritas ali aumenta a chance de falha de serialização num caminho que move
+ * dinheiro. A conquista não precisa ser atômica com o pagamento — precisa é
+ * de nunca poder desfazê-lo.
+ *
+ * Por isso o try/catch engole TUDO. Nenhuma conquista vale reverter, ou
+ * sequer atrasar, um pagamento que o provedor já confirmou. Se falhar, o
+ * membro fica sem a conquista até a próxima compra, e isso é o pior que pode
+ * acontecer aqui.
+ */
+const awardStoreBadges = async (orderId: string): Promise<void> => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { userId: true },
+    });
+    if (!order) return;
+
+    await prisma.$transaction(async (tx) => {
+      const garage = await tx.garage.findUnique({
+        where: { userId: order.userId },
+        select: { id: true },
+      });
+      if (!garage) return;
+      const codes = await checkOrderEligibility(tx, order.userId);
+      for (const code of codes) {
+        await awardBadge(tx, garage.id, code, `order:${orderId}`);
+      }
+    });
+  } catch {
+    // Engolido de propósito — ver o bloco acima.
+  }
+};
 
 export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
@@ -67,6 +107,7 @@ export const settlePaidOrder = async (
       throw new OrderNotPendingError(orderId, order.status);
     }
     const issued = await issueTicketsForMixedOrder(orderId, providerRef, env);
+    await awardStoreBadges(orderId);
     await assignEventPickupTicket(orderId, env);
     return { kind: 'mixed', issued };
   }
@@ -98,6 +139,7 @@ export const settlePaidOrder = async (
       { isolationLevel: 'Serializable' },
     );
 
+    await awardStoreBadges(orderId);
     await assignEventPickupTicket(orderId, env);
     return { kind: order.kind };
   }

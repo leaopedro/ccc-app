@@ -6,6 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { requireUser } from '../plugins/auth.js';
 import { awardBadge } from '../services/garage/awarder.js';
+import { checkEligibility as checkCarPhotoEligibility } from '../services/garage/eligibility/car-photos.js';
 import { checkEligibility as checkCarEligibility } from '../services/garage/eligibility/cars.js';
 import { allocateSpotForCar, GarageFullError } from '../services/garage/index.js';
 import { awardXp } from '../services/garage/xp-awarder.js';
@@ -13,7 +14,6 @@ import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';
 
 import { serializeCar } from './cars-serializer.js';
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const carRoutes: FastifyPluginAsync = async (app) => {
   app.get('/me/cars', { preHandler: [app.authenticate] }, async (request) => {
     const { sub } = requireUser(request);
@@ -194,13 +194,40 @@ export const carRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      await prisma.carPhoto.create({
-        data: {
-          carId: id,
-          objectKey,
-          width: width ?? null,
-          height: height ?? null,
-        },
+      // Transação para a foto e a conquista caírem juntas. Sem ela, um crash
+      // entre as duas deixaria a foto sem o álbum, ou o álbum sem a foto que
+      // o fechou.
+      await prisma.$transaction(async (tx) => {
+        const photo = await tx.carPhoto.create({
+          data: {
+            carId: id,
+            objectKey,
+            width: width ?? null,
+            height: height ?? null,
+          },
+        });
+
+        // CAR-004 conta carros RETRATADOS, então só faz sentido pontuar
+        // depois que esta foto existe. Mesma forma dos outros hooks: a
+        // garagem é 1:1 com o usuário e o award é best-effort — um throw do
+        // awarder (Badge faltando num ambiente sem seed) não pode desfazer o
+        // upload que o membro acabou de fazer.
+        const garage = await tx.garage.findUnique({
+          where: { userId: sub },
+          select: { id: true },
+        });
+        if (!garage) return;
+        const codes = await checkCarPhotoEligibility(tx, sub);
+        for (const code of codes) {
+          try {
+            await awardBadge(tx, garage.id, code, `car_photo:${photo.id}`);
+          } catch (err) {
+            app.log.warn(
+              { err, garageId: garage.id, code },
+              'awardBadge failed during car photo create',
+            );
+          }
+        }
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {

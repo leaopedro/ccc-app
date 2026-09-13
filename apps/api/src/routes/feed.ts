@@ -19,7 +19,9 @@ import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
 import { blockedUserIdsFor, isBlockedBetween } from '../services/feed/blocks.js';
 import { awardBadge } from '../services/garage/awarder.js';
+import { checkEligibility as checkCommentEligibility } from '../services/garage/eligibility/comments.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
+import { checkEligibility as checkLikeEligibility } from '../services/garage/eligibility/likes.js';
 import rateLimit from '@fastify/rate-limit';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { awardXp, revertLikeXp } from '../services/garage/xp-awarder.js';
@@ -591,17 +593,40 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
       const buildUrl = (key: string) => app.uploads.buildPublicUrl(key);
 
-      const comment = await prisma.feedComment.create({
-        data: { postId, authorUserId: sub, carId: carId ?? null, body, status: 'visible' },
-        select: {
-          id: true,
-          postId: true,
-          body: true,
-          status: true,
-          createdAt: true,
-          updatedAt: true,
-          car: { select: CAR_SELECT },
-        },
+      // Transação pelo mesmo motivo do post: a conquista tem de cair ou
+      // reverter junto do comentário que a destravou.
+      const comment = await prisma.$transaction(async (tx) => {
+        const created = await tx.feedComment.create({
+          data: { postId, authorUserId: sub, carId: carId ?? null, body, status: 'visible' },
+          select: {
+            id: true,
+            postId: true,
+            body: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            car: { select: CAR_SELECT },
+          },
+        });
+
+        const garage = await tx.garage.findUnique({
+          where: { userId: sub },
+          select: { id: true },
+        });
+        if (garage) {
+          const codes = await checkCommentEligibility(tx, sub);
+          for (const code of codes) {
+            try {
+              await awardBadge(tx, garage.id, code, `feed_comment:${created.id}`);
+            } catch (err) {
+              app.log.warn(
+                { err, garageId: garage.id, code },
+                'awardBadge failed during feed comment create',
+              );
+            }
+          }
+        }
+        return created;
       });
 
       return reply.status(201).send(
@@ -939,6 +964,23 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
 
         if (prevKind !== 'like' && nextKind === 'like') {
           await awardXp(tx, authorGarageId, 'post_like', { sourceRef });
+
+          // COM-006 / COM-007 vão para o AUTOR, não para quem curtiu, e são
+          // pontuadas DEPOIS do awardXp: é ele que incrementa
+          // `Garage.likesReceived`, a coluna que a regra lê. Inverter a ordem
+          // avaliaria o contador de antes desta curtida e atrasaria toda
+          // conquista em uma.
+          const codes = await checkLikeEligibility(tx, authorGarageId);
+          for (const code of codes) {
+            try {
+              await awardBadge(tx, authorGarageId, code, sourceRef);
+            } catch (err) {
+              app.log.warn(
+                { err, garageId: authorGarageId, code },
+                'awardBadge failed during feed reaction',
+              );
+            }
+          }
         } else if (prevKind === 'like' && nextKind !== 'like') {
           await revertLikeXp(tx, postId, reactionId, authorGarageId);
         }

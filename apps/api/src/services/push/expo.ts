@@ -41,8 +41,16 @@ export class ExpoPushSender implements PushSender {
           outcomesByToken.set(to, { kind: 'ok' });
           return;
         }
+        // Only DeviceNotRegistered says anything about the token itself. Both
+        // callers delete the DeviceToken row on `invalid-token`, so mapping a
+        // project-level credential fault here (InvalidCredentials — missing or
+        // expired APNs key, bad FCM config) would wipe valid tokens across the
+        // whole audience for a problem no device can fix, and the deletion
+        // outlives the fix: every user has to reopen the app to re-register.
+        // Surface it as an error instead, so the row is retried and the reason
+        // is persisted.
         const detailsErr = ticket.details?.error;
-        if (detailsErr === 'DeviceNotRegistered' || detailsErr === 'InvalidCredentials') {
+        if (detailsErr === 'DeviceNotRegistered') {
           outcomesByToken.set(to, { kind: 'invalid-token' });
         } else {
           outcomesByToken.set(to, { kind: 'error', message: ticket.message ?? 'expo error' });

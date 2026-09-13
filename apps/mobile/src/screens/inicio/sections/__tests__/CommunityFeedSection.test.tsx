@@ -45,6 +45,8 @@ vi.mock('react-native', async () => {
         contentContainerStyle,
         accessible,
         numberOfLines,
+        maxFontSizeMultiplier,
+        accessibilityHint,
         ...rest
       } = props;
       const aria: Record<string, unknown> = {};
@@ -65,6 +67,8 @@ vi.mock('react-native', async () => {
       void showsHorizontalScrollIndicator;
       void accessible;
       void numberOfLines;
+      void maxFontSizeMultiplier;
+      void accessibilityHint;
       return ReactMod.createElement(tag, { ...rest, ...aria, ref });
     });
   return {
@@ -85,13 +89,14 @@ vi.mock('expo-linear-gradient', async () => {
   const ReactMod = await import('react');
   return {
     LinearGradient: ReactMod.forwardRef((props: Record<string, unknown>, ref: unknown) => {
-      const { colors, start, end, style, ...rest } = props;
+      const { colors, start, end, style, pointerEvents, ...rest } = props;
       const aria: Record<string, unknown> = {};
       const resolvedStyle = resolveStyle(style);
       if (resolvedStyle) aria['data-style'] = JSON.stringify(resolvedStyle);
       void colors;
       void start;
       void end;
+      void pointerEvents;
       return ReactMod.createElement('div', { ref, ...rest, ...aria });
     }),
   };
@@ -192,5 +197,48 @@ describe('CommunityFeedSection', () => {
     // Catches: um label tipo "Post em X". Pressable colapsa os filhos num no
     // so, entao o que nao estiver no label nao existe para leitor de tela.
     expect(label).toContain('que encontro bom');
+  });
+
+  it('renderiza a foto e o gradiente quando o post tem foto', async () => {
+    await act(async () => {
+      root.render(
+        <CommunityFeedSection
+          posts={[
+            post({
+              photos: [
+                {
+                  id: 'ph1',
+                  url: 'https://cdn.example.com/post.webp',
+                  width: null,
+                  height: null,
+                  sortOrder: 0,
+                },
+              ],
+            }),
+          ]}
+          onOpenEvent={() => {}}
+        />,
+      );
+    });
+
+    // Catches: perder o ramo da foto, ou trocar o gradiente de tres paradas
+    // por um scrim chapado, que apagaria a foto em vez de realca-la.
+    expect(container.querySelector('img')).not.toBeNull();
+
+    // O <LinearGradient style={styles.fill} .../> e o unico <div> cujo
+    // data-style resolve para os quatro offsets absolutos do fill (a Image
+    // tambem usa styles.fill, mas vira <img>, nao <div>). Mesma convencao de
+    // HeroSection.test.tsx (div[data-style]).
+    const fillStyle = JSON.stringify({
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    });
+    const gradient = Array.from(container.querySelectorAll('div[data-style]')).find(
+      (el) => el.getAttribute('data-style') === fillStyle,
+    );
+    expect(gradient).not.toBeUndefined();
   });
 });

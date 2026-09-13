@@ -205,7 +205,7 @@ describe('GET /api/home-feed', () => {
     expect(seen.size).toBeGreaterThan(3);
   });
 
-  it('esconde post de autor bloqueado em qualquer direcao', async () => {
+  it('esconde bloqueado nas duas direcoes e a conta apagada no mesmo pool', async () => {
     const event = await seedEvent('Encontro Publico');
     const reader = await newUser();
     const blocked = await newUser();
@@ -213,6 +213,20 @@ describe('GET /api/home-feed', () => {
     await seedPost(event.id, 'do bloqueado', blocked.id);
     await seedPost(event.id, 'de quem me bloqueou', blocker.id);
     await seedPost(event.id, 'de terceiro');
+    // O post orfao esta aqui DE PROPOSITO, nao sobrou de copiar e colar. Os
+    // dois requisitos do filtro de autor moram na MESMA chave do where: ter
+    // autor (`not: null`) e o autor nao estar bloqueado (`notIn`). Este e o
+    // unico cenario com leitor logado, bloqueios E post orfao no mesmo pool.
+    //
+    // O que ele pega, verificado rodando a variante e vendo falhar: copiar
+    // para ca o idiom do feed do evento (routes/feed.ts:70-76),
+    // `OR: [{ authorUserId: null }, { authorUserId: { notIn } }]`. La aquele
+    // OR existe para MANTER o tombstone e nao perder a thread; aqui ele
+    // inverte o requisito e promove conteudo de conta apagada para a primeira
+    // tela do app. Sem este post no pool, a copia passa nos outros 16 testes.
+    await prisma.feedPost.create({
+      data: { eventId: event.id, body: 'tombstone', authorUserId: null, status: 'visible' },
+    });
     await prisma.userBlock.create({ data: { blockerId: reader.id, blockedId: blocked.id } });
     await prisma.userBlock.create({ data: { blockerId: blocker.id, blockedId: reader.id } });
 

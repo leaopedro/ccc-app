@@ -117,9 +117,27 @@ export const adminRefundRoutes: FastifyPluginAsync = async (app) => {
 
     const order = await prisma.order.findUnique({
       where: { id },
-      select: { id: true, status: true, provider: true, providerRef: true, amountCents: true },
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        provider: true,
+        providerRef: true,
+        amountCents: true,
+      },
     });
     if (!order) return reply.status(404).send({ error: 'NotFound' });
+
+    // Estorno de caixa e Fase 4c. Enquanto ela nao existir, o `MonthlyBox` nao
+    // acompanha o estorno: `revokeTicketsForRefundedOrder` nao tem ramo de box,
+    // entao a Order viraria `refunded` e a caixa seria enviada do mesmo jeito.
+    // Recusar e melhor que estornar pela metade.
+    if (order.kind === 'box') {
+      return reply.status(501).send({
+        error: 'RefundNotSupported',
+        message: 'Estorno de caixa ainda nao e suportado. Ver Fase 4c.',
+      });
+    }
 
     if (order.provider !== 'stripe') {
       return reply.status(501).send({

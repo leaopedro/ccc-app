@@ -757,22 +757,51 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             .status(200)
             .send({ ok: true, refunded: true, reason: 'pickup-ticket-unavailable' });
         }
-        // Order expired between POST /orders and webhook delivery.
-        // Customer paid but capacity was already released — refund immediately.
+        // Order nao estava `pending` quando o pagamento chegou. Antes daqui so
+        // `expired` era tratado e todo o resto caia no `throw` abaixo -> 500.
+        // Para ingresso isso quase nao aparecia: `expired` era o estado comum.
+        // Uma Order de caixa nunca pode ser `expired` (o confirm nao grava
+        // `expiresAt` e order-expiry filtra por ele) e o cutoff grava
+        // `cancelled`, entao o pagador de ultima hora caia direto no 500: sem
+        // markProcessed, sem dedupe, a Stripe reentregando por ~3 dias ate
+        // desativar o endpoint. Dinheiro entrou, nada saiu, nenhum alerta.
+        // Espelha o ramo equivalente do abacatepay-webhook.ts, que ja tinha os
+        // tres casos.
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: orderId },
-            select: { status: true },
+            select: { status: true, providerRef: true },
           });
-          if (staleOrder?.status === 'expired') {
-            await app.stripe.refund(intent.id, 'order-expired');
-            await markProcessed(event.id, event);
-            request.log.warn(
-              { orderId, paymentIntentId: intent.id },
-              'stripe webhook: order expired at payment, refunded',
-            );
-            return reply.status(200).send({ ok: true, refunded: true, reason: 'expired' });
+
+          // Ja pago: nada a fazer alem de deduplicar. Uma cobranca DISTINTA na
+          // mesma Order e pagamento em dobro e precisa de estorno.
+          if (staleOrder?.status === 'paid') {
+            const firstTime = await markProcessed(event.id, event);
+            if (firstTime && staleOrder.providerRef && staleOrder.providerRef !== intent.id) {
+              await app.stripe.refund(intent.id, 'double-payment');
+              request.log.warn(
+                { orderId, paymentIntentId: intent.id, storedProviderRef: staleOrder.providerRef },
+                'stripe webhook: distinct PI on an already-paid order, refunded',
+              );
+            }
+            return reply.status(200).send({ ok: true, deduped: !firstTime });
           }
+
+          // Qualquer outro estado nao-pendente: expired, cancelled, failed,
+          // refunded. Estorna na primeira entrega e deduplica nas seguintes.
+          // `markProcessed` PRIMEIRO, para que uma reentrega nao estorne duas
+          // vezes se o refund ou o log falharem depois.
+          const firstTime = await markProcessed(event.id, event);
+          if (firstTime) {
+            await app.stripe.refund(intent.id, `order-${staleOrder?.status ?? 'unknown'}`);
+            request.log.warn(
+              { orderId, paymentIntentId: intent.id, status: staleOrder?.status },
+              'stripe webhook: order not pending at payment, refunded',
+            );
+          }
+          return reply
+            .status(200)
+            .send({ ok: true, refunded: firstTime, reason: staleOrder?.status ?? 'unknown' });
         }
         throw err;
       }

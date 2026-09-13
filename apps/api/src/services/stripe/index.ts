@@ -17,6 +17,12 @@ export type CreatePaymentIntentInput = {
    * nossa conta Stripe.
    */
   receiptEmail?: string;
+  /**
+   * Restringe os metodos oferecidos. Omitido => `automatic_payment_methods`, o
+   * comportamento de sempre. A caixa passa `['card']` porque a cobranca tem
+   * prazo duro (o cutoff) e um metodo assincrono liquidaria depois dele.
+   */
+  paymentMethodTypes?: string[];
 };
 
 export type CheckoutSessionResult = {
@@ -386,13 +392,16 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
       metadata,
       idempotencyKey,
       receiptEmail,
+      paymentMethodTypes,
     }) => {
       const pi = await stripe.paymentIntents.create(
         {
           amount: amountCents,
           currency: currency.toLowerCase(),
           metadata,
-          automatic_payment_methods: { enabled: true },
+          ...(paymentMethodTypes
+            ? { payment_method_types: paymentMethodTypes }
+            : { automatic_payment_methods: { enabled: true } }),
           ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
         },
         { idempotencyKey },

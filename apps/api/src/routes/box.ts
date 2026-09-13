@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 import {
+  boxCheckoutRequestSchema,
   boxConfirmSchema,
   boxPreferencesSchema,
   boxSelectionUpdateSchema,
@@ -397,21 +398,47 @@ export const boxRoutes: FastifyPluginAsync = async (app) => {
     });
     scoped.post('/me/box/checkout', async (request, reply) => {
       const { sub } = requireUser(request);
-      if (!app.abacatepay) return reply.status(503).send({ error: 'payment_unavailable' });
+      const parsed = boxCheckoutRequestSchema.safeParse(request.body ?? {});
+      // snake_case and no `issues`: every other error this endpoint returns is
+      // snake_case (`box_locked`, `box_not_eligible`), and leaking Zod
+      // internals to clients buys nothing.
+      if (!parsed.success) {
+        return reply.status(422).send({ error: 'invalid_payment_method' });
+      }
+      const method = parsed.data.method;
       const membership = await loadEligibleMembership(sub);
       if (!membership) return reply.status(403).send({ error: 'box_not_eligible' });
+      // `app.stripe` is always decorated (app.ts); only Pix can be missing. The
+      // 503 guard lives AFTER the checkout so a card reuse is not 503'd just
+      // because the caller asked for 'pix' — Phase A ignores the requested
+      // method once a charge exists.
       const result = await checkoutBoxOrder({
         userId: sub,
         membershipId: membership.id,
+        method,
         abacatepay: app.abacatepay,
+        stripe: app.stripe,
       });
       if (result.kind === 'not_found') return reply.status(404).send({ error: 'box_not_open' });
       if (result.kind === 'not_awaiting')
         return reply.status(409).send({ error: 'box_not_awaiting' });
       if (result.kind === 'locked') return reply.status(409).send({ error: 'box_locked' });
-      if (result.kind === 'upstream')
+      if (result.kind === 'upstream') {
+        if (method === 'pix' && !app.abacatepay) {
+          return reply.status(503).send({ error: 'payment_unavailable' });
+        }
         return reply.status(502).send({ error: 'payment_provider_error' });
+      }
+      if (result.method === 'card') {
+        return reply.send({
+          method: 'card',
+          clientSecret: result.clientSecret,
+          amountCents: result.amountCents,
+          expiresAt: result.expiresAt,
+        });
+      }
       return reply.send({
+        method: 'pix',
         brCode: result.brCode,
         amountCents: result.amountCents,
         expiresAt: result.expiresAt,

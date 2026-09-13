@@ -119,6 +119,20 @@ export const awardBadge = async (
   // badgeCode]) on GarageBadge — we catch P2002 instead of pre-reading
   // because the read-then-write pattern races under concurrency (two
   // simultaneous write-paths both observe "not earned" and both insert).
+  //
+  // SAVEPOINT, pelo mesmo motivo que `awardXp` usa um: o Prisma não abre um
+  // savepoint por statement dentro de `$transaction`. Sem ele, o INSERT que
+  // falha com P2002 deixa a transação em 25P02
+  // (in_failed_sql_transaction) — todo comando seguinte falha e o COMMIT vira
+  // ROLLBACK em silêncio. O chamador recebe `already_earned`, acha que está
+  // tudo bem, e perde a PRÓPRIA escrita sem ver erro nenhum.
+  //
+  // Não é um caso raro: como cada hook reavalia a superfície inteira a cada
+  // escrita, o segundo carro re-pontua CAR-001 e o segundo comentário
+  // re-pontua COM-004. O caminho repetido é o normal. Em produção isto estava
+  // mascarado só porque a tabela Badge estava vazia e o `unknown badge` acima
+  // disparava antes do INSERT.
+  await tx.$executeRawUnsafe('SAVEPOINT awardbadge');
   try {
     await tx.garageBadge.create({
       data: { garageId, badgeCode: code, sourceRef },
@@ -176,8 +190,16 @@ export const awardBadge = async (
       }
     }
 
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge');
     return { awarded: true };
   } catch (e) {
+    // Devolver a transação a um estado gravável ANTES de decidir entre engolir
+    // (P2002) e relançar. Sem o ROLLBACK TO, mesmo o caminho de rethrow
+    // deixaria o chamador sem conseguir nem registrar o erro, e um chamador
+    // que faz log+swallow (os hooks de carro, feed, check-in e signup)
+    // perderia a escrita dele no commit.
+    await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT awardbadge');
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge');
     if (isUniqueConstraintError(e)) return { awarded: false, reason: 'already_earned' };
     throw e;
   }

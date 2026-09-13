@@ -28,10 +28,12 @@ import { buildLoginHref } from '~/auth/redirect-intent';
 import { inicioCopy } from '~/copy/inicio';
 import { useClubStats } from '~/hooks/useClubStats';
 import { useHomeContent } from '~/hooks/useHomeContent';
+import { useHomeFeed } from '~/hooks/useHomeFeed';
 import { AppHeader } from '~/screens/inicio/components/AppHeader';
 import { p } from '~/screens/inicio/palette';
 import { BenefitsSection } from '~/screens/inicio/sections/BenefitsSection';
 import { ClubStatsSection } from '~/screens/inicio/sections/ClubStatsSection';
+import { CommunityFeedSection } from '~/screens/inicio/sections/CommunityFeedSection';
 import { ConfirmedCarsSection } from '~/screens/inicio/sections/ConfirmedCarsSection';
 import { CtaSection } from '~/screens/inicio/sections/CtaSection';
 import { HeroSection } from '~/screens/inicio/sections/HeroSection';
@@ -57,6 +59,7 @@ const UPCOMING_EVENTS_QUERY = { window: 'upcoming' as const, limit: 3 };
 export function GuestHome() {
   const { content, loading, error, refresh } = useHomeContent();
   const { stats } = useClubStats();
+  const { posts: feedPosts } = useHomeFeed();
   const [events, setEvents] = useState<EventSummary[]>([]);
 
   useEffect(() => {
@@ -117,6 +120,15 @@ export function GuestHome() {
               events={events}
               onOpenLink={goLink}
               onOpenEvent={goEvent}
+            />
+            <CommunityFeedSection
+              posts={feedPosts}
+              onOpenEvent={(slug) =>
+                router.push({
+                  pathname: '/events/[slug]',
+                  params: { slug, focus: 'feed' },
+                } as never)
+              }
             />
             <StoreTeaserSection />
             <ConfirmedCarsSection eventSlug={firstEventSlug} />

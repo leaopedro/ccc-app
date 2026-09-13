@@ -148,6 +148,12 @@ const { listEvents, getConfirmedCars } = vi.hoisted(() => ({
   getConfirmedCars: vi.fn(),
 }));
 
+// Task 8: mesma razao do MemberHome — o hook real puxa ~/api/client ->
+// expo-constants, que lanca `__DEV__ is not defined` sob jsdom.
+const homeFeedState = vi.hoisted(() => ({
+  value: { posts: [] as unknown[], loading: false, refresh: async () => {} },
+}));
+
 vi.mock('~/hooks/useHomeContent', () => ({
   useHomeContent: () => hookState.home,
 }));
@@ -156,6 +162,9 @@ vi.mock('~/hooks/useClubStats', () => ({
 }));
 vi.mock('~/hooks/useStoreProducts', () => ({
   useStoreProducts: () => hookState.storeProducts,
+}));
+vi.mock('~/hooks/useHomeFeed', () => ({
+  useHomeFeed: () => homeFeedState.value,
 }));
 vi.mock('~/api/events', () => ({
   listEvents,
@@ -288,6 +297,7 @@ beforeEach(() => {
     error: false,
     refresh: () => Promise.resolve(),
   };
+  homeFeedState.value = { posts: [], loading: false, refresh: async () => {} };
 });
 
 afterEach(async () => {
@@ -572,5 +582,34 @@ describe('GuestHome — member-state leak guard', () => {
     expect(text).not.toContain(inicioCopy.sections.myTickets);
     expect(text).not.toContain(inicioCopy.sections.myGarage);
     expect(text).not.toContain(inicioCopy.sections.quickAccess);
+  });
+});
+
+describe('GuestHome — community feed (Task 8)', () => {
+  it('renderiza o feed da comunidade quando ha posts', async () => {
+    homeFeedState.value = {
+      posts: [
+        {
+          id: 'p1',
+          eventId: 'e1',
+          car: null,
+          body: 'que encontro bom',
+          status: 'visible',
+          photos: [],
+          reactions: { likes: 0, mine: false },
+          commentCount: 0,
+          isOwn: false,
+          createdAt: '2026-09-13T12:00:00.000Z',
+          updatedAt: '2026-09-13T12:00:00.000Z',
+          event: { slug: 'encontro-setembro', title: 'Encontro de Setembro' },
+        },
+      ],
+      loading: false,
+      refresh: async () => {},
+    };
+
+    await render();
+
+    expect(container.textContent).toContain('que encontro bom');
   });
 });

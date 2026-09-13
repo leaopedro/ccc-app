@@ -30,12 +30,14 @@ import { useAuth } from '~/auth/context';
 import { notificationsCopy } from '~/copy/notifications';
 import { useClubStats } from '~/hooks/useClubStats';
 import { useHomeContent } from '~/hooks/useHomeContent';
+import { useHomeFeed } from '~/hooks/useHomeFeed';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { useUnreadCount } from '~/hooks/useUnreadCount';
 import { AppHeader } from '~/screens/inicio/components/AppHeader';
 import { p } from '~/screens/inicio/palette';
 import { BoxSection } from '~/screens/inicio/sections/BoxSection';
 import { ClubStatsSection } from '~/screens/inicio/sections/ClubStatsSection';
+import { CommunityFeedSection } from '~/screens/inicio/sections/CommunityFeedSection';
 import { HeroSection } from '~/screens/inicio/sections/HeroSection';
 import { MemberGreeting } from '~/screens/inicio/sections/MemberGreeting';
 import { MyGarageSection } from '~/screens/inicio/sections/MyGarageSection';
@@ -56,12 +58,21 @@ export function MemberHome() {
   // which starts a NEW purchase. Same source SubscriptionSection's sibling
   // screens (MinhaAssinaturaScreen, PlanosScreen) already read.
   const { subscriptionsEnabled } = usePremiumPlans();
+  const { posts: feedPosts, loading: feedLoading, refresh: refreshFeed } = useHomeFeed();
 
   // Pull-to-refresh recovery affordance (final review, Blocker 4). Reflects
   // the five phase-1 sources refreshAll actually re-fetches — box is phase-2
   // and gated on garage, not part of the pull gesture's own loading window.
+  // O feed (Task 8) entra tambem: sem isso o spinner some antes do feed
+  // voltar, e o carrossel troca de conteudo sozinho com a tela ja parecendo
+  // pronta.
   const refreshing =
-    profile.loading || nextEvent.loading || tickets.loading || garage.loading || premium.loading;
+    profile.loading ||
+    nextEvent.loading ||
+    tickets.loading ||
+    garage.loading ||
+    premium.loading ||
+    feedLoading;
 
   const firstName = (user?.name ?? profile.data?.name ?? '').trim().split(/\s+/)[0] ?? '';
   // Fix round 1 (Minor 9). Two different sources, on purpose:
@@ -87,7 +98,7 @@ export function MemberHome() {
           <RefreshControl
             testID="inicio-refresh-control"
             refreshing={refreshing}
-            onRefresh={() => void refreshAll()}
+            onRefresh={() => void Promise.all([refreshAll(), refreshFeed()])}
             tintColor={p.gold}
           />
         }
@@ -123,6 +134,13 @@ export function MemberHome() {
         <MemberGreeting firstName={firstName || null} createdAt={profile.data?.createdAt ?? null} />
 
         <NextEventCard event={nextEvent.data} onPress={(slug) => router.push(`/events/${slug}`)} />
+
+        <CommunityFeedSection
+          posts={feedPosts}
+          onOpenEvent={(slug) =>
+            router.push({ pathname: '/events/[slug]', params: { slug, focus: 'feed' } } as never)
+          }
+        />
 
         <ClubStatsSection stats={stats} />
 

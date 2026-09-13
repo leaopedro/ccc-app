@@ -62,11 +62,11 @@ eliminação viraria destaque na primeira tela do app, servido a anônimo.
 
 **Excluir `authorUserId: null` não é suficiente, e essa foi a primeira versão
 errada deste spec.** A anulação do autor não acontece no pedido de exclusão:
-`routes/me-account-delete.ts` só marca `status: 'deleted'` e grava `deletedAt`,
-e o worker (`workers/account-deletion.ts`) só anonimiza quem tem
-`deletedAt <= now - DELETION_GRACE_DAYS`, que é 30 por padrão
+`services/account-deletion/request.ts:19-36` só marca `status: 'deleted'` e
+grava `deletedAt`, e o worker (`workers/account-deletion.ts:26-27`) só anonimiza
+quem tem `deletedAt <= now - DELETION_GRACE_DAYS`, que é 30 por padrão
 (`env.ts:68`). Durante esses 30 dias `authorUserId` continua preenchido, e o
-post, o apelido e a foto do carro continuariam elegíveis para a vitrine —
+post, o apelido e a foto do carro continuariam elegíveis para a vitrine. É
 exatamente o dano que esta seção existe para impedir, atrasado um mês. O mesmo
 buraco cobre `status: 'disabled'`, ou seja, conta banida da plataforma.
 

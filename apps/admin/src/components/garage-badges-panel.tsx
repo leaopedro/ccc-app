@@ -9,14 +9,12 @@ import { grantAdminUserBadgeAction } from '~/lib/admin-garage-actions';
 
 interface Props {
   userId: string;
-  /** Full badge catalog from `GET /badges/catalog` (chunk 16). Empty when
-   *  the global killswitch is off or the upstream fetch failed. */
+  /** Full badge catalog from `GET /admin/users/:id/garage/badges`. Empty
+   *  when the global killswitch is off or the upstream fetch failed. */
   catalog: BadgeCatalogEntry[];
-  /** Codes the user has already earned. Best-effort: chunk 20 fetches
-   *  pinned-only badges from the public garage payload because no admin
-   *  badge READ endpoint exists yet. Unpinned-earned badges therefore
-   *  show as not-earned in the indicator but the API call still returns
-   *  `already_earned` and the panel surfaces that error inline. */
+  /** Codes the user has already earned, from the same admin read. Complete:
+   *  pinned and unpinned alike, and independent of whether the target's
+   *  garage is public. */
   earnedCodes: string[];
   /** Drives whether granting a `premiumExclusive` badge needs the
    *  bypass-confirm dialog. Same flag the awarder uses server-side. */

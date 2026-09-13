@@ -65,7 +65,7 @@ export const brand = {
 
   urls: {
     appBase: 'https://casacar.club',
-    publicProfileBase: 'https://casacar.club/g',
+    publicProfileBase: 'https://garage.casacar.club/g',
     partnersPage: 'https://casacar.club/parceiros',
   },
 

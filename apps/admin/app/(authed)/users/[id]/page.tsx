@@ -1,3 +1,4 @@
+import type { BadgeCatalogEntry } from '@ccc/shared/badges';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -13,10 +14,9 @@ import { UserGaragePanel } from '~/components/user-garage-panel';
 import { UserStatusActions } from '~/components/user-status-actions';
 import { UserStatusChip } from '~/components/user-status-chip';
 import { getAdminUser, getMe, listAdminEvents, listAdminGroups } from '~/lib/admin-api';
-import { getAdminUserGarage } from '~/lib/admin-garage-api';
+import { getAdminUserGarage, getAdminUserGarageBadges } from '~/lib/admin-garage-api';
 import { ApiError } from '~/lib/api';
 import { readRole } from '~/lib/auth-session';
-import { fetchBadgeCatalog, fetchPublicGarage } from '~/lib/public-garage';
 
 export const dynamic = 'force-dynamic';
 
@@ -139,29 +139,24 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   // do Next em vez de resposta. Organizer vê o texto, não o link.
   const canOpenOrderDetail = (await readRole()) === 'admin';
 
-  // Conquistas panel data. The badge catalog comes from the public
-  // /badges/catalog endpoint (chunk 16) — no auth, killswitch-aware.
-  // Earned badges are best-effort: chunk 18 ships only an admin grant
-  // route, no admin badge READ. We fall back to the public garage
-  // payload's pinned-earned list when the garage is public. Unpinned
-  // earned badges therefore show as "not earned" in the indicator, but
-  // the awarder still rejects double-grants with `already_earned` and
-  // the panel surfaces that error inline.
-  let badgeCatalog: Awaited<ReturnType<typeof fetchBadgeCatalog>> = null;
+  // Conquistas panel data. One admin-scoped read carries both the catalog
+  // and the target's per-badge state, killswitch-aware: when Conquistas are
+  // globally off the route returns `enabled: false` with empty arrays and the
+  // panel renders its empty state.
+  let badgeCatalog: BadgeCatalogEntry[] = [];
   let earnedCodes: string[] = [];
   let isPremiumActive = false;
   let adminGarage: Awaited<ReturnType<typeof getAdminUserGarage>> | undefined;
   try {
-    const [catalog, fetchedGarage] = await Promise.all([
-      fetchBadgeCatalog(),
+    const [badgesState, fetchedGarage] = await Promise.all([
+      getAdminUserGarageBadges(user.id),
       getAdminUserGarage(user.id),
     ]);
-    badgeCatalog = catalog;
     adminGarage = fetchedGarage;
     isPremiumActive = fetchedGarage.garage.isPremiumActive;
-    if (fetchedGarage.garage.isPublic) {
-      const publicPayload = await fetchPublicGarage(fetchedGarage.garage.slug);
-      earnedCodes = publicPayload?.garage.badges.map((b) => b.code) ?? [];
+    if (badgesState.enabled) {
+      badgeCatalog = badgesState.catalog;
+      earnedCodes = badgesState.badges.filter((b) => b.state === 'earned').map((b) => b.code);
     }
   } catch {
     // non-fatal: panel falls back to empty-catalog state.
@@ -395,7 +390,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       {/* Garage Conquistas (chunk 20) */}
       <GarageBadgesPanel
         userId={user.id}
-        catalog={badgeCatalog?.enabled ? badgeCatalog.catalog : []}
+        catalog={badgeCatalog}
         earnedCodes={earnedCodes}
         isPremiumActive={isPremiumActive}
       />

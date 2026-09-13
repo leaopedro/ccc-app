@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type * as AdminApi from '~/lib/admin-api';
 import type * as AdminGarageApi from '~/lib/admin-garage-api';
 import { ApiError } from '~/lib/api';
-import type * as PublicGarage from '~/lib/public-garage';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -75,15 +74,10 @@ vi.mock('~/lib/admin-api', () => ({
 }));
 
 const getAdminUserGarage = vi.fn<typeof AdminGarageApi.getAdminUserGarage>();
+const getAdminUserGarageBadges = vi.fn<typeof AdminGarageApi.getAdminUserGarageBadges>();
 vi.mock('~/lib/admin-garage-api', () => ({
   getAdminUserGarage: (id: string) => getAdminUserGarage(id),
-}));
-
-const fetchBadgeCatalog = vi.fn<typeof PublicGarage.fetchBadgeCatalog>();
-const fetchPublicGarage = vi.fn<typeof PublicGarage.fetchPublicGarage>();
-vi.mock('~/lib/public-garage', () => ({
-  fetchBadgeCatalog: () => fetchBadgeCatalog(),
-  fetchPublicGarage: (slug: string) => fetchPublicGarage(slug),
+  getAdminUserGarageBadges: (id: string) => getAdminUserGarageBadges(id),
 }));
 
 const Page = (await import('../page')).default;

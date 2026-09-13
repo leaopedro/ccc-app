@@ -12,6 +12,7 @@ export const inicioCopy = {
     clubStats: 'STATUS DO CLUBE',
     store: 'NA LOJA',
     confirmedCars: 'QUEM JÁ CONFIRMOU',
+    communityFeed: 'DA COMUNIDADE',
     quickAccess: 'ACESSO RÁPIDO',
     myTickets: 'MEUS INGRESSOS',
     myGarage: 'MINHA GARAGEM',

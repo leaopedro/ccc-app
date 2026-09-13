@@ -1,7 +1,7 @@
 'use client';
 
 import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const inputCls =
   'w-full rounded border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-2 py-1.5 text-sm text-[color:var(--color-fg)]';
@@ -48,10 +48,16 @@ export function AdminXpAdjustmentModal({
     setSubmitting(false);
   }, []);
 
-  // Reset whenever the modal opens fresh so prior errors do not leak.
-  useEffect(() => {
+  // Reset whenever the modal opens fresh so prior errors do not leak. Done as
+  // a render-phase adjustment rather than an effect: React re-renders with the
+  // cleared fields before committing, so the stale delta/reason never paint.
+  // The effect version set state synchronously in its body, which costs an
+  // extra commit and trips react-hooks/set-state-in-effect.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) reset();
-  }, [open, reset]);
+  }
 
   // canon §C7: `Number(delta)` + `Number.isInteger(...)` — NOT
   // `Number.parseInt`. `parseInt('1.5')` returns `1` and would bypass the

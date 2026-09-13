@@ -201,6 +201,7 @@ function TicketResultCard({
   onDismiss: () => void;
 }) {
   const [extras, setExtras] = useState<CheckInExtraItem[]>(data.ok ? data.extras : []);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   if (!data.ok) {
     const human = friendlyError(data.error);
@@ -220,8 +221,6 @@ function TicketResultCard({
   }
 
   const admitted = data.result === 'admitted';
-
-  const [claimError, setClaimError] = useState<string | null>(null);
 
   const handleClaim = async (extra: CheckInExtraItem) => {
     setClaimError(null);

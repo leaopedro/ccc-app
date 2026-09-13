@@ -93,7 +93,7 @@ export default function PagarCaixaScreen() {
     // The screen may have unmounted while checkout was in flight; a late
     // response must not navigate or set state on a dead screen.
     if (!activeRef.current) return;
-    if (result === 'ok' && data) {
+    if (result === 'ok' && data && data.method === 'pix') {
       setBrCode(data.brCode);
       setAmountCents(data.amountCents);
       setExpiresAt(data.expiresAt);

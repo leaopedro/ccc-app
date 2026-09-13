@@ -24,10 +24,15 @@ export type RankKey = (typeof RANK_KEYS)[number];
  */
 export const BADGE_TITLE_MAX = 40;
 export const BADGE_DESCRIPTION_MAX = 240;
+/**
+ * O critério é renderizado no bloco "Bloqueado" do BadgeDetail, um Text sem
+ * numberOfLines, então o cap é o da coluna e não o do layout.
+ */
+export const BADGE_CRITERIA_MAX = 240;
 export const RANK_NAME_MAX = 20;
 
 /** Quantas conquistas o catálogo tem. Um PUT maior que isto é recusado. */
-export const BADGE_COPY_MAX_ENTRIES = 12;
+export const BADGE_COPY_MAX_ENTRIES = 20;
 
 // z.object com as cinco chaves obrigatórias, não z.record: em Zod 3 um
 // z.record(z.enum(...)) tipa a saída como Record completo mas não valida
@@ -59,6 +64,7 @@ export const badgeCopyEntrySchema = z.object({
   code: badgeCodeSchema,
   title: z.string().trim().min(1).max(BADGE_TITLE_MAX),
   description: z.string().trim().min(1).max(BADGE_DESCRIPTION_MAX),
+  criteria: z.string().trim().min(1).max(BADGE_CRITERIA_MAX),
 });
 
 // Leitura: capada no que a COLUNA aceita, não no cap de escrita. Um título de
@@ -68,6 +74,11 @@ export const badgeCopyReadEntrySchema = z.object({
   code: badgeCodeSchema,
   title: z.string().min(1).max(80),
   description: z.string().min(1).max(BADGE_DESCRIPTION_MAX),
+  // Sem `min(1)`, ao contrário da escrita: a coluna tem DEFAULT '', então uma
+  // conquista inserida por fora da migration de seed chega aqui vazia. Exigir
+  // um caractere transformaria essa linha num 500 e tiraria a tela inteira do
+  // ar em vez de mostrar um campo em branco para o admin preencher.
+  criteria: z.string().max(BADGE_CRITERIA_MAX),
 });
 
 export const adminGamificationCopySchema = z.object({

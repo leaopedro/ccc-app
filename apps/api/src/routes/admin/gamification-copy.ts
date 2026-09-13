@@ -55,7 +55,7 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
     const settings = await ensureGeneralSettings();
     const badges = await prisma.badge.findMany({
       orderBy: { code: 'asc' },
-      select: { code: true, title: true, description: true },
+      select: { code: true, title: true, description: true, criteria: true },
     });
 
     const stored = (settings.rankNames ?? {}) as Record<string, unknown>;
@@ -84,7 +84,7 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const existingBadges = await prisma.badge.findMany({
-      select: { code: true, title: true, description: true },
+      select: { code: true, title: true, description: true, criteria: true },
     });
     const byCode = new Map(existingBadges.map((b) => [b.code, b]));
     for (const entry of incoming) {
@@ -101,9 +101,11 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
       const current = byCode.get(entry.code)!;
       const titleChanged = current.title !== entry.title;
       const descChanged = current.description !== entry.description;
+      const criteriaChanged = current.criteria !== entry.criteria;
       if (titleChanged) touched.push(`badge.${entry.code}.title`);
       if (descChanged) touched.push(`badge.${entry.code}.description`);
-      if (titleChanged || descChanged) badgeWrites.push(entry);
+      if (criteriaChanged) touched.push(`badge.${entry.code}.criteria`);
+      if (titleChanged || descChanged || criteriaChanged) badgeWrites.push(entry);
     }
 
     // Compara contra o nome EFETIVO (mesma resolução do GET), não contra o
@@ -154,7 +156,11 @@ export const adminGamificationCopyRoutes: FastifyPluginAsync = async (app) => {
       for (const entry of badgeWrites) {
         await tx.badge.update({
           where: { code: entry.code },
-          data: { title: entry.title, description: entry.description },
+          data: {
+            title: entry.title,
+            description: entry.description,
+            criteria: entry.criteria,
+          },
         });
       }
 

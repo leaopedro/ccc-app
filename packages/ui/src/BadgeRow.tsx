@@ -9,10 +9,8 @@ const MAX_FEATURED = 4;
 export interface BadgeRowProps {
   /** Owner shape from `GET /me/garage/badges`. */
   data: GarageBadgesOwnerResponse;
-  /** Tap on an earned tile OR the "Ver todas" / "+N" chip. */
+  /** Tap em QUALQUER tile, ganho ou bloqueado, mais a chip "Ver todas" / "+N". */
   onOpenSheet: () => void;
-  /** Tap on a locked OR locked_premium tile — chunk 19 wires the upsell. */
-  onLockedPress: (code: string) => void;
   /** Optional override — set to `false` to short-circuit render in chunk 19
    *  when the gamification killswitch is off OR signup is too fresh. Chunk 17
    *  just exposes the prop; chunk 19 supplies the fresh-signup check. */
@@ -63,15 +61,18 @@ function orderBadges(
 /**
  * BadgeRow — horizontal "Conquistas" strip on the owner garage screen. Shows
  * up to 4 hex badges (md size) followed by a "+N" overflow chip that opens
- * `BadgesSheet`. Locked tiles fire `onLockedPress(code)` so chunk 19 can wire
- * the upsell sheet without changing this primitive (§C11 precedent).
+ * `BadgesSheet`. Todo tile abre a gaveta, ganho ou bloqueado: é lá que está o
+ * "como ganhar". O tile bloqueado antes chamava `onLockedPress` e ia direto
+ * para o upsell de Premium, que respondia a uma pergunta que o membro não
+ * tinha feito. O upsell continua, dentro do `BadgeDetail`, só no estado
+ * `locked_premium`.
  *
  * Visual canon: `.handoffs/.../jdma-garage/badges.jsx` BadgeRow (lines
  * 554–667). The RN port collapses the per-mode (owner vs public) ordering
  * down to a single owner-shape ordering since chunk 17 only ships the owner
  * surface — the public twin is chunk 21.
  */
-export function BadgeRow({ data, onOpenSheet, onLockedPress, visible, testID }: BadgeRowProps) {
+export function BadgeRow({ data, onOpenSheet, visible, testID }: BadgeRowProps) {
   const enabled = data.enabled && visible !== false;
   if (!enabled) return null;
 
@@ -127,7 +128,6 @@ export function BadgeRow({ data, onOpenSheet, onLockedPress, visible, testID }: 
           const entry = data.catalog.find((c) => c.code === b.code);
           if (!entry) return null;
           const variant = b.state;
-          const onPress = variant === 'earned' ? onOpenSheet : () => onLockedPress(b.code);
           return (
             <HexBadge
               key={b.code}
@@ -136,7 +136,7 @@ export function BadgeRow({ data, onOpenSheet, onLockedPress, visible, testID }: 
               rarity={entry.rarity}
               icon={entry.icon}
               size="md"
-              onPress={onPress}
+              onPress={onOpenSheet}
             />
           );
         })}

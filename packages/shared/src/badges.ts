@@ -25,6 +25,10 @@ export const badgeCatalogEntrySchema = z.object({
   // porque este objeto não é .strict() e app velho descarta chave nova.
   title: z.string().min(1).max(80).optional(),
   description: z.string().min(1).max(240).optional(),
+  // "Como ganhar". Opcional pelo mesmo motivo dos dois acima, mais um: a
+  // coluna tem default vazio, e o serializador omite string vazia em vez de
+  // mandar '' pro cliente ter de tratar.
+  criteria: z.string().min(1).max(240).optional(),
 });
 export type BadgeCatalogEntry = z.infer<typeof badgeCatalogEntrySchema>;
 

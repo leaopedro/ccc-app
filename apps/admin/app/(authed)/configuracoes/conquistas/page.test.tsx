@@ -16,7 +16,9 @@ const Page = (await import('./page')).default;
 
 const copy: AdminGamificationCopy = {
   version: 1,
-  badges: [{ code: 'EVT-001', title: 'Primeira Largada', description: 'Desc' }],
+  badges: [
+    { code: 'EVT-001', title: 'Primeira Largada', description: 'Desc', criteria: 'Critério' },
+  ],
   rankNames: {
     iniciante: 'Iniciante',
     pilotador: 'Pilotador',

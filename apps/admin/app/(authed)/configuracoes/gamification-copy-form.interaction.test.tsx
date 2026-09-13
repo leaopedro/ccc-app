@@ -18,8 +18,13 @@ import { GamificationCopyForm } from './gamification-copy-form';
 const initial: AdminGamificationCopy = {
   version: 3,
   badges: [
-    { code: 'EVT-001', title: 'Primeira Largada', description: 'Desc 1' },
-    { code: 'CAR-001', title: 'Garagem Aberta', description: 'Desc 2' },
+    {
+      code: 'EVT-001',
+      title: 'Primeira Largada',
+      description: 'Desc 1',
+      criteria: 'Critério 1',
+    },
+    { code: 'CAR-001', title: 'Garagem Aberta', description: 'Desc 2', criteria: 'Critério 2' },
   ],
   rankNames: {
     iniciante: 'Iniciante',
@@ -81,6 +86,28 @@ describe('GamificationCopyForm', () => {
     expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ expectedVersion: 3 }));
     const sent = updateMock.mock.calls[0]![0] as { badges: { code: string; title: string }[] };
     expect(sent.badges.find((b) => b.code === 'EVT-001')?.title).toBe('Largada');
+  });
+
+  it('edita o critério e manda no payload', async () => {
+    // O critério é o texto que o app mostra na conquista bloqueada. Sem campo
+    // no admin ele só muda com deploy, que é o estado que esta branch encerra.
+    updateMock.mockResolvedValue({ ok: true, copy: { ...initial, version: 4 } });
+    await act(async () => {
+      root.render(<GamificationCopyForm initial={initial} />);
+      await Promise.resolve();
+    });
+
+    setValue(input('Critério de CAR-001'), 'Adicione um carro à sua garagem.');
+    await act(async () => {
+      clickByText('Salvar');
+      await Promise.resolve();
+    });
+
+    const sent = updateMock.mock.calls[0]![0] as { badges: { code: string; criteria: string }[] };
+    expect(sent.badges.find((b) => b.code === 'CAR-001')?.criteria).toBe(
+      'Adicione um carro à sua garagem.',
+    );
+    expect(sent.badges.find((b) => b.code === 'EVT-001')?.criteria).toBe('Critério 1');
   });
 
   it('usa a versao nova depois de salvar', async () => {

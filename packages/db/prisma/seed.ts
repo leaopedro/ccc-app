@@ -428,6 +428,14 @@ const seedGaragesForExistingUsers = async (): Promise<void> => {
   }
 };
 
+// Catálogo de conquistas. A fonte de verdade em produção é a migration
+// `20260913120100_seed_badge_catalog` — este array existe para dev e preview.
+// Os dois têm de andar juntos: uma conquista aqui e não lá nunca chega a
+// produção, e o contrário faz dev divergir do que o membro vê.
+//
+// Toda entrada tem um `criteria` que descreve a regra REAL de
+// `services/garage/eligibility/*`. Não há conquista sem regra: COM-002 e
+// COM-003 saíram do catálogo justamente por nunca terem tido uma.
 const BADGES = [
   {
     code: 'EVT-001',
@@ -437,6 +445,7 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Primeira Largada',
     description: 'Seu primeiro check-in confirmado em um encontro CCC.',
+    criteria: 'Faça check-in em qualquer evento.',
   },
   {
     code: 'EVT-002',
@@ -446,6 +455,8 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Sequência de Três',
     description: 'Três eventos consecutivos sem perder nenhum.',
+    criteria:
+      'Faça check-in nos três últimos eventos para os quais você tem ingresso, sem faltar a nenhum.',
   },
   {
     code: 'EVT-003',
@@ -455,6 +466,27 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Veterano de Pista',
     description: 'Dez eventos CCC na sua trajetória.',
+    criteria: 'Faça check-in em 10 eventos diferentes.',
+  },
+  {
+    code: 'EVT-004',
+    category: 'eventos',
+    rarity: 'rare',
+    icon: 'calendar',
+    premiumExclusive: false,
+    title: 'Maratona',
+    description: 'Três encontros em trinta dias.',
+    criteria: 'Faça check-in em 3 eventos diferentes num intervalo de 30 dias.',
+  },
+  {
+    code: 'EVT-005',
+    category: 'eventos',
+    rarity: 'legendary',
+    icon: 'trophy',
+    premiumExclusive: false,
+    title: 'Fiel de Carteirinha',
+    description: 'Vinte e cinco encontros CCC no seu histórico.',
+    criteria: 'Faça check-in em 25 eventos diferentes.',
   },
   {
     code: 'CAR-001',
@@ -464,6 +496,7 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Garagem Aberta',
     description: 'O primeiro carro estacionado na sua garagem.',
+    criteria: 'Adicione um carro à sua garagem.',
   },
   {
     code: 'CAR-002',
@@ -472,7 +505,8 @@ const BADGES = [
     icon: 'garageFull',
     premiumExclusive: false,
     title: 'Garagem Cheia',
-    description: 'Cinco carros ou mais ocupando suas vagas.',
+    description: 'Todas as suas vagas gratuitas ocupadas.',
+    criteria: 'Preencha com carros todas as vagas gratuitas da sua garagem.',
   },
   {
     code: 'CAR-003',
@@ -481,7 +515,8 @@ const BADGES = [
     icon: 'curator',
     premiumExclusive: false,
     title: 'Curador CCC',
-    description: 'Dez carros ou mais na coleção da sua garagem.',
+    description: 'Cinco carros na coleção da sua garagem.',
+    criteria: 'Tenha 5 carros na garagem ao mesmo tempo.',
   },
   {
     code: 'COM-001',
@@ -491,24 +526,17 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Primeira Postagem',
     description: 'Sua estreia no feed de um evento.',
+    criteria: 'Publique uma postagem no feed.',
   },
   {
-    code: 'COM-002',
+    code: 'COM-008',
     category: 'comunidade',
     rarity: 'rare',
-    icon: 'chat',
+    icon: 'camera',
     premiumExclusive: false,
-    title: 'Voz da Comunidade',
-    description: 'Comentários ativos nas conversas dos encontros.',
-  },
-  {
-    code: 'COM-003',
-    category: 'comunidade',
-    rarity: 'legendary',
-    icon: 'fire',
-    premiumExclusive: false,
-    title: 'Em Chamas',
-    description: 'Postagens engajadas em sequência na comunidade.',
+    title: 'Fotógrafo do Rolê',
+    description: 'Vinte fotos suas no feed dos encontros.',
+    criteria: 'Publique 20 fotos em postagens do feed.',
   },
   {
     code: 'CCC-001',
@@ -516,8 +544,9 @@ const BADGES = [
     rarity: 'common',
     icon: 'pin',
     premiumExclusive: false,
-    title: 'Marco Fixado',
-    description: 'Primeiro local fixado no seu mapa CCC.',
+    title: 'Curitibano de Coração',
+    description: 'Presença confirmada num encontro em Curitiba.',
+    criteria: 'Faça check-in em um evento realizado em Curitiba.',
   },
   {
     code: 'CCC-002',
@@ -525,8 +554,9 @@ const BADGES = [
     rarity: 'rare',
     icon: 'flagCheck',
     premiumExclusive: false,
-    title: 'Itinerário CCC',
-    description: 'Participação ativa na agenda nacional de eventos.',
+    title: 'Drift King',
+    description: 'Presença confirmada num evento de drift.',
+    criteria: 'Faça check-in em um evento do tipo drift.',
   },
   {
     code: 'CCC-003',
@@ -536,6 +566,7 @@ const BADGES = [
     premiumExclusive: false,
     title: 'Fundador',
     description: 'Você entrou antes de a comunidade decolar.',
+    criteria: 'Ter criado a conta antes de 01/06/2026.',
   },
 ] as const;
 

@@ -2,9 +2,18 @@
 // for future migration to a shared locale package (CLAUDE.md mandates an i18n
 // scaffold from day one). Two-level shape so the eventual move is mechanical.
 //
-// Catalog keys are badge codes verbatim (EVT-001 ... CCC-003). Mobile UI
-// consumers (chunk 17) look up `badgesCopy.badges.catalog[code]` and fall back
-// to the raw code if a key is missing — but every code MUST have an entry here.
+// Este arquivo é FALLBACK, não fonte de verdade. O texto autoritativo vive em
+// `Badge.title` / `Badge.description` / `Badge.criteria` no banco, editável em
+// /configuracoes/conquistas, e chega ao app pelo catálogo da API. O bundle
+// cobre o caso de um app novo contra uma API velha, que não manda esses campos.
+//
+// `criteria` é a regra REAL de `apps/api/src/services/garage/eligibility/*`.
+// Se a regra mudar lá, o texto muda aqui e na migration de seed. Um critério
+// que não corresponde ao código é pior que critério nenhum: promete e não
+// entrega.
+//
+// COM-002 e COM-003 foram removidas: nenhuma regra jamais as concedeu. Os
+// códigos não serão reaproveitados.
 
 const ptBR = {
   badges: {
@@ -30,17 +39,28 @@ const ptBR = {
       'EVT-001': {
         title: 'Primeira Largada',
         description: 'Seu primeiro check-in confirmado em um encontro CCC.',
-        criteria: 'Faça check-in em qualquer evento publicado.',
+        criteria: 'Faça check-in em qualquer evento.',
       },
       'EVT-002': {
         title: 'Sequência de Três',
         description: 'Três eventos consecutivos sem perder nenhum.',
-        criteria: 'Faça check-in em três eventos seguidos por data.',
+        criteria:
+          'Faça check-in nos três últimos eventos para os quais você tem ingresso, sem faltar a nenhum.',
       },
       'EVT-003': {
         title: 'Veterano de Pista',
         description: 'Dez eventos CCC na sua trajetória.',
-        criteria: 'Compareça a 10 eventos publicados diferentes.',
+        criteria: 'Faça check-in em 10 eventos diferentes.',
+      },
+      'EVT-004': {
+        title: 'Maratona',
+        description: 'Três encontros em trinta dias.',
+        criteria: 'Faça check-in em 3 eventos diferentes num intervalo de 30 dias.',
+      },
+      'EVT-005': {
+        title: 'Fiel de Carteirinha',
+        description: 'Vinte e cinco encontros CCC no seu histórico.',
+        criteria: 'Faça check-in em 25 eventos diferentes.',
       },
       'CAR-001': {
         title: 'Garagem Aberta',
@@ -49,43 +69,38 @@ const ptBR = {
       },
       'CAR-002': {
         title: 'Garagem Cheia',
-        description: 'Cinco carros ou mais ocupando suas vagas.',
-        criteria: 'Tenha 5 carros simultâneos na garagem.',
+        description: 'Todas as suas vagas gratuitas ocupadas.',
+        criteria: 'Preencha com carros todas as vagas gratuitas da sua garagem.',
       },
       'CAR-003': {
         title: 'Curador CCC',
-        description: 'Dez carros ou mais na coleção da sua garagem.',
-        criteria: 'Tenha 10 carros simultâneos na garagem.',
+        description: 'Cinco carros na coleção da sua garagem.',
+        criteria: 'Tenha 5 carros na garagem ao mesmo tempo.',
       },
       'COM-001': {
         title: 'Primeira Postagem',
         description: 'Sua estreia no feed de um evento.',
         criteria: 'Publique uma postagem no feed.',
       },
-      'COM-002': {
-        title: 'Voz da Comunidade',
-        description: 'Comentários ativos nas conversas dos encontros.',
-        criteria: 'Acumule comentários publicados em postagens do feed.',
-      },
-      'COM-003': {
-        title: 'Em Chamas',
-        description: 'Postagens engajadas em sequência na comunidade.',
-        criteria: 'Mantenha uma sequência de postagens com engajamento.',
+      'COM-008': {
+        title: 'Fotógrafo do Rolê',
+        description: 'Vinte fotos suas no feed dos encontros.',
+        criteria: 'Publique 20 fotos em postagens do feed.',
       },
       'CCC-001': {
-        title: 'Marco Fixado',
-        description: 'Primeiro local fixado no seu mapa CCC.',
-        criteria: 'Fixe um local no seu mapa pessoal.',
+        title: 'Curitibano de Coração',
+        description: 'Presença confirmada num encontro em Curitiba.',
+        criteria: 'Faça check-in em um evento realizado em Curitiba.',
       },
       'CCC-002': {
-        title: 'Itinerário CCC',
-        description: 'Participação ativa na agenda nacional de eventos.',
-        criteria: 'Compareça a múltiplos eventos pelo país.',
+        title: 'Drift King',
+        description: 'Presença confirmada num evento de drift.',
+        criteria: 'Faça check-in em um evento do tipo drift.',
       },
       'CCC-003': {
         title: 'Fundador',
         description: 'Você entrou antes de a comunidade decolar.',
-        criteria: 'Conta criada antes de 01/06/2026.',
+        criteria: 'Ter criado a conta antes de 01/06/2026.',
       },
     },
   },
@@ -115,57 +130,62 @@ const en = {
       'EVT-001': {
         title: 'First Lap',
         description: 'Your first confirmed check-in at a CCC meet.',
-        criteria: 'Check in to any published event.',
+        criteria: 'Check in to any event.',
       },
       'EVT-002': {
         title: 'Three in a Row',
         description: 'Three consecutive events without skipping.',
-        criteria: 'Check in to three events in a row by date.',
+        criteria: 'Check in to the last three events you hold a ticket for, missing none.',
       },
       'EVT-003': {
         title: 'Track Veteran',
         description: 'Ten CCC events on your journey.',
-        criteria: 'Attend 10 different published events.',
+        criteria: 'Check in to 10 different events.',
+      },
+      'EVT-004': {
+        title: 'Marathon',
+        description: 'Three meets in thirty days.',
+        criteria: 'Check in to 3 different events within 30 days.',
+      },
+      'EVT-005': {
+        title: 'Card-Carrying Regular',
+        description: 'Twenty-five CCC meets in your history.',
+        criteria: 'Check in to 25 different events.',
       },
       'CAR-001': {
         title: 'Garage Open',
         description: 'The first car parked in your garage.',
-        criteria: 'Add one car to your garage.',
+        criteria: 'Add a car to your garage.',
       },
       'CAR-002': {
         title: 'Garage Full',
-        description: 'Five or more cars filling your spots.',
-        criteria: 'Hold 5 cars simultaneously in your garage.',
+        description: 'Every free spot of yours taken.',
+        criteria: 'Fill every free spot in your garage with a car.',
       },
       'CAR-003': {
         title: 'CCC Curator',
-        description: 'Ten or more cars in your garage collection.',
-        criteria: 'Hold 10 cars simultaneously in your garage.',
+        description: 'Five cars in your garage collection.',
+        criteria: 'Keep 5 cars in the garage at the same time.',
       },
       'COM-001': {
         title: 'First Post',
         description: 'Your debut on an event feed.',
-        criteria: 'Publish a post on any event feed.',
+        criteria: 'Publish a post on the feed.',
       },
-      'COM-002': {
-        title: 'Community Voice',
-        description: 'Active comments in event conversations.',
-        criteria: 'Accumulate comments published on feed posts.',
-      },
-      'COM-003': {
-        title: 'On Fire',
-        description: 'Engaged posts in a community streak.',
-        criteria: 'Maintain a posting streak with engagement.',
+      'COM-008': {
+        title: 'Meet Photographer',
+        description: 'Twenty photos of yours on the meet feeds.',
+        criteria: 'Publish 20 photos in feed posts.',
       },
       'CCC-001': {
-        title: 'Marker Pinned',
-        description: 'First location pinned to your CCC map.',
-        criteria: 'Pin a location on your personal map.',
+        title: 'Curitiba at Heart',
+        description: 'Attendance confirmed at a meet in Curitiba.',
+        criteria: 'Check in to an event held in Curitiba.',
       },
       'CCC-002': {
-        title: 'CCC Itinerary',
-        description: 'Active participation across the national event calendar.',
-        criteria: 'Attend multiple events around the country.',
+        title: 'Drift King',
+        description: 'Attendance confirmed at a drift event.',
+        criteria: 'Check in to a drift-type event.',
       },
       'CCC-003': {
         title: 'Founder',

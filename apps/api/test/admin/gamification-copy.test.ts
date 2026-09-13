@@ -17,6 +17,7 @@ const seedTwo = async () => {
         icon: 'flag',
         title: 'Primeira Largada',
         description: 'Desc 1',
+        criteria: 'Criterio EVT-001',
       },
       {
         code: 'CAR-001',
@@ -25,6 +26,7 @@ const seedTwo = async () => {
         icon: 'car',
         title: 'Garagem Aberta',
         description: 'Desc 2',
+        criteria: 'Criterio CAR-001',
       },
     ],
   });
@@ -87,7 +89,9 @@ describe('admin gamification copy', () => {
 
     const res = await put(user.id, {
       expectedVersion: before.version,
-      badges: [{ code: 'EVT-001', title: 'Largada', description: 'Nova desc.' }],
+      badges: [
+        { code: 'EVT-001', title: 'Largada', description: 'Nova desc.', criteria: 'Criterio 1' },
+      ],
       rankNames: FULL_RANKS,
     });
     expect(res.statusCode).toBe(200);
@@ -103,7 +107,7 @@ describe('admin gamification copy', () => {
     const user = await admin();
     const res = await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'ZZZ-999', title: 'X', description: 'Y' }],
+      badges: [{ code: 'ZZZ-999', title: 'X', description: 'Y', criteria: 'Z' }],
     });
     expect(res.statusCode).toBe(400);
     expect(await prisma.badge.count()).toBe(2);
@@ -115,8 +119,8 @@ describe('admin gamification copy', () => {
     const res = await put(user.id, {
       expectedVersion: 0,
       badges: [
-        { code: 'EVT-001', title: 'A', description: 'A' },
-        { code: 'EVT-001', title: 'B', description: 'B' },
+        { code: 'EVT-001', title: 'A', description: 'A', criteria: 'A' },
+        { code: 'EVT-001', title: 'B', description: 'B', criteria: 'B' },
       ],
     });
     expect(res.statusCode).toBe(400);
@@ -127,12 +131,12 @@ describe('admin gamification copy', () => {
     const user = await admin();
     await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'EVT-001', title: 'Primeiro', description: 'D' }],
+      badges: [{ code: 'EVT-001', title: 'Primeiro', description: 'D', criteria: 'C' }],
     });
 
     const stale = await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'EVT-001', title: 'Segundo', description: 'D' }],
+      badges: [{ code: 'EVT-001', title: 'Segundo', description: 'D', criteria: 'C' }],
     });
     expect(stale.statusCode).toBe(409);
     const row = await prisma.badge.findUniqueOrThrow({ where: { code: 'EVT-001' } });
@@ -157,7 +161,7 @@ describe('admin gamification copy', () => {
       titles.map((title) =>
         put(user.id, {
           expectedVersion: 0,
-          badges: [{ code: 'EVT-001', title, description: 'D' }],
+          badges: [{ code: 'EVT-001', title, description: 'D', criteria: 'C' }],
         }),
       ),
     );
@@ -179,7 +183,14 @@ describe('admin gamification copy', () => {
     const user = await admin();
     const res = await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'EVT-001', title: 'Primeira Largada', description: 'Desc 1' }],
+      badges: [
+        {
+          code: 'EVT-001',
+          title: 'Primeira Largada',
+          description: 'Desc 1',
+          criteria: 'Criterio EVT-001',
+        },
+      ],
     });
     expect(res.statusCode).toBe(200);
     const body = adminGamificationCopySchema.parse(res.json());
@@ -212,7 +223,9 @@ describe('admin gamification copy', () => {
     const user = await admin();
     await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'EVT-001', title: 'Largada', description: 'Desc 1' }],
+      badges: [
+        { code: 'EVT-001', title: 'Largada', description: 'Desc 1', criteria: 'Criterio EVT-001' },
+      ],
     });
     const audit = await prisma.adminAudit.findFirstOrThrow();
     expect(audit.action).toBe('gamification_copy.update');
@@ -268,7 +281,7 @@ describe('admin gamification copy', () => {
 
     await put(user.id, {
       expectedVersion: 0,
-      badges: [{ code: 'EVT-001', title: 'Depois do PUT', description: 'D' }],
+      badges: [{ code: 'EVT-001', title: 'Depois do PUT', description: 'D', criteria: 'C' }],
     });
 
     const res = await app.inject({ method: 'GET', url: '/badges/catalog' });

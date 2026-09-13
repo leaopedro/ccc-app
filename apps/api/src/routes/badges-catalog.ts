@@ -52,6 +52,8 @@ export const badgesCatalogRoute: FastifyPluginAsync = async (app) => {
         icon: b.icon,
         title: b.title,
         description: b.description,
+        // Omitido quando vazio — mesmo contrato de `badges-read.ts`.
+        ...(b.criteria ? { criteria: b.criteria } : {}),
       })),
     };
   });

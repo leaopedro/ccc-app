@@ -122,6 +122,8 @@ vi.mock('lucide-react-native', async () => {
     });
   return {
     ArrowLeft: make('ArrowLeft'),
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -138,6 +140,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 
@@ -228,11 +231,22 @@ describe('BadgesSheet', () => {
     expect(container.textContent ?? '').toContain('CCC');
   });
 
-  it('tapping a locked tile fires onLockedPress (not the drilldown)', async () => {
+  // Antes desta branch, tocar num tile bloqueado abria o upsell de Premium e
+  // nada mais — nem o nome da conquista o membro via. O detalhe é agora o
+  // destino de TODO tile, e o upsell virou um botão lá dentro.
+  it('tocar num tile bloqueado abre o detalhe com o critério', async () => {
     const { BadgesSheet } = await import('@ccc/ui');
     const onLockedPress = vi.fn();
     await renderEl(
-      <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={onLockedPress} />,
+      <BadgesSheet
+        visible
+        onClose={() => {}}
+        data={baseData}
+        onLockedPress={onLockedPress}
+        copy={{
+          'CAR-003': { title: 'Curador CCC', criteria: 'Tenha 5 carros na garagem.' },
+        }}
+      />,
     );
     const lockedBtn = container.querySelector('button[aria-label="Conquista CAR-003, bloqueada"]');
     expect(lockedBtn).not.toBeNull();
@@ -240,7 +254,64 @@ describe('BadgesSheet', () => {
       (lockedBtn as HTMLButtonElement).click();
       await flush();
     });
-    expect(onLockedPress).toHaveBeenCalledWith('CAR-003');
+    const text = container.textContent ?? '';
+    expect(text).toContain('Curador CCC');
+    expect(text).toContain('Como ganhar');
+    expect(text).toContain('Tenha 5 carros na garagem.');
+    // Bloqueada comum não é caso de upsell: assinar não destrava esta.
+    expect(onLockedPress).not.toHaveBeenCalled();
+    expect(container.querySelector('button[aria-label="Conhecer o Premium"]')).toBeNull();
+  });
+
+  it('no detalhe de uma exclusiva Premium, o botão de assinar chama onLockedPress', async () => {
+    const { BadgesSheet } = await import('@ccc/ui');
+    const onLockedPress = vi.fn();
+    await renderEl(
+      <BadgesSheet
+        visible
+        onClose={() => {}}
+        data={baseData}
+        onLockedPress={onLockedPress}
+        copy={{ 'CCC-003': { title: 'Fundador', criteria: 'Conta criada antes de 01/06/2026.' } }}
+      />,
+    );
+    const premiumBtn = container.querySelector('button[aria-label="Conquista CCC-003, bloqueada"]');
+    await act(async () => {
+      (premiumBtn as HTMLButtonElement).click();
+      await flush();
+    });
+    expect(container.textContent ?? '').toContain('Conta criada antes de 01/06/2026.');
+
+    const upsell = container.querySelector('button[aria-label="Conhecer o Premium"]');
+    expect(upsell).not.toBeNull();
+    await act(async () => {
+      (upsell as HTMLButtonElement).click();
+      await flush();
+    });
+    expect(onLockedPress).toHaveBeenCalledWith('CCC-003');
+  });
+
+  it('Voltar do detalhe de uma bloqueada volta para o grid', async () => {
+    const { BadgesSheet } = await import('@ccc/ui');
+    await renderEl(
+      <BadgesSheet visible onClose={() => {}} data={baseData} onLockedPress={() => {}} />,
+    );
+    await act(async () => {
+      (
+        container.querySelector(
+          'button[aria-label="Conquista CAR-003, bloqueada"]',
+        ) as HTMLButtonElement
+      ).click();
+      await flush();
+    });
+    await act(async () => {
+      (
+        container.querySelector(
+          'button[aria-label="Voltar para a lista de conquistas"]',
+        ) as HTMLButtonElement
+      ).click();
+      await flush();
+    });
     expect(container.textContent ?? '').toContain('Suas conquistas');
   });
 

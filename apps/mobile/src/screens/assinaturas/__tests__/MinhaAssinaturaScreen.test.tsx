@@ -232,6 +232,8 @@ vi.mock('lucide-react-native', async () => {
   return {
     ArrowLeft: icon,
     Check: icon,
+    CalendarDays: icon,
+    Camera: icon,
     Car: icon,
     CheckSquare: icon,
     Crown: icon,
@@ -248,6 +250,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: icon,
     ShieldCheck: icon,
     TrendingUp: icon,
+    Trophy: icon,
   };
 });
 

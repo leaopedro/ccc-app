@@ -35,6 +35,8 @@ export interface BadgesSheetCopy {
    *  layer owns copy; the primitive stays purely visual). */
   title?: string;
   description?: string;
+  /** "Como ganhar" — mostrado só nos estados bloqueados. */
+  criteria?: string;
 }
 
 export interface BadgesSheetProps {
@@ -42,7 +44,12 @@ export interface BadgesSheetProps {
   onClose: () => void;
   /** Owner shape from `GET /me/garage/badges`. */
   data: GarageBadgesOwnerResponse;
-  /** Tap a locked or locked_premium tile — chunk 19 wires the upsell. */
+  /**
+   * Abre o upsell de Premium. Já NÃO é o destino do toque num tile bloqueado:
+   * todo tile abre o `BadgeDetail`, e é o botão "Conhecer o Premium" lá
+   * dentro, renderizado só no estado `locked_premium`, que chama isto. A rota
+   * não mudou de lado nenhum — continua abrindo o `PremiumSheet`.
+   */
   onLockedPress: (code: string) => void;
   /** Pin toggle — only invoked for earned badges in the detail view. */
   onTogglePin?: (code: string) => void;
@@ -61,10 +68,12 @@ const stateByCode = (badges: GarageBadgeOwnerState[]): Map<string, GarageBadgeOw
 
 /**
  * BadgesSheet — full-catalog grid drawer. Top-level shows every catalog
- * entry grouped by category (eventos / carros / comunidade / jdm). Tap a
- * tile to drill into `BadgeDetail`. Locked tiles route to `onLockedPress`
- * instead of drilldown so chunk 19 can show the upsell sheet (§C11
- * precedent).
+ * entry grouped by category (eventos / carros / comunidade / ccc). Tocar em
+ * QUALQUER tile abre o `BadgeDetail`, ganho ou não: é lá que mora o "como
+ * ganhar". O tile bloqueado antes ia direto para o upsell de Premium, o que
+ * deixava o membro sem saber nem o nome da conquista nem o que fazer para
+ * tê-la. O upsell virou um botão dentro do detalhe, só no estado
+ * `locked_premium`.
  *
  * Visual canon: `.handoffs/.../jdma-garage/badges.jsx` BadgesSheet (lines
  * 674–836). The RN port keeps the same category sectioning + drilldown
@@ -120,9 +129,11 @@ export function BadgesSheet({
           {...(detailCopy?.description !== undefined
             ? { description: detailCopy.description }
             : {})}
+          {...(detailCopy?.criteria !== undefined ? { criteria: detailCopy.criteria } : {})}
           {...(pinCount !== undefined ? { pinCount } : {})}
           {...(pinCap !== undefined ? { pinCap } : {})}
           {...(onTogglePin ? { onTogglePin } : {})}
+          onUpsell={onLockedPress}
           onBack={() => setDetailCode(null)}
         />
       ) : (
@@ -227,10 +238,6 @@ export function BadgesSheet({
                     const state = byCode.get(entry.code);
                     if (!state) return null;
                     const variant = state.state;
-                    const onPress =
-                      variant === 'earned'
-                        ? () => setDetailCode(entry.code)
-                        : () => onLockedPress(entry.code);
                     return (
                       <HexBadge
                         key={entry.code}
@@ -239,7 +246,7 @@ export function BadgesSheet({
                         rarity={entry.rarity}
                         icon={entry.icon}
                         size="md"
-                        onPress={onPress}
+                        onPress={() => setDetailCode(entry.code)}
                       />
                     );
                   })}

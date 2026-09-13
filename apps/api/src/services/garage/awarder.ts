@@ -119,6 +119,20 @@ export const awardBadge = async (
   // badgeCode]) on GarageBadge — we catch P2002 instead of pre-reading
   // because the read-then-write pattern races under concurrency (two
   // simultaneous write-paths both observe "not earned" and both insert).
+  //
+  // SAVEPOINT, pelo mesmo motivo que `awardXp` usa um: o Prisma não abre um
+  // savepoint por statement dentro de `$transaction`. Sem ele, o INSERT que
+  // falha com P2002 deixa a transação em 25P02
+  // (in_failed_sql_transaction) — todo comando seguinte falha e o COMMIT vira
+  // ROLLBACK em silêncio. O chamador recebe `already_earned`, acha que está
+  // tudo bem, e perde a PRÓPRIA escrita sem ver erro nenhum.
+  //
+  // Não é um caso raro: como cada hook reavalia a superfície inteira a cada
+  // escrita, o segundo carro re-pontua CAR-001 e o segundo comentário
+  // re-pontua COM-004. O caminho repetido é o normal. Em produção isto estava
+  // mascarado só porque a tabela Badge estava vazia e o `unknown badge` acima
+  // disparava antes do INSERT.
+  await tx.$executeRawUnsafe('SAVEPOINT awardbadge');
   try {
     await tx.garageBadge.create({
       data: { garageId, badgeCode: code, sourceRef },
@@ -156,6 +170,12 @@ export const awardBadge = async (
     // The unique index `@@unique([userId, kind, dedupeKey])` swallows the
     // re-grant case (un-grant → re-grant) without inserting a duplicate.
     if (opts.notifyOnGrant) {
+      // Savepoint aninhado, pelo mesmo motivo do de fora: este try/catch
+      // engole a colisão de `dedupeKey`, e o INSERT que falhou já abortou a
+      // transação. Sem o savepoint próprio, o `RELEASE` logo abaixo estoura e
+      // o re-grant depois de um un-grant responde 500 — com o GarageBadge
+      // recém-criado indo junto.
+      await tx.$executeRawUnsafe('SAVEPOINT awardbadge_notify');
       try {
         await tx.notification.create({
           data: {
@@ -167,17 +187,28 @@ export const awardBadge = async (
             dedupeKey: badgeAwardedDedupeKey(code, garage.userId),
           },
         });
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge_notify');
       } catch (notifyErr) {
         // Dedupe collision (un-grant → re-grant) is a silent no-op: the
         // historical "you earned X" event already lives in the inbox and
         // we don't want to double-notify on a re-mint. Any other failure
         // bubbles so the surrounding transaction rolls back the award.
+        await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT awardbadge_notify');
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge_notify');
         if (!isUniqueConstraintError(notifyErr)) throw notifyErr;
       }
     }
 
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge');
     return { awarded: true };
   } catch (e) {
+    // Devolver a transação a um estado gravável ANTES de decidir entre engolir
+    // (P2002) e relançar. Sem o ROLLBACK TO, mesmo o caminho de rethrow
+    // deixaria o chamador sem conseguir nem registrar o erro, e um chamador
+    // que faz log+swallow (os hooks de carro, feed, check-in e signup)
+    // perderia a escrita dele no commit.
+    await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT awardbadge');
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge');
     if (isUniqueConstraintError(e)) return { awarded: false, reason: 'already_earned' };
     throw e;
   }

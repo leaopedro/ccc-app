@@ -331,6 +331,10 @@ model Badge {
   code             String        @unique @db.VarChar(20)
   title            String        @db.VarChar(80)
   description      String        @db.VarChar(240)
+  // Como ganhar. O default vazio é o que torna o ADD COLUMN possível numa
+  // tabela já populada; a migration de seed preenche as linhas que caírem
+  // nele, e o admin nunca grava vazio (zod exige min(1)).
+  criteria         String        @default("") @db.VarChar(240)
   category         BadgeCategory
   rarity           BadgeRarity
   premiumExclusive Boolean       @default(false)

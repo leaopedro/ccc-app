@@ -287,7 +287,7 @@ export const buildApp = async (
         backfillWorker.stop();
       });
 
-      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log });
+      const boxCutoffWorker = startBoxCutoffWorker({ log: app.log, stripe: app.stripe });
       app.addHook('onClose', () => {
         boxCutoffWorker.stop();
       });

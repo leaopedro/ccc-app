@@ -634,6 +634,18 @@ export const orderRoutes: FastifyPluginAsync = async (app) => {
         return reply.status(409).send({ error: 'OrderNotPending', status: order.status });
       }
 
+      // A caixa tem o proprio checkout (`POST /me/box/checkout`), com validacao
+      // de assinatura ativa e a guarda de `box_locked` nos 60s antes do corte.
+      // Esta rota e chaveada por provider e cega a kind: enquanto a caixa era
+      // sempre `abacatepay` ela caia no 409 por nao ter `expiresAt`, por
+      // acidente. Com cartao (`provider: 'stripe'`) o ramo de baixo so exige
+      // `providerRef`, entao ela viraria resumivel aqui e escaparia das duas
+      // guardas, ainda por cima num limiter 12x mais folgado. Explicito e
+      // melhor que acidental.
+      if (order.kind === 'box') {
+        return reply.status(409).send({ error: 'OrderNotPending', status: order.status });
+      }
+
       reply.header('Cache-Control', 'no-store');
 
       if (order.provider === 'abacatepay') {

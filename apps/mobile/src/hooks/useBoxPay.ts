@@ -1,4 +1,4 @@
-import type { BoxCheckoutResponse } from '@ccc/shared/box';
+import type { BoxCheckoutRequest, BoxCheckoutResponse } from '@ccc/shared/box';
 import { useState } from 'react';
 
 import { checkoutBox } from '~/api/box';
@@ -7,13 +7,16 @@ import type { BoxPayResult } from '~/screens/caixa/pay-result';
 
 type Outcome = { result: BoxPayResult; data?: BoxCheckoutResponse };
 
-export function useBoxPay(): { checkout: () => Promise<Outcome>; loading: boolean } {
+export function useBoxPay(): {
+  checkout: (method?: BoxCheckoutRequest['method']) => Promise<Outcome>;
+  loading: boolean;
+} {
   const [loading, setLoading] = useState(false);
 
-  const checkout = async (): Promise<Outcome> => {
+  const checkout = async (method: BoxCheckoutRequest['method'] = 'pix'): Promise<Outcome> => {
     setLoading(true);
     try {
-      const data = await checkoutBox();
+      const data = await checkoutBox(method);
       return { result: 'ok', data };
     } catch (e) {
       if (e instanceof ApiError) {

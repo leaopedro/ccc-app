@@ -102,6 +102,8 @@ vi.mock('lucide-react-native', async () => {
   // enough. Keep this list in sync with `packages/ui/src/BadgeGlyph.tsx`
   // ICON_MAP imports.
   return {
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -118,6 +120,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 
@@ -157,6 +160,21 @@ describe('HexBadge', () => {
     const icon = container.querySelector('i[data-icon]');
     expect(icon).not.toBeNull();
     expect(icon?.getAttribute('data-icon')).toBe('Flag');
+  });
+
+  // As três conquistas novas do catálogo de 20 trouxeram ícones que o
+  // ICON_MAP não tinha. Sem entrada no mapa o glyph cai no HelpCircle, que
+  // não quebra a tela e por isso passaria despercebido em produção.
+  it.each([
+    ['calendar', 'CalendarDays'],
+    ['trophy', 'Trophy'],
+    ['camera', 'Camera'],
+  ])('mapeia o ícone %s do catálogo', async (wire, expected) => {
+    const { HexBadge } = await import('@ccc/ui');
+    await renderEl(
+      <HexBadge code="EVT-004" variant="earned" rarity="rare" icon={wire!} size="md" />,
+    );
+    expect(container.querySelector('i[data-icon]')?.getAttribute('data-icon')).toBe(expected);
   });
 
   it('locked variant renders the Lock glyph', async () => {

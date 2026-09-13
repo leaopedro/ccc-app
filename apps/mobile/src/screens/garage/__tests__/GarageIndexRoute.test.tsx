@@ -609,9 +609,10 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
     expect(sheetText).not.toContain('Primeira Largada');
   });
 
-  it('opens PremiumSheet (NOT BadgesSheet) when a locked tile is tapped', async () => {
-    // Locked-only catalog → BadgeRow renders locked tiles. Tap one →
-    // onLockedPress → PremiumSheet upsell.
+  it('abre a gaveta (NÃO o PremiumSheet) quando um tile bloqueado é tocado', async () => {
+    // Locked-only catalog → BadgeRow renders locked tiles. Tocar num deles
+    // agora abre "Suas conquistas", onde o critério vive. O upsell só aparece
+    // no detalhe de uma exclusiva Premium.
     setApi({
       garage: makeGarage({
         garage: makeGarageOwner({
@@ -636,9 +637,54 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
       lockedBtn!.click();
       await flush();
     });
-    expect(container.querySelector('[data-testid="premium-sheet"]')).not.toBeNull();
-    // BadgesSheet stays closed when the locked-tap landed.
-    expect(container.querySelector('[data-testid="garage-badges-sheet"]')).toBeNull();
+    expect(container.querySelector('[data-testid="garage-badges-sheet"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="premium-sheet"]')).toBeNull();
+  });
+
+  it('o critério vindo da API chega ao detalhe de uma conquista bloqueada', async () => {
+    // O caminho inteiro: catálogo da API → badgeCopy da rota → BadgesSheet →
+    // BadgeDetail. É o que o membro lê quando pergunta "como ganho essa?".
+    setApi({
+      garage: makeGarage({
+        garage: makeGarageOwner({ badges: [] }),
+        cars: [carCivic],
+      }),
+      badges: makeBadgesAggregate({
+        catalog: [
+          {
+            code: 'EVT-001',
+            category: 'eventos',
+            rarity: 'common',
+            premiumExclusive: false,
+            icon: 'flag',
+            title: 'Título da API',
+            description: 'Descrição da API.',
+            criteria: 'Critério vindo da API.',
+          },
+        ],
+        badges: [lockedBadge('EVT-001')],
+      }),
+    });
+    await mount();
+    const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
+    );
+    await act(async () => {
+      lockedBtn!.click();
+      await flush();
+    });
+    const sheet = container.querySelector('[data-testid="garage-badges-sheet"]');
+    expect(sheet).not.toBeNull();
+    const insideSheetBtn = Array.from(sheet!.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
+    );
+    await act(async () => {
+      insideSheetBtn!.click();
+      await flush();
+    });
+    const sheetText = sheet!.textContent ?? '';
+    expect(sheetText).toContain('Como ganhar');
+    expect(sheetText).toContain('Critério vindo da API.');
   });
 
   // Final review C2 — the call site, not just the copy helper. This suite runs
@@ -658,11 +704,28 @@ describe('GarageIndex route — chunk 19 BadgeRow integration', () => {
       }),
     });
     await mount();
+    // O upsell deixou de ser o destino do toque no tile: o caminho agora é
+    // tile bloqueado → gaveta → detalhe da exclusiva Premium → "Conhecer o
+    // Premium".
     const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
     );
     await act(async () => {
       lockedBtn!.click();
+      await flush();
+    });
+    const badgesSheet = container.querySelector('[data-testid="garage-badges-sheet"]');
+    const premiumTile = Array.from(badgesSheet!.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista CCC-003'),
+    );
+    await act(async () => {
+      premiumTile!.click();
+      await flush();
+    });
+    const upsellBtn = container.querySelector('button[aria-label="Conhecer o Premium"]');
+    expect(upsellBtn).not.toBeNull();
+    await act(async () => {
+      (upsellBtn as HTMLButtonElement).click();
       await flush();
     });
     const sheet = container.querySelector('[data-testid="premium-sheet"]');

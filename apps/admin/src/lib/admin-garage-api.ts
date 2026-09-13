@@ -7,6 +7,7 @@ import {
   type AdminGarageSpotRevokeBody,
 } from '@ccc/shared/admin-garage';
 import type { AdminXpAdjustmentInput } from '@ccc/shared/admin-garage-xp';
+import { garageBadgesOwnerResponseSchema } from '@ccc/shared/badges';
 import { z } from 'zod';
 
 import { apiFetch } from './api';
@@ -54,6 +55,16 @@ export const revokeAdminUserGarageSpot = (
     method: 'DELETE',
     body: JSON.stringify(body),
     schema: z.unknown(),
+  });
+
+// Admin read of a target user's badge state. Same aggregator and same
+// response shape as the owner route GET /me/garage/badges, so every earned
+// badge is reported — pinned or not, public garage or private. Replaces the
+// old fallback that read the public /g/:slug payload, which carried pinned
+// badges only and nothing at all for a private garage.
+export const getAdminUserGarageBadges = (userId: string) =>
+  apiFetch(`/admin/users/${userId}/garage/badges`, {
+    schema: garageBadgesOwnerResponseSchema,
   });
 
 // Manual badge grant. Body is empty per chunk-18 contract. The route is

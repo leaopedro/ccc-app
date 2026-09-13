@@ -1,4 +1,6 @@
 import {
+  CalendarDays,
+  Camera,
   Car,
   CheckSquare,
   Crown,
@@ -16,6 +18,7 @@ import {
   MessageSquare,
   ShieldCheck,
   TrendingUp,
+  Trophy,
 } from 'lucide-react-native';
 
 /**
@@ -36,6 +39,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   flag: Flag,
   streak: TrendingUp,
   medal: Medal,
+  calendar: CalendarDays,
+  trophy: Trophy,
   // CARROS
   car: Car,
   garageFull: Home,
@@ -44,6 +49,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   post: MessageSquare,
   chat: MessageCircle,
   fire: Flame,
+  camera: Camera,
   // JDM
   pin: MapPin,
   flagCheck: CheckSquare,

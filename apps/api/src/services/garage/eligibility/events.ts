@@ -25,6 +25,10 @@ export type BadgeCode = string;
  *                                       the user's ticket set (no missed
  *                                       event). See streak query below.
  *   - EVT-003 — "Veterano de Pista"   : count(DISTINCT attended events) >= 10
+ *   - EVT-004 — "Maratona"            : count(DISTINCT attended events whose
+ *                                       `startsAt` falls in the last 30 days)
+ *                                       >= 3.
+ *   - EVT-005 — "Fiel de Carteirinha" : count(DISTINCT attended events) >= 25
  *   - CCC-001 — "Curitibano de Coração" : the just-checked-in event has
  *                                       `city === 'Curitiba'` (case-insensitive).
  *   - CCC-002 — "Drift King"          : the just-checked-in event has
@@ -85,6 +89,33 @@ export const checkEligibility = async (
   // on every check-in).
   const attendedEventCount = await countAttendedEvents(tx, userId, now);
   if (attendedEventCount >= 10) codes.push('EVT-003');
+
+  // EVT-005 — mesmo contador de EVT-003 num limiar mais alto. Reusar o valor
+  // já lido custa zero; uma segunda chamada seria uma query a mais em todo
+  // check-in para responder a mesma pergunta.
+  if (attendedEventCount >= 25) codes.push('EVT-005');
+
+  // EVT-004 — três eventos distintos numa janela MÓVEL de 30 dias.
+  //
+  // Janela móvel, e não mês do calendário: `Event.startsAt` é UTC e o membro
+  // está em UTC-3, então "no mesmo mês" teria uma borda de três horas que o
+  // texto do critério não conseguiria explicar a ninguém. Trinta dias corridos
+  // é o que o critério promete e o que a query faz.
+  //
+  // Mesma forma de query de `countAttendedEvents`: groupBy do lado do Ticket,
+  // que entra pelo `userId` indexado, em vez de varrer o Event.
+  const marathonWindowStart = new Date(now.getTime() - 30 * 24 * 3600_000);
+  const marathonEvents = await tx.ticket.groupBy({
+    by: ['eventId'],
+    where: {
+      ...attendedTicket(userId),
+      event: {
+        ...startedPublishedEvent(now),
+        startsAt: { gte: marathonWindowStart, lte: now },
+      },
+    },
+  });
+  if (marathonEvents.length >= 3) codes.push('EVT-004');
 
   // EVT-002 — streak of 3. Definition (per plan §18 §5239-5247): the three
   // most-recently-past published events the user holds a ticket for must ALL

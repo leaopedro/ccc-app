@@ -23,6 +23,7 @@ export default tseslint.config(
       'apps/mobile/scripts/**',
       'apps/admin/*.config.mjs',
       'apps/admin/eslint.config.mjs',
+      'apps/garage/*.config.mjs',
       'packages/design/tailwind-preset.cjs',
       'apps/mobile/eslint-rules/**/*.cjs',
     ],

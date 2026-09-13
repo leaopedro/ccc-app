@@ -96,6 +96,30 @@ describe('awardBadge não envenena a transação do chamador', () => {
     expect(await prisma.car.count({ where: { userId: user.id } })).toBe(1);
   });
 
+  it('o re-grant depois de um un-grant persiste a conquista, mesmo com a notificação deduplicada', async () => {
+    // Segunda instância do mesmo bug, um nível mais fundo. O insert de
+    // Notification é protegido por um try/catch que engole a colisão de
+    // `dedupeKey` — e aquele INSERT falho aborta a transação igual ao outro.
+    // Sem savepoint próprio, o GarageBadge re-concedido some no commit.
+    const { user } = await createUser({ email: 'savepoint-notify@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+
+    await prisma.$transaction(async (tx) => {
+      await awardBadge(tx, garage.id, 'EVT-001', 'grant:1', { notifyOnGrant: true });
+    });
+    await prisma.garageBadge.deleteMany({ where: { garageId: garage.id, badgeCode: 'EVT-001' } });
+
+    await prisma.$transaction(async (tx) => {
+      await awardBadge(tx, garage.id, 'EVT-001', 'grant:2', { notifyOnGrant: true });
+    });
+
+    const rows = await prisma.garageBadge.findMany({
+      where: { garageId: garage.id, badgeCode: 'EVT-001' },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sourceRef).toBe('grant:2');
+  });
+
   it('POST /me/cars duas vezes grava os dois carros', async () => {
     // O caso real: a elegibilidade devolve CAR-001 em todo carro a partir do
     // primeiro, então o segundo POST sempre re-pontua. Com o catálogo semeado

@@ -170,6 +170,12 @@ export const awardBadge = async (
     // The unique index `@@unique([userId, kind, dedupeKey])` swallows the
     // re-grant case (un-grant → re-grant) without inserting a duplicate.
     if (opts.notifyOnGrant) {
+      // Savepoint aninhado, pelo mesmo motivo do de fora: este try/catch
+      // engole a colisão de `dedupeKey`, e o INSERT que falhou já abortou a
+      // transação. Sem o savepoint próprio, o `RELEASE` logo abaixo estoura e
+      // o re-grant depois de um un-grant responde 500 — com o GarageBadge
+      // recém-criado indo junto.
+      await tx.$executeRawUnsafe('SAVEPOINT awardbadge_notify');
       try {
         await tx.notification.create({
           data: {
@@ -181,11 +187,14 @@ export const awardBadge = async (
             dedupeKey: badgeAwardedDedupeKey(code, garage.userId),
           },
         });
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge_notify');
       } catch (notifyErr) {
         // Dedupe collision (un-grant → re-grant) is a silent no-op: the
         // historical "you earned X" event already lives in the inbox and
         // we don't want to double-notify on a re-mint. Any other failure
         // bubbles so the surrounding transaction rolls back the award.
+        await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT awardbadge_notify');
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT awardbadge_notify');
         if (!isUniqueConstraintError(notifyErr)) throw notifyErr;
       }
     }

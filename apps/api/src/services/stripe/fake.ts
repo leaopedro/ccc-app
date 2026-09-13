@@ -60,6 +60,8 @@ export type FakeStripe = StripeClient & {
   /** Next Price returned by retrievePrice. Defaults to a no-metadata throw. */
   nextRetrievedPrice: Stripe.Price | null;
   nextPaymentIntent: { id: string; clientSecret: string };
+  /** When set, createPaymentIntent throws this AFTER recording the call. */
+  nextPaymentIntentError: Error | null;
   nextRetrievedPaymentIntent: { id: string; clientSecret: string } | null;
   nextCancelPaymentIntentError: Error | null;
   nextCheckoutSession: CheckoutSessionResult;
@@ -135,6 +137,7 @@ export const buildFakeStripe = (): FakeStripe => {
   const fake: FakeStripe = {
     calls: [],
     nextPaymentIntent: { id: 'pi_test_1', clientSecret: 'pi_test_1_secret_abc' },
+    nextPaymentIntentError: null,
     nextRetrievedPaymentIntent: null,
     nextCancelPaymentIntentError: null,
     nextCheckoutSession: {
@@ -183,7 +186,10 @@ export const buildFakeStripe = (): FakeStripe => {
     nextRefundError: null,
 
     createPaymentIntent: async (input: CreatePaymentIntentInput): Promise<PaymentIntentResult> => {
+      // Push BEFORE throwing: a test asserting "a chamada aconteceu e falhou"
+      // precisa ver a chamada registrada.
       fake.calls.push({ kind: 'createPaymentIntent', payload: input });
+      if (fake.nextPaymentIntentError) throw fake.nextPaymentIntentError;
       return fake.nextPaymentIntent;
     },
 

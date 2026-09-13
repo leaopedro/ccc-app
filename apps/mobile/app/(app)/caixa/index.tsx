@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { unskipBox } from '~/api/box';
 import { caixaCopy } from '~/copy/caixa';
@@ -67,8 +68,11 @@ function goToMontar() {
 /* ------------------------------------------------------------------ */
 
 function Header({ title }: { title?: string }) {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <View style={styles.headerTitles}>
         <Text variant="eyebrow" style={styles.eyebrow}>
           {caixaCopy.header.eyebrow}

@@ -5,6 +5,7 @@
 // either (the handoff's subtle opacity loop is left as a follow-up).
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '~/theme';
 
@@ -15,8 +16,15 @@ function Block({ style }: { style: StyleProp<ViewStyle> }) {
 }
 
 export function CaixaSkeleton() {
+  // Stack header is hidden, so the skeleton has to clear the status bar /
+  // notch itself — same as the real header it stands in for.
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.screen} accessibilityLabel="Carregando caixa do mês">
+    <View
+      style={[styles.screen, { paddingTop: insets.top + theme.spacing.md }]}
+      accessibilityLabel="Carregando caixa do mês"
+    >
       <View style={styles.headerRow}>
         <Block style={styles.eyebrow} />
         <Block style={styles.title} />

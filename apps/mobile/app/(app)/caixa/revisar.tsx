@@ -11,6 +11,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Home, Plus } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { caixaCopy } from '~/copy/caixa';
 import { useBox } from '~/hooks/useBox';
@@ -46,8 +47,11 @@ function openAddAddress() {
 }
 
 function Header() {
+  // Stack header is hidden, so the in-screen header has to clear the status
+  // bar / notch itself.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <Pressable
         onPress={goBack}
         accessibilityRole="button"

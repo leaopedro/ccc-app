@@ -28,9 +28,11 @@ import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
 import { paymentsCopy } from '~/copy/payments';
 import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
+import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
 import { usePaymentSheet } from '~/payments/payment-sheet';
+import { canChangePlan } from '~/screens/assinaturas/can-change-plan';
 import { startPremiumCheckout } from '~/screens/assinaturas/checkout';
 import type { CheckoutError } from '~/screens/assinaturas/checkout-error';
 import { packageTotalCents } from '~/screens/assinaturas/package-total';
@@ -82,6 +84,19 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
   const [error, setError] = useState(false);
   const { modules } = usePremiumAddonModules();
   const { pay } = usePaymentSheet();
+  const { subscription, loading: subLoading } = usePremiumSubscription();
+
+  // A member with a live, in-good-standing membership who reaches this
+  // screen (any plan, typically via "VER TODOS OS PLANOS") would otherwise
+  // walk the whole package-assembly flow only to hit a 409 AlreadySubscribed
+  // at the very end. Send them to AlterarPlanoScreen instead. Gated on
+  // canChangePlan, not `subscription?.active` alone — `active` covers
+  // past_due too, and that status must NOT redirect here: the 409 path is
+  // what surfaces the Stripe portal link a past_due member needs.
+  useEffect(() => {
+    if (subLoading || !slug || !canChangePlan(subscription)) return;
+    router.replace(`/assinaturas/alterar?slug=${slug}` as never);
+  }, [subLoading, subscription, slug]);
 
   const refresh = useCallback(async () => {
     if (!slug) {
@@ -223,8 +238,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         setPhase('confirming');
         const active = await pollSubscriptionActive();
         if (active) {
-          showToast(copy.successToast);
-          router.replace('/assinaturas/minha-assinatura');
+          // The welcome screen IS the confirmation (plan, benefits, first
+          // steps), so no success toast on top of it.
+          router.replace('/assinaturas/boas-vindas');
         } else {
           setPhase('pending');
         }
@@ -250,8 +266,9 @@ export default function ContratarScreen({ slug }: { slug: string | undefined }) 
         setPhase('confirming');
         const active = await pollSubscriptionActive();
         if (active) {
-          showToast(copy.successToast);
-          router.replace('/assinaturas/minha-assinatura');
+          // The welcome screen IS the confirmation (plan, benefits, first
+          // steps), so no success toast on top of it.
+          router.replace('/assinaturas/boas-vindas');
         } else {
           setPhase('pending');
         }

@@ -97,6 +97,9 @@ describe('attachAddon', () => {
   it('chama a Stripe antes de gravar e abre o ciclo alinhado ao periodo', async () => {
     const { membershipId } = await seed();
     const stripe = buildFakeStripe();
+    const membership = await prisma.premiumMembership.findUniqueOrThrow({
+      where: { id: membershipId },
+    });
 
     await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
 
@@ -106,7 +109,7 @@ describe('attachAddon', () => {
         payload: {
           subscriptionId: 'sub_1',
           priceId: 'price_detailing',
-          idempotencyKey: `addon_attach_${membershipId}_detailing`,
+          idempotencyKey: `addon_attach_${membershipId}_detailing_${membership.updatedAt.getTime()}`,
         },
       },
     ]);
@@ -180,6 +183,37 @@ describe('attachAddon', () => {
     }).catch((e: unknown) => e);
     expect(isBillingActionError(err) && err.code).toBe('MembershipNotFound');
   });
+
+  it('reativa um add-on removido, recriando o item na Stripe', async () => {
+    const { membershipId } = await seed();
+    const stripe = buildFakeStripe();
+
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+
+    const result = await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+
+    expect(result.status).toBe('active');
+    const attachCalls = stripe.calls.filter(
+      (c): c is { kind: 'addSubscriptionItem'; payload: { idempotencyKey: string } } =>
+        c.kind === 'addSubscriptionItem',
+    );
+    // O item foi removido da Stripe no detach; reativar precisa criar um novo,
+    // senao a linha fica ativa no banco e ninguem cobra.
+    expect(attachCalls).toHaveLength(2);
+    // As duas chaves de idempotencia tem que ser diferentes (cada uma carrega
+    // membership.updatedAt.getTime(), que muda a cada mutacao da membership).
+    // Chave repetida faria a Stripe devolver a resposta em cache do primeiro
+    // attach — o item ja removido no detach nao seria recriado — e o membro
+    // ficaria com um modulo `active` no banco que ninguem cobra.
+    expect(attachCalls[0]!.payload.idempotencyKey).not.toBe(attachCalls[1]!.payload.idempotencyKey);
+
+    const row = await prisma.premiumMembershipAddon.findFirstOrThrow({
+      where: { membershipId, addonKey: 'detailing' },
+    });
+    expect(row.status).toBe('active');
+    expect(row.providerItemRef).not.toBeNull();
+  });
 });
 
 describe('detachAddon', () => {
@@ -196,6 +230,9 @@ describe('detachAddon', () => {
     const { membershipId } = await seed();
     const stripe = buildFakeStripe();
     await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    const attached = await prisma.premiumMembershipAddon.findFirstOrThrow({
+      where: { membershipId },
+    });
 
     const result = await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
 
@@ -210,7 +247,10 @@ describe('detachAddon', () => {
     expect(addon.status).toBe('cancel_scheduled');
     expect(stripe.calls.at(-1)).toEqual({
       kind: 'removeSubscriptionItem',
-      payload: { subscriptionItemId: 'si_fake_1', idempotencyKey: `addon_detach_${addon.id}` },
+      payload: {
+        subscriptionItemId: 'si_fake_1',
+        idempotencyKey: `addon_detach_${addon.id}_${attached.updatedAt.getTime()}`,
+      },
     });
   });
 
@@ -222,5 +262,35 @@ describe('detachAddon', () => {
       (e: unknown) => e,
     );
     expect(isBillingActionError(err) && err.code).toBe('AddonNotAttached');
+  });
+
+  it('detach repetido sem re-vinculo no meio lanca AddonNotAttached, sem chamar a Stripe de novo', async () => {
+    const { membershipId } = await seed();
+    const stripe = buildFakeStripe();
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+
+    const err = await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(isBillingActionError(err) && err.code).toBe('AddonNotAttached');
+    // O item ja foi removido no primeiro detach. Uma segunda chamada a
+    // removeSubscriptionItem bateria num item inexistente na Stripe, que
+    // devolve resource_missing e vira 500 para o membro.
+    expect(stripe.calls.filter((c) => c.kind === 'removeSubscriptionItem')).toHaveLength(1);
+  });
+
+  it('attach -> detach -> attach -> detach funciona por completo (re-vinculo destrava o proximo detach)', async () => {
+    const { membershipId } = await seed();
+    const stripe = buildFakeStripe();
+
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    await attachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+    const result = await detachAddon({ membershipId, addonKey: 'detailing', stripe, logger });
+
+    expect(result.status).toBe('cancel_scheduled');
+    expect(stripe.calls.filter((c) => c.kind === 'removeSubscriptionItem')).toHaveLength(2);
   });
 });

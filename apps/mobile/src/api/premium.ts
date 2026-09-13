@@ -9,6 +9,10 @@ import {
   type PremiumCheckoutResponse,
   type PremiumNativeCheckoutResponse,
 } from '@ccc/shared/premium';
+import {
+  addonMutationResponseSchema,
+  type AddonMutationResponse,
+} from '@ccc/shared/premium-subscription';
 import { z } from 'zod';
 
 import { authedRequest } from '~/api/client';
@@ -53,6 +57,21 @@ export type CancelNotStripeSubscription = {
   manageUrl: string;
 };
 
+/**
+ * POST /api/me/premium/plan — switches the subscription's plan/cadence, with
+ * proration (create_prorations). Answers `pending: true` on purpose: only the
+ * verified webhook writes tier/cadence, so the caller must poll
+ * (`pollSubscriptionTier`) before showing success.
+ */
+export const changePremiumPlan = (input: {
+  planSlug: string;
+  cadence: 'monthly' | 'annual';
+}): Promise<{ ok: boolean; pending: boolean }> =>
+  authedRequest('/api/me/premium/plan', z.object({ ok: z.boolean(), pending: z.boolean() }), {
+    method: 'POST',
+    body: { planSlug: input.planSlug, cadence: input.cadence },
+  });
+
 /** POST /api/me/premium/cancel — schedules cancellation at period end. */
 export const cancelPremiumSubscription = (): Promise<{
   cancelAtPeriodEnd: boolean;
@@ -62,4 +81,29 @@ export const cancelPremiumSubscription = (): Promise<{
     '/api/me/premium/cancel',
     z.object({ cancelAtPeriodEnd: z.boolean(), currentPeriodEnd: z.string() }),
     { method: 'POST' },
+  );
+
+/**
+ * POST /api/me/premium/addons — attach an add-on module by key. Also the
+ * re-vínculo path: a `cancel_scheduled` (or `cancelled`) row on the caller's
+ * own membership goes back to `active` instead of erroring, which is what
+ * makes REATIVAR possible on Minha Assinatura.
+ */
+export const attachPremiumAddon = (addonKey: string): Promise<AddonMutationResponse> =>
+  authedRequest('/api/me/premium/addons', addonMutationResponseSchema, {
+    method: 'POST',
+    body: { addonKey },
+  });
+
+/**
+ * DELETE /api/me/premium/addons/:addonKey — schedules the add-on's
+ * cancellation (never a hard delete). The response's recomputed totals are
+ * NOT applied to local state by callers — only `usePremiumSubscription`'s
+ * `refresh()` carries the add-on's current-cycle usage.
+ */
+export const detachPremiumAddon = (addonKey: string): Promise<AddonMutationResponse> =>
+  authedRequest(
+    `/api/me/premium/addons/${encodeURIComponent(addonKey)}`,
+    addonMutationResponseSchema,
+    { method: 'DELETE' },
   );

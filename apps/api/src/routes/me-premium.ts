@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '@ccc/db';
 import * as Sentry from '@sentry/node';
 import {
+  APPLE_MANAGE_URL,
   premiumBillingPortalResponseSchema,
   premiumCheckoutPrecheckResponseSchema,
   premiumCheckoutRejectionSchema,
@@ -29,14 +30,20 @@ import {
   premiumStatusSchema,
   type PremiumCheckoutRejection,
 } from '@ccc/shared/premium';
-import { premiumInvoicesResponseSchema } from '@ccc/shared/premium-subscription';
+import {
+  memberChangePlanRequestSchema,
+  premiumInvoicesResponseSchema,
+} from '@ccc/shared/premium-subscription';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { requireUser } from '../plugins/auth.js';
+import { recordAudit } from '../services/admin-audit.js';
+import { isBillingActionError } from '../services/billing/errors.js';
 import { pickLiveMembership } from '../services/billing/live-membership.js';
 import { handleStaleRef } from '../services/billing/stale-ref.js';
+import { changePlan } from '../services/billing/subscription-actions.js';
 import { computeIsPremiumActive } from '../services/garage/index.js';
 import { requireSubscriptionsEnabled } from '../services/platform-gate/guard.js';
 import { enforceProfileGate } from '../services/profile/gate.js';
@@ -50,15 +57,20 @@ const billingPortalBodySchema = z.object({
   returnUrl: z.string().url().optional(),
 });
 
-/** App Store deep link to subscription management — used when the user pays via Apple IAP. */
-const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
-
 /**
  * How many times to re-mint a checkout session whose idempotency key replayed a
  * non-open session. Three covers the realistic A→B→A→B→A dance; past that the
  * handler gives up and 503s rather than looping against Stripe.
  */
 const MAX_SESSION_MINT_ATTEMPTS = 3;
+
+/**
+ * Status em que o membro pode trocar de plano. Mais estrita que a do admin, que
+ * aceita `past_due`: quem tem cobranca pendente regulariza antes de mexer no
+ * valor da assinatura. Mesma lista que o attach de add-on usa
+ * (me-premium-addons.ts) — assumir compromisso novo tem uma regra so.
+ */
+const MEMBER_CHANGE_PLAN_STATUS = ['active', 'cancel_scheduled'] as const;
 
 type MintInput = Parameters<StripeClient['createSubscriptionCheckoutSession']>[0];
 
@@ -982,6 +994,186 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
   };
 
   /**
+   * POST /api/me/premium/plan
+   *
+   * Body: { planSlug, cadence }. Troca o plano da assinatura do membro, com
+   * rateio (create_prorations) — o mesmo `changePlan` que o admin chama.
+   *
+   * Como toda acao de assinatura deste repo, NAO escreve em PremiumMembership:
+   * quem grava tier/cadence e o webhook verificado, por isso a resposta e
+   * `pending: true`.
+   *
+   * Nao roda `enforceProfileGate`. O gate existe para a ENTRADA de um assinante
+   * novo; quem ja paga ja passou por ele, e barrar a troca de plano por perfil
+   * incompleto prenderia um membro no plano atual sem acao possivel.
+   *
+   * A ordem dos guards e contratual (os testes a prendem): provider antes de
+   * status, e os dois antes do catalogo. Um assinante Apple recebe sempre
+   * NotStripeSubscription, mesmo com status ruim e slug inexistente.
+   *
+   * O guard de preco fica AQUI, nao no servico: delegar produziria
+   * `PlanPriceMissing` em 422, codigo que nenhum cliente mapeia e que vira
+   * "tente novamente" num erro que nunca passa. 404 PlanNotFound e a verdade
+   * do ponto de vista do membro — aquele plano, naquela cadencia, nao existe
+   * para ser comprado.
+   */
+  const changePlanHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!app.env.GROWTH_PREMIUM_BILLING_ENABLED) {
+      return reply
+        .status(503)
+        .send({ error: 'ServiceUnavailable', message: 'premium billing not available' });
+    }
+
+    const { sub } = requireUser(request);
+
+    const parsed = memberChangePlanRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(422).send({
+        error: 'UnprocessableEntity',
+        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
+    }
+    const { planSlug, cadence } = parsed.data;
+
+    const garage = await prisma.garage.findUnique({
+      where: { userId: sub },
+      select: { id: true },
+    });
+    if (!garage) {
+      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+    }
+
+    // Leituras soltas, sem transacao e sem SELECT ... FOR UPDATE na linha de
+    // Garage. A versao anterior segurava esse lock por cima da chamada a
+    // Stripe, e estava errada por tres motivos:
+    //
+    //  1. O lock nao serializava nada. Nem esta transacao nem o `changePlan`
+    //     escrevem linha alguma (a invariante e que so o webhook grava), entao
+    //     nao existe token que o segundo request possa observar: ele pegava o
+    //     lock, relia a mesma membership gold/monthly, passava pelo NoChange e
+    //     chegava na Stripe com a chave dele. As duas trocas aplicavam, igual
+    //     a sem lock nenhum.
+    //  2. `packages/db` nao define `transactionOptions`, entao valem os 5s
+    //     padrao do Prisma. Uma chamada ACEITA pela Stripe que responde em
+    //     mais de 5s aborta a transacao com P2028 — a troca aconteceu la fora,
+    //     o membro ve erro, e o `recordAudit` (que roda depois) nunca escreve:
+    //     troca real sem rastro nenhum. Mesmo bug que admin/refunds.ts:49-60
+    //     ja cometeu e ja consertou, com o mesmo desenho de claim-then-call.
+    //  3. stripe-billing-webhook.ts:434 pede FOR UPDATE na MESMA linha de
+    //     Garage. Segurar o lock durante o round-trip bloqueia o webhook que
+    //     esta propria chamada dispara.
+    //
+    // Decisao registrada: a corrida entre dois POST para planos alvo
+    // DIFERENTES fica em aberto. Para o mesmo plano alvo a chave de
+    // idempotencia de `changePlan` ja colapsa o segundo toque. Serializar de
+    // verdade exigiria uma linha de claim+settle (o desenho de refunds.ts),
+    // que e trabalho proprio, fora do escopo desta rota.
+    const membership = await pickLiveMembership(prisma, garage.id);
+    if (!membership) {
+      return reply.status(404).send({ error: 'NotFound', message: 'no live membership' });
+    }
+
+    if (membership.provider !== 'stripe') {
+      return reply.status(409).send({
+        error: 'NotStripeSubscription',
+        message: 'manage your subscription in the App Store',
+        manageUrl: APPLE_MANAGE_URL,
+      });
+    }
+
+    if (!(MEMBER_CHANGE_PLAN_STATUS as readonly string[]).includes(membership.status)) {
+      return reply.status(409).send({
+        error: 'InvalidStatus',
+        message: `plan change not allowed while subscription is ${membership.status}`,
+        status: membership.status,
+      });
+    }
+
+    const plan = await prisma.premiumPlan.findUnique({
+      where: { slug: planSlug },
+      select: { id: true, tier: true, active: true },
+    });
+    // `!plan.active` conta como inexistente: um plano desativado saiu do
+    // catalogo vendavel, e migrar para ele e exatamente o que a desativacao
+    // existe para impedir.
+    if (!plan || !plan.active) {
+      return reply.status(404).send({ error: 'PlanNotFound', message: 'plan not found' });
+    }
+
+    const price = await prisma.premiumPlanPrice.findUnique({
+      where: { planId_cadence: { planId: plan.id, cadence } },
+      select: { stripePriceId: true },
+    });
+    if (!price?.stripePriceId) {
+      return reply.status(404).send({ error: 'PlanNotFound', message: 'plan not found' });
+    }
+
+    // Mesmo guard do checkout: add-on e mensal por construcao, e a Stripe
+    // recusa uma assinatura com intervalos misturados. Sem isto a recusa vem
+    // da Stripe, nao e BillingActionError, escapa do catch e vira 500.
+    const attached = await prisma.premiumMembershipAddon.findMany({
+      where: { membershipId: membership.id, status: { in: ['active', 'cancel_scheduled'] } },
+      orderBy: { addonKey: 'asc' },
+      select: { addonKey: true },
+    });
+    const rejection = checkAnnualCadenceAddonRejection(
+      cadence,
+      attached.map((a) => a.addonKey),
+    );
+    if (rejection) {
+      return reply.status(422).send(rejection);
+    }
+
+    // NoChange fica com o `changePlan` (primeira coisa que ele checa, antes de
+    // qualquer chamada a Stripe) para nao duplicar a comparacao em dois lugares
+    // que poderiam divergir. O catch abaixo o traduz.
+    try {
+      await changePlan({
+        membershipId: membership.id,
+        tier: plan.tier,
+        cadence,
+        stripe: app.stripe,
+      });
+    } catch (err) {
+      // Mapa explicito, como me-premium-addons.ts:200-216 faz e documenta.
+      // Repassar err.code cru entregaria ao membro `PlanPriceMissing` ("target
+      // plan has no stripePriceId configured") e `AmbiguousPlanItem` ("expected
+      // exactly one plan item, found N"), que sao estado de operador.
+      if (isBillingActionError(err)) {
+        if (err.code === 'NoChange') {
+          return reply.status(409).send({ error: 'NoChange', message: 'already on this plan' });
+        }
+        request.log.error(
+          { err, code: err.code, garageId: garage.id, membershipId: membership.id },
+          'me-premium: troca de plano recusada pela camada de billing',
+        );
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'plan change unavailable' });
+      }
+      throw err;
+    }
+
+    // `actorKind` impede a linha de conflar staff e membro: a mesma acao
+    // `premium.subscription.plan_changed` agora tem duas origens.
+    await recordAudit({
+      actorId: sub,
+      action: 'premium.subscription.plan_changed',
+      entityType: 'premium_membership',
+      entityId: membership.id,
+      metadata: {
+        actorKind: 'member',
+        fromTier: membership.tier,
+        fromCadence: membership.cadence,
+        toTier: plan.tier,
+        toCadence: cadence,
+      },
+    });
+
+    return reply.status(200).send({ ok: true, pending: true });
+  };
+
+  /**
    * GET /api/me/premium/invoices
    *
    * Billing history as the member sees it. Reads every membership row of the
@@ -1197,5 +1389,23 @@ export const mePremiumRoutes: FastifyPluginAsync = async (app) => {
       keyGenerator: (req) => `premium-cancel:${req.user?.sub ?? req.ip}`,
     });
     scoped.post('/api/me/premium/cancel', cancelHandler);
+  });
+
+  // Escopo proprio, nao um dos tres acima. Reusar o balde do checkout faria
+  // uma troca de plano consumir tentativa de CONTRATACAO: o membro que mexe no
+  // plano ficaria impedido de assinar de novo depois de cancelar, e vice-versa.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 5,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (req) => `premium-change-plan:${req.user?.sub ?? req.ip}`,
+    });
+    scoped.post(
+      '/api/me/premium/plan',
+      { preHandler: requireSubscriptionsEnabled },
+      changePlanHandler,
+    );
   });
 };

@@ -180,6 +180,102 @@ describe('platform gate on GET /api/me/premium/checkout-precheck', () => {
   });
 });
 
+describe('platform gate on POST /api/me/premium/plan', () => {
+  let app: FastifyInstance;
+  let stripe: FakeStripe;
+
+  // resetDatabase() nao limpa o catalogo premium; este bloco cria plano e preco
+  // e precisa limpar os dois lados para nao colidir com os unique de tier/slug.
+  const resetCatalog = async (): Promise<void> => {
+    await prisma.premiumPlanPrice.deleteMany();
+    await prisma.premiumPlanBenefit.deleteMany();
+    await prisma.premiumPlan.deleteMany();
+  };
+
+  const seedCatalog = async (): Promise<void> => {
+    const silver = await prisma.premiumPlan.create({
+      data: { tier: 'silver', slug: 'estrada', name: 'Estrada', sortOrder: 1 },
+    });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: silver.id,
+        cadence: 'monthly',
+        baseAmountCents: 89000,
+        currency: 'BRL',
+        stripePriceId: 'price_silver',
+      },
+    });
+    const gold = await prisma.premiumPlan.create({
+      data: { tier: 'gold', slug: 'fundador', name: 'Fundador', sortOrder: 2 },
+    });
+    await prisma.premiumPlanPrice.create({
+      data: {
+        planId: gold.id,
+        cadence: 'monthly',
+        baseAmountCents: 149000,
+        currency: 'BRL',
+        stripePriceId: 'price_gold',
+      },
+    });
+  };
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await resetCatalog();
+    process.env.PREMIUM_SUBSCRIPTIONS_IOS = 'false';
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    await resetDatabase();
+    await resetCatalog();
+    restoreEnv();
+  });
+
+  it('refuses a plan change from a gated platform', async () => {
+    ({ app } = await buildPremiumApp());
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'gated_plan@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    await seedMembership(garage.id, 'active', 'stripe', 'cus_gated_plan');
+    await seedCatalog();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/plan',
+      headers: { authorization: bearer(env, user.id, 'user'), 'x-ccc-platform': 'ios' },
+      payload: { planSlug: 'estrada', cadence: 'monthly' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(json(res)).toMatchObject({ error: 'PlatformNotSupported' });
+  });
+
+  it('still allows the same call from web', async () => {
+    ({ app, stripe } = await buildPremiumApp());
+    const env = loadEnv();
+    const { user } = await createUser({ email: 'web_plan@jdm.test', verified: true });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { userId: user.id } });
+    const membership = await seedMembership(garage.id, 'active', 'stripe', 'cus_web_plan');
+    await seedCatalog();
+    stripe.nextRetrievedSubscription = {
+      id: membership.providerSubRef,
+      items: { data: [{ id: 'si_plan', price: { id: 'price_gold' } }] },
+    } as never;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/premium/plan',
+      headers: { authorization: bearer(env, user.id, 'user'), 'x-ccc-platform': 'web' },
+      payload: { planSlug: 'estrada', cadence: 'monthly' },
+    });
+
+    expect(res.statusCode).not.toBe(403);
+    expect(res.statusCode).toBe(200);
+    expect(json(res)).toEqual({ ok: true, pending: true });
+  });
+});
+
 describe('platform gate does NOT block POST /api/me/premium/billing-portal', () => {
   let app: FastifyInstance;
 

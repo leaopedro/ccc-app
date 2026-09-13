@@ -22,17 +22,23 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { PremiumAddonModule } from '@ccc/shared/premium-catalog';
+
 import { ApiError } from '~/api/client';
-import { cancelPremiumSubscription } from '~/api/premium';
+import { attachPremiumAddon, cancelPremiumSubscription, detachPremiumAddon } from '~/api/premium';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { usePremiumInvoices } from '~/hooks/usePremiumInvoices';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
 import { showToast } from '~/lib/toast';
+import { resolveAddonError } from '~/screens/assinaturas/addon-error';
+import { canChangePlan } from '~/screens/assinaturas/can-change-plan';
 import { c, TIER_VISUAL, type ApiTier } from '~/screens/assinaturas/tier-visual';
 
 const copy = assinaturasCopy.minhaAssinatura;
+const modulosCopy = copy.modulos;
 
 const APPLE_MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
 
@@ -72,7 +78,29 @@ function Header() {
   );
 }
 
-function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
+function AddonRow({
+  addon,
+  provider,
+  subscriptionsEnabled,
+  planActionsAllowed,
+  module,
+  totalAmountCents,
+  refresh,
+}: {
+  addon: MySubscriptionAddon;
+  provider: MySubscriptionResponse['provider'];
+  subscriptionsEnabled: boolean;
+  /** canChangePlan(sub) — the membership status check, NOT the platform
+   * gate. Gates REATIVAR only (purchase-shaped, like ADICIONAR) — REMOVER
+   * deliberately ignores it, same as the server's own detach. */
+  planActionsAllowed: boolean;
+  /** Catalog entry matching addon.key, used only for REATIVAR's price/total
+   * (the catalog's CURRENT price, since re-attach re-snapshots it — see
+   * addons.ts:134-139). undefined when the module left the catalog. */
+  module: PremiumAddonModule | undefined;
+  totalAmountCents: number;
+  refresh: () => Promise<void>;
+}) {
   const cycle = addon.currentCycle;
   let usageText: string = copy.usageNoCycle;
   let remainingText: string | null = null;
@@ -86,6 +114,77 @@ function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
         ? copy.usageRemainingHours(cycle.quotaRemaining)
         : copy.usageRemainingAccess(cycle.quotaRemaining);
   }
+
+  // Both actions are refused by the server for an Apple/RevenueCat
+  // membership (409 NotStripeSubscription), so neither is offered here.
+  // REMOVER does NOT follow the platform gate — reducing an existing
+  // commitment is never blocked by it. REATIVAR DOES: it resumes billing,
+  // the same purchase-shaped split the API makes between attach and detach.
+  //
+  // Final review (Conserto 1, corrected): REATIVAR requires
+  // `planActionsAllowed` (canChangePlan(sub) — status in
+  // ['active','cancel_scheduled']) because attach 409s InvalidStatus outside
+  // that set (me-premium-addons.ts:223) — REATIVAR is purchase-shaped, same
+  // family as ADICIONAR. REMOVER deliberately does NOT: the server's detach
+  // is never status-gated (me-premium-addons.ts's own comment: "reducing a
+  // commitment is never blocked by status"), on purpose — a past_due member
+  // needs to be able to cut cost precisely BECAUSE they're behind. Gating
+  // REMOVER on membership status here would trap that member with the
+  // module they can least afford. `addon.status === 'active'` below is the
+  // add-on's OWN status (not the membership's) — it just keeps REMOVER off a
+  // row that's already cancel_scheduled.
+  const isApple = provider === 'apple_revenuecat';
+  const canRemove = !isApple && addon.status === 'active';
+  // Final review (Conserto 2): also requires the module to still be in the
+  // catalog — REATIVAR always charges the catalog's CURRENT price
+  // (addons.ts re-snapshots on re-attach), so with no catalog entry there is
+  // no honest number to confirm.
+  const canReactivate =
+    !isApple &&
+    addon.status === 'cancel_scheduled' &&
+    subscriptionsEnabled &&
+    planActionsAllowed &&
+    Boolean(module);
+
+  const [sheetAction, setSheetAction] = useState<'remove' | 'reactivate' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  const onConfirm = async () => {
+    if (submittingRef.current || !sheetAction) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      if (sheetAction === 'remove') {
+        await detachPremiumAddon(addon.key);
+      } else {
+        await attachPremiumAddon(addon.key);
+      }
+      setSheetAction(null);
+      showToast(sheetAction === 'remove' ? modulosCopy.removedToast : modulosCopy.reativadoToast);
+      // The mutation itself already succeeded here — the response's
+      // recomputed totals are correct but do not carry the add-on's
+      // current-cycle usage, so the state is refreshed from the source of
+      // truth instead of being patched locally.
+      try {
+        await refresh();
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
+    } catch (err) {
+      setActionError(
+        resolveAddonError(err, sheetAction === 'remove' ? 'detach' : 'attach').message,
+      );
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const newTotalAfterRemove = formatBRL(Math.max(0, totalAmountCents - addon.monthlyDeltaCents));
+
   return (
     <View style={styles.addonRow}>
       <View style={styles.addonHeaderRow}>
@@ -97,6 +196,277 @@ function AddonRow({ addon }: { addon: MySubscriptionAddon }) {
       <Text style={styles.addonUsageLabel}>{copy.usageLabel}</Text>
       <Text style={styles.addonUsage}>{usageText}</Text>
       {remainingText ? <Text style={styles.addonRemaining}>{remainingText}</Text> : null}
+
+      {canRemove || canReactivate ? (
+        <Pressable
+          onPress={() => {
+            setActionError(null);
+            setSheetAction(canRemove ? 'remove' : 'reactivate');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={canRemove ? modulosCopy.removerTrigger : modulosCopy.reativarTrigger}
+          style={styles.addonActionTrigger}
+          testID={`assinatura-modulo-${addon.key}-${canRemove ? 'remover' : 'reativar'}`}
+        >
+          <Text style={styles.addonActionTriggerText}>
+            {canRemove ? modulosCopy.removerTrigger : modulosCopy.reativarTrigger}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <SheetShell
+        visible={sheetAction !== null}
+        title={
+          sheetAction === 'remove' ? modulosCopy.removerSheetTitle : modulosCopy.reativarSheetTitle
+        }
+        onClose={() => setSheetAction(null)}
+        theme={{
+          surface: c.surface,
+          border: c.hairline,
+          titleColor: c.cream,
+          titleFontFamily: 'Inter_600SemiBold',
+        }}
+        testID={`assinatura-modulo-${addon.key}-sheet`}
+      >
+        <View style={styles.sheetBody}>
+          {sheetAction === 'remove' ? (
+            <>
+              <Text style={styles.sheetText}>
+                {modulosCopy.removerBody(addon.name, newTotalAfterRemove)}
+              </Text>
+              {/* Final review (Conserto 3): this promises the member can
+                  reactivate whenever they want, but REATIVAR follows the
+                  platform gate. With it off, showing this promise strands
+                  the member with no way back — omit it entirely rather than
+                  say something the gate contradicts. */}
+              {subscriptionsEnabled ? (
+                <Text style={styles.sheetText}>{modulosCopy.removerReversivel}</Text>
+              ) : null}
+            </>
+          ) : module ? (
+            // Final review (Conserto 2): the reactivate sheet used to show
+            // only the rateio sentence, no number — every module action must
+            // confirm with numbers. Same catalog-price fields
+            // AvailableModuleRow already shows (not the snapshot: re-attach
+            // re-prices to the catalog's CURRENT value, addons.ts:134-139).
+            <>
+              <Text style={styles.sheetText}>
+                {assinaturasCopy.alterar.differenceLabel}: {formatBRL(module.monthlyDeltaCents)}
+              </Text>
+              <Text style={styles.sheetText}>
+                {assinaturasCopy.alterar.newTotalLabel}:{' '}
+                {formatBRL(totalAmountCents + module.monthlyDeltaCents)}
+              </Text>
+              {/* The ONE rateio phrasing (Global Constraint) — no variant here. */}
+              <Text style={styles.sheetText}>{assinaturasCopy.alterar.whenBody}</Text>
+            </>
+          ) : null}
+          {actionError ? <Text style={styles.sheetError}>{actionError}</Text> : null}
+          <Pressable
+            onPress={() => setSheetAction(null)}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.keep}
+            style={styles.sheetKeep}
+          >
+            <Text style={styles.sheetKeepText}>{modulosCopy.keep}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm()}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={
+              sheetAction === 'remove' ? modulosCopy.removerConfirm : modulosCopy.reativarConfirm
+            }
+            accessibilityState={{ disabled: submitting, busy: submitting }}
+            style={[styles.sheetConfirm, submitting && styles.dimmed]}
+            testID={`assinatura-modulo-${addon.key}-confirmar`}
+          >
+            <Text style={styles.sheetConfirmText}>
+              {submitting
+                ? sheetAction === 'remove'
+                  ? modulosCopy.removerLoading
+                  : modulosCopy.reativarLoading
+                : sheetAction === 'remove'
+                  ? modulosCopy.removerConfirm
+                  : modulosCopy.reativarConfirm}
+            </Text>
+          </Pressable>
+        </View>
+      </SheetShell>
+    </View>
+  );
+}
+
+// Task 10: one row per catalog module NOT already on the membership. Price
+// comes from the catalog (`module.monthlyDeltaCents`), never from a
+// subscription snapshot — it is what gets charged the moment the member
+// attaches now, unlike REMOVER's `addon.monthlyDeltaCents` (what is already
+// being charged).
+function AvailableModuleRow({
+  module,
+  totalAmountCents,
+  refresh,
+}: {
+  module: PremiumAddonModule;
+  totalAmountCents: number;
+  refresh: () => Promise<void>;
+}) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+
+  const onConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await attachPremiumAddon(module.key);
+      setSheetOpen(false);
+      showToast(modulosCopy.adicionadoToast);
+      // Same contract as REMOVER/REATIVAR: the mutation already succeeded
+      // here — only refresh() carries the fresh cycle usage, so a failure to
+      // refresh must never be reported as a failed add.
+      try {
+        await refresh();
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
+    } catch (err) {
+      setActionError(resolveAddonError(err, 'attach').message);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const novoTotal = formatBRL(totalAmountCents + module.monthlyDeltaCents);
+  // Spec §5: the sheet must state the module's monthly value, the new total,
+  // the quota the member is buying, and the ONE rateio phrasing — same four
+  // facts as the plan-change screen's "O QUE MUDA NO VALOR" block, reusing
+  // its labels rather than inventing a new sentence for this one action.
+  const quotaText =
+    module.quotaUnit === 'hours'
+      ? assinaturasCopy.contratar.quotaHours(module.quotaPerCycle)
+      : assinaturasCopy.contratar.quotaAccess(module.quotaPerCycle);
+
+  return (
+    <View style={styles.addonRow}>
+      <View style={styles.addonHeaderRow}>
+        <Text style={styles.addonName}>{module.name}</Text>
+      </View>
+
+      <Pressable
+        onPress={() => {
+          setActionError(null);
+          setSheetOpen(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={modulosCopy.adicionarTrigger}
+        style={styles.addonActionTrigger}
+        testID={`assinatura-modulo-${module.key}-adicionar`}
+      >
+        <Text style={styles.addonActionTriggerText}>{modulosCopy.adicionarTrigger}</Text>
+      </Pressable>
+
+      <SheetShell
+        visible={sheetOpen}
+        title={modulosCopy.adicionarSheetTitle}
+        onClose={() => setSheetOpen(false)}
+        theme={{
+          surface: c.surface,
+          border: c.hairline,
+          titleColor: c.cream,
+          titleFontFamily: 'Inter_600SemiBold',
+        }}
+        testID={`assinatura-modulo-${module.key}-sheet`}
+      >
+        <View style={styles.sheetBody}>
+          <Text style={styles.sheetText}>
+            {assinaturasCopy.alterar.differenceLabel}: {formatBRL(module.monthlyDeltaCents)}
+          </Text>
+          <Text style={styles.sheetText}>
+            {assinaturasCopy.alterar.newTotalLabel}: {novoTotal}
+          </Text>
+          <Text style={styles.sheetText}>{quotaText}</Text>
+          {/* The ONE rateio phrasing (Global Constraint) — same key REATIVAR
+              uses below, no variant here either. */}
+          <Text style={styles.sheetText}>{assinaturasCopy.alterar.whenBody}</Text>
+          {actionError ? <Text style={styles.sheetError}>{actionError}</Text> : null}
+          <Pressable
+            onPress={() => setSheetOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.keep}
+            style={styles.sheetKeep}
+          >
+            <Text style={styles.sheetKeepText}>{modulosCopy.keep}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm()}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel={modulosCopy.adicionarConfirm}
+            accessibilityState={{ disabled: submitting, busy: submitting }}
+            style={[styles.sheetConfirm, submitting && styles.dimmed]}
+            testID={`assinatura-modulo-${module.key}-confirmar`}
+          >
+            <Text style={styles.sheetConfirmText}>
+              {submitting ? modulosCopy.adicionarLoading : modulosCopy.adicionarConfirm}
+            </Text>
+          </Pressable>
+        </View>
+      </SheetShell>
+    </View>
+  );
+}
+
+// The catalog block — deliberately rendered OUTSIDE the
+// `sub.addons.length > 0` condition that gates the ATTACHED add-ons section
+// below: a member with zero add-ons is exactly who most needs to see what
+// they can add. Gated on `subscriptionsEnabled` AND `provider === 'stripe'`
+// (ADICIONAR is a purchase-shaped action, same split the API makes between
+// attach and detach) — unlike REMOVER, which is never gated. Final review
+// (Conserto 1): also gated on `canChangePlan(sub)` — the server 409s
+// InvalidStatus for attach outside ['active','cancel_scheduled']
+// (me-premium-addons.ts:223), which `subscriptionsEnabled`/`provider` alone
+// never caught.
+function AvailableModules({
+  sub,
+  subscriptionsEnabled,
+  modules,
+  refresh,
+}: {
+  sub: MySubscriptionResponse;
+  subscriptionsEnabled: boolean;
+  modules: PremiumAddonModule[];
+  refresh: () => Promise<void>;
+}) {
+  if (!subscriptionsEnabled || sub.provider !== 'stripe' || !canChangePlan(sub)) return null;
+
+  // A `cancel_scheduled` add-on already appears above as REATIVAR — it must
+  // not also show up here as "available".
+  const attachedKeys = new Set(
+    sub.addons
+      .filter((addon) => addon.status === 'active' || addon.status === 'cancel_scheduled')
+      .map((addon) => addon.key),
+  );
+  const available = modules.filter((module) => !attachedKeys.has(module.key));
+  if (available.length === 0) return null;
+
+  return (
+    <View style={styles.addonsSection}>
+      <Text style={styles.addonsTitle}>{modulosCopy.disponiveisTitle}</Text>
+      <View style={styles.addons}>
+        {available.map((module) => (
+          <AvailableModuleRow
+            key={module.key}
+            module={module}
+            totalAmountCents={sub.totalAmountCents}
+            refresh={refresh}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -151,6 +521,21 @@ function ActiveSubscription({
 }) {
   const visual = sub.tier ? TIER_VISUAL[sub.tier as ApiTier] : null;
   const periodEnd = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null;
+  // Final review (Conserto 1): the one canChangePlan(sub) check shared by
+  // REMOVER/REATIVAR (per-row) and the available-modules block. Computed
+  // once here instead of inside each row/block.
+  const planActionsAllowed = canChangePlan(sub);
+  // Final review (Conserto 2): hoisted above AddonRow (rather than one call
+  // per row) — REATIVAR needs the catalog's CURRENT price for the module it
+  // is reactivating (addons.ts re-snapshots on re-attach), never the
+  // subscription's own snapshot.
+  const { modules: catalogModules } = usePremiumAddonModules();
+  // Final review (Conserto 5): the module blocks do MONTHLY math
+  // (removerBody's "por mês", catalog monthlyDeltaCents) on top of
+  // `baseAmountCents`, which for an annual membership is the ANNUAL
+  // snapshot — the numbers would misstate the real total. The app only
+  // sells monthly; annual only reaches this screen via admin/web.
+  const modulesForCadenceSupported = sub.cadence !== 'annual';
   const periodText = periodEnd
     ? sub.cancelAtPeriodEnd
       ? copy.cancelsAt(dateFmt.format(periodEnd))
@@ -252,16 +637,54 @@ function ActiveSubscription({
           </View>
         ) : null}
 
-        {sub.addons.length > 0 ? (
+        {modulesForCadenceSupported ? (
+          <>
+            {sub.addons.length > 0 ? (
+              <View style={styles.addonsSection}>
+                <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
+                {/* Review fix (Task 9): REMOVER/REATIVAR are hidden per-row for
+                    an Apple/RevenueCat membership (AddonRow's own `isApple`
+                    gate), which otherwise leaves the row with no action and no
+                    explanation. One note for the whole section — not per row,
+                    and not a link/CTA: the cancel flow already points at the
+                    App Store, and a second button to the same place here would
+                    be noise. */}
+                {sub.provider === 'apple_revenuecat' ? (
+                  <Text style={styles.addonsAppleNote}>{modulosCopy.appleManagedNote}</Text>
+                ) : null}
+                <View style={styles.addons}>
+                  {sub.addons.map((addon) => (
+                    <AddonRow
+                      key={addon.key}
+                      addon={addon}
+                      provider={sub.provider}
+                      subscriptionsEnabled={subscriptionsEnabled}
+                      planActionsAllowed={planActionsAllowed}
+                      module={catalogModules.find((m) => m.key === addon.key)}
+                      totalAmountCents={sub.totalAmountCents}
+                      refresh={refresh}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Task 10: deliberately OUTSIDE the `sub.addons.length > 0` block
+                above — a member with zero add-ons is exactly who needs to see
+                what they can add. */}
+            <AvailableModules
+              sub={sub}
+              subscriptionsEnabled={subscriptionsEnabled}
+              modules={catalogModules}
+              refresh={refresh}
+            />
+          </>
+        ) : (
           <View style={styles.addonsSection}>
             <Text style={styles.addonsTitle}>{copy.addonsTitle}</Text>
-            <View style={styles.addons}>
-              {sub.addons.map((addon) => (
-                <AddonRow key={addon.key} addon={addon} />
-              ))}
-            </View>
+            <Text style={styles.addonsAppleNote}>{modulosCopy.annualManagedNote}</Text>
           </View>
-        ) : null}
+        )}
 
         <InvoiceHistory />
 
@@ -568,6 +991,12 @@ const styles = StyleSheet.create({
     letterSpacing: 2.8,
     color: c.goldDeep,
   },
+  addonsAppleNote: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12.5,
+    color: c.muted55,
+    marginTop: 8,
+  },
   addons: { marginTop: 14, gap: 12 },
   addonRow: {
     backgroundColor: c.surface,
@@ -602,6 +1031,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: c.goldLight,
     marginTop: 3,
+  },
+  addonActionTrigger: { marginTop: 12, alignSelf: 'flex-start' },
+  addonActionTriggerText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: c.goldLight,
   },
 
   // Shared section title (benefits + history)

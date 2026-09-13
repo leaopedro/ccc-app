@@ -1,6 +1,13 @@
 // PT-BR copy for the Assinaturas module (planos, detalhe, minha assinatura).
 // EN scaffold kept minimal per the i18n mandate (CLAUDE.md cross-cutting).
 
+// Shared between `alterar.blockedPastDueBody` (pre-check block, subscription
+// already past_due when the screen loads) and `alterar.errorPastDue` (the
+// same fact surfacing mid-action, from a 409 InvalidStatus race) — one
+// sentence, not two variants of the same state.
+const ALTERAR_PAST_DUE_BODY =
+  'Sua assinatura está com um pagamento pendente. Resolva a cobrança antes de trocar de plano.';
+
 export const assinaturasCopy = {
   header: {
     title: 'ASSINATURA',
@@ -15,6 +22,12 @@ export const assinaturasCopy = {
     perMonth: 'POR MÊS',
     // CTA label is "ASSINAR {TIER}" — tier appended by the screen.
     ctaPrefix: 'ASSINAR',
+    // Shown in place of the CTA on the card matching the member's own live
+    // plan — there is nothing to buy on that card.
+    currentBadge: 'SEU PLANO ATUAL',
+    // CTA label is "TROCAR PARA {TIER}" on every OTHER card, when the member
+    // already has a live membership in good standing (canChangePlan).
+    changePrefix: 'TROCAR PARA',
   },
   modules: {
     eyebrow: 'MÓDULOS ADICIONAIS',
@@ -78,7 +91,6 @@ export const assinaturasCopy = {
     pendingTitle: 'Pagamento em processamento.',
     pendingSubcopy: 'Assim que o pagamento for confirmado sua assinatura aparece aqui.',
     pendingCta: 'VER MINHA ASSINATURA',
-    successToast: 'Assinatura ativada.',
     // Final review I4: this used to reuse paymentsCopy.sheet.cancelled, which
     // says "Seu pedido continua aguardando pagamento". There is no *pedido* in
     // the subscription flow — the member closed the sheet on a contratação,
@@ -108,6 +120,115 @@ export const assinaturasCopy = {
     // same plan (which reuses it) or wait for it to clear on its own.
     errorAttemptInFlight:
       'Você tem uma tentativa de assinatura de outro plano em andamento. Tente novamente com o mesmo plano de antes, ou aguarde essa tentativa expirar.',
+  },
+  // Plan-change confirmation screen (troca de plano dentro de Minha
+  // Assinatura). Same rateio mechanism as contratar's add-on attach/detach
+  // (tasks 9 e 10), so `whenBody` is the ONE canonical phrasing — those
+  // screens reuse this key rather than writing their own sentence.
+  alterar: {
+    // Names the spec fixes verbatim (design doc, seção 4) — the feature is
+    // "alterar assinatura", not "trocar de plano", and Task 7 builds the
+    // screen against these exact strings.
+    header: 'ALTERAR ASSINATURA',
+    back: 'Voltar',
+    // `DE`/`PARA` label two side-by-side cards (current plan vs target
+    // plan), not section titles — kept terse on purpose.
+    fromLabel: 'DE',
+    toLabel: 'PARA',
+    // `baseAmountCents` is the snapshot of the CONTRACTED cadence, not always
+    // monthly — an annual snapshot labelled "mensalidade" would be off by a
+    // factor of twelve. Functions of cadence, not fixed strings.
+    currentValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Valor anual de hoje' : 'Valor mensal de hoje',
+    newValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'Novo valor anual' : 'Novo valor mensal',
+    valueTitle: 'O QUE MUDA NO VALOR',
+    // Row captions inside `valueTitle` that are NOT functions of cadence —
+    // "diferença" and "novo total" are neutral words, unlike "mensalidade",
+    // so a fixed string here does not reproduce the factor-twelve bug.
+    differenceLabel: 'Diferença',
+    newTotalLabel: 'Novo total',
+    gainTitle: 'O QUE VOCÊ GANHA',
+    loseTitle: 'O QUE VOCÊ PERDE',
+    // Lists add-ons that stay attached (status === 'active') with their
+    // monthlyDeltaCents — not "what stays the same" in general.
+    keptTitle: 'SEUS MÓDULOS CONTINUAM',
+    whenTitle: 'QUANDO VALE',
+    // Global Constraint — literal, single formulation. contratar's future
+    // add-on attach/detach copy (tasks 9/10) reads this key instead of
+    // writing a variant.
+    whenBody:
+      'A mudança vale assim que você confirmar. Nada é cobrado agora: a diferença proporcional entra na sua próxima fatura, que pode ser a que fecha neste ciclo.',
+    cta: 'CONFIRMAR ALTERAÇÃO',
+    ctaLoading: 'CONFIRMANDO...',
+    voltar: 'VOLTAR',
+    confirming: 'Confirmando a troca de plano...',
+    pendingTitle: 'Troca em processamento.',
+    pendingSubcopy: 'Assim que a troca for confirmada seu plano aparece atualizado aqui.',
+    pendingCta: 'VER MINHA ASSINATURA',
+    successToast: 'Plano alterado.',
+    // Blocked state when the membership is Apple/RevenueCat: no Stripe
+    // subscription to change here, so the screen points at the App Store
+    // instead of offering a CTA that would 409.
+    appleTitle: 'Assinatura pela App Store',
+    appleBody: 'Esta assinatura foi contratada pela App Store. A troca de plano é feita por lá.',
+    appleCta: 'ABRIR APP STORE',
+    // Blocked state for InvalidStatus (subscription status outside
+    // ['active', 'cancel_scheduled']) — past_due is the reachable case today.
+    blockedPastDueTitle: 'Pagamento pendente',
+    blockedPastDueBody: ALTERAR_PAST_DUE_BODY,
+    blockedPastDueCta: 'VER COBRANÇA',
+    // 422 ANNUAL_CADENCE_ADDON_UNSUPPORTED — a combination error, not an
+    // availability one: annual cadence does not accept the monthly-only
+    // add-ons already attached.
+    unavailableCadence:
+      'O plano anual não aceita os módulos adicionais da sua assinatura. Remova os módulos antes de trocar para o anual.',
+    // Informational note when the membership already has a scheduled
+    // cancellation (cancel_scheduled is allowed by the guard, but the member
+    // should know changing plans does not clear the cancellation).
+    cancelScheduledNote:
+      'Sua assinatura tem um cancelamento agendado. Trocar de plano não desfaz esse cancelamento.',
+    errorGeneric: 'Não foi possível trocar de plano. Tente novamente.',
+    errorUnavailable: 'A troca de plano está indisponível agora. Tente mais tarde.',
+    errorPastDue: ALTERAR_PAST_DUE_BODY,
+    errorNoChange: 'Você já está nesse plano.',
+    errorPlanNotFound: 'Esse plano não está mais disponível.',
+    // Distinct from errorPlanNotFound: this is the 404 for "no live
+    // membership at all" (route's plain `NotFound`), not "plan not found".
+    // The plan is still there — there is no subscription to change it on.
+    errorNoMembership: 'Você não tem uma assinatura ativa para alterar.',
+    errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
+    errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+  },
+  // Post-purchase welcome. Reached only after the poll confirmed the
+  // membership exists, so this copy may state the activation as a fact — it
+  // is never shown on the pending path (`contratar.pendingTitle` owns that).
+  //
+  // The benefit list is NOT here: it comes from the subscription payload
+  // (DB-registered labels), the same source Minha Assinatura reads. Only the
+  // framing lives in copy, so the two screens can never disagree about what
+  // the member bought.
+  boasVindas: {
+    eyebrow: 'ASSINATURA ATIVA',
+    title: 'Bem-vindo à Casa',
+    subcopy:
+      'Seu pagamento foi confirmado. A partir de agora você é membro, com acesso aos encontros, à garagem e à curadoria da Casa.',
+    planLabel: 'SEU PLANO',
+    benefitsTitle: 'O QUE JÁ É SEU',
+    nextTitle: 'POR ONDE COMEÇAR',
+    // Each step points at something the member can do today. The caixa step
+    // follows the same build flag as the caixa block in `contratar` — a step
+    // linking to a screen that is not in the build is worse than no step.
+    steps: {
+      caixaTitle: 'Monte sua caixa',
+      caixaBody: 'Escolha os itens da curadoria deste ciclo e confirme antes do fechamento.',
+      eventosTitle: 'Reserve seu lugar',
+      eventosBody: 'Veja os próximos encontros e garanta sua vaga antes de lotar.',
+      garagemTitle: 'Apresente seu carro',
+      garagemBody: 'Cadastre seu carro na garagem e seja reconhecido nos encontros.',
+    },
+    cta: 'VER MINHA ASSINATURA',
+    loading: 'Preparando suas boas-vindas...',
   },
   minhaAssinatura: {
     header: 'MINHA ASSINATURA',
@@ -165,6 +286,71 @@ export const assinaturasCopy = {
       appleBody: 'Esta assinatura foi contratada pela App Store. O cancelamento é feito por lá.',
       appleCta: 'ABRIR APP STORE',
     },
+    // Task 9 (remove/reactivate) + Task 10 (add). One block for the three
+    // add-on actions on Minha Assinatura, all synchronous (no webhook/poll).
+    modulos: {
+      removerTrigger: 'REMOVER',
+      reativarTrigger: 'REATIVAR',
+      removerSheetTitle: 'Remover módulo',
+      reativarSheetTitle: 'Reativar módulo',
+      // Review fix (Task 9): an Apple/RevenueCat member sees the module row
+      // with no action at all once REMOVER/REATIVAR are hidden — no CTA, no
+      // link (the cancel flow already points at the App Store; a second
+      // button to the same place would be noise), just the reason why.
+      // Mirrors `cancelar.appleBody`'s pattern for this same screen.
+      appleManagedNote: 'Módulos desta assinatura são gerenciados pela App Store.',
+      // Truth made possible by Task 4's re-vínculo (attachAddon accepts
+      // cancel_scheduled → active again). Before that fix, removing a module
+      // was permanent: nothing wrote `cancelled`, so the row stayed locked
+      // forever and not even the admin could undo it.
+      removerBody: (nome: string, total: string) =>
+        `A cobrança de ${nome} para agora e seu total cai para ${total} por mês. Você continua usando a cota deste módulo até o fim do ciclo atual.`,
+      removerReversivel: 'Você pode reativar este módulo quando quiser.',
+      keep: 'MANTER MÓDULO',
+      removerConfirm: 'REMOVER',
+      removerLoading: 'REMOVENDO...',
+      reativarConfirm: 'REATIVAR',
+      reativarLoading: 'REATIVANDO...',
+      removedToast: 'Módulo removido.',
+      reativadoToast: 'Módulo reativado.',
+      errorGeneric: 'Não foi possível concluir a ação. Tente novamente.',
+      errorNotStripe:
+        'Esta assinatura foi contratada pela App Store. Módulos são gerenciados por lá.',
+      // Fix round (final review, Conserto 1): the 409 InvalidStatus for
+      // module attach used to reuse `alterar.errorPastDue`, which asserts a
+      // pending charge — true for past_due, false for paused. This copy
+      // states no cause, so it holds for either reachable status.
+      errorInvalidStatus:
+        'Sua assinatura não está em um status que permite adicionar módulos agora.',
+      errorAlreadyAttached: 'Este módulo já está na sua assinatura.',
+      errorModuleNotFound: 'Este módulo não está mais disponível.',
+      errorNotAttached: 'Este módulo não está mais na sua assinatura.',
+      errorUnavailable: 'Ação indisponível agora. Tente mais tarde.',
+      errorRateLimited: 'Muitas tentativas seguidas. Espere um minuto e tente de novo.',
+      errorUnauthorized: 'Sua sessão expirou. Entre de novo para continuar.',
+      // Task 10 (add). The catalog block that lists modules NOT yet on the
+      // membership — price here comes from `usePremiumAddonModules` (the
+      // catalog), never from a snapshot: it is what gets charged the moment
+      // the member attaches. The sheet itself has no dedicated body copy: it
+      // is composed from `alterar.differenceLabel`/`newTotalLabel`,
+      // `contratar.quotaAccess`/`quotaHours`, and the ONE rateio phrasing
+      // (`alterar.whenBody`) — review fix (Task 10 round 1): a standalone
+      // `adicionarBody` omitted the rateio disclosure and the quota, both
+      // required by spec §5.
+      disponiveisTitle: 'MÓDULOS DISPONÍVEIS',
+      adicionarTrigger: 'ADICIONAR',
+      adicionarSheetTitle: 'Adicionar módulo',
+      adicionarConfirm: 'ADICIONAR',
+      adicionarLoading: 'ADICIONANDO...',
+      adicionadoToast: 'Módulo adicionado.',
+      // Fix round (final review, Conserto 5): the module blocks do monthly
+      // math (removerBody's "por mês", the catalog's monthlyDeltaCents) on
+      // top of `baseAmountCents`, which for an annual membership is the
+      // ANNUAL snapshot — the displayed numbers would be wrong. The app only
+      // sells monthly, so this is admin/web-only territory; hide the blocks
+      // rather than show a wrong total.
+      annualManagedNote: 'Módulos de assinaturas anuais são tratados pelo suporte.',
+    },
   },
 } as const;
 
@@ -173,7 +359,18 @@ export const assinaturasCopy = {
  * that date on carry an EN twin, so the eventual move to a shared locale package
  * is mechanical instead of a rewrite.
  */
+// Shared between `alterar.blockedPastDueBody` and `alterar.errorPastDue` in
+// the EN twin, same reason as the PT constant above.
+const ALTERAR_PAST_DUE_BODY_EN =
+  'Your subscription has a pending payment. Settle the charge before changing plans.';
+
 export const assinaturasCopyEn = {
+  // Added with Task 8 (plan-change entry points), so both keys carry a twin
+  // from day one.
+  plans: {
+    currentBadge: 'YOUR CURRENT PLAN',
+    changePrefix: 'SWITCH TO',
+  },
   // Mirrors the top-level `caixa` key in `assinaturasCopy` — keep both in
   // sync (fix round 1, Criticals 1+2: opt-in/curated per cycle, no freight
   // claim; see the comment on `assinaturasCopy.caixa` for why).
@@ -190,12 +387,117 @@ export const assinaturasCopyEn = {
     errorAttemptInFlight:
       'You have a subscription attempt for another plan in progress. Try again with the same plan as before, or wait for that attempt to expire.',
   },
+  // Brand-new block, so every key carries a twin from day one.
+  alterar: {
+    header: 'CHANGE MEMBERSHIP',
+    back: 'Back',
+    fromLabel: 'FROM',
+    toLabel: 'TO',
+    currentValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? "Today's annual value" : "Today's monthly value",
+    newValue: (cadence: 'monthly' | 'annual') =>
+      cadence === 'annual' ? 'New annual value' : 'New monthly value',
+    valueTitle: 'WHAT CHANGES IN THE VALUE',
+    differenceLabel: 'Difference',
+    newTotalLabel: 'New total',
+    gainTitle: "WHAT YOU'LL GAIN",
+    loseTitle: "WHAT YOU'LL LOSE",
+    keptTitle: 'YOUR MODULES CONTINUE',
+    whenTitle: 'WHEN IT TAKES EFFECT',
+    whenBody:
+      'The change takes effect as soon as you confirm. Nothing is charged now: the pro-rated difference lands on your next invoice, which may be the one closing this cycle.',
+    cta: 'CONFIRM CHANGE',
+    ctaLoading: 'CONFIRMING...',
+    voltar: 'BACK',
+    confirming: 'Confirming your plan change...',
+    pendingTitle: 'Change in progress.',
+    pendingSubcopy: 'Once the change is confirmed your plan shows up updated here.',
+    pendingCta: 'VIEW MY MEMBERSHIP',
+    successToast: 'Plan changed.',
+    appleTitle: 'App Store subscription',
+    appleBody:
+      'This subscription was purchased through the App Store. Changing plans happens there.',
+    appleCta: 'OPEN APP STORE',
+    blockedPastDueTitle: 'Payment pending',
+    blockedPastDueBody: ALTERAR_PAST_DUE_BODY_EN,
+    blockedPastDueCta: 'VIEW CHARGE',
+    unavailableCadence:
+      "The annual plan doesn't accept the add-on modules on your subscription. Remove the modules before switching to annual.",
+    cancelScheduledNote:
+      'Your subscription has a cancellation scheduled. Changing plans does not undo that cancellation.',
+    errorGeneric: 'Could not change your plan. Try again.',
+    errorUnavailable: 'Changing plans is unavailable right now. Try again later.',
+    errorPastDue: ALTERAR_PAST_DUE_BODY_EN,
+    errorNoChange: "You're already on this plan.",
+    errorPlanNotFound: 'That plan is no longer available.',
+    errorNoMembership: "You don't have an active subscription to change.",
+    errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
+    errorUnauthorized: 'Your session expired. Sign in again to continue.',
+  },
+  // Added with the post-purchase welcome screen, so it carries a twin from
+  // day one. Benefit labels stay out of here for the same reason as in PT:
+  // they come from the subscription payload, not from copy.
+  boasVindas: {
+    eyebrow: 'MEMBERSHIP ACTIVE',
+    title: 'Welcome to the Casa',
+    subcopy:
+      'Your payment is confirmed. From now on you are a member, with access to the meetups, the garage and the Casa curation.',
+    planLabel: 'YOUR PLAN',
+    benefitsTitle: "WHAT'S ALREADY YOURS",
+    nextTitle: 'WHERE TO START',
+    steps: {
+      caixaTitle: 'Build your box',
+      caixaBody: "Pick this cycle's curated items and confirm before the cutoff.",
+      eventosTitle: 'Take your seat',
+      eventosBody: 'See the next meetups and claim your spot before they fill up.',
+      garagemTitle: 'Show your car',
+      garagemBody: 'Add your car to the garage and be recognised at the meetups.',
+    },
+    cta: 'VIEW MY MEMBERSHIP',
+    loading: 'Getting your welcome ready...',
+  },
   // `unavailableTitle` / `unavailableSubcopy` were rewritten on this branch
   // (they used to say "em breve"), so they need twins too. State only: no
   // cause, no timeline — the screen cannot tell the flag-off case from a 503.
   minhaAssinatura: {
     unavailableTitle: 'Memberships are unavailable right now.',
     unavailableSubcopy: 'Please try again later.',
+    // Brand-new block (Task 9/10), so every key carries a twin from day one.
+    modulos: {
+      removerTrigger: 'REMOVE',
+      reativarTrigger: 'REACTIVATE',
+      removerSheetTitle: 'Remove module',
+      reativarSheetTitle: 'Reactivate module',
+      appleManagedNote: "This subscription's modules are managed through the App Store.",
+      removerBody: (nome: string, total: string) =>
+        `${nome}'s charge stops now and your total drops to ${total} per month. You keep using this module's quota until the end of the current cycle.`,
+      removerReversivel: 'You can reactivate this module whenever you want.',
+      keep: 'KEEP MODULE',
+      removerConfirm: 'REMOVE',
+      removerLoading: 'REMOVING...',
+      reativarConfirm: 'REACTIVATE',
+      reativarLoading: 'REACTIVATING...',
+      removedToast: 'Module removed.',
+      reativadoToast: 'Module reactivated.',
+      errorGeneric: 'Could not complete the action. Try again.',
+      errorNotStripe:
+        'This subscription was purchased through the App Store. Modules are managed there.',
+      errorInvalidStatus:
+        "Your subscription isn't in a status that allows adding modules right now.",
+      errorAlreadyAttached: 'This module is already on your subscription.',
+      errorModuleNotFound: 'This module is no longer available.',
+      errorNotAttached: 'This module is no longer on your subscription.',
+      errorUnavailable: 'This action is unavailable right now. Try again later.',
+      errorRateLimited: 'Too many attempts in a row. Wait a minute and try again.',
+      errorUnauthorized: 'Your session expired. Sign in again to continue.',
+      disponiveisTitle: 'AVAILABLE MODULES',
+      adicionarTrigger: 'ADD',
+      adicionarSheetTitle: 'Add module',
+      adicionarConfirm: 'ADD',
+      adicionarLoading: 'ADDING...',
+      adicionadoToast: 'Module added.',
+      annualManagedNote: 'Modules on annual subscriptions are handled by support.',
+    },
   },
 } as const;
 

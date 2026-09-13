@@ -662,8 +662,10 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     },
     addSubscriptionItem: async ({ subscriptionId, priceId, idempotencyKey }) => {
       // Stripe default proration_behavior for subscription-item create is
-      // 'create_prorations'; we set it explicitly so the pro-rated delta is
-      // charged/credited immediately when an add-on is attached mid-cycle.
+      // 'create_prorations'; we set it explicitly. This creates a pending
+      // invoice item for the pro-rated delta, collected on the next invoice —
+      // not charged immediately (that would need 'always_invoice'). Same
+      // policy as updateSubscriptionItemPrice above.
       const item = await stripe.subscriptionItems.create(
         {
           subscription: subscriptionId,

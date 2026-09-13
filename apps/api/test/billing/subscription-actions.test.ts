@@ -104,7 +104,8 @@ describe('changePlan', () => {
       payload: {
         subscriptionItemId: 'si_plan',
         priceId: 'price_silver',
-        idempotencyKey: `plan_change_${membershipId}_silver_monthly`,
+        // O sufixo e o updatedAt da membership; o que importa aqui e o prefixo estavel.
+        idempotencyKey: expect.stringContaining(`plan_change_${membershipId}_silver_monthly`),
       },
     });
 
@@ -199,6 +200,60 @@ describe('changePlan', () => {
       stripe,
     }).catch((e: unknown) => e);
     expect(isBillingActionError(err) && err.code).toBe('MembershipNotFound');
+  });
+
+  // Os dois testes abaixo afirmam a FORMA da chave de idempotencia, nao dedupe
+  // real. FakeStripe.updateSubscriptionItemPrice (services/stripe/fake.ts:341-343)
+  // so empurra em `calls` e nao implementa idempotencia, entao nenhum teste
+  // deste repo pode provar que a Stripe deduplicou de fato.
+
+  it('gera chave de idempotencia nova depois que a troca anterior foi aplicada', async () => {
+    const { membershipId } = await seed();
+    const stripe = buildFakeStripe();
+    stripe.nextRetrievedSubscription = {
+      id: 'sub_1',
+      items: { data: [{ id: 'si_plan', price: { id: 'price_gold' } }] },
+    } as unknown as Stripe.Subscription;
+
+    await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
+    // O webhook aplicou a troca: a linha muda, e com ela o updatedAt.
+    await prisma.premiumMembership.update({
+      where: { id: membershipId },
+      data: { tier: 'silver' },
+    });
+    await changePlan({ membershipId, tier: 'gold', cadence: 'monthly', stripe });
+    await prisma.premiumMembership.update({ where: { id: membershipId }, data: { tier: 'gold' } });
+    await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
+
+    const keys = stripe.calls
+      .filter((c) => c.kind === 'updateSubscriptionItemPrice')
+      .map((c) => (c.payload as { idempotencyKey: string }).idempotencyKey);
+
+    expect(keys).toHaveLength(3);
+    // A terceira troca repete tier e cadencia da primeira. Se a chave repetir, a
+    // Stripe devolve a resposta em cache e a troca nunca acontece.
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('repete a chave enquanto a troca ainda nao foi aplicada', async () => {
+    const { membershipId } = await seed();
+    const stripe = buildFakeStripe();
+    stripe.nextRetrievedSubscription = {
+      id: 'sub_1',
+      items: { data: [{ id: 'si_plan', price: { id: 'price_gold' } }] },
+    } as unknown as Stripe.Subscription;
+
+    await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
+    await changePlan({ membershipId, tier: 'silver', cadence: 'monthly', stripe });
+
+    const keys = stripe.calls
+      .filter((c) => c.kind === 'updateSubscriptionItemPrice')
+      .map((c) => (c.payload as { idempotencyKey: string }).idempotencyKey);
+
+    // Duplo toque antes do webhook chegar: a chave TEM que repetir. E o caso que
+    // a idempotencia existe para cobrir, e e o que impede a "correcao"
+    // preguicosa com Date.now() ou uuid.
+    expect(keys[0]).toBe(keys[1]);
   });
 });
 

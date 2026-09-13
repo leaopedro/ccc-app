@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MySubscriptionResponse, PremiumInvoice } from '@ccc/shared/premium-subscription';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { formatBRL } from '~/lib/format';
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -57,6 +58,8 @@ const plansState = vi.hoisted(() => ({
 }));
 
 const cancelMock = vi.hoisted(() => ({ fn: vi.fn() }));
+const detachMock = vi.hoisted(() => ({ fn: vi.fn() }));
+const attachMock = vi.hoisted(() => ({ fn: vi.fn() }));
 const openURLMock = vi.hoisted(() => ({ fn: vi.fn() }));
 
 vi.mock('~/hooks/usePremiumSubscription', () => ({
@@ -77,8 +80,40 @@ vi.mock('~/hooks/usePremiumInvoices', () => ({
   usePremiumInvoices: () => invoicesState.value,
 }));
 
+// Task 10: catalog source for the "MÓDULOS DISPONÍVEIS" block. Defaults to an
+// empty catalog so every pre-existing test above (none of which cares about
+// available modules) renders exactly as before — the section is a no-op with
+// an empty list.
+const modulesState = vi.hoisted(() => ({
+  current: {
+    modules: [] as {
+      key: string;
+      name: string;
+      description: string;
+      monthlyDeltaCents: number;
+      currency: string;
+      quotaPerCycle: number;
+      quotaUnit: 'access' | 'hours';
+      sortOrder: number;
+    }[],
+    loading: false,
+    error: false,
+  },
+}));
+
+vi.mock('~/hooks/usePremiumAddonModules', () => ({
+  usePremiumAddonModules: () => ({
+    modules: modulesState.current.modules,
+    loading: modulesState.current.loading,
+    error: modulesState.current.error,
+    refresh: () => Promise.resolve(),
+  }),
+}));
+
 vi.mock('~/api/premium', () => ({
   cancelPremiumSubscription: (...args: unknown[]) => cancelMock.fn(...args),
+  detachPremiumAddon: (...args: unknown[]) => detachMock.fn(...args),
+  attachPremiumAddon: (...args: unknown[]) => attachMock.fn(...args),
 }));
 
 // Real ApiError class (not vi.fn()) so `err instanceof ApiError` inside the
@@ -232,6 +267,8 @@ const activeSub: MySubscriptionResponse = {
   cadence: 'monthly',
   currentPeriodEnd: '2026-08-22T00:00:00.000Z',
   cancelAtPeriodEnd: false,
+  status: 'active',
+  provider: 'stripe',
   baseAmountCents: 149000,
   addonsAmountCents: 15000,
   totalAmountCents: 164000,
@@ -243,6 +280,7 @@ const activeSub: MySubscriptionResponse = {
       status: 'active',
       quotaUnit: 'access',
       quotaPerCycle: 3,
+      monthlyDeltaCents: 15000,
       currentCycle: {
         cycleStart: '2026-07-22T00:00:00.000Z',
         cycleEnd: '2026-08-22T00:00:00.000Z',
@@ -252,6 +290,68 @@ const activeSub: MySubscriptionResponse = {
       },
     },
   ],
+};
+
+// Same membership, but the add-on is already cancel_scheduled — the state
+// that offers REATIVAR instead of REMOVER.
+const cancelScheduledSub: MySubscriptionResponse = {
+  ...activeSub,
+  addons: [{ ...activeSub.addons[0]!, status: 'cancel_scheduled' }],
+};
+
+// Same membership, but with zero add-ons attached — the case that pins the
+// "MÓDULOS DISPONÍVEIS" block against the pre-existing
+// `sub.addons.length > 0` condition (MinhaAssinaturaScreen.tsx:251), which
+// gates the OTHER (attached) section and must never gate this one too.
+const zeroAddonsSub: MySubscriptionResponse = {
+  ...activeSub,
+  addonsAmountCents: 0,
+  totalAmountCents: activeSub.baseAmountCents,
+  addons: [],
+};
+
+// Final review (Conserto 1, corrected): past_due is a LIVE membership
+// (`active: true`) but outside canChangePlan's status list. The server 409s
+// InvalidStatus for ATTACH at this status (me-premium-addons.ts:223) — only
+// the purchase-shaped actions (ADICIONAR/REATIVAR) must be hidden. REMOVER
+// stays visible on purpose: the server's detach is never status-gated,
+// specifically so a member behind on payment can still cut cost.
+const pastDueSub: MySubscriptionResponse = { ...activeSub, status: 'past_due' };
+const pastDueCancelScheduledSub: MySubscriptionResponse = {
+  ...cancelScheduledSub,
+  status: 'past_due',
+};
+
+// Final review (Conserto 5): an annual membership's `baseAmountCents` is the
+// ANNUAL snapshot — the module blocks' monthly math (removerBody's "por
+// mês", catalog monthlyDeltaCents) would misstate the real total on top of
+// it. The app only sells monthly; annual only reaches here via admin/web.
+const annualSub: MySubscriptionResponse = { ...activeSub, cadence: 'annual' };
+
+// Catalog fixtures (usePremiumAddonModules). `detailingModule` shares its key
+// with the already-attached add-on above — used to prove the available block
+// excludes it. `estacionamentoModule` is never attached in any fixture, so it
+// always qualifies as available.
+const detailingModule = {
+  key: 'detailing',
+  name: 'Detailing',
+  description: 'Lavagem e detalhamento do carro.',
+  monthlyDeltaCents: 15000,
+  currency: 'BRL',
+  quotaPerCycle: 3,
+  quotaUnit: 'access' as const,
+  sortOrder: 1,
+};
+
+const estacionamentoModule = {
+  key: 'estacionamento',
+  name: 'Estacionamento Coberto',
+  description: 'Vaga coberta nos encontros.',
+  monthlyDeltaCents: 8000,
+  currency: 'BRL',
+  quotaPerCycle: 10,
+  quotaUnit: 'hours' as const,
+  sortOrder: 2,
 };
 
 const inactiveSub: MySubscriptionResponse = {
@@ -264,6 +364,8 @@ const inactiveSub: MySubscriptionResponse = {
   cadence: null,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
+  status: null,
+  provider: null,
   baseAmountCents: 0,
   addonsAmountCents: 0,
   totalAmountCents: 0,
@@ -338,9 +440,12 @@ describe('MinhaAssinaturaScreen', () => {
     replace.mockClear();
     push.mockClear();
     cancelMock.fn.mockReset();
+    detachMock.fn.mockReset();
+    attachMock.fn.mockReset();
     openURLMock.fn.mockReset();
     invoicesState.value = invoicesResult({});
     plansState.current = { subscriptionsEnabled: true, loading: false };
+    modulesState.current = { modules: [], loading: false, error: false };
   });
 
   afterEach(async () => {
@@ -620,5 +725,606 @@ describe('MinhaAssinaturaScreen', () => {
 
     expect(text()).toContain(copy.cancelar.error);
     expect(text()).not.toContain(copy.cancelar.appleBody);
+  });
+
+  // Task 9: remove/reactivate a module from Minha Assinatura.
+  describe('module remove / reactivate', () => {
+    // 7. REMOVER opens a confirm sheet with the formatted numbers; detach is
+    // only called after the confirm tap, never on the trigger tap itself.
+    it('opens a confirm sheet before removing an add-on and calls detach only on confirm', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(detachMock.fn).not.toHaveBeenCalled();
+      const expectedTotal = formatBRL(
+        activeSub.totalAmountCents - activeSub.addons[0]!.monthlyDeltaCents,
+      );
+      expect(text()).toContain(copy.modulos.removerBody('Detailing', expectedTotal));
+      expect(text()).toContain(copy.modulos.removerReversivel);
+
+      detachMock.fn.mockResolvedValue({
+        addonKey: 'detailing',
+        status: 'cancel_scheduled',
+        addonsAmountCents: 0,
+        totalAmountCents: activeSub.baseAmountCents,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(detachMock.fn).toHaveBeenCalledWith('detailing');
+    });
+
+    // 8. A cancel_scheduled add-on offers REATIVAR, not REMOVER. REATIVAR
+    // requires the module to still be in the catalog (Conserto 2) — no
+    // catalog price means no honest number to confirm.
+    it('offers REATIVAR (not REMOVER) for a cancel_scheduled add-on', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).not.toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+    });
+
+    // Reactivating reuses the ONE rateio phrasing (`alterar.whenBody`), calls
+    // attach on confirm, and refreshes after — the same refresh contract as
+    // cancel. The route's own response totals are not applied locally: only
+    // refresh() picks up the fresh cycle usage.
+    //
+    // Final review (Conserto 2): the sheet must also show the module's
+    // monthly value and the new total, from the CATALOG price (never the
+    // add-on's own snapshot) — re-attach re-prices to the catalog's current
+    // value (addons.ts:134-139).
+    it('reactivating shows the catalog value and new total, reuses the rateio copy, calls attach on confirm, and refreshes after', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: cancelScheduledSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-reativar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('reactivate trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      // Catalog monthly value.
+      expect(text()).toContain(formatBRL(detailingModule.monthlyDeltaCents));
+      // New total = subscription total (which excludes the cancel_scheduled
+      // add-on already) + catalog price.
+      const expectedTotal = formatBRL(
+        cancelScheduledSub.totalAmountCents + detailingModule.monthlyDeltaCents,
+      );
+      expect(text()).toContain(expectedTotal);
+      expect(text()).toContain(assinaturasCopy.alterar.whenBody);
+      expect(attachMock.fn).not.toHaveBeenCalled();
+
+      attachMock.fn.mockResolvedValue({
+        addonKey: 'detailing',
+        status: 'active',
+        addonsAmountCents: 15000,
+        totalAmountCents: 164000,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledWith('detailing');
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    // Final review (Conserto 2): with the module no longer in the catalog,
+    // there is no honest price to confirm — REATIVAR must not be offered at
+    // all, rather than opening a sheet with no numbers.
+    it('does not offer REATIVAR when the module has left the catalog', async () => {
+      modulesState.current = { modules: [], loading: false, error: false };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // Global constraint: REMOVER does not follow the platform gate — reducing
+    // an existing commitment is never blocked by it (same split the API makes
+    // between attach and detach).
+    it('keeps REMOVER visible on an active add-on even when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+    });
+
+    // Global constraint: REATIVAR DOES follow the platform gate — it resumes
+    // billing, so it is a purchase-shaped action.
+    it('hides REATIVAR on a cancel_scheduled add-on when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // 9. Apple/RevenueCat memberships hide both actions: the API 409s
+    // NotStripeSubscription for attach and detach alike.
+    it('hides both REMOVER and REATIVAR for an Apple/RevenueCat membership', async () => {
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // Review fix: hiding both actions with no explanation left the Apple
+    // member staring at a module row that does nothing. Mirrors the
+    // cancel flow's own `cancelar.appleBody` pattern for this same screen.
+    it('explains that modules are managed by the App Store when both actions are hidden', async () => {
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(text()).toContain(copy.modulos.appleManagedNote);
+    });
+
+    it('does not show the App Store modules note for a Stripe membership', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(text()).not.toContain(copy.modulos.appleManagedNote);
+    });
+
+    it('hides REATIVAR too on an Apple/RevenueCat membership with a cancel_scheduled add-on', async () => {
+      hookState.value = result({
+        subscription: { ...cancelScheduledSub, provider: 'apple_revenuecat' },
+      });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+
+    // 10. An add-on mutation failure degrades to an inline message — it must
+    // never take the whole screen down.
+    it('shows an inline error and keeps the screen up when the detach call fails', async () => {
+      const { ApiError } = (await import('~/api/client')) as unknown as {
+        ApiError: new (status: number, message: string, body?: unknown) => Error;
+      };
+      detachMock.fn.mockRejectedValue(new ApiError(500, 'internal error'));
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      // The screen (and the plan card) survives the failure.
+      expect(text()).toContain('Fundador');
+      expect(text()).toContain(copy.modulos.errorGeneric);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  // Task 10: add a module from Minha Assinatura. Source is the catalog
+  // (usePremiumAddonModules), not the subscription snapshot — the catalog
+  // price is what gets charged the moment the member attaches now.
+  describe('add module', () => {
+    // 1. The available block lists only what is NOT already attached: an
+    // already-attached key (active or cancel_scheduled) never shows an
+    // ADICIONAR trigger, while an unattached catalog module does.
+    it('lists only modules not already attached', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-adicionar"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).not.toBeNull();
+    });
+
+    // A cancel_scheduled add-on offers REATIVAR up top, and must NOT also
+    // reappear in the available block — it is not "available", it is already
+    // on the membership with billing paused.
+    it('excludes a cancel_scheduled add-on from the available block too', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: cancelScheduledSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-adicionar"]'),
+      ).toBeNull();
+    });
+
+    // 2. The block appears even with ZERO add-ons attached — the trap in
+    // MinhaAssinaturaScreen.tsx:251, which wraps the EXISTING (attached)
+    // section in `sub.addons.length > 0`. The available block must live
+    // outside that condition, since a member with nothing attached is
+    // exactly who needs to see what they can add.
+    it('shows the available modules block even with zero add-ons attached', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: zeroAddonsSub });
+      await renderScreen();
+
+      expect(text()).toContain(copy.modulos.disponiveisTitle);
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).not.toBeNull();
+    });
+
+    // 3. Spec §5: the sheet must state, before any call goes out, the
+    // module's monthly value, the new total, the quota being bought, and the
+    // ONE rateio phrasing (`alterar.whenBody`) — same four facts as the
+    // plan-change screen's value block. Review fix (Task 10 round 1): the
+    // original `adicionarBody` covered only name + new total and silently
+    // omitted the rateio disclosure and the quota; this test pins all four
+    // so that omission cannot come back unnoticed.
+    it('shows the monthly value, new total, quota, and rateio phrasing in the sheet before adding, and calls attach only on confirm', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).not.toHaveBeenCalled();
+
+      // 1. Monthly value of the module (catalog price).
+      expect(text()).toContain(formatBRL(estacionamentoModule.monthlyDeltaCents));
+      // 2. New total (subscription total + catalog price).
+      const expectedTotal = formatBRL(
+        activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+      );
+      expect(text()).toContain(expectedTotal);
+      // 3. The quota the member is buying (module.quotaUnit === 'hours').
+      expect(text()).toContain(
+        assinaturasCopy.contratar.quotaHours(estacionamentoModule.quotaPerCycle),
+      );
+      // 4. The ONE rateio phrasing — no variant sentence.
+      expect(text()).toContain(assinaturasCopy.alterar.whenBody);
+
+      attachMock.fn.mockResolvedValue({
+        addonKey: 'estacionamento',
+        status: 'active',
+        addonsAmountCents: 23000,
+        totalAmountCents: activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledWith('estacionamento');
+    });
+
+    // Minor fix: ADICIONAR must be immune to a rapid double tap, same guard
+    // (submittingRef) and same test shape as the cancel flow's own
+    // double-tap test above. Two clicks inside one `act`, no flush between.
+    it('calls attachPremiumAddon exactly once on a rapid double tap and refreshes after', async () => {
+      let resolveAttach: (v: {
+        addonKey: string;
+        status: 'active';
+        addonsAmountCents: number;
+        totalAmountCents: number;
+      }) => void = () => {};
+      attachMock.fn.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveAttach = resolve;
+          }),
+      );
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+
+      await act(async () => {
+        confirm.click();
+        confirm.click();
+        await flush();
+      });
+
+      expect(attachMock.fn).toHaveBeenCalledTimes(1);
+      expect(refresh).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveAttach({
+          addonKey: 'estacionamento',
+          status: 'active',
+          addonsAmountCents: 23000,
+          totalAmountCents: activeSub.totalAmountCents + estacionamentoModule.monthlyDeltaCents,
+        });
+        await flush();
+      });
+
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    // 4. ADICIONAR follows the platform gate — it is a purchase-shaped
+    // action, same split as REATIVAR. REMOVER must stay unaffected.
+    it('hides ADICIONAR when subscriptions are gated but keeps REMOVER visible', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+    });
+
+    // 5. ADICIONAR also requires provider === 'stripe' — an Apple/RevenueCat
+    // membership hides it even when the platform gate is on, same as REATIVAR.
+    it('hides ADICIONAR for an Apple/RevenueCat membership', async () => {
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: { ...activeSub, provider: 'apple_revenuecat' } });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+    });
+
+    // An add-on attach failure degrades to an inline message — must never
+    // take the whole screen down, and must not call refresh.
+    it('shows an inline error and keeps the screen up when the attach call fails', async () => {
+      const { ApiError } = (await import('~/api/client')) as unknown as {
+        ApiError: new (status: number, message: string, body?: unknown) => Error;
+      };
+      attachMock.fn.mockRejectedValue(new ApiError(500, 'internal error'));
+      modulesState.current = {
+        modules: [estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      const refresh = vi.fn(() => Promise.resolve());
+      hookState.value = result({ subscription: activeSub, refresh });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-adicionar"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('add trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+      const confirm = container.querySelector(
+        '[data-testid="assinatura-modulo-estacionamento-confirmar"]',
+      ) as HTMLElement | null;
+      if (!confirm) throw new Error('confirm button not rendered');
+      await act(async () => {
+        confirm.click();
+        await flush();
+      });
+
+      expect(text()).toContain('Fundador');
+      expect(text()).toContain(copy.modulos.errorGeneric);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  // Final review (Conserto 1, corrected): past_due is a LIVE membership
+  // (`subscription.active` stays true) but outside canChangePlan's status
+  // list. The server 409s InvalidStatus for ATTACH at this status
+  // (me-premium-addons.ts:223) — the two purchase-shaped actions (ADICIONAR,
+  // REATIVAR) must not offer what the server refuses. REMOVER is the
+  // opposite case on purpose: the server's detach is NEVER status-gated
+  // (me-premium-addons.ts's own comment: "reducing a commitment is never
+  // blocked by status"), because a past_due member needs to be able to cut
+  // cost precisely BECAUSE they're behind on payment. Blocking REMOVER here
+  // would trap that member with a module they can least afford — the
+  // opposite of what the server's asymmetry exists to guarantee.
+  describe('past_due status gate (Conserto 1)', () => {
+    it('shows REMOVER but not ADICIONAR for a past_due member', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: pastDueSub });
+      await renderScreen();
+
+      // REMOVER stays available — cutting cost while behind on payment is
+      // exactly what the server's status-blind detach is for.
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+      // ADICIONAR is a purchase — the server would 409 InvalidStatus.
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+    });
+
+    it('shows no REATIVAR for a past_due member with a cancel_scheduled add-on', async () => {
+      modulesState.current = { modules: [detailingModule], loading: false, error: false };
+      hookState.value = result({ subscription: pastDueCancelScheduledSub });
+      await renderScreen();
+
+      // REATIVAR resumes billing — purchase-shaped, same family as
+      // ADICIONAR, so it follows the status gate too.
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-reativar"]'),
+      ).toBeNull();
+    });
+  });
+
+  // Final review (Conserto 3): `removerReversivel` promises the member can
+  // reactivate whenever they want — a promise REATIVAR's own platform gate
+  // can break. It must track that gate, not render unconditionally.
+  describe('removerReversivel follows the platform gate (Conserto 3)', () => {
+    it('shows removerReversivel in the remove sheet when subscriptions are enabled', async () => {
+      plansState.current = { subscriptionsEnabled: true, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(text()).toContain(copy.modulos.removerReversivel);
+    });
+
+    it('omits removerReversivel in the remove sheet when subscriptions are gated', async () => {
+      plansState.current = { subscriptionsEnabled: false, loading: false };
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      const trigger = container.querySelector(
+        '[data-testid="assinatura-modulo-detailing-remover"]',
+      ) as HTMLElement | null;
+      if (!trigger) throw new Error('remove trigger not rendered');
+      await act(async () => {
+        trigger.click();
+        await flush();
+      });
+
+      expect(text()).not.toContain(copy.modulos.removerReversivel);
+    });
+  });
+
+  // Final review (Conserto 5): an annual membership's `baseAmountCents` is
+  // the ANNUAL snapshot. The module blocks do monthly math on top of it
+  // (removerBody's "por mês", catalog monthlyDeltaCents) — the app only
+  // sells monthly, so the displayed numbers would misstate the real total.
+  describe('annual cadence hides the module blocks (Conserto 5)', () => {
+    it('hides the attached-modules and available-modules blocks for an annual membership', async () => {
+      modulesState.current = {
+        modules: [detailingModule, estacionamentoModule],
+        loading: false,
+        error: false,
+      };
+      hookState.value = result({ subscription: annualSub });
+      await renderScreen();
+
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-estacionamento-adicionar"]'),
+      ).toBeNull();
+      expect(text()).toContain(copy.modulos.annualManagedNote);
+    });
+
+    it('shows the module blocks for a monthly membership', async () => {
+      hookState.value = result({ subscription: activeSub });
+      await renderScreen();
+
+      expect(text()).not.toContain(copy.modulos.annualManagedNote);
+      expect(
+        container.querySelector('[data-testid="assinatura-modulo-detailing-remover"]'),
+      ).not.toBeNull();
+    });
   });
 });

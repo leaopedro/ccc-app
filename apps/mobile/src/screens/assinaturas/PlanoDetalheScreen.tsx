@@ -15,7 +15,9 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { getPremiumPlan } from '~/api/premium-catalog';
 import { assinaturasCopy } from '~/copy/assinaturas';
+import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
+import { canChangePlan } from '~/screens/assinaturas/can-change-plan';
 import { TierCta } from '~/screens/assinaturas/TierCta';
 import {
   c,
@@ -74,6 +76,7 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [loading, setLoading] = useState(Boolean(slug));
   const [error, setError] = useState(false);
+  const { subscription } = usePremiumSubscription();
 
   const refresh = useCallback(async () => {
     if (!slug) {
@@ -144,6 +147,18 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
   const priceCents = monthlyPriceCents(plan);
   const benefits = orderedBenefits(plan);
 
+  // Own plan: nothing to contract here at all. A different plan, with the
+  // member's own membership live and in good standing: send them straight to
+  // AlterarPlanoScreen instead of a contratar flow that would only 409
+  // AlreadySubscribed at the end. past_due is excluded by canChangePlan on
+  // purpose — that status must keep the regular contratar → 409 → Stripe
+  // portal exit.
+  const isOwnPlan = Boolean(subscription?.active && subscription.planSlug === plan.slug);
+  const showCta = subscriptionsEnabled && !isOwnPlan;
+  const target = canChangePlan(subscription)
+    ? `/assinaturas/alterar?slug=${plan.slug}`
+    : `/assinaturas/contratar?slug=${plan.slug}`;
+
   return (
     <View style={styles.screen}>
       <Header />
@@ -192,15 +207,18 @@ export default function PlanoDetalheScreen({ slug }: { slug: string | undefined 
         ) : null}
       </ScrollView>
 
-      {/* Sticky CTA — navigates to the contratação screen (owns the checkout seam).
-          Hidden when the platform gate is off; that screen would have no CTA
-          of its own to land on. */}
-      {subscriptionsEnabled ? (
+      {/* Sticky CTA — navigates to the contratação screen (or, when the
+          member already has a live membership in good standing, straight to
+          AlterarPlanoScreen) — owns the checkout seam either way. Hidden when
+          the platform gate is off (that screen would have no CTA of its own
+          to land on) or when this is the member's own current plan (nothing
+          to contract). */}
+      {showCta ? (
         <View style={styles.ctaBar}>
           <TierCta
             tier={plan.tier}
             label={assinaturasCopy.detail.cta}
-            onPress={() => router.push(`/assinaturas/contratar?slug=${plan.slug}` as never)}
+            onPress={() => router.push(target as never)}
             testID="detalhe-assinar"
           />
         </View>

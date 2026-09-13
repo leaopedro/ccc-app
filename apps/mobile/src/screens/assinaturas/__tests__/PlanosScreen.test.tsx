@@ -331,6 +331,8 @@ describe('PlanosScreen', () => {
     cadence: 'monthly',
     currentPeriodEnd: '2026-08-22T00:00:00.000Z',
     cancelAtPeriodEnd: false,
+    status: 'active',
+    provider: 'stripe',
     baseAmountCents: 149000,
     addonsAmountCents: 0,
     totalAmountCents: 149000,
@@ -352,6 +354,45 @@ describe('PlanosScreen', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('Ingresso');
     expect(text).toContain('Fundador');
+  });
+
+  it('shows the current-plan badge with no CTA on the card matching the subscriber plan', async () => {
+    hookState.subscription = { subscription: ACTIVE_SUBSCRIPTION, loading: false };
+    await renderScreen(true);
+    const text = container.textContent ?? '';
+    expect(text).toContain('SEU PLANO ATUAL');
+    expect(container.querySelector('[data-testid="current-gold"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assinar-gold"]')).toBeNull();
+    expect(container.querySelector('[data-testid="trocar-gold"]')).toBeNull();
+  });
+
+  it('shows a change CTA for the other plans and navigates to alterar on tap', async () => {
+    hookState.subscription = { subscription: ACTIVE_SUBSCRIPTION, loading: false };
+    await renderScreen(true);
+    const text = container.textContent ?? '';
+    expect(text).toContain('TROCAR PARA');
+    const cta = container.querySelector('[data-testid="trocar-bronze"]') as HTMLElement | null;
+    if (!cta) throw new Error('trocar CTA not rendered');
+    await act(async () => {
+      cta.click();
+      await flush();
+    });
+    expect(push).toHaveBeenCalledWith('/assinaturas/alterar?slug=ingresso');
+  });
+
+  it('does not offer a change CTA for a past_due member — the 409 manage link stays the exit', async () => {
+    hookState.subscription = {
+      subscription: { ...ACTIVE_SUBSCRIPTION, status: 'past_due' },
+      loading: false,
+    };
+    await renderScreen(true);
+    expect(container.querySelector('[data-testid="trocar-bronze"]')).toBeNull();
+    expect(container.querySelector('[data-testid="trocar-silver"]')).toBeNull();
+    // Its own plan still shows the badge (it IS the member's plan).
+    expect(container.querySelector('[data-testid="current-gold"]')).not.toBeNull();
+    // The other cards fall back to the regular Assinar CTA (→ contratar → 409
+    // with the Stripe portal link), not a dead end.
+    expect(container.querySelector('[data-testid="assinar-bronze"]')).not.toBeNull();
   });
 
   it('does not redirect a member without an active subscription', async () => {

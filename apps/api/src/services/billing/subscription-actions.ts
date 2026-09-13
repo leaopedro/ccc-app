@@ -82,7 +82,16 @@ export const changePlan = async ({
   await stripe.updateSubscriptionItemPrice({
     subscriptionItemId: planItemId,
     priceId: targetPriceId,
-    idempotencyKey: `plan_change_${membershipId}_${tier}_${cadence}`,
+    // `updatedAt` entra na chave porque tier+cadencia sozinhos se repetem: um
+    // membro que vai de gold para silver, volta, e vai de novo reusaria a chave
+    // da primeira dentro da janela de 24h da Stripe, receberia a resposta em
+    // cache, e a assinatura nao mudaria. Enquanto o webhook nao aplica nada,
+    // `updatedAt` fica parado e o duplo toque continua deduplicando.
+    //
+    // Ressalva: `recomputeAddonsAmount` tambem escreve nessa linha, entao mexer
+    // num modulo entre dois toques rotaciona a chave. Dano baixo (reaplicar o
+    // mesmo price nao gera rateio novo), mas a rede nao e absoluta.
+    idempotencyKey: `plan_change_${membershipId}_${tier}_${cadence}_${membership.updatedAt.getTime()}`,
   });
 };
 

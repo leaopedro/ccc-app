@@ -11,6 +11,7 @@
 // follow the handoff exactly.
 
 import type { PremiumAddonModule, PremiumPlan } from '@ccc/shared/premium-catalog';
+import type { MySubscriptionResponse } from '@ccc/shared/premium-subscription';
 import { ArrowLeft, Check, SprayCan, Wrench } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +25,7 @@ import { usePremiumAddonModules } from '~/hooks/usePremiumAddonModules';
 import { usePremiumPlans } from '~/hooks/usePremiumPlans';
 import { usePremiumSubscription } from '~/hooks/usePremiumSubscription';
 import { formatBRL } from '~/lib/format';
+import { canChangePlan } from '~/screens/assinaturas/can-change-plan';
 import {
   c,
   monthlyPriceCents,
@@ -73,13 +75,39 @@ function OuroBackground() {
 // they briefly disagree, this at least removes the explicit gold "Assinar"
 // pill instead of showing an affirmative CTA next to a gate that just
 // turned itself off.
-function PlanCard({ plan, showCta }: { plan: PremiumPlan; showCta: boolean }) {
+function PlanCard({
+  plan,
+  showCta,
+  subscription,
+}: {
+  plan: PremiumPlan;
+  showCta: boolean;
+  subscription: MySubscriptionResponse | null;
+}) {
   const t = tierStyle(plan.tier);
   const visual = TIER_VISUAL[plan.tier];
   const isOuro = plan.tier === 'gold';
   const priceCents = monthlyPriceCents(plan);
   const benefits = orderedBenefits(plan);
-  const ctaLabel = `${assinaturasCopy.plans.ctaPrefix} ${visual.label}`;
+
+  // The card matching the member's own live plan gets a badge, not a CTA —
+  // there is nothing to buy on it. Every OTHER card offers a change CTA
+  // instead of the regular purchase one, but only when canChangePlan holds:
+  // a past_due member must keep landing on the regular Assinar → contratar
+  // → 409 AlreadySubscribed path, which is what surfaces the Stripe portal
+  // link they need to fix the failed card.
+  const isCurrentPlan = Boolean(subscription?.active && subscription.planSlug === plan.slug);
+  const showChangeCta = !isCurrentPlan && canChangePlan(subscription);
+  const ctaLabel = showChangeCta
+    ? `${assinaturasCopy.plans.changePrefix} ${visual.label}`
+    : `${assinaturasCopy.plans.ctaPrefix} ${visual.label}`;
+  const onCtaPress = () => {
+    if (showChangeCta) {
+      router.push(`/assinaturas/alterar?slug=${plan.slug}` as never);
+      return;
+    }
+    openPlan(plan.slug);
+  };
 
   return (
     <Pressable
@@ -133,14 +161,18 @@ function PlanCard({ plan, showCta }: { plan: PremiumPlan; showCta: boolean }) {
           ))}
         </View>
 
-        {showCta ? (
+        {isCurrentPlan ? (
+          <View style={styles.currentBadge} testID={`current-${plan.tier}`}>
+            <Text style={styles.currentBadgeText}>{assinaturasCopy.plans.currentBadge}</Text>
+          </View>
+        ) : showCta ? (
           t.btnBg === 'gradient' ? (
             <Pressable
-              onPress={() => openPlan(plan.slug)}
+              onPress={onCtaPress}
               accessibilityRole="button"
               accessibilityLabel={ctaLabel}
               style={styles.ctaGradient}
-              testID={`assinar-${plan.tier}`}
+              testID={showChangeCta ? `trocar-${plan.tier}` : `assinar-${plan.tier}`}
             >
               <LinearGradient
                 colors={[c.goldLight, c.goldDeep]}
@@ -152,11 +184,11 @@ function PlanCard({ plan, showCta }: { plan: PremiumPlan; showCta: boolean }) {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => openPlan(plan.slug)}
+              onPress={onCtaPress}
               accessibilityRole="button"
               accessibilityLabel={ctaLabel}
               style={[styles.cta, { borderColor: t.btnBorder }]}
-              testID={`assinar-${plan.tier}`}
+              testID={showChangeCta ? `trocar-${plan.tier}` : `assinar-${plan.tier}`}
             >
               <Text style={[styles.ctaText, { color: t.btnColor }]}>{ctaLabel}</Text>
             </Pressable>
@@ -272,7 +304,12 @@ export default function PlanosScreen({ showAll = false }: { showAll?: boolean })
       ) : (
         <View style={styles.plans}>
           {plans.map((plan) => (
-            <PlanCard key={plan.slug} plan={plan} showCta={subscriptionsEnabled} />
+            <PlanCard
+              key={plan.slug}
+              plan={plan}
+              showCta={subscriptionsEnabled}
+              subscription={subscription}
+            />
           ))}
         </View>
       )}
@@ -482,6 +519,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   ctaText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, letterSpacing: 2.4 },
+  currentBadge: {
+    marginTop: 20,
+    borderRadius: 11,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: c.tileBorder,
+    backgroundColor: c.elevated,
+  },
+  currentBadgeText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    letterSpacing: 2.4,
+    color: c.muted55,
+  },
 
   // Modules
   modulesSection: { marginTop: 34 },

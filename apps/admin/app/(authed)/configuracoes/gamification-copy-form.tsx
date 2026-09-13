@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BADGE_CRITERIA_MAX,
   BADGE_DESCRIPTION_MAX,
   BADGE_TITLE_MAX,
   RANK_KEYS,
@@ -30,7 +31,7 @@ export const GamificationCopyForm = ({ initial }: { initial: AdminGamificationCo
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const patchBadge = (code: string, field: 'title' | 'description', value: string) =>
+  const patchBadge = (code: string, field: 'title' | 'description' | 'criteria', value: string) =>
     setBadges((prev) => prev.map((b) => (b.code === code ? { ...b, [field]: value } : b)));
 
   const save = () => {
@@ -103,6 +104,21 @@ export const GamificationCopyForm = ({ initial }: { initial: AdminGamificationCo
                 value={b.description}
                 onChange={(e) => patchBadge(b.code, 'description', e.target.value)}
               />
+            </label>
+            <label className={labelCls}>
+              <span>
+                Critério ({b.criteria.length}/{BADGE_CRITERIA_MAX})
+              </span>
+              <input
+                className={inputCls}
+                aria-label={`Critério de ${b.code}`}
+                maxLength={BADGE_CRITERIA_MAX}
+                value={b.criteria}
+                onChange={(e) => patchBadge(b.code, 'criteria', e.target.value)}
+              />
+              <span className="text-xs text-[color:var(--color-muted)]">
+                O que o membro precisa fazer. Aparece na conquista bloqueada, dentro do app.
+              </span>
             </label>
           </div>
         ))}

@@ -105,6 +105,8 @@ vi.mock('lucide-react-native', async () => {
   // imports MapPin / Flag / Flame / MessageSquare. Mirror BadgeRow.test.tsx
   // export list so the resolver does not blow up on unrelated lookups.
   return {
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -121,6 +123,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 

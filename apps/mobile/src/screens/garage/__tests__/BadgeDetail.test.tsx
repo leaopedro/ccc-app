@@ -100,6 +100,8 @@ vi.mock('lucide-react-native', async () => {
   // BadgeDetail Voltar affordance.
   return {
     ArrowLeft: make('ArrowLeft'),
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -116,6 +118,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 
@@ -289,5 +292,86 @@ describe('BadgeDetail', () => {
     );
     expect(container.querySelector('button[aria-label="Fixar no perfil público"]')).toBeNull();
     expect(container.textContent ?? '').toContain('Exclusivo Premium');
+  });
+
+  // ---------------------------------------------------------------------
+  // "Como ganhar". Antes desta branch o estado bloqueado dizia só "Continue
+  // participando para desbloquear", que não informa nada.
+  // ---------------------------------------------------------------------
+
+  it('mostra o critério no lugar da frase genérica quando bloqueada', async () => {
+    const { BadgeDetail } = await import('@ccc/ui');
+    await renderEl(
+      <BadgeDetail
+        entry={baseEntry}
+        state={{ code: 'CAR-001', state: 'locked' }}
+        criteria="Adicione um carro à sua garagem."
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain('Como ganhar');
+    expect(text).toContain('Adicione um carro à sua garagem.');
+    expect(text).not.toContain('Continue participando');
+  });
+
+  it('cai no texto genérico quando a conquista não tem critério', async () => {
+    const { BadgeDetail } = await import('@ccc/ui');
+    await renderEl(<BadgeDetail entry={baseEntry} state={{ code: 'CAR-001', state: 'locked' }} />);
+    expect(container.textContent ?? '').toContain('Continue participando');
+  });
+
+  it('não mostra o critério numa conquista já ganha', async () => {
+    // Quem já ganhou não precisa de instrução; o bloco vira a data e a dica
+    // de fixar no perfil.
+    const { BadgeDetail } = await import('@ccc/ui');
+    await renderEl(
+      <BadgeDetail
+        entry={baseEntry}
+        state={{
+          code: 'CAR-001',
+          state: 'earned',
+          earnedAt: '2026-05-01T12:00:00.000Z',
+          pinned: false,
+          pinnedAt: null,
+        }}
+        criteria="Adicione um carro à sua garagem."
+      />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain('Conquistado em');
+    expect(text).not.toContain('Adicione um carro à sua garagem.');
+  });
+
+  it('locked_premium mostra o critério E o botão de assinar', async () => {
+    const { BadgeDetail } = await import('@ccc/ui');
+    const onUpsell = vi.fn();
+    await renderEl(
+      <BadgeDetail
+        entry={{ ...baseEntry, premiumExclusive: true }}
+        state={{ code: 'CAR-001', state: 'locked_premium' }}
+        criteria="Tenha 5 carros na garagem ao mesmo tempo."
+        onUpsell={onUpsell}
+      />,
+    );
+    expect(container.textContent ?? '').toContain('Tenha 5 carros na garagem ao mesmo tempo.');
+    const btn = container.querySelector('button[aria-label="Conhecer o Premium"]');
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      (btn as HTMLButtonElement).click();
+      await flush();
+    });
+    expect(onUpsell).toHaveBeenCalledWith('CAR-001');
+  });
+
+  it('não mostra o botão de assinar numa conquista bloqueada comum', async () => {
+    const { BadgeDetail } = await import('@ccc/ui');
+    await renderEl(
+      <BadgeDetail
+        entry={baseEntry}
+        state={{ code: 'CAR-001', state: 'locked' }}
+        onUpsell={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('button[aria-label="Conhecer o Premium"]')).toBeNull();
   });
 });

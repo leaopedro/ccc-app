@@ -157,17 +157,19 @@ export default function GarageIndex() {
     // still safe — missing keys just yield `undefined` at runtime.
     const bundled = badgesCopy.badges.catalog as Record<
       string,
-      { title: string; description: string } | undefined
+      { title: string; description: string; criteria: string } | undefined
     >;
     return Object.fromEntries(
       catalog.map((entry) => {
         const title = entry.title ?? bundled[entry.code]?.title;
         const description = entry.description ?? bundled[entry.code]?.description;
+        const criteria = entry.criteria ?? bundled[entry.code]?.criteria;
         // exactOptionalPropertyTypes: omit the key rather than assign
         // `undefined` when neither the API nor the bundle has a value.
         const value: BadgesSheetCopy = {
           ...(title !== undefined ? { title } : {}),
           ...(description !== undefined ? { description } : {}),
+          ...(criteria !== undefined ? { criteria } : {}),
         };
         return [entry.code, value];
       }),
@@ -233,7 +235,6 @@ export default function GarageIndex() {
               <BadgeRow
                 data={badgesAggregate}
                 onOpenSheet={handleOpenBadgesSheet}
-                onLockedPress={handleLockedBadgePress}
                 testID="garage-badge-row"
               />
             ) : null}

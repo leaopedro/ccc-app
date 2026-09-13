@@ -44,6 +44,10 @@ export const readOwnerBadgesState = async (garage: Garage): Promise<OwnerBadgesS
     icon: b.icon,
     title: b.title,
     description: b.description,
+    // Omitido quando vazio em vez de mandar '': a coluna tem DEFAULT '', e o
+    // cliente já sabe cair no texto genérico de bloqueado quando a chave não
+    // vem. Mandar string vazia obrigaria toda tela a testar `!== ''`.
+    ...(b.criteria ? { criteria: b.criteria } : {}),
   }));
 
   const badges: GarageBadgeOwnerState[] = catalogRows.map((b) => {

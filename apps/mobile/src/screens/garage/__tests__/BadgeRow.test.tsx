@@ -99,6 +99,8 @@ vi.mock('lucide-react-native', async () => {
   // Mirror the explicit named-export list from HexBadge.test.tsx — keep in
   // sync with `packages/ui/src/BadgeGlyph.tsx` ICON_MAP imports.
   return {
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -115,6 +117,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 
@@ -197,9 +200,7 @@ describe('BadgeRow', () => {
       catalog: CATALOG,
       badges: [],
     };
-    await renderEl(
-      <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
-    );
+    await renderEl(<BadgeRow data={data} onOpenSheet={() => undefined} />);
     expect(container.children.length).toBe(0);
   });
 
@@ -225,9 +226,7 @@ describe('BadgeRow', () => {
         },
       ],
     };
-    await renderEl(
-      <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
-    );
+    await renderEl(<BadgeRow data={data} onOpenSheet={() => undefined} />);
     // Pinned EVT-002 (rare/streak) should be the FIRST badge button rendered
     // among the hex tiles. The first <button> in the row is the badge
     // labelled by code in the aria-label.
@@ -293,9 +292,7 @@ describe('BadgeRow', () => {
         },
       ],
     };
-    await renderEl(
-      <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
-    );
+    await renderEl(<BadgeRow data={data} onOpenSheet={() => undefined} />);
     expect(textOf()).toContain('+2');
   });
 
@@ -315,7 +312,7 @@ describe('BadgeRow', () => {
         },
       ],
     };
-    await renderEl(<BadgeRow data={data} onOpenSheet={fn} onLockedPress={() => undefined} />);
+    await renderEl(<BadgeRow data={data} onOpenSheet={fn} />);
     const badgeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
     );
@@ -327,9 +324,12 @@ describe('BadgeRow', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('fires onLockedPress (not onOpenSheet) when a locked tile is tapped', async () => {
+  it('tile bloqueado abre a gaveta, igual ao ganho', async () => {
+    // Antes ia direto para o upsell de Premium. O mesmo tile respondia de um
+    // jeito aqui e de outro dentro da gaveta, e no caminho o membro não via
+    // nem o nome da conquista. A gaveta é onde mora o "como ganhar"; o upsell
+    // sobreviveu como botão no detalhe de uma exclusiva Premium.
     const openSheet = vi.fn();
-    const lockedPress = vi.fn();
     const { BadgeRow } = await import('@ccc/ui');
     // No earned badges → row falls back to showing locked tiles. The first
     // catalog entry is EVT-001 (locked).
@@ -341,7 +341,7 @@ describe('BadgeRow', () => {
         { code: 'CCC-003', state: 'locked_premium' },
       ],
     };
-    await renderEl(<BadgeRow data={data} onOpenSheet={openSheet} onLockedPress={lockedPress} />);
+    await renderEl(<BadgeRow data={data} onOpenSheet={openSheet} />);
     const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') ?? '').startsWith('Conquista EVT-001'),
     );
@@ -350,9 +350,17 @@ describe('BadgeRow', () => {
       lockedBtn.click();
       await flush();
     });
-    expect(lockedPress).toHaveBeenCalledTimes(1);
-    expect(lockedPress).toHaveBeenCalledWith('EVT-001');
-    expect(openSheet).not.toHaveBeenCalled();
+    expect(openSheet).toHaveBeenCalledTimes(1);
+
+    const premiumBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      (b.getAttribute('aria-label') ?? '').startsWith('Conquista CCC-003'),
+    );
+    if (!premiumBtn) throw new Error('locked_premium badge button not rendered');
+    await act(async () => {
+      premiumBtn.click();
+      await flush();
+    });
+    expect(openSheet).toHaveBeenCalledTimes(2);
   });
 
   it('locked tiles are pressable (NOT aria-disabled) per §C11 precedent', async () => {
@@ -362,9 +370,7 @@ describe('BadgeRow', () => {
       catalog: CATALOG,
       badges: [{ code: 'CCC-003', state: 'locked_premium' }],
     };
-    await renderEl(
-      <BadgeRow data={data} onOpenSheet={() => undefined} onLockedPress={() => undefined} />,
-    );
+    await renderEl(<BadgeRow data={data} onOpenSheet={() => undefined} />);
     const lockedBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       (b.getAttribute('aria-label') ?? '').startsWith('Conquista CCC-003'),
     );

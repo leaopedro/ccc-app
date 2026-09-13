@@ -24,6 +24,17 @@ export interface BadgeDetailProps {
   title?: string;
   /** Optional short description — same caveat as `title`. */
   description?: string;
+  /**
+   * "Como ganhar" — a regra que destrava a conquista, em PT-BR. Vem de
+   * `BadgeCatalogEntry.criteria`, que o admin edita. Só é renderizado nos
+   * estados bloqueados: quem já ganhou não precisa da instrução.
+   *
+   * Ausente cai no texto genérico de bloqueado. A ausência é real, não
+   * teórica: a coluna tem default vazio e o serializador omite a chave nesse
+   * caso, então uma conquista criada por fora da migration de seed chega aqui
+   * sem critério.
+   */
+  criteria?: string;
   /** Current pinned-cap value from `GET /me/garage/badges` aggregation. When
    *  `pinCount >= pinCap` AND this badge is not already pinned, the pin
    *  button is disabled (a11y-disabled — still pressable for screen readers
@@ -33,6 +44,12 @@ export interface BadgeDetailProps {
   pinCap?: number;
   /** Fired on pin/unpin tap. Only rendered for earned badges. */
   onTogglePin?: (code: string) => void;
+  /**
+   * Abre o upsell de Premium. Só rende botão no estado `locked_premium`: numa
+   * conquista bloqueada comum, assinar não destrava nada, e oferecer o plano
+   * ali seria vender a solução errada para o problema que o membro tem.
+   */
+  onUpsell?: (code: string) => void;
   /** When supplied, renders a "Voltar" affordance at the top of the detail
    *  view. `BadgesSheet` passes this so the drilldown can return to the
    *  catalog grid without closing the entire sheet. Matches the design
@@ -60,9 +77,11 @@ export function BadgeDetail({
   state,
   title,
   description,
+  criteria,
   pinCount = 0,
   pinCap = 3,
   onTogglePin,
+  onUpsell,
   onBack,
 }: BadgeDetailProps) {
   const r = rarityColors(entry.rarity);
@@ -73,6 +92,10 @@ export function BadgeDetail({
   const atCap = !pinned && pinCount >= pinCap;
   const canTogglePin = isEarned && Boolean(onTogglePin);
   const earnedDateStr = isEarned ? formatPtDate(state.earnedAt) : null;
+  // Trim: o admin edita este campo à mão, e um espaço solitário passaria no
+  // `min(1)` do zod e viraria um bloco "Como ganhar" em branco.
+  const howToEarn = !isEarned && criteria?.trim() ? criteria.trim() : null;
+  const canUpsell = isPremiumLocked && Boolean(onUpsell);
 
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 18 }}>
@@ -210,16 +233,47 @@ export function BadgeDetail({
         }}
       >
         <Text style={{ color: '#F5F5F5', fontSize: 13, fontWeight: '700' }}>
-          {isEarned ? `Conquistado em ${earnedDateStr}` : 'Bloqueado'}
+          {isEarned ? `Conquistado em ${earnedDateStr}` : howToEarn ? 'Como ganhar' : 'Bloqueado'}
         </Text>
         <Text style={{ color: '#8A8A93', fontSize: 12, marginTop: 4, lineHeight: 17 }}>
           {isEarned
             ? 'Aparece no seu perfil público quando fixada.'
-            : isPremiumLocked
-              ? 'Disponível apenas para assinantes Premium.'
-              : 'Continue participando para desbloquear esta conquista.'}
+            : (howToEarn ??
+              (isPremiumLocked
+                ? 'Disponível apenas para assinantes Premium.'
+                : 'Continue participando para desbloquear esta conquista.'))}
         </Text>
+        {howToEarn && isPremiumLocked ? (
+          <Text style={{ color: '#8A8A93', fontSize: 12, marginTop: 6, lineHeight: 17 }}>
+            Disponível apenas para assinantes Premium.
+          </Text>
+        ) : null}
       </View>
+
+      {/* Upsell — só no estado premium-bloqueado. */}
+      {canUpsell ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Conhecer o Premium"
+          onPress={() => onUpsell?.(entry.code)}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.6 : 1,
+            marginTop: 10,
+            padding: 14,
+            borderRadius: 12,
+            backgroundColor: garageTokens.tier.goldTint,
+            borderWidth: 1,
+            borderColor: `${garageTokens.tier.gold}66`,
+          })}
+        >
+          <Text style={{ color: garageTokens.tier.gold, fontSize: 13, fontWeight: '700' }}>
+            Conhecer o Premium
+          </Text>
+          <Text style={{ color: '#8A8A93', fontSize: 11, marginTop: 2 }}>
+            Esta conquista é exclusiva de quem assina.
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* Pin toggle — owner-only, earned-only */}
       {canTogglePin ? (

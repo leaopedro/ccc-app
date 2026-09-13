@@ -112,6 +112,8 @@ vi.mock('lucide-react-native', async () => {
   // Mirrors the surface needed by `@ccc/ui` barrel imports (BadgeGlyph
   // ICON_MAP). Keep in sync with packages/ui/src/BadgeGlyph.tsx.
   return {
+    CalendarDays: make('CalendarDays'),
+    Camera: make('Camera'),
     Car: make('Car'),
     CheckSquare: make('CheckSquare'),
     Crown: make('Crown'),
@@ -128,6 +130,7 @@ vi.mock('lucide-react-native', async () => {
     MessageSquare: make('MessageSquare'),
     ShieldCheck: make('ShieldCheck'),
     TrendingUp: make('TrendingUp'),
+    Trophy: make('Trophy'),
   };
 });
 

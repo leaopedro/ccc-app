@@ -47,7 +47,7 @@ motivo próprio; nenhuma é decorativa.
 | `Event.status = 'published'`                       | Toda leitura pública de evento filtra isso (`routes/events.ts:172`, `:213`). Sem essa linha, o `slug` e o `title` de um evento em rascunho aparecem na primeira tela do app, e o toque no card cai num 404. |
 | Autor sem `FeedBan` naquele evento                 | `FeedBan` não mexe em `FeedPost.status` (`routes/admin/feed-moderation.ts:245`). Sem esse filtro, banir um assediador às 22h deixa o conteúdo dele sendo promovido à primeira tela do app.                  |
 | Nenhum `Report` com `status: 'open'`               | O auto-hide só dispara com 3 denunciantes distintos (`services/feed/report.ts:13`). Um post com 2 denúncias abertas é tolerável dentro do evento; na vitrine do app, não.                                   |
-| `authorUserId` não nulo                            | Ver "Conta apagada", abaixo.                                                                                                                                                                                |
+| Autor existe E está em conta `active`              | Ver "Conta apagada", abaixo. O `not: null` sozinho NÃO basta.                                                                                                                                               |
 | Autor não bloqueado pelo leitor, nos dois sentidos | Guideline 1.2 da App Store.                                                                                                                                                                                 |
 | Evento sem `FeedBan` scope `view` para o leitor    | Mesma regra que `checkFeedReadAccess` aplica.                                                                                                                                                               |
 
@@ -58,15 +58,29 @@ motivo próprio; nenhuma é decorativa.
 audiência já é restrita àquele evento.
 
 Na Início não há thread, só promoção. Um post de quem exerceu o direito de
-eliminação viraria destaque na primeira tela do app, servido a anônimo, e a
-foto continua acessível durante a janela de 30 dias da fila de deleção
-(`anonymize.ts:52`). Por isso o pool da home exclui `authorUserId: null`.
+eliminação viraria destaque na primeira tela do app, servido a anônimo.
+
+**Excluir `authorUserId: null` não é suficiente, e essa foi a primeira versão
+errada deste spec.** A anulação do autor não acontece no pedido de exclusão:
+`routes/me-account-delete.ts` só marca `status: 'deleted'` e grava `deletedAt`,
+e o worker (`workers/account-deletion.ts`) só anonimiza quem tem
+`deletedAt <= now - DELETION_GRACE_DAYS`, que é 30 por padrão
+(`env.ts:68`). Durante esses 30 dias `authorUserId` continua preenchido, e o
+post, o apelido e a foto do carro continuariam elegíveis para a vitrine —
+exatamente o dano que esta seção existe para impedir, atrasado um mês. O mesmo
+buraco cobre `status: 'disabled'`, ou seja, conta banida da plataforma.
+
+Por isso a regra real é mais forte: o autor precisa existir E estar em conta
+`active`. A rota resolve isso com uma consulta a `User` sobre os autores do
+pool, ao lado da consulta de `FeedBan`, e descarta quem não estiver ativo.
+Excluir `partial` de passagem é conservador e aceito.
+
+O `not: null` continua no `where` porque ele é barato e coabita com o `notIn`
+do filtro de bloqueio na mesma chave. Mas ele é otimização, não a salvaguarda.
 
 Isso é o oposto do que a rota por evento faz, e a diferença é deliberada. Lá, o
 ramo `OR: [{ authorUserId: null }, ...]` existe porque `NULL NOT IN (...)`
-avalia para NULL e derrubaria esses posts sem querer
-(`routes/feed.ts:70-77`). Aqui a exclusão é intencional, então o `where` diz
-`authorUserId: { not: null }` e o problema do `NULL NOT IN` desaparece junto.
+avalia para NULL e derrubaria esses posts sem querer (`routes/feed.ts:70-77`).
 
 **Obrigação que viaja com esta entrega:** `docs/ropa.md` COMM-01 descreve a
 salvaguarda como "controle de acesso por evento". A rota nova não passa por

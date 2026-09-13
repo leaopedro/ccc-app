@@ -83,9 +83,16 @@ export const homeFeedRoutes: FastifyPluginAsync = async (app) => {
         // do conteúdo de quem pediu eliminação, para anônimo, na primeira
         // tela do app. Ver "Conta apagada" no spec.
         //
+        // Este `not: null` NÃO basta sozinho: o autor só é anulado quando o
+        // worker de anonimização roda, e ele espera DELETION_GRACE_DAYS
+        // (env.ts:68, default 30) depois do pedido. Durante essa carência o
+        // post continua com apelido e foto do carro de quem já pediu para
+        // sair. Por isso o pool ainda passa pelo filtro de autor `active`
+        // logo abaixo, que cobre a carência e também conta `disabled`.
+        //
         // O `notIn` do bloqueio mora na MESMA chave, então os dois vivem neste
         // objeto único. Perder o `not: null` aqui reintroduziria o problema do
-        // `NULL NOT IN (...)` que routes/feed.ts:131-138 documenta.
+        // `NULL NOT IN (...)` que routes/feed.ts:70-77 documenta.
         authorUserId: blockedIds.length > 0 ? { not: null, notIn: blockedIds } : { not: null },
         // Denúncia aberta: o auto-hide só dispara com 3 denunciantes distintos
         // (services/feed/report.ts:13). Dois é tolerável dentro do evento, não
@@ -108,12 +115,29 @@ export const homeFeedRoutes: FastifyPluginAsync = async (app) => {
     const authorIds = [
       ...new Set(pool.map((p) => p.authorUserId).filter((id): id is string => id !== null)),
     ];
-    const authorBans = await prisma.feedBan.findMany({
-      where: { eventId: { in: eventIds }, userId: { in: authorIds } },
-      select: { eventId: true, userId: true },
-    });
+    // A vitrine pública exige autor em conta ativa. `deleted` fica elegível
+    // pelos 30 dias da carência (ver a nota no where acima) e `disabled` é
+    // quem a plataforma baniu, que não pode seguir em destaque. Exigir
+    // `active` cobre os dois e de quebra deixa `partial` de fora, o que é
+    // conservador e inofensivo para uma vitrine.
+    const [authorBans, activeAuthors] = await Promise.all([
+      prisma.feedBan.findMany({
+        where: { eventId: { in: eventIds }, userId: { in: authorIds } },
+        select: { eventId: true, userId: true },
+      }),
+      prisma.user.findMany({
+        where: { id: { in: authorIds }, status: 'active' },
+        select: { id: true },
+      }),
+    ]);
     const bannedPairs = new Set(authorBans.map((b) => `${b.eventId}:${b.userId}`));
-    const eligible = pool.filter((p) => !bannedPairs.has(`${p.eventId}:${p.authorUserId ?? ''}`));
+    const activeIds = new Set(activeAuthors.map((u) => u.id));
+    const eligible = pool.filter(
+      (p) =>
+        p.authorUserId !== null &&
+        activeIds.has(p.authorUserId) &&
+        !bannedPairs.has(`${p.eventId}:${p.authorUserId}`),
+    );
 
     const picked = shuffle(eligible).slice(0, content.feedPostCount);
 

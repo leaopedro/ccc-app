@@ -173,6 +173,32 @@ describe('GET /api/home-feed', () => {
     expect(bodies((await app.inject(GET)).json())).toEqual(['com autor']);
   });
 
+  it('nao serve post de autor que pediu exclusao e ainda esta na carencia', async () => {
+    const event = await seedEvent('Encontro Publico');
+    const leaving = await newUser();
+    await seedPost(event.id, 'do autor saindo', leaving.id);
+    await seedPost(event.id, 'de quem fica');
+    await prisma.user.update({
+      where: { id: leaving.id },
+      data: { status: 'deleted', deletedAt: new Date() },
+    });
+
+    // Catches: confiar so em `authorUserId: { not: null }`. O worker de
+    // anonimizacao so anula o autor depois de DELETION_GRACE_DAYS (default
+    // 30), entao durante a carencia o post continuaria na vitrine publica.
+    expect(bodies((await app.inject(GET)).json())).toEqual(['de quem fica']);
+  });
+
+  it('nao serve post de autor desabilitado', async () => {
+    const event = await seedEvent('Encontro Publico');
+    const banned = await newUser();
+    await seedPost(event.id, 'do banido da plataforma', banned.id);
+    await seedPost(event.id, 'de quem fica');
+    await prisma.user.update({ where: { id: banned.id }, data: { status: 'disabled' } });
+
+    expect(bodies((await app.inject(GET)).json())).toEqual(['de quem fica']);
+  });
+
   it('respeita feedPostCount', async () => {
     const event = await seedEvent('Encontro Publico');
     for (let i = 0; i < 8; i += 1) await seedPost(event.id, `post ${i}`);

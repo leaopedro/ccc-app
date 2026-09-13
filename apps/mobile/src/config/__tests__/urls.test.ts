@@ -4,7 +4,7 @@ import { PUBLIC_PROFILE_BASE_URL, publicGarageUrl } from '../urls';
 
 describe('publicGarageUrl', () => {
   it('returns the base URL joined with the slug', () => {
-    expect(publicGarageUrl('foo')).toBe('https://casacar.club/g/foo');
+    expect(publicGarageUrl('foo')).toBe('https://garage.casacar.club/g/foo');
   });
 
   it('preserves hyphens in the slug', () => {

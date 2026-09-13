@@ -6,7 +6,7 @@ import {
   adminGarageSpotRevokeBodySchema,
   adminGarageSummarySchema,
 } from '@ccc/shared/admin-garage';
-import { badgeCodeSchema } from '@ccc/shared/badges';
+import { badgeCodeSchema, garageBadgesOwnerResponseSchema } from '@ccc/shared/badges';
 import { GARAGE_RESERVED_SLUGS } from '@ccc/shared/garage';
 import type { Garage, GarageSpot } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
@@ -15,7 +15,9 @@ import { isUniqueConstraintError } from '../../lib/prisma-errors.js';
 import { requireUser } from '../../plugins/auth.js';
 import { recordAudit } from '../../services/admin-audit.js';
 import { awardBadge } from '../../services/garage/awarder.js';
+import { readOwnerBadgesState } from '../../services/garage/badges-read.js';
 import { ensureGarageForUserId } from '../../services/garage/ensure.js';
+import { readGamificationEnabled } from '../../services/garage/killswitch.js';
 import { computeIsPremiumActive, reconcileGarageSpots } from '../../services/garage/index.js';
 import rateLimit from '@fastify/rate-limit';
 import { awardXp } from '../../services/garage/xp-awarder.js';
@@ -345,6 +347,31 @@ export const adminUserGarageRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return reply.status(204).send();
+  });
+
+  // GET /admin/users/:id/garage/badges — admin read of a user's badge state.
+  // Mirrors GET /me/garage/badges (same aggregator, same response schema) so
+  // the admin Conquistas panel sees EVERY earned badge. Before this existed
+  // the panel fell back to the public /g/:slug payload, which carries pinned
+  // badges only and nothing at all for a private garage — unpinned-earned
+  // badges rendered as "not earned" and the grant call then 409'd with
+  // `already_earned`. Killswitch-aware: returns the empty enabled:false shape
+  // rather than 404, same as the owner route.
+  app.get('/users/:id/garage/badges', async (request, reply) => {
+    requireUser(request);
+    const { id } = request.params as { id: string };
+
+    const target = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!target) return reply.status(404).send({ error: 'NotFound' });
+
+    const enabled = await readGamificationEnabled();
+    if (!enabled) {
+      return garageBadgesOwnerResponseSchema.parse({ enabled: false, catalog: [], badges: [] });
+    }
+
+    const garage = await ensureGarageForUserId(id);
+    const { catalog, badges } = await readOwnerBadgesState(garage);
+    return garageBadgesOwnerResponseSchema.parse({ enabled: true, catalog, badges });
   });
 
   // POST /admin/users/:id/garage/badges/:code/grant — admin manual badge

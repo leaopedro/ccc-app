@@ -53,7 +53,7 @@ export function ProfileStats({
   if (!progress || !stats) return null;
 
   return (
-    <View testID={testID}>
+    <View style={{ marginHorizontal: 16, marginTop: 12 }} testID={testID}>
       <XPScoreboard
         progress={progress}
         onPressHint={onPressHint}

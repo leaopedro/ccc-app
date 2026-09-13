@@ -2,7 +2,7 @@
 
 import type { AdminProductType, AdminStoreProductDetail } from '@ccc/shared/admin';
 import { GARAGE_SPOT_PRODUCT_SLUG } from '@ccc/shared/garage';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 
@@ -68,12 +68,23 @@ export const ProductForm = ({
   const v = state.values ?? {};
   const [allowPickup, setAllowPickup] = useState(product.allowPickup);
   const [allowShip, setAllowShip] = useState(product.allowShip);
-  useEffect(() => {
+  // Re-sync both toggles to server truth after a revalidate hands us a new
+  // `product`. Render-phase adjustment rather than an effect: React re-renders
+  // with the corrected toggles before committing, so the stale value never
+  // paints. The effect version set state synchronously in its body, which
+  // costs an extra commit and trips react-hooks/set-state-in-effect.
+  const [prevShipping, setPrevShipping] = useState({
+    allowPickup: product.allowPickup,
+    allowShip: product.allowShip,
+  });
+  if (
+    prevShipping.allowPickup !== product.allowPickup ||
+    prevShipping.allowShip !== product.allowShip
+  ) {
+    setPrevShipping({ allowPickup: product.allowPickup, allowShip: product.allowShip });
     setAllowPickup(product.allowPickup);
-  }, [product.allowPickup]);
-  useEffect(() => {
     setAllowShip(product.allowShip);
-  }, [product.allowShip]);
+  }
   const currentTypeMissing = !productTypes.some((t) => t.id === product.productTypeId);
   const hasPhotos = product.photos.length > 0;
   const isVirtual = product.virtual === true;

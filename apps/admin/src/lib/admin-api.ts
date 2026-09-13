@@ -724,9 +724,10 @@ export const updateAdminGeneralSettings = (
 // de entrada (feedPostCount opcional) do de saida (feedPostCount obrigatorio).
 // apiFetch<T> usa um unico parametro de tipo para ZodType<T>, que colide os
 // dois lados, entao o TS infere o lado de entrada e o Promise<AdminHomeContent>
-// anotado deixa de bater. Mesmo problema documentado em admin.ts:246-252, so
-// que la a saida evita `.default()`; aqui o `.default()` e exigido pelo
-// brief, entao o cast fixa T no tipo de saida real do parse.
+// anotado deixa de bater. Mesmo problema e mesma causa do cast em
+// getAdminUser (admin-api.ts:396-408), que tambem nasce de `.default()` no
+// schema por deploy skew entre Railway e Vercel; aqui o `.default()` e exigido
+// pelo brief, entao o cast fixa T no tipo de saida real do parse.
 export const getAdminHomeContent = (): Promise<AdminHomeContent> =>
   apiFetch<AdminHomeContent>('/admin/home/content', {
     schema: adminHomeContentSchema as z.ZodType<AdminHomeContent>,

@@ -19,9 +19,12 @@ const CARD_WIDTH = 240;
 export function FeedTeaserCard({ post, onPress }: { post: HomeFeedItem; onPress: () => void }) {
   const photo = post.photos[0] ?? null;
   const car = post.car;
-  // Car.nickname é NOT NULL no schema; sem carro, o post é de um membro que
-  // não escolheu carro na hora de postar.
-  const authorLabel = car ? car.nickname : 'Membro';
+  // O CONTRATO manda aqui, não a coluna: publicCarProfileSchema.nickname é
+  // `z.string().nullable()` (packages/shared/src/feed.ts) mesmo com a coluna
+  // NOT NULL, então `car.nickname` tipa como `string | null` e o `??` evita o
+  // accessibilityLabel virar "Por null" no leitor de tela. Sem carro, o post é
+  // de um membro que não escolheu carro na hora de postar.
+  const authorLabel = car?.nickname ?? 'Membro';
 
   return (
     <Pressable

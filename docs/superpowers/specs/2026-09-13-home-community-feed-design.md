@@ -16,14 +16,14 @@ card leva para a página daquele evento, já rolada até o feed.
 
 ## Decisões
 
-| Questão | Decisão |
-|---|---|
-| Quem vê | Todo mundo, inclusive anônimo. Guest e Member. |
+| Questão          | Decisão                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| Quem vê          | Todo mundo, inclusive anônimo. Guest e Member.                           |
 | De quais eventos | Só `feedAccess: 'public'` E `status: 'published'` E `feedEnabled: true`. |
-| Sorteio | Embaralha os 50 posts elegíveis mais recentes, corta em N. |
-| Quantidade | Configurável no admin, campo novo em `HomeContent`. Default 5. |
-| Destino do toque | `/events/[slug]` com scroll automático até o feed. |
-| Formato | Carrossel horizontal, card texto-first. |
+| Sorteio          | Embaralha os 50 posts elegíveis mais recentes, corta em N.               |
+| Quantidade       | Configurável no admin, campo novo em `HomeContent`. Default 5.           |
+| Destino do toque | `/events/[slug]` com scroll automático até o feed.                       |
+| Formato          | Carrossel horizontal, card texto-first.                                  |
 
 A escolha de "só `public`" é o ponto load-bearing. `Event.feedAccess` tem
 default `attendees`, e `checkFeedReadAccess`
@@ -39,17 +39,17 @@ eventos como `public` no admin.
 Um post entra no sorteio quando TODAS as condições valem. Cada linha tem um
 motivo próprio; nenhuma é decorativa.
 
-| Condição | Por quê |
-|---|---|
-| `FeedPost.status = 'visible'` | `hidden` e `removed` são os dois estados de moderação. O soft delete grava `removed` (`routes/feed.ts:543`). |
-| `Event.feedEnabled = true` | O organizer desligou o feed daquele evento. |
-| `Event.feedAccess = 'public'` | `attendees` exige ticket, `members_only` exige premium. Nenhum pode alimentar tela anônima. |
-| `Event.status = 'published'` | Toda leitura pública de evento filtra isso (`routes/events.ts:172`, `:213`). Sem essa linha, o `slug` e o `title` de um evento em rascunho aparecem na primeira tela do app, e o toque no card cai num 404. |
-| Autor sem `FeedBan` naquele evento | `FeedBan` não mexe em `FeedPost.status` (`routes/admin/feed-moderation.ts:245`). Sem esse filtro, banir um assediador às 22h deixa o conteúdo dele sendo promovido à primeira tela do app. |
-| Nenhum `Report` com `status: 'open'` | O auto-hide só dispara com 3 denunciantes distintos (`services/feed/report.ts:13`). Um post com 2 denúncias abertas é tolerável dentro do evento; na vitrine do app, não. |
-| `authorUserId` não nulo | Ver "Conta apagada", abaixo. |
-| Autor não bloqueado pelo leitor, nos dois sentidos | Guideline 1.2 da App Store. |
-| Evento sem `FeedBan` scope `view` para o leitor | Mesma regra que `checkFeedReadAccess` aplica. |
+| Condição                                           | Por quê                                                                                                                                                                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FeedPost.status = 'visible'`                      | `hidden` e `removed` são os dois estados de moderação. O soft delete grava `removed` (`routes/feed.ts:543`).                                                                                                |
+| `Event.feedEnabled = true`                         | O organizer desligou o feed daquele evento.                                                                                                                                                                 |
+| `Event.feedAccess = 'public'`                      | `attendees` exige ticket, `members_only` exige premium. Nenhum pode alimentar tela anônima.                                                                                                                 |
+| `Event.status = 'published'`                       | Toda leitura pública de evento filtra isso (`routes/events.ts:172`, `:213`). Sem essa linha, o `slug` e o `title` de um evento em rascunho aparecem na primeira tela do app, e o toque no card cai num 404. |
+| Autor sem `FeedBan` naquele evento                 | `FeedBan` não mexe em `FeedPost.status` (`routes/admin/feed-moderation.ts:245`). Sem esse filtro, banir um assediador às 22h deixa o conteúdo dele sendo promovido à primeira tela do app.                  |
+| Nenhum `Report` com `status: 'open'`               | O auto-hide só dispara com 3 denunciantes distintos (`services/feed/report.ts:13`). Um post com 2 denúncias abertas é tolerável dentro do evento; na vitrine do app, não.                                   |
+| `authorUserId` não nulo                            | Ver "Conta apagada", abaixo.                                                                                                                                                                                |
+| Autor não bloqueado pelo leitor, nos dois sentidos | Guideline 1.2 da App Store.                                                                                                                                                                                 |
+| Evento sem `FeedBan` scope `view` para o leitor    | Mesma regra que `checkFeedReadAccess` aplica.                                                                                                                                                               |
 
 ### Conta apagada
 
@@ -65,7 +65,7 @@ foto continua acessível durante a janela de 30 dias da fila de deleção
 Isso é o oposto do que a rota por evento faz, e a diferença é deliberada. Lá, o
 ramo `OR: [{ authorUserId: null }, ...]` existe porque `NULL NOT IN (...)`
 avalia para NULL e derrubaria esses posts sem querer
-(`routes/feed.ts:131-138`). Aqui a exclusão é intencional, então o `where` diz
+(`routes/feed.ts:70-77`). Aqui a exclusão é intencional, então o `where` diz
 `authorUserId: { not: null }` e o problema do `NULL NOT IN` desaparece junto.
 
 **Obrigação que viaja com esta entrega:** `docs/ropa.md` COMM-01 descreve a
@@ -251,7 +251,7 @@ hoje. Nenhum call site do mobile envia `photoObjectKeys`.
 ### Navegação e scroll
 
 ```ts
-router.push({ pathname: '/events/[slug]', params: { slug, focus: 'feed' } } as never)
+router.push({ pathname: '/events/[slug]', params: { slug, focus: 'feed' } } as never);
 ```
 
 Em `apps/mobile/app/(app)/events/[slug].tsx`: `ref` no `ScrollView` da linha 215,

@@ -88,10 +88,13 @@ export type FeedPostRow = {
 
 export const serializeCarProfile = (car: CarSelect | null, buildUrl: (key: string) => string) => {
   if (!car) return null;
-  // Desempate por id: CarPhoto.sortOrder tem @default(0) (schema.prisma:922),
-  // então duas fotos sem ordem explícita deixavam o "primeiro" à mercê da
-  // ordem de retorno do Postgres, que não é garantida sem ORDER BY — a foto
-  // de capa do carro trocava sozinha entre requests.
+  // Desempate defensivo, não correção de um bug observável: CarPhoto tem
+  // @@unique([carId]) (schema.prisma:928), então hoje um carro tem no máximo
+  // UMA foto e não existe empate para desfazer. O caso real desta classe de
+  // bug é o das fotos do POST, mais abaixo neste arquivo: FeedPostPhoto não
+  // tem unique por postId, sortOrder tem @default(0) e sem ORDER BY total a
+  // ordem de retorno do Postgres não é garantida. Mantemos o sort aqui para o
+  // dia em que o unique cair.
   const primary =
     [...car.photos].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))[0] ??
     null;

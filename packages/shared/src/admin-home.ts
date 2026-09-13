@@ -53,6 +53,12 @@ export const adminHomeContentSchema = z.object({
   institutionalBody: z.string().min(1),
   institutionalImageObjectKey: z.string().nullable(),
   institutionalImageUrl: z.string().url().nullable(),
+  /**
+   * `.default(5)` na LEITURA: a API roda no Railway e o admin na Vercel, com
+   * deploys independentes. Sem o default, um deploy do admin que chegue antes
+   * do da API faz este parse lançar a página inteira de configurações.
+   */
+  feedPostCount: z.number().int().min(0).default(5),
   updatedAt: z.string().datetime(),
 });
 export type AdminHomeContent = z.infer<typeof adminHomeContentSchema>;
@@ -67,6 +73,19 @@ export const homeContentUpdateSchema = z.object({
   institutionalTitle: z.string().trim().min(1).max(120).optional(),
   institutionalBody: z.string().trim().min(1).max(1000).optional(),
   institutionalImageObjectKey: optionalText(300).optional(),
+  /**
+   * Quantos posts a seção de feed da Início sorteia. Zero desliga a seção. O
+   * teto de 20 é de produto, não de banco: a Início é uma tela de resumo.
+   *
+   * O preprocess é load-bearing, no mesmo espírito do optionalText acima. O
+   * input do form entrega '' e nunca undefined; `z.coerce.number()` puro faz
+   * Number('') === 0, que passa em min(0) e DESLIGA a seção. Vazio tem que
+   * significar "não alterar".
+   */
+  feedPostCount: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.coerce.number().int().min(0).max(20).optional(),
+  ),
 });
 export type HomeContentUpdate = z.infer<typeof homeContentUpdateSchema>;
 

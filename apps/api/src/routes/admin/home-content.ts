@@ -36,6 +36,7 @@ const serializeAdminHomeContent = (app: FastifyInstance, row: DbHomeContent) => 
     institutionalBody: row.institutionalBody,
     institutionalImageObjectKey: row.institutionalImageObjectKey,
     institutionalImageUrl: mediaUrl(row.institutionalImageObjectKey),
+    feedPostCount: row.feedPostCount,
     updatedAt: row.updatedAt.toISOString(),
   };
 };
@@ -55,9 +56,15 @@ export const adminHomeContentRoutes: FastifyPluginAsync = async (app) => {
     'institutionalTitle',
     'institutionalBody',
     'institutionalImageObjectKey',
+    'feedPostCount',
   ] as const;
 
   const IMAGE_FIELDS = ['heroBannerObjectKey', 'institutionalImageObjectKey'] as const;
+
+  // feedPostCount controla quanto UGC vai para a vitrine do app, então a
+  // trilha precisa do antes/depois. Texto continua de fora: institutionalBody
+  // tem 1000 chars. Mesmo tratamento que IMAGE_FIELDS já recebe.
+  const VALUE_FIELDS = ['feedPostCount'] as const;
 
   app.put('/home/content', async (request, reply) => {
     const { sub } = requireUser(request);
@@ -125,12 +132,19 @@ export const adminHomeContentRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    const values: Record<string, { previous: number; next: number }> = {};
+    for (const field of VALUE_FIELDS) {
+      if (touched.includes(field)) {
+        values[field] = { previous: existing[field], next: updated[field] };
+      }
+    }
+
     await recordAudit({
       actorId: sub,
       action: 'home_content.update',
       entityType: 'home_content',
       entityId: HOME_CONTENT_SINGLETON_ID,
-      metadata: { fields: touched, images },
+      metadata: { fields: touched, images, values },
     });
 
     return serializeAdminHomeContent(app, updated);

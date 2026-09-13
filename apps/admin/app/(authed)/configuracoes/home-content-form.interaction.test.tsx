@@ -28,6 +28,7 @@ const initial: AdminHomeContent = {
   institutionalBody: 'Um clubhouse automotivo privado em Curitiba.',
   institutionalImageObjectKey: null,
   institutionalImageUrl: null,
+  feedPostCount: 5,
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
@@ -163,5 +164,25 @@ describe('HomeContentForm', () => {
     expect(updateMock.mock.calls[1]![0]).toEqual(
       expect.objectContaining({ expectedUpdatedAt: '2026-02-02T00:00:00.000Z' }),
     );
+  });
+
+  it('envia feedPostCount como numero no save', async () => {
+    updateMock.mockResolvedValue({ ok: true, content: { ...initial, feedPostCount: 3 } });
+
+    await act(async () => {
+      root.render(<HomeContentForm initial={initial} />);
+      await Promise.resolve();
+    });
+
+    setValue(input('Posts no feed da Início'), '3');
+
+    await act(async () => {
+      clickByText('Salvar');
+      await Promise.resolve();
+    });
+
+    // Numero, nao string: HomeContentUpdate e o tipo de SAIDA do zod, entao
+    // feedPostCount e `number | undefined`, e o estado do form e string.
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ feedPostCount: 3 }));
   });
 });

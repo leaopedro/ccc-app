@@ -78,13 +78,19 @@ export const homeContentUpdateSchema = z.object({
    * teto de 20 é de produto, não de banco: a Início é uma tela de resumo.
    *
    * O preprocess é load-bearing, no mesmo espírito do optionalText acima. O
-   * input do form entrega '' e nunca undefined; `z.coerce.number()` puro faz
+   * input do form entrega '' e nunca undefined; `z.coerce.number()` faz
    * Number('') === 0, que passa em min(0) e DESLIGA a seção. Vazio tem que
    * significar "não alterar".
+   *
+   * Sem `coerce`, de proposito: o form já manda `number`, e `z.coerce.number()`
+   * também engole `null`, `false` e `[]` como 0 (Number(null) === 0), o que
+   * desliga a seção com 200 e sem aviso. `NaN` no form serializa para `null`
+   * no wire, então um refactor que simplifique o spread condicional do form
+   * cairia direto nessa porta. Sem coerce, esses valores dão 400 visível.
    */
   feedPostCount: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.coerce.number().int().min(0).max(20).optional(),
+    z.number().int().min(0).max(20).optional(),
   ),
 });
 export type HomeContentUpdate = z.infer<typeof homeContentUpdateSchema>;

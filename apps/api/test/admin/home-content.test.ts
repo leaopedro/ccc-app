@@ -162,6 +162,18 @@ describe('admin home content', () => {
     expect((await readRow()).feedPostCount).toBe(5);
   });
 
+  it('PUT recusa feedPostCount null', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: null });
+
+    // Catches: z.coerce.number(), onde Number(null) === 0 passa em min(0) e
+    // desliga a secao. NaN do form serializa para null no wire.
+    expect(res.statusCode).toBe(400);
+    expect((await readRow()).feedPostCount).toBe(5);
+  });
+
   it('PUT audita o valor anterior e o novo de feedPostCount', async () => {
     const user = await organizer();
     const before = await ensureRowViaGet(app, user.id);

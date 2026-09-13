@@ -1,6 +1,7 @@
 import { prisma } from '@ccc/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { buildFakeStripe, type FakeStripe } from '../../src/services/stripe/fake.js';
 import { runBoxCutoffTick } from '../../src/workers/box-cutoff.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
@@ -611,5 +612,133 @@ describe('runBoxCutoffTick', () => {
       where: { userId: user.id, kind: 'box.ready' },
     });
     expect(count).toBe(0);
+  });
+});
+
+/**
+ * Um Pix morre sozinho no cutoff: `expiresInSeconds` e o tempo ate o corte. Um
+ * PaymentIntent nao. Sem cancelar, ele segue pagavel depois do corte e cai no
+ * estorno automatico do webhook — que funciona, mas e pior que nunca ter
+ * cobrado.
+ */
+describe('box-cutoff: cancelamento do PaymentIntent', () => {
+  let stripe: FakeStripe;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    stripe = buildFakeStripe();
+  });
+
+  const seedAwaitingWithOrder = async (over: {
+    provider: 'stripe' | 'abacatepay';
+    method: 'card' | 'pix';
+    providerRef: string;
+    status?: 'pending' | 'paid';
+  }) => {
+    const { box } = await makeBox({
+      status: 'awaiting_payment',
+      withItem: true,
+      autoSendOptIn: true,
+      withAddress: true,
+    });
+    const garage = await prisma.garage.findUniqueOrThrow({ where: { id: box.garageId } });
+    const status = over.status ?? 'pending';
+    const order = await prisma.order.create({
+      data: {
+        userId: garage.userId,
+        kind: 'box',
+        amountCents: 3000,
+        baseAmountCents: 3000,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: over.method,
+        provider: over.provider,
+        providerRef: over.providerRef,
+        status,
+        ...(status === 'paid' ? { paidAt: new Date() } : {}),
+        shippingAddressId: box.shippingAddressId,
+      },
+    });
+    await prisma.monthlyBox.update({ where: { id: box.id }, data: { orderId: order.id } });
+    return { box, order };
+  };
+
+  const cancels = () => stripe.calls.filter((c) => c.kind === 'cancelPaymentIntent');
+
+  it('cancela o PI quando a Order de cartao e cancelada no corte', async () => {
+    const { box, order } = await seedAwaitingWithOrder({
+      provider: 'stripe',
+      method: 'card',
+      providerRef: 'pi_box_1',
+    });
+
+    await runBoxCutoffTick({ stripe });
+
+    expect(cancels()).toHaveLength(1);
+    expect((cancels()[0]!.payload as { paymentIntentId: string }).paymentIntentId).toBe('pi_box_1');
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(freshOrder.status).toBe('cancelled');
+    const freshBox = await prisma.monthlyBox.findUniqueOrThrow({ where: { id: box.id } });
+    expect(freshBox.orderId).toBeNull();
+  });
+
+  it('nao cancela nada quando a Order de cartao ja estava paga', async () => {
+    await seedAwaitingWithOrder({
+      provider: 'stripe',
+      method: 'card',
+      providerRef: 'pi_box_1',
+      status: 'paid',
+    });
+
+    await runBoxCutoffTick({ stripe });
+
+    expect(cancels()).toHaveLength(0);
+  });
+
+  it('nao chama a Stripe para uma Order de Pix', async () => {
+    await seedAwaitingWithOrder({
+      provider: 'abacatepay',
+      method: 'pix',
+      providerRef: 'pix_char_1',
+    });
+
+    await runBoxCutoffTick({ stripe });
+
+    expect(cancels()).toHaveLength(0);
+  });
+
+  it('uma falha no cancel nao derruba o tick', async () => {
+    stripe.nextCancelPaymentIntentError = new Error('stripe down');
+    const { order } = await seedAwaitingWithOrder({
+      provider: 'stripe',
+      method: 'card',
+      providerRef: 'pi_box_1',
+    });
+
+    await expect(runBoxCutoffTick({ stripe })).resolves.toBeUndefined();
+
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(freshOrder.status).toBe('cancelled');
+  });
+
+  it('sem cliente stripe, a Order de cartao ainda e cancelada e o tick registra', async () => {
+    const logged: unknown[] = [];
+    const log = {
+      error: (obj: unknown) => logged.push(obj),
+      warn: () => {},
+    } as never;
+    const { order } = await seedAwaitingWithOrder({
+      provider: 'stripe',
+      method: 'card',
+      providerRef: 'pi_box_1',
+    });
+
+    // Falhar em silencio aqui deixaria todo PI de caixa vivo apos o corte.
+    await runBoxCutoffTick({ log });
+
+    const freshOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(freshOrder.status).toBe('cancelled');
+    expect(logged.some((o) => JSON.stringify(o).includes('pi_box_1'))).toBe(true);
   });
 });

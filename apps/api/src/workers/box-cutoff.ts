@@ -1,5 +1,6 @@
 import { meetsMinTier } from '@ccc/shared/box';
 import { prisma } from '@ccc/db';
+import * as Sentry from '@sentry/node';
 import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
@@ -7,8 +8,9 @@ import type { FastifyBaseLogger } from 'fastify';
 import { enqueueBoxNotification } from '../services/box/notifications.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
+import type { StripeClient } from '../services/stripe/index.js';
 
-type Deps = { log?: FastifyBaseLogger };
+type Deps = { log?: FastifyBaseLogger; stripe?: StripeClient };
 
 /** Trim a box to budget-only in-tx: drop all partners, LIFO-trim catalog, reserve stock. */
 const resolveBudgetOnly = async (
@@ -136,6 +138,11 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
   });
 
   for (const { id, garageId } of due) {
+    // Per box, not outside the loop: the flush below only runs after THAT
+    // box's transaction commits. A rollback rejects the await and control
+    // jumps to the catch, so the list is discarded unused. Cancelling the PI
+    // of an Order that stayed `pending` would be worse than not cancelling.
+    const pendingCancels: string[] = [];
     try {
       await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "Garage" WHERE id = ${garageId} FOR UPDATE`;
@@ -173,6 +180,14 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
         // it); a null orderId simply falls through to resolveBudgetOnly with no
         // order to cancel.
         if (box.orderId) {
+          // Read ahead ONLY for provider/providerRef, which the update does not
+          // touch. The "already paid" decision uses the post-update re-read
+          // below: reading status here would open a TOCTOU where a concurrent
+          // settle makes this worker trim a box the member already paid for.
+          const ref = await tx.order.findUnique({
+            where: { id: box.orderId },
+            select: { provider: true, providerRef: true },
+          });
           const cancelled = await tx.order.updateMany({
             where: { id: box.orderId, status: 'pending' },
             data: { status: 'cancelled', fulfillmentStatus: 'cancelled' },
@@ -191,6 +206,12 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
             // Order is cancelled/failed/expired/refunded via another path.
             // Fall through: release reservations and resolve budget-only so the
             // box is not permanently stuck in awaiting_payment.
+          } else if (ref?.provider === 'stripe' && ref.providerRef) {
+            // A Pix dies on its own at the cutoff (expiresInSeconds is the time
+            // until it). A PaymentIntent does not: without this cancel it stays
+            // payable past the cutoff and lands in the webhook's automatic
+            // refund path, which works but is worse than never charging.
+            pendingCancels.push(ref.providerRef);
           }
           await tx.monthlyBox.update({ where: { id }, data: { orderId: null } });
           // Release the confirm-time reservations for this box's included lines.
@@ -211,6 +232,45 @@ export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
           await enqueueBoxNotification(tx, { userId, boxId: id, kind: 'box.ready' });
         }
       });
+
+      if (pendingCancels.length > 0 && !deps.stripe) {
+        // Failing silently here leaves every box PaymentIntent live past the
+        // cutoff, and each one then walks into the webhook's refund path.
+        deps.log?.error(
+          { boxId: id, providerRefs: pendingCancels },
+          '[box-cutoff] no stripe client, PaymentIntents left open',
+        );
+        Sentry.captureMessage('box-cutoff: stripe client missing, PIs left open', {
+          level: 'error',
+          tags: { kind: 'box-cutoff-no-stripe' },
+          extra: { boxId: id, providerRefs: pendingCancels },
+        });
+      }
+      for (const ref of pendingCancels) {
+        try {
+          await deps.stripe?.cancelPaymentIntent(ref);
+        } catch (err) {
+          // `cancel` fails when the PI is already `processing` or `succeeded`.
+          // That is NOT "an open PI left over": it is money taken with the box
+          // cancelled, and the webhook will refund it. Its own tag so it does
+          // not get lost among network failures.
+          const alreadyPaying =
+            err instanceof Error && /processing|succeeded|cannot be canceled/i.test(err.message);
+          deps.log?.error(
+            { err, providerRef: ref, boxId: id, alreadyPaying },
+            '[box-cutoff] stripe PI cancel failed',
+          );
+          Sentry.withScope((scope) => {
+            scope.setTag(
+              'kind',
+              alreadyPaying ? 'box-cutoff-pi-paid-after-cutoff' : 'box-cutoff-pi-cancel-failed',
+            );
+            scope.setTag('stripe_operation', 'cancel_payment_intent');
+            scope.setTag('stripe_payment_intent_id', ref);
+            Sentry.captureException(err);
+          });
+        }
+      }
     } catch (err) {
       deps.log?.error({ err, boxId: id }, '[box-cutoff] failed to resolve box');
     }

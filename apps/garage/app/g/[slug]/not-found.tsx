@@ -1,3 +1,5 @@
+import { NotFoundShell } from '~/components/not-found-shell';
+
 const LockIcon = ({ size = 28 }: { size?: number }) => (
   <svg
     width={size}
@@ -14,19 +16,16 @@ const LockIcon = ({ size = 28 }: { size?: number }) => (
   </svg>
 );
 
+// Copy is deliberately vague about WHY the garage is missing. §C9: an unknown
+// slug and a private garage must be indistinguishable, so this page can never
+// hint at which case it is.
 export default function PublicGarageNotFound() {
   return (
-    <div className="min-h-screen bg-bg flex flex-col items-center justify-center px-8 text-center">
-      <div className="w-18 h-18 rounded-full bg-surface-alt border border-border flex items-center justify-center text-muted mb-4">
-        <LockIcon size={28} />
-      </div>
-      <h1 className="text-fg text-lg font-bold">Garagem não encontrada</h1>
-      <p className="text-muted text-sm mt-1 leading-relaxed max-w-xs">
-        Este link pode ter sido removido, estar privado ou nunca ter existido.
-      </p>
-      <div className="mt-4 px-2.5 py-1.5 rounded bg-surface-alt border border-border text-muted text-[10px] tracking-wider font-mono">
-        HTTP 404 · /g/{'<slug>'}
-      </div>
-    </div>
+    <NotFoundShell
+      icon={<LockIcon size={28} />}
+      title="Garagem não encontrada"
+      description="Este link pode ter sido removido, estar privado ou nunca ter existido."
+      code={<>HTTP 404 · /g/{'<slug>'}</>}
+    />
   );
 }

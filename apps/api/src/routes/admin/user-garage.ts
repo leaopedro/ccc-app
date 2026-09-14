@@ -417,10 +417,10 @@ export const adminUserGarageRoutes: FastifyPluginAsync = async (app) => {
         awardBadge(tx, garage.id, parsedCode.data, `admin:${actor.sub}`, {
           actorId: actor.sub,
           allowAdminOverride: true,
-          // Chunk 22: admin manual grants surface as in-app notifications
-          // on the next mobile garage load. Auto-award write-path hooks
-          // (cars/feed/check-in/signup) intentionally omit this flag so
-          // they stay silent.
+          // Chunk 22/conquista-celebracao: every successful grant notifies
+          // by default now (see awardBadge's notifyOnGrant doc), so this is
+          // redundant with the default. Kept explicit at this call site for
+          // clarity — the admin manual-grant flow depends on it firing.
           notifyOnGrant: true,
         }),
       );

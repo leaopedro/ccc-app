@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { CELEBRATION_PAGE_SIZE } from '@ccc/shared/badges';
 import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -117,6 +118,41 @@ describe('GET /me/garage/badges/celebrations', () => {
     });
     // Autolimpeza: a propria rota fecha o rabo da fila, sem worker.
     expect(row.celebratedAt).not.toBeNull();
+  });
+
+  it('respeita o teto de CELEBRATION_PAGE_SIZE quando ha mais pendentes', async () => {
+    const { user } = await createUser({ verified: true });
+    const gid = await garageId(user.id);
+    const overflow = CELEBRATION_PAGE_SIZE + 1;
+    // `@@unique([garageId, badgeCode])` exige um codigo distinto por linha,
+    // entao o catalogo precisa de mais codigos do que o teto para provar o take.
+    const codes = Array.from(
+      { length: overflow },
+      (_, i) => `PAG-${String(i + 1).padStart(3, '0')}`,
+    );
+    await prisma.badge.createMany({
+      data: codes.map((code) => ({
+        code,
+        category: 'eventos' as const,
+        rarity: 'common' as const,
+        icon: 'flag',
+        title: code,
+        description: code,
+      })),
+    });
+    const earnedAt = new Date('2026-09-13T12:00:00.000Z');
+    await prisma.garageBadge.createMany({
+      data: codes.map((badgeCode) => ({ garageId: gid, badgeCode, earnedAt })),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/me/garage/badges/celebrations',
+      headers: { authorization: bearer(env, user.id) },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { pending: { code: string }[] };
+    expect(body.pending).toHaveLength(CELEBRATION_PAGE_SIZE);
   });
 
   it('devolve enabled false com o killswitch desligado', async () => {

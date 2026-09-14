@@ -44,17 +44,15 @@ export type AwardBadgeOptions = {
   allowAdminOverride?: boolean;
   /**
    * Emit an in-app Notification row for the garage owner on a successful
-   * award. Defaults to `false` so the implicit write-path hooks (Car.create,
-   * FeedPost.create, check-in, signup) stay silent — the mobile app reveals
-   * those discoveries by re-rendering the garage screen on next load. Set
-   * to `true` from the admin manual-grant route so support actions surface
-   * via the existing `GET /me/notifications` poll.
+   * award. Default `true`: é assim que a celebração chega ao usuário.
    *
-   * Idempotency: the Notification row uses
-   * `dedupeKey = badge:${code}:${garage.userId}` against the existing
-   * `@@unique([userId, kind, dedupeKey])` index. A re-grant after an
-   * un-grant therefore re-mints the GarageBadge but does NOT double-notify.
-   * Push delivery is deferred to Phase 2D — we never set `sentAt` here.
+   * Um caminho futuro de concessão em massa (recompute retroativo, por
+   * exemplo) PRECISA passar `false` explícito, senão notifica a base inteira
+   * de uma vez.
+   *
+   * Idempotência: a linha usa `dedupeKey = badge:${code}:${userId}` contra o
+   * `@@unique([userId, kind, dedupeKey])`. Reavaliação da superfície não passa
+   * por aqui: o P2002 do `garageBadge.create` já desviou para o catch de fora.
    */
   notifyOnGrant?: boolean;
 };
@@ -160,16 +158,17 @@ export const awardBadge = async (
       rarity: badge.rarity,
     });
 
-    // 5. Optional in-app notification. Only the admin manual-grant route
-    // opts in via `notifyOnGrant: true`. Write-path hooks (cars/feed/
-    // check-in/signup) pass nothing, so the default `false` keeps them
-    // silent — the user discovers those badges on the next garage render.
+    // 5. In-app notification. Default `true`: every successful grant fires
+    // one, admin manual grant and write-path hooks (cars/feed/check-in)
+    // alike — that's how the badge celebration reaches the user. A caller
+    // must pass `notifyOnGrant: false` explicitly to opt out (e.g. a future
+    // bulk recompute path).
     //
     // The Notification participates in the caller's transaction so a
     // failure mid-write rolls back the inbox row alongside the GarageBadge.
     // The unique index `@@unique([userId, kind, dedupeKey])` swallows the
     // re-grant case (un-grant → re-grant) without inserting a duplicate.
-    if (opts.notifyOnGrant) {
+    if (opts.notifyOnGrant ?? true) {
       // Savepoint aninhado, pelo mesmo motivo do de fora: este try/catch
       // engole a colisão de `dedupeKey`, e o INSERT que falhou já abortou a
       // transação. Sem o savepoint próprio, o `RELEASE` logo abaixo estoura e
@@ -184,6 +183,7 @@ export const awardBadge = async (
             title: BADGE_AWARDED_NOTIFICATION_TITLE,
             body: badge.title,
             data: { kind: BADGE_AWARDED_NOTIFICATION_KIND, code } as Prisma.InputJsonValue,
+            destination: { kind: 'internal_path', path: '/garage' } as Prisma.InputJsonValue,
             dedupeKey: badgeAwardedDedupeKey(code, garage.userId),
           },
         });

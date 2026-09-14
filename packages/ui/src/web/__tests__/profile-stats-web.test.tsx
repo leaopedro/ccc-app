@@ -77,10 +77,12 @@ describe('ProfileStatsWeb', () => {
 });
 
 describe('XPScoreboardWeb', () => {
-  it("renders '?' as <span>, not <button>", () => {
+  it("renders '?' as a decorative <span>, not <button>", () => {
     const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
-    expect(html).toMatch(/<span[^>]*aria-label="Sobre XP"/);
-    expect(html).not.toMatch(/<button[^>]*aria-label="Sobre XP"/);
+    // The static hint carries no action, so it is hidden from the a11y tree
+    // exactly like the RN twin's non-interactive fallback.
+    expect(html).toMatch(/<span aria-hidden="true"[^>]*>\?<\/span>/);
+    expect(html).not.toContain('<button');
   });
 
   it("has no 'onclick' attribute in the rendered markup", () => {
@@ -95,9 +97,40 @@ describe('XPScoreboardWeb', () => {
     expect(html).toContain('Topo do ranking');
   });
 
-  it('caption is "<N> XP até <NextRank>" when nextRank is set', () => {
+  it('caption is "<N> → <NextRank>" when nextRank is set', () => {
+    // Mirrors the RN twin's caption verbatim, pt-BR thousands separator
+    // included. The old "N XP até X" wording only existed on the web.
     const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
-    expect(html).toContain('3766 XP até Lendário');
+    expect(html).toContain('3.766 → Lendário');
+  });
+
+  it('mirrors the mobile card material: #141414 sheet under a corner gold glow', () => {
+    // Regression: the first web twin painted the WHOLE card in a solid brand
+    // gradient. The app instead shows #141414 with gold burning in from the
+    // top-left corner and gone by ~60% of the diagonal — sampled straight off
+    // a device screenshot at (198,163,52) top-left, (20,20,20) right.
+    const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
+    expect(html).toContain('background-color:#141414');
+    expect(html).toContain('linear-gradient(105deg, #D4AF37 0%, rgba(212,175,55,0) 62%)');
+  });
+
+  it('keeps the 12% tint on the rank pill, where RN honours the alpha', () => {
+    const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
+    expect(html).toContain('background-color:rgba(212,175,55,0.12)');
+    expect(html).toContain('border-color:rgba(212,175,55,0.45)');
+  });
+
+  it('renders the 11 ticker hatches with every 5th tall', () => {
+    const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
+    expect(html.match(/rounded-\[1px\]/g)).toHaveLength(11);
+    expect(html.match(/height:8px/g)).toHaveLength(3);
+    expect(html.match(/height:4px/g)).toHaveLength(8);
+  });
+
+  it('renders the rank pill and the "pontos" caption of the mobile layout', () => {
+    const html = renderToStaticMarkup(<XPScoreboardWeb progress={progress} />);
+    expect(html).toContain('pontos');
+    expect(html).toContain('color:#E8C874');
   });
 
   it('progress bar forces 100% width at top tier (nextRank === null sentinel)', () => {
@@ -128,5 +161,22 @@ describe('StatsRowWeb', () => {
   it('formats joinedAt as "fev. 26" for an ISO datetime in Feb 2026', () => {
     const html = renderToStaticMarkup(<StatsRowWeb stats={stats} />);
     expect(html).toContain('fev. 26');
+  });
+
+  it('renders one decorative glyph per tile, matching the mobile icon set', () => {
+    // The RN twin tops each tile with flag / post / fire / pin at 14px.
+    // The web twin shipped without any glyph, which is the most visible
+    // size-and-density difference between the two stats strips.
+    const html = renderToStaticMarkup(<StatsRowWeb stats={stats} />);
+    expect(html.match(/<svg/g)).toHaveLength(4);
+    expect(html.match(/width="14"/g)).toHaveLength(4);
+    expect(html.match(/<span aria-hidden="true"/g)).toHaveLength(4);
+  });
+
+  it('keeps all four labels', () => {
+    const html = renderToStaticMarkup(<StatsRowWeb stats={stats} />);
+    for (const label of ['EVENTOS', 'POSTS', 'CURTIDAS', 'DESDE']) {
+      expect(html).toContain(label);
+    }
   });
 });

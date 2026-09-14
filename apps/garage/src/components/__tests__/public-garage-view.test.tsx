@@ -77,6 +77,27 @@ describe('PublicGarageView', () => {
     expect(html.toLowerCase()).toContain('#1a0606');
   });
 
+  it('renders the mobile cover chrome: preset stripe glow, bottom scrim and corner label', () => {
+    // The RN GarageCover layers hue ramp → stripe glow → artwork → scrim →
+    // "cover · slug" label. The web twin shipped with only the hue ramp, so
+    // a cover with no artwork read as a flat block instead of the app's.
+    const garage: Garage = {
+      ...baseGarage,
+      coverPreset: 'tokyo-wangan',
+      isPremiumActive: true,
+    };
+    const html = renderToStaticMarkup(<PublicGarageView garage={garage} cars={[]} />);
+    expect(html).toContain('background-color:#D4AF37');
+    expect(html).toContain('opacity-40');
+    expect(html).toContain('rgba(0,0,0,0.85)');
+    expect(html).toContain('cover · tokyo-wangan');
+  });
+
+  it('renders the cover at the mobile 168px height', () => {
+    const html = renderToStaticMarkup(<PublicGarageView garage={baseGarage} cars={[]} />);
+    expect(html).toContain('height:168px');
+  });
+
   describe('preset R2 image overlay', () => {
     const prev = process.env.NEXT_PUBLIC_R2_PUBLIC_BASE_URL;
     beforeEach(() => {
@@ -265,8 +286,8 @@ describe('PublicGarageView — ProfileStats (chunk 41)', () => {
         stats={stats}
       />,
     );
-    expect(html).toMatch(/<span[^>]*aria-label="Sobre XP"/);
-    expect(html).not.toMatch(/<button[^>]*aria-label="Sobre XP"/);
+    expect(html).toMatch(/<span aria-hidden="true"[^>]*>\?<\/span>/);
+    expect(html).not.toContain('<button');
     expect(html).not.toContain('onclick');
   });
 

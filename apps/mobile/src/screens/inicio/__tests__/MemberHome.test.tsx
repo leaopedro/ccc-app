@@ -204,6 +204,13 @@ const unreadCountArgs = vi.hoisted(() => ({ fn: vi.fn() }));
 // in `~/api/client` -> `expo-constants`, which throws `__DEV__ is not
 // defined` under this file's jsdom environment.
 const premiumPlansState = vi.hoisted(() => ({ value: null as unknown }));
+// Task 8: mesma razao das demais. O hook real puxa ~/api/client ->
+// expo-constants, que lanca `__DEV__ is not defined` sob jsdom.
+// `refresh` e um vi.fn() (nao uma funcao vazia) para os testes de
+// pull-to-refresh poderem asserir que ele foi chamado junto com refreshAll.
+const homeFeedState = vi.hoisted(() => ({
+  value: { posts: [] as unknown[], loading: false, refresh: vi.fn(async () => {}) },
+}));
 
 vi.mock('~/screens/inicio/useMemberHomeData', () => ({
   useMemberHomeData: () => memberHomeDataState.value,
@@ -216,6 +223,9 @@ vi.mock('~/hooks/useClubStats', () => ({
 }));
 vi.mock('~/hooks/usePremiumPlans', () => ({
   usePremiumPlans: () => premiumPlansState.value,
+}));
+vi.mock('~/hooks/useHomeFeed', () => ({
+  useHomeFeed: () => homeFeedState.value,
 }));
 vi.mock('~/hooks/useUnreadCount', () => ({
   useUnreadCount: (enabled: boolean) => {
@@ -428,6 +438,7 @@ beforeEach(() => {
     subscriptionsEnabled: true,
     refresh: vi.fn(),
   };
+  homeFeedState.value = { posts: [], loading: false, refresh: vi.fn(async () => {}) };
 });
 
 afterEach(() => {
@@ -442,6 +453,29 @@ const renderMemberHome = async () => {
 
 describe('MemberHome — full scenario', () => {
   it('renders every block, in the handoff order', async () => {
+    // Task 8 fix (Important 2): a lista de marcadores precisa conhecer a
+    // secao nova, senao mover CommunityFeedSection para outro lugar do
+    // stack passa em tudo aqui. Precisa de >=1 post: com a lista vazia a
+    // secao renderiza null e o marcador nunca apareceria.
+    homeFeedState.value = {
+      ...homeFeedState.value,
+      posts: [
+        {
+          id: 'p1',
+          eventId: 'e1',
+          car: null,
+          body: 'post do feed',
+          status: 'visible',
+          photos: [],
+          reactions: { likes: 0, mine: false },
+          commentCount: 0,
+          isOwn: false,
+          createdAt: ISO,
+          updatedAt: ISO,
+          event: { slug: 'evento-feed', title: 'Evento do Feed' },
+        },
+      ],
+    };
     await renderMemberHome();
     const text = container.textContent ?? '';
     const markers = [
@@ -449,6 +483,7 @@ describe('MemberHome — full scenario', () => {
       HOME_CONTENT.hero.title,
       inicioCopy.member.greeting('Ana'),
       inicioCopy.sections.nextEvent,
+      inicioCopy.sections.communityFeed,
       inicioCopy.sections.clubStats,
       inicioCopy.sections.myTickets,
       inicioCopy.sections.myGarage,
@@ -709,6 +744,27 @@ describe('MemberHome — pull to refresh (Blocker 4)', () => {
     const control = container.querySelector('[data-testid="inicio-refresh-control"]');
     expect(control?.getAttribute('data-refreshing')).toBe('false');
   });
+
+  it('reflete o loading do feed no refreshing', async () => {
+    // Catches: tirar feedLoading da disjuncao do refreshing. Sem ele o
+    // spinner some antes do feed voltar e o carrossel troca sozinho.
+    homeFeedState.value = { ...homeFeedState.value, loading: true };
+    await renderMemberHome();
+    const control = container.querySelector('[data-testid="inicio-refresh-control"]');
+    expect(control).not.toBeNull();
+    expect(control?.getAttribute('data-refreshing')).toBe('true');
+  });
+
+  it('refresca o feed junto no onRefresh', async () => {
+    // Catches: reverter Promise.all([refreshAll(), refreshFeed()]) para
+    // refreshAll() sozinho.
+    const data = defaultMemberHomeData();
+    memberHomeDataState.value = data;
+    await renderMemberHome();
+    click('inicio-refresh-control');
+    expect(data.refreshAll).toHaveBeenCalledTimes(1);
+    expect(homeFeedState.value.refresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('MemberHome — notification bell', () => {
@@ -794,5 +850,34 @@ describe('MemberHome — remaining navigation targets (Important 3)', () => {
     await renderMemberHome();
     click('inicio-next-event');
     expect(routerMocks.push).toHaveBeenCalledWith('/events/trackday-2026');
+  });
+});
+
+describe('MemberHome — community feed (Task 8)', () => {
+  it('renderiza o feed da comunidade quando ha posts', async () => {
+    homeFeedState.value = {
+      posts: [
+        {
+          id: 'p1',
+          eventId: 'e1',
+          car: null,
+          body: 'que encontro bom',
+          status: 'visible',
+          photos: [],
+          reactions: { likes: 0, mine: false },
+          commentCount: 0,
+          isOwn: false,
+          createdAt: '2026-09-13T12:00:00.000Z',
+          updatedAt: '2026-09-13T12:00:00.000Z',
+          event: { slug: 'encontro-setembro', title: 'Encontro de Setembro' },
+        },
+      ],
+      loading: false,
+      refresh: vi.fn(async () => {}),
+    };
+
+    await renderMemberHome();
+
+    expect(container.textContent).toContain('que encontro bom');
   });
 });

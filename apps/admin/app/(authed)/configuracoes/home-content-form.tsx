@@ -26,6 +26,7 @@ export const HomeContentForm = ({ initial }: { initial: AdminHomeContent }) => {
     objectKey: initial.institutionalImageObjectKey,
     previewUrl: initial.institutionalImageUrl,
   });
+  const [feedPostCount, setFeedPostCount] = useState(String(initial.feedPostCount));
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -43,6 +44,11 @@ export const HomeContentForm = ({ initial }: { initial: AdminHomeContent }) => {
         institutionalTitle,
         institutionalBody,
         institutionalImageObjectKey: institutionalImage.objectKey ?? '',
+        // Omitir quando vazio, em vez de mandar '' ou NaN. HomeContentUpdate
+        // e o tipo de SAIDA do zod, entao feedPostCount e `number | undefined`
+        // e passar a string crua nao compila. Campo vazio significa "nao
+        // alterar", e omitir e exatamente isso.
+        ...(feedPostCount.trim() === '' ? {} : { feedPostCount: Number(feedPostCount) }),
       });
 
       if (result.ok) {
@@ -55,6 +61,7 @@ export const HomeContentForm = ({ initial }: { initial: AdminHomeContent }) => {
           objectKey: result.content.institutionalImageObjectKey,
           previewUrl: result.content.institutionalImageUrl,
         });
+        setFeedPostCount(String(result.content.feedPostCount));
         setMessage({ kind: 'ok', text: 'Conteúdo salvo.' });
         return;
       }
@@ -126,6 +133,25 @@ export const HomeContentForm = ({ initial }: { initial: AdminHomeContent }) => {
           previewUrl={institutionalImage.previewUrl}
           onChange={setInstitutionalImage}
         />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Feed da comunidade</h2>
+        <label className={labelCls}>
+          <span>Posts no feed da Início (0 a 20, zero esconde a seção)</span>
+          <input
+            className={inputCls}
+            aria-label="Posts no feed da Início"
+            type="number"
+            min={0}
+            max={20}
+            value={feedPostCount}
+            onChange={(e) => setFeedPostCount(e.target.value)}
+          />
+        </label>
+        <p className="text-xs opacity-70">
+          Só entram posts de eventos publicados e com o feed marcado como público.
+        </p>
       </section>
 
       <div className="flex items-center gap-3">

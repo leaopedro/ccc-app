@@ -125,7 +125,6 @@ export const upsertPriceAction = async (
   const parsed = adminPremiumPriceUpsertSchema.safeParse({
     baseAmountCents: num(fd, 'baseAmountCents'),
     currency: str(fd, 'currency') || 'BRL',
-    stripePriceId: str(fd, 'stripePriceId'),
     rcProductId: str(fd, 'rcProductId'),
     active: bool(fd, 'active'),
   });
@@ -188,7 +187,6 @@ export const createModuleAction = async (
     currency: str(fd, 'currency') || 'BRL',
     active: bool(fd, 'active'),
     sortOrder: num(fd, 'sortOrder'),
-    stripePriceId: str(fd, 'stripePriceId'),
     rcProductId: str(fd, 'rcProductId'),
   });
   if (!parsed.success) return { error: zodMessage(parsed.error.issues) };
@@ -222,7 +220,6 @@ export const updateModuleAction = async (
     currency: str(fd, 'currency') || 'BRL',
     active: bool(fd, 'active'),
     sortOrder: num(fd, 'sortOrder'),
-    stripePriceId: str(fd, 'stripePriceId'),
     rcProductId: str(fd, 'rcProductId'),
   });
   if (!parsed.success) return { error: zodMessage(parsed.error.issues) };

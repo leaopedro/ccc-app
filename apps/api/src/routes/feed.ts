@@ -18,10 +18,15 @@ import { requireUser } from '../plugins/auth.js';
 import { fileReport } from '../services/feed/report.js';
 import { checkFeedPostAccess, checkFeedReadAccess, isFeedBanned } from '../services/feed/access.js';
 import { blockedUserIdsFor, isBlockedBetween } from '../services/feed/blocks.js';
+import {
+  CAR_SELECT,
+  POST_SELECT,
+  serializeCarProfile,
+  serializeFeedPost,
+} from '../services/feed/serialize.js';
 import { awardBadge } from '../services/garage/awarder.js';
 import { checkEligibility as checkFeedEligibility } from '../services/garage/eligibility/feed.js';
 import rateLimit from '@fastify/rate-limit';
-import { computeIsPremiumActive } from '../services/garage/index.js';
 import { awardXp, revertLikeXp } from '../services/garage/xp-awarder.js';
 import { queueObjectDeletion } from '../services/uploads/deletion-queue.js';
 
@@ -33,72 +38,6 @@ const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   perPage: z.coerce.number().int().min(1).max(50).default(20),
 });
-
-const CAR_SELECT = {
-  id: true,
-  make: true,
-  model: true,
-  year: true,
-  nickname: true,
-  modifications: true,
-  photos: { select: { objectKey: true, width: true, height: true, sortOrder: true } },
-  // Needed to compute isPremiumActive on the public car profile. The badge
-  // tone is per-Garage (one badge per car owner), so we pull premiumTier +
-  // premiumUntil and feed them through computeIsPremiumActive at serialize
-  // time. Never expose the raw timestamp publicly.
-  user: { select: { garage: { select: { premiumTier: true, premiumUntil: true } } } },
-} as const;
-
-const POST_SELECT = {
-  id: true,
-  eventId: true,
-  body: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-  authorUserId: true,
-  car: { select: CAR_SELECT },
-  photos: { select: { id: true, objectKey: true, width: true, height: true, sortOrder: true } },
-  _count: {
-    select: { reactions: { where: { kind: 'like' } }, comments: { where: { status: 'visible' } } },
-  },
-} as const;
-
-type CarSelect = {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  nickname: string | null;
-  modifications: string[];
-  photos: { objectKey: string; width: number | null; height: number | null; sortOrder: number }[];
-  user: {
-    garage: {
-      premiumTier: 'bronze' | 'silver' | 'gold' | null;
-      premiumUntil: Date | null;
-    } | null;
-  } | null;
-};
-
-const serializeCarProfile = (car: CarSelect | null, buildUrl: (key: string) => string) => {
-  if (!car) return null;
-  const primary = [...car.photos].sort((a, b) => a.sortOrder - b.sortOrder)[0] ?? null;
-  const garage = car.user?.garage ?? null;
-  const isPremiumActive =
-    garage === null ? false : computeIsPremiumActive(garage.premiumTier, garage.premiumUntil);
-  return {
-    id: car.id,
-    make: car.make,
-    model: car.model,
-    year: car.year,
-    nickname: car.nickname,
-    modifications: car.modifications,
-    photo: primary
-      ? { url: buildUrl(primary.objectKey), width: primary.width, height: primary.height }
-      : null,
-    isPremiumActive,
-  };
-};
 
 export const feedRoutes: FastifyPluginAsync = async (app) => {
   // ---- GET /events/:eventId/feed ----
@@ -166,27 +105,13 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(200).send(
       feedListResponseSchema.parse({
         posts: posts.map((p) =>
-          feedPostResponseSchema.parse({
-            id: p.id,
-            eventId: p.eventId,
-            isOwn: userId !== null && p.authorUserId === userId,
-            car: serializeCarProfile(p.car, buildUrl),
-            body: p.body,
-            status: p.status,
-            photos: [...p.photos]
-              .sort((a, b) => a.sortOrder - b.sortOrder)
-              .map((ph) => ({
-                id: ph.id,
-                url: buildUrl(ph.objectKey),
-                width: ph.width,
-                height: ph.height,
-                sortOrder: ph.sortOrder,
-              })),
-            reactions: { likes: p._count.reactions, mine: myReactions.get(p.id) === 'like' },
-            commentCount: p._count.comments,
-            createdAt: p.createdAt.toISOString(),
-            updatedAt: p.updatedAt.toISOString(),
-          }),
+          feedPostResponseSchema.parse(
+            serializeFeedPost(p, {
+              isOwn: userId !== null && p.authorUserId === userId,
+              myReactions,
+              buildUrl,
+            }),
+          ),
         ),
         page,
         total,
@@ -381,28 +306,11 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return reply.status(201).send(
-        feedPostResponseSchema.parse({
-          id: post.id,
-          eventId: post.eventId,
-          // Create: the author is the caller by construction.
-          isOwn: true,
-          car: serializeCarProfile(post.car, buildUrl),
-          body: post.body,
-          status: post.status,
-          photos: [...post.photos]
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((ph) => ({
-              id: ph.id,
-              url: buildUrl(ph.objectKey),
-              width: ph.width,
-              height: ph.height,
-              sortOrder: ph.sortOrder,
-            })),
-          reactions: { likes: 0, mine: false },
-          commentCount: 0,
-          createdAt: post.createdAt.toISOString(),
-          updatedAt: post.updatedAt.toISOString(),
-        }),
+        feedPostResponseSchema.parse(
+          // Create: the author is the caller by construction, and a
+          // freshly created post has no reactions yet.
+          serializeFeedPost(post, { isOwn: true, myReactions: new Map(), buildUrl }),
+        ),
       );
     });
 
@@ -481,30 +389,20 @@ export const feedRoutes: FastifyPluginAsync = async (app) => {
       });
       const buildUrl = (key: string) => app.uploads.buildPublicUrl(key);
 
+      // Patch: only the author or a moderator reaches here, so `isOwn` is
+      // computed rather than assumed true. A moderator editing someone
+      // else's post must not see it as their own.
+      const myReactions = new Map<string, string>();
+      if (myReaction) myReactions.set(updated.id, myReaction.kind);
+
       return reply.status(200).send(
-        feedPostResponseSchema.parse({
-          id: updated.id,
-          eventId: updated.eventId,
-          // Patch: only the author or a moderator reaches here; the moderator
-          // case is corrected below.
-          isOwn: updated.authorUserId === sub,
-          car: serializeCarProfile(updated.car, buildUrl),
-          body: updated.body,
-          status: updated.status,
-          photos: [...updated.photos]
-            .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((ph) => ({
-              id: ph.id,
-              url: buildUrl(ph.objectKey),
-              width: ph.width,
-              height: ph.height,
-              sortOrder: ph.sortOrder,
-            })),
-          reactions: { likes: updated._count.reactions, mine: myReaction?.kind === 'like' },
-          commentCount: updated._count.comments,
-          createdAt: updated.createdAt.toISOString(),
-          updatedAt: updated.updatedAt.toISOString(),
-        }),
+        feedPostResponseSchema.parse(
+          serializeFeedPost(updated, {
+            isOwn: updated.authorUserId === sub,
+            myReactions,
+            buildUrl,
+          }),
+        ),
       );
     });
 

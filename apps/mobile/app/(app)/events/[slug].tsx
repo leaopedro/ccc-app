@@ -8,7 +8,7 @@ import type { TicketSource } from '@ccc/shared/tickets';
 import { Button } from '@ccc/ui';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Ticket as TicketIcon } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -41,9 +41,17 @@ import { EventFeedSection } from '~/screens/events/feed/EventFeedSection';
 import { theme } from '~/theme';
 
 export default function EventDetailScreen() {
-  const { slug, tierId: requestedTierId } = useLocalSearchParams<{
+  const {
+    slug,
+    tierId: requestedTierId,
+    focus,
+  } = useLocalSearchParams<{
     slug: string;
     tierId?: string;
+    // string | string[]: useLocalSearchParams devolve array para param
+    // repetido, e na web ?focus=a&focus=b faria um `focus !== 'feed'` puro
+    // passar sempre.
+    focus?: string | string[];
   }>();
   const router = useRouter();
   const [publicEvent, setPublicEvent] = useState<EventDetailPublic | null>(null);
@@ -58,6 +66,12 @@ export default function EventDetailScreen() {
   const [carFromAll, setCarFromAll] = useState(false);
   const { addItem, adding } = useCart();
   const { status: authStatus } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
+  // Guarda de disparo unico, latcheada DENTRO do timer (ver efeito abaixo).
+  const didFocusFeedRef = useRef(false);
+  // Estado, nao so ref: o onLayout do bloco do feed chega depois do primeiro
+  // render, e um ref puro nao acordaria o efeito.
+  const [feedPosition, setFeedPosition] = useState<number | null>(null);
   const insets = useSafeAreaInsets();
   const backTop = Platform.OS === 'web' ? 16 : Math.max(insets.top, 16);
   const isAnon = authStatus === 'unauthenticated';
@@ -144,6 +158,24 @@ export default function EventDetailScreen() {
     };
   }, [event, isAnon, authStatus]);
 
+  useEffect(() => {
+    if (focus !== 'feed' || didFocusFeedRef.current) return;
+    if (feedPosition === null || !event) return;
+
+    const timer = setTimeout(() => {
+      // Latchear AQUI, e nao antes do setTimeout. `event` e
+      // `commerceEvent ?? publicEvent` e getEventCommerce resolve numa
+      // request separada de getEvent: latchear antes faz o cleanup deste
+      // efeito cancelar o timer enquanto a guarda ja bloqueia a
+      // reexecucao, e o scroll nunca acontece. Latcheando dentro,
+      // reagendar com o y mais novo vira o comportamento em vez do bug.
+      didFocusFeedRef.current = true;
+      scrollRef.current?.scrollTo({ y: feedPosition, animated: true });
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [focus, event, feedPosition]);
+
   const openMap = (e: EventDetailPublic) => {
     const parts = [e.venueName, e.venueAddress, e.city, e.stateCode].filter(Boolean);
     if (parts.length === 0) return;
@@ -213,6 +245,7 @@ export default function EventDetailScreen() {
   return (
     <View style={styles.root}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.container}
         importantForAccessibility={isSheetOpen ? 'no-hide-descendants' : 'auto'}
       >
@@ -346,19 +379,21 @@ export default function EventDetailScreen() {
         </View>
 
         {event.feedEnabled ? (
-          <EventFeedSection
-            eventSlug={event.slug}
-            eventId={event.id}
-            feedSettings={{
-              feedEnabled: event.feedEnabled,
-              feedAccess: event.feedAccess,
-              postingAccess: event.postingAccess,
-              maxPostsPerUser: null,
-              maxPhotosPerUser: 5,
-            }}
-            ticketSource={ticketSource}
-            embedded
-          />
+          <View onLayout={(e) => setFeedPosition(e.nativeEvent.layout.y)}>
+            <EventFeedSection
+              eventSlug={event.slug}
+              eventId={event.id}
+              feedSettings={{
+                feedEnabled: event.feedEnabled,
+                feedAccess: event.feedAccess,
+                postingAccess: event.postingAccess,
+                maxPostsPerUser: null,
+                maxPhotosPerUser: 5,
+              }}
+              ticketSource={ticketSource}
+              embedded
+            />
+          </View>
         ) : null}
       </ScrollView>
 

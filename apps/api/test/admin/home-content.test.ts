@@ -115,6 +115,78 @@ describe('admin home content', () => {
     expect(body.institutionalTitle).toBe('A Casa');
   });
 
+  it('PUT persiste feedPostCount', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 8 });
+
+    expect(res.statusCode).toBe(200);
+    expect(adminHomeContentSchema.parse(res.json()).feedPostCount).toBe(8);
+    expect((await readRow()).feedPostCount).toBe(8);
+  });
+
+  it('PUT recusa feedPostCount acima do teto', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 21 });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PUT aceita feedPostCount zero', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 0 });
+
+    expect(res.statusCode).toBe(200);
+    expect((await readRow()).feedPostCount).toBe(0);
+  });
+
+  it('PUT trata string vazia como nao alterar, e nao como zero', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, {
+      expectedUpdatedAt: before.updatedAt,
+      heroTitle: 'OUTRO MOTE',
+      feedPostCount: '',
+    });
+
+    // Catches: z.coerce.number() puro, onde Number('') === 0 passa em min(0).
+    // O organizer que limpa o campo para redigitar e clica Salvar apagaria a
+    // secao da Inicio de todo mundo, com 200 e sem aviso.
+    expect(res.statusCode).toBe(200);
+    expect((await readRow()).feedPostCount).toBe(5);
+  });
+
+  it('PUT recusa feedPostCount null', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    const res = await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: null });
+
+    // Catches: z.coerce.number(), onde Number(null) === 0 passa em min(0) e
+    // desliga a secao. NaN do form serializa para null no wire.
+    expect(res.statusCode).toBe(400);
+    expect((await readRow()).feedPostCount).toBe(5);
+  });
+
+  it('PUT audita o valor anterior e o novo de feedPostCount', async () => {
+    const user = await organizer();
+    const before = await ensureRowViaGet(app, user.id);
+
+    await put(user.id, { expectedUpdatedAt: before.updatedAt, feedPostCount: 12 });
+
+    const entry = await prisma.adminAudit.findFirst({
+      where: { action: 'home_content.update' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(entry?.metadata).toMatchObject({ values: { feedPostCount: { previous: 5, next: 12 } } });
+  });
+
   it('PUT identico nao escreve e nao audita', async () => {
     const user = await organizer();
     const before = await ensureRowViaGet(app, user.id);

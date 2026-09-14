@@ -718,14 +718,26 @@ export const updateAdminGeneralSettings = (
     schema: generalSettingsSchema,
   });
 
+// O cast e so no boundary de tipo, nao no parse: adminHomeContentSchema tem
+// feedPostCount com `.default(5)` (necessario para o parse sobreviver a um
+// deploy do admin que chegue antes do da API), e isso faz zod divergir o tipo
+// de entrada (feedPostCount opcional) do de saida (feedPostCount obrigatorio).
+// apiFetch<T> usa um unico parametro de tipo para ZodType<T>, que colide os
+// dois lados, entao o TS infere o lado de entrada e o Promise<AdminHomeContent>
+// anotado deixa de bater. Mesmo problema e mesma causa do cast em
+// getAdminUser (admin-api.ts:396-408), que tambem nasce de `.default()` no
+// schema por deploy skew entre Railway e Vercel; aqui o `.default()` e exigido
+// pelo brief, entao o cast fixa T no tipo de saida real do parse.
 export const getAdminHomeContent = (): Promise<AdminHomeContent> =>
-  apiFetch('/admin/home/content', { schema: adminHomeContentSchema });
+  apiFetch<AdminHomeContent>('/admin/home/content', {
+    schema: adminHomeContentSchema as z.ZodType<AdminHomeContent>,
+  });
 
 export const updateAdminHomeContent = (input: HomeContentUpdate): Promise<AdminHomeContent> =>
-  apiFetch('/admin/home/content', {
+  apiFetch<AdminHomeContent>('/admin/home/content', {
     method: 'PUT',
     body: JSON.stringify(input),
-    schema: adminHomeContentSchema,
+    schema: adminHomeContentSchema as z.ZodType<AdminHomeContent>,
   });
 
 export const getAdminGamificationCopy = (): Promise<AdminGamificationCopy> =>

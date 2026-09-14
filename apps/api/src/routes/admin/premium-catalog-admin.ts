@@ -33,10 +33,92 @@ import type {
   PremiumPlanPrice as DbPremiumPlanPrice,
   Prisma,
 } from '@prisma/client';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
+import type { StripeClient } from '../../services/stripe/index.js';
+
 const cadenceSchema = z.enum(['monthly', 'annual']);
+
+/**
+ * Stripe Prices are immutable, so "changing a price" is always minting a new
+ * one. This runs BEFORE the catalog row is written, and its failure aborts the
+ * save: the stored amount and the amount Stripe actually bills can then never
+ * disagree, which is the entire point of the sync.
+ *
+ * Returns the id to persist — the untouched current one when nothing about the
+ * money changed, so a rename or a sortOrder edit costs no Stripe call.
+ *
+ * The replaced Price is archived, never deleted. Stripe keeps billing existing
+ * subscriptions on an archived Price, which IS the grandfathering the operator
+ * asked for: only new subscribers land on the new amount.
+ */
+const syncStripePrice = async (input: {
+  stripe: StripeClient;
+  log: FastifyBaseLogger;
+  currentPriceId: string | null;
+  currentAmountCents: number | null;
+  currentCurrency: string | null;
+  amountCents: number;
+  currency: string;
+  interval: 'month' | 'year';
+  productName: string;
+}): Promise<string> => {
+  const { stripe, log, currentPriceId, amountCents, currency } = input;
+
+  if (
+    currentPriceId &&
+    input.currentAmountCents === amountCents &&
+    input.currentCurrency === currency
+  ) {
+    return currentPriceId;
+  }
+
+  // Reuse the Product the old Price hung off so repeated edits do not leave one
+  // Product per edit behind. A failed lookup is NOT fatal: it only costs us the
+  // reuse, and creating a fresh Product still produces a correct Price. If
+  // Stripe is genuinely down, the create below fails and aborts the save.
+  let productId: string | null = null;
+  if (currentPriceId) {
+    try {
+      const existing = await stripe.retrievePrice(currentPriceId);
+      productId =
+        typeof existing.product === 'string'
+          ? existing.product
+          : 'id' in existing.product
+            ? existing.product.id
+            : null;
+    } catch (err) {
+      log.warn(
+        { err, priceId: currentPriceId },
+        'premium catalog: could not read the replaced Price, creating a new Product',
+      );
+    }
+  }
+
+  const created = await stripe.createRecurringPrice({
+    productId,
+    productName: input.productName,
+    amountCents,
+    currency,
+    interval: input.interval,
+  });
+
+  if (currentPriceId) {
+    // Cosmetic. An un-archived leftover bills nobody and blocks nothing, so a
+    // failure here must not undo a Price that is already correct.
+    try {
+      await stripe.archivePrice(currentPriceId);
+    } catch (err) {
+      log.warn(
+        { err, priceId: currentPriceId },
+        'premium catalog: new Price is live but archiving the old one failed',
+      );
+    }
+  }
+
+  return created.priceId;
+};
 
 const isUniqueViolation = (err: unknown): boolean =>
   typeof err === 'object' &&
@@ -209,12 +291,39 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     const plan = await prisma.premiumPlan.findUnique({ where: { id } });
     if (!plan) return reply.status(404).send({ error: 'NotFound' });
 
+    const current = await prisma.premiumPlanPrice.findUnique({
+      where: { planId_cadence: { planId: id, cadence: cadenceParsed.data } },
+    });
+
+    let stripePriceId: string;
+    try {
+      stripePriceId = await syncStripePrice({
+        stripe: app.stripe,
+        log: request.log,
+        currentPriceId: current?.stripePriceId ?? null,
+        currentAmountCents: current?.baseAmountCents ?? null,
+        currentCurrency: current?.currency ?? null,
+        amountCents: input.baseAmountCents,
+        currency: input.currency,
+        interval: cadenceParsed.data === 'annual' ? 'year' : 'month',
+        productName: `${plan.name} ${cadenceParsed.data === 'annual' ? 'anual' : 'mensal'}`,
+      });
+    } catch (err) {
+      request.log.error(
+        { err, planId: id, cadence: cadenceParsed.data },
+        'premium catalog: Stripe refused the Price, price not saved',
+      );
+      return reply
+        .status(502)
+        .send({ error: 'BadGateway', message: 'stripe rejected the price change' });
+    }
+
     const price = await prisma.premiumPlanPrice.upsert({
       where: { planId_cadence: { planId: id, cadence: cadenceParsed.data } },
       update: {
         baseAmountCents: input.baseAmountCents,
         currency: input.currency,
-        stripePriceId: input.stripePriceId ?? null,
+        stripePriceId,
         rcProductId: input.rcProductId ?? null,
         active: input.active,
       },
@@ -223,7 +332,7 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
         cadence: cadenceParsed.data,
         baseAmountCents: input.baseAmountCents,
         currency: input.currency,
-        stripePriceId: input.stripePriceId ?? null,
+        stripePriceId,
         rcProductId: input.rcProductId ?? null,
         active: input.active,
       },
@@ -269,6 +378,33 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(422).send({ error: 'UnprocessableEntity', issues: parsed.error.issues });
     }
     const input = parsed.data;
+
+    let stripePriceId: string;
+    try {
+      stripePriceId = await syncStripePrice({
+        stripe: app.stripe,
+        log: request.log,
+        currentPriceId: null,
+        currentAmountCents: null,
+        currentCurrency: null,
+        amountCents: input.monthlyDeltaCents,
+        currency: input.currency,
+        // Add-on Prices are always monthly: an annual plan plus an add-on is a
+        // typed 422 (mixed intervals in one subscription), so no year variant
+        // can ever be reached.
+        interval: 'month',
+        productName: input.name,
+      });
+    } catch (err) {
+      request.log.error(
+        { err, key: input.key },
+        'premium catalog: Stripe refused the module Price, module not created',
+      );
+      return reply
+        .status(502)
+        .send({ error: 'BadGateway', message: 'stripe rejected the price change' });
+    }
+
     try {
       const created = await prisma.premiumAddonModule.create({
         data: {
@@ -283,7 +419,7 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
           currency: input.currency,
           active: input.active,
           sortOrder: input.sortOrder ?? 0,
-          stripePriceId: input.stripePriceId ?? null,
+          stripePriceId,
           rcProductId: input.rcProductId ?? null,
         },
       });
@@ -318,8 +454,32 @@ export const adminPremiumCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (input.currency !== undefined) data.currency = input.currency;
     if (input.active !== undefined) data.active = input.active;
     if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
-    if (input.stripePriceId !== undefined) data.stripePriceId = input.stripePriceId;
     if (input.rcProductId !== undefined) data.rcProductId = input.rcProductId;
+
+    // Mint on every patch, not only on a price edit: a module that still has no
+    // Price attaches locally and grants its quota without Stripe ever billing
+    // it (see services/billing/addons.ts). Any save should close that hole.
+    try {
+      data.stripePriceId = await syncStripePrice({
+        stripe: app.stripe,
+        log: request.log,
+        currentPriceId: existing.stripePriceId,
+        currentAmountCents: existing.monthlyDeltaCents,
+        currentCurrency: existing.currency,
+        amountCents: input.monthlyDeltaCents ?? existing.monthlyDeltaCents,
+        currency: input.currency ?? existing.currency,
+        interval: 'month',
+        productName: input.name ?? existing.name,
+      });
+    } catch (err) {
+      request.log.error(
+        { err, moduleId: id },
+        'premium catalog: Stripe refused the module Price, module not updated',
+      );
+      return reply
+        .status(502)
+        .send({ error: 'BadGateway', message: 'stripe rejected the price change' });
+    }
 
     const updated = await prisma.premiumAddonModule.update({ where: { id }, data });
     return reply.send(adminPremiumAddonModuleSchema.parse(serializeModule(updated)));

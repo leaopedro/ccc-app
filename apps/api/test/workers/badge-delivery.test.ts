@@ -1,5 +1,5 @@
 import { prisma } from '@ccc/db';
-import { BADGE_AWARDED_NOTIFICATION_KIND } from '@ccc/shared/badges-copy';
+import { badgeAwardedGroupBody, BADGE_AWARDED_NOTIFICATION_KIND } from '@ccc/shared/badges-copy';
 import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -47,7 +47,7 @@ describe('entrega de badge_awarded', () => {
     // Tres linhas na central, um push so. Tres vibracoes no portao do evento
     // e o que este agrupamento existe para evitar.
     expect(sender.captured.length).toBe(1);
-    expect(sender.captured[0]!.body).toContain('3');
+    expect(sender.captured[0]!.body).toBe(badgeAwardedGroupBody(3));
     const rows = await prisma.notification.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.sentAt !== null)).toBe(true);

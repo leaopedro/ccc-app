@@ -105,7 +105,11 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
         if (!allowed.has(userId)) {
           // Preferência governa o push, não o inbox: a linha da central fica,
           // e é carimbada para não voltar em todo tick.
-          await suppressGroup(ids, now);
+          try {
+            await suppressGroup(ids, now);
+          } catch (err) {
+            deps.log?.error({ err, userId }, '[notification-delivery] badge group failed');
+          }
           continue;
         }
         const single = group.length === 1;

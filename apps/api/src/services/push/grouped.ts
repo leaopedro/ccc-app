@@ -26,9 +26,15 @@ export type GroupedDeliveryResult = {
  *
  * A reivindicação é um `updateMany` sobre o grupo, mais fraca que o
  * compare-and-swap por linha de `deliverNotification`: duas réplicas que
- * observem o mesmo grupo podem ambas reivindicar. O que fecha isso na prática
- * é a guarda de não-sobreposição do worker. A troca é consciente: duplicar um
- * push de celebração é barato, e o alvo aqui é não vibrar N vezes.
+ * observem o mesmo grupo podem ambas reivindicar. Isto é seguro hoje só
+ * porque `railway.json` fixa `numReplicas: 1` — um único processo roda este
+ * cron, e a guarda de não-sobreposição em memória do worker (o `running`
+ * boolean em `startNotificationDeliveryWorker`) basta para serializar os
+ * ticks desse processo. Essa guarda NÃO protege entre réplicas: subir o
+ * número de réplicas deixa dois ticks disputarem o mesmo grupo e entregar um
+ * push duplicado. A troca é consciente: duplicar um push de celebração é
+ * barato, e o alvo aqui é não vibrar N vezes, não ser exactly-once — mas
+ * quem escalar a API para mais de uma réplica precisa saber deste custo.
  */
 export const deliverGroupedNotifications = async (
   input: GroupedDeliveryInput,

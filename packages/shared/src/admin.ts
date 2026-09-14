@@ -1659,10 +1659,13 @@ export const adminPremiumPlanUpdateSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
 export type AdminPremiumPlanUpdate = z.infer<typeof adminPremiumPlanUpdateSchema>;
 
+// stripePriceId is deliberately absent: the API mints the Stripe Price from
+// baseAmountCents on save and stores the id it gets back. Letting an operator
+// type one is what allowed the stored amount and the billed amount to drift.
+// rcProductId stays writable — nothing in the API bills on it.
 export const adminPremiumPriceUpsertSchema = z.object({
   baseAmountCents: z.number().int().nonnegative(),
   currency: z.string().length(3).default('BRL'),
-  stripePriceId: providerIdSchema.optional(),
   rcProductId: providerIdSchema.optional(),
   active: z.boolean().default(true),
 });
@@ -1691,7 +1694,6 @@ export const adminPremiumAddonModuleCreateSchema = z.object({
   currency: z.string().length(3).default('BRL'),
   active: z.boolean().default(true),
   sortOrder: z.number().int().nonnegative().optional(),
-  stripePriceId: providerIdSchema.optional(),
   rcProductId: providerIdSchema.optional(),
 });
 export type AdminPremiumAddonModuleCreate = z.infer<typeof adminPremiumAddonModuleCreateSchema>;
@@ -1708,7 +1710,6 @@ export const adminPremiumAddonModuleUpdateSchema = z
     currency: z.string().length(3),
     active: z.boolean(),
     sortOrder: z.number().int().nonnegative(),
-    stripePriceId: providerIdSchema,
     rcProductId: providerIdSchema,
   })
   .partial()

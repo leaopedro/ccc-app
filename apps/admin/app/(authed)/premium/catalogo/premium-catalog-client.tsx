@@ -214,10 +214,10 @@ const PlanPriceForm = ({
         <label className={labelCls}>
           ID do preço (Stripe)
           <input
-            name="stripePriceId"
-            defaultValue={row?.stripePriceId ?? ''}
-            maxLength={120}
-            className={inputCls}
+            value={row?.stripePriceId ?? '—'}
+            readOnly
+            className={`${inputCls} opacity-60`}
+            title="Gerado pela API ao salvar o preço. Não editável."
           />
         </label>
         <label className={labelCls}>
@@ -482,10 +482,10 @@ const ModuleFields = ({ mod }: { mod?: AdminPremiumAddonModule }) => {
         <label className={labelCls}>
           ID do preço (Stripe)
           <input
-            name="stripePriceId"
-            defaultValue={mod?.stripePriceId ?? ''}
-            maxLength={120}
-            className={inputCls}
+            value={mod?.stripePriceId ?? '—'}
+            readOnly
+            className={`${inputCls} opacity-60`}
+            title="Gerado pela API ao salvar o preço. Não editável."
           />
         </label>
         <label className={labelCls}>

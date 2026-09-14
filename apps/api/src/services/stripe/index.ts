@@ -147,6 +147,30 @@ export type BillingPortalSessionResult = {
 };
 
 /**
+ * Mint the recurring Price that will actually bill a premium plan or add-on.
+ * Stripe Prices are immutable, so an amount change is always a NEW Price:
+ * the admin catalog calls this before writing the amount, and the id it
+ * returns is what checkout and every subscription item reference.
+ *
+ * productId reuses the Product the replaced Price hung off, so editing an
+ * amount does not litter the Stripe account with one Product per edit. Pass
+ * null for a plan or module that has no Price yet and a Product named
+ * productName is created alongside.
+ */
+export type CreateRecurringPriceInput = {
+  productId: string | null;
+  productName: string;
+  amountCents: number;
+  currency: string;
+  interval: 'month' | 'year';
+};
+
+export type CreateRecurringPriceResult = {
+  priceId: string;
+  productId: string;
+};
+
+/**
  * Add a recurring add-on line to an existing subscription (P5 premium add-ons).
  * priceId is resolved server-side from the add-on module catalog — never from a
  * client-supplied value.
@@ -322,6 +346,19 @@ export type StripeClient = {
    * snapshot drift occurs.
    */
   retrievePrice: (priceId: string) => Promise<Stripe.Price>;
+  /**
+   * Create a recurring Price. See CreateRecurringPriceInput — the catalog
+   * calls this BEFORE persisting the amount, so a Stripe failure aborts the
+   * save rather than leaving the stored amount and the billed amount apart.
+   */
+  createRecurringPrice: (input: CreateRecurringPriceInput) => Promise<CreateRecurringPriceResult>;
+  /**
+   * Deactivate a Price that a newer one replaced. Cosmetic only: Stripe keeps
+   * billing existing subscriptions on an archived Price, which is exactly the
+   * grandfathering we want. It just stops the dead Price showing up in
+   * dashboard pickers.
+   */
+  archivePrice: (priceId: string) => Promise<void>;
   /**
    * Add a recurring add-on item to an existing subscription (P5). Uses Stripe's
    * default proration (`create_prorations`) so the customer is charged/credited
@@ -668,6 +705,27 @@ export const buildStripe = (env: StripeEnv): StripeClient => {
     },
     retrievePrice: async (priceId) => {
       return stripe.prices.retrieve(priceId);
+    },
+    createRecurringPrice: async ({ productId, productName, amountCents, currency, interval }) => {
+      const price = await stripe.prices.create({
+        currency: currency.toLowerCase(),
+        unit_amount: amountCents,
+        recurring: { interval },
+        ...(productId ? { product: productId } : { product_data: { name: productName } }),
+      });
+      // price.product is the id when unexpanded, but a deleted Product comes
+      // back as an object with no usable id for reuse — fall back to creating
+      // a fresh one on the next edit rather than persisting a dead reference.
+      const resolvedProductId =
+        typeof price.product === 'string'
+          ? price.product
+          : 'id' in price.product
+            ? price.product.id
+            : '';
+      return { priceId: price.id, productId: resolvedProductId };
+    },
+    archivePrice: async (priceId) => {
+      await stripe.prices.update(priceId, { active: false });
     },
     addSubscriptionItem: async ({ subscriptionId, priceId, idempotencyKey }) => {
       // Stripe default proration_behavior for subscription-item create is

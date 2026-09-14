@@ -36,12 +36,12 @@ describe('premium-catalog-actions', () => {
     createAdminPremiumModule.mockReset().mockResolvedValue({});
   });
 
-  it('upsertPriceAction coerces cents + clears blank provider ids to null', async () => {
+  it('upsertPriceAction coerces cents + never forwards a Stripe price id', async () => {
     const fd = new FormData();
     fd.set('cadence', 'monthly');
     fd.set('baseAmountCents', '2990');
     fd.set('currency', 'BRL');
-    fd.set('stripePriceId', '');
+    fd.set('stripePriceId', 'price_ignorado');
     fd.set('rcProductId', 'rc_1');
     fd.set('active', 'on');
 
@@ -53,7 +53,6 @@ describe('premium-catalog-actions', () => {
     expect(call[2]).toEqual({
       baseAmountCents: 2990,
       currency: 'BRL',
-      stripePriceId: null,
       rcProductId: 'rc_1',
       active: true,
     });

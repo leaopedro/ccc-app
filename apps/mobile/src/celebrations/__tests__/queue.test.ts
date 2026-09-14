@@ -37,13 +37,29 @@ describe('resolveEntries', () => {
   });
 
   it('cai no bundle quando a API nao manda titulo', () => {
-    const semTitulo = [{ code: 'EVT-001', category: 'eventos' as const, rarity: 'common' as const, premiumExclusive: false, icon: 'flag' }];
+    const semTitulo = [
+      {
+        code: 'EVT-001',
+        category: 'eventos' as const,
+        rarity: 'common' as const,
+        premiumExclusive: false,
+        icon: 'flag',
+      },
+    ];
     const out = resolveEntries(pending, semTitulo, bundled);
     expect(out.entries[0]!.title).toBe('Do bundle');
   });
 
   it('marca para ack sem animar quando falta titulo em catalogo e bundle', () => {
-    const semTitulo = [{ code: 'EVT-001', category: 'eventos' as const, rarity: 'common' as const, premiumExclusive: false, icon: 'flag' }];
+    const semTitulo = [
+      {
+        code: 'EVT-001',
+        category: 'eventos' as const,
+        rarity: 'common' as const,
+        premiumExclusive: false,
+        icon: 'flag',
+      },
+    ];
     const bundledEmpty = {};
     const out = resolveEntries(pending, semTitulo, bundledEmpty);
     expect(out.entries).toHaveLength(0);

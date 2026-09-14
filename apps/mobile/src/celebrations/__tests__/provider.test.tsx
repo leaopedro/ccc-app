@@ -75,8 +75,7 @@ vi.mock('expo-notifications', () => ({
 vi.mock('react-native', async () => {
   const ReactMod = await import('react');
   return {
-    View: (props: { children?: ReactNode }) =>
-      ReactMod.createElement('div', null, props.children),
+    View: (props: { children?: ReactNode }) => ReactMod.createElement('div', null, props.children),
     AccessibilityInfo: { isReduceMotionEnabled: () => Promise.resolve(false) },
     AppState: {
       addEventListener: (_event: string, cb: (state: string) => void) => {
@@ -95,10 +94,7 @@ vi.mock('react-native', async () => {
 vi.mock('@ccc/ui', async () => {
   const ReactMod = await import('react');
   return {
-    BadgeCelebration: (props: {
-      entries: { code: string }[];
-      onClose: () => void;
-    }) =>
+    BadgeCelebration: (props: { entries: { code: string }[]; onClose: () => void }) =>
       ReactMod.createElement(
         'div',
         { 'data-testid': 'celebration' },
@@ -228,7 +224,10 @@ describe('BadgeCelebrationProvider', () => {
     // trigger fired before it resolves must be swallowed by the guard.
     // Without it, the second GET resolves AFTER the ack from the close
     // below and resurrects the celebration the user just dismissed.
-    let resolveFirst!: (v: { enabled: boolean; pending: { code: string; earnedAt: string }[] }) => void;
+    let resolveFirst!: (v: {
+      enabled: boolean;
+      pending: { code: string; earnedAt: string }[];
+    }) => void;
     garageMocks.listCelebrations.mockReset();
     garageMocks.listCelebrations.mockImplementationOnce(
       () =>

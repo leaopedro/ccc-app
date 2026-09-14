@@ -10,8 +10,8 @@ import {
   View,
 } from 'react-native';
 
-import { garageTokens, type GarageRarity } from './garage-tokens.js';
 import { HexBadge } from './HexBadge.js';
+import { garageTokens, type GarageRarity } from './garage-tokens.js';
 
 const MAX_VISIBLE = 6;
 

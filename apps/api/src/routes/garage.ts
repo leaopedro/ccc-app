@@ -1,10 +1,13 @@
 import { prisma } from '@ccc/db';
 import {
+  badgeCelebrationsAckRequestSchema,
+  badgeCelebrationsAckResponseSchema,
   badgeCelebrationsResponseSchema,
   badgeCodeSchema,
   CELEBRATION_PAGE_SIZE,
   CELEBRATION_WINDOW_DAYS,
 } from '@ccc/shared/badges';
+import { BADGE_AWARDED_NOTIFICATION_KIND, badgeAwardedDedupeKey } from '@ccc/shared/badges-copy';
 import {
   GARAGE_RESERVED_SLUGS,
   garageCoverPatchSchema,
@@ -433,6 +436,56 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
         enabled: true,
         pending: rows.map((r) => ({ code: r.badgeCode, earnedAt: r.earnedAt.toISOString() })),
       });
+    });
+  });
+
+  // POST /me/garage/badges/celebrations/ack — 20/min/usuário.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 20,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (request) => {
+        const user = request.user as { sub: string } | undefined;
+        return `me-garage-celebrations-ack:${user?.sub ?? request.ip}`;
+      },
+    });
+
+    scoped.post('/me/garage/badges/celebrations/ack', async (request, reply) => {
+      const { sub } = requireUser(request);
+      const parsed = badgeCelebrationsAckRequestSchema.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: 'invalid_body' });
+      const { codes } = parsed.data;
+
+      const garage = await ensureGarageForUser(sub);
+      const now = new Date();
+
+      const acked = await prisma.$transaction(async (tx) => {
+        const stamped = await tx.garageBadge.updateMany({
+          where: { garageId: garage.id, badgeCode: { in: codes }, celebratedAt: null },
+          data: { celebratedAt: now },
+        });
+
+        // Cancela o push. O worker é cron de 1 min: a linha nasce em t=0 e só
+        // seria enviada em t<=60s. Um app em foreground já buscou, celebrou e
+        // chegou aqui antes disso, então carimbar sentAt faz o worker não ter
+        // o que enviar. É assim que "sem push com o app aberto" é decidido no
+        // servidor, sem rastrear presença.
+        await tx.notification.updateMany({
+          where: {
+            userId: sub,
+            kind: BADGE_AWARDED_NOTIFICATION_KIND,
+            sentAt: null,
+            dedupeKey: { in: codes.map((c) => badgeAwardedDedupeKey(c, sub)) },
+          },
+          data: { sentAt: now },
+        });
+
+        return stamped.count;
+      });
+
+      return badgeCelebrationsAckResponseSchema.parse({ acked });
     });
   });
 

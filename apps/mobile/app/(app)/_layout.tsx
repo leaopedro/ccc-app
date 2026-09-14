@@ -12,6 +12,7 @@ import { Platform } from 'react-native';
 
 import { brand } from '~/brand';
 import { CartProvider, useCart } from '~/cart/context';
+import { BadgeCelebrationProvider } from '~/celebrations/provider';
 import { usePremiumSlot } from '~/hooks/usePremiumSlot';
 import { getAppTabScreenOptions } from '~/navigation/app-tab-screen-options';
 import {
@@ -182,7 +183,9 @@ function AppTabs() {
 export default function AppLayout() {
   return (
     <CartProvider>
-      <AppTabs />
+      <BadgeCelebrationProvider>
+        <AppTabs />
+      </BadgeCelebrationProvider>
     </CartProvider>
   );
 }

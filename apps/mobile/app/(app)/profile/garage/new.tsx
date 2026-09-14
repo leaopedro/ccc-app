@@ -12,6 +12,7 @@ type CarInputForm = z.input<typeof carInputSchema>;
 import { createCar } from '~/api/cars';
 import { ApiError } from '~/api/client';
 import { sanitizeNext } from '~/auth/redirect-intent';
+import { requestCelebrationRefresh } from '~/celebrations/refresh-bus';
 import { TextField } from '~/components/TextField';
 import { profileCopy } from '~/copy/profile';
 import { theme } from '~/theme';
@@ -46,6 +47,7 @@ export default function NewCar() {
   const onSave = form.handleSubmit(async (values) => {
     try {
       const car = await createCar(values);
+      requestCelebrationRefresh();
       if (returnTo) {
         router.replace(returnTo as never);
       } else {

@@ -32,6 +32,7 @@ import {
   reportFeedPost,
 } from '~/api/feed';
 import { useAuth } from '~/auth/context';
+import { requestCelebrationRefresh } from '~/celebrations/refresh-bus';
 import { feedCopy } from '~/copy/feed';
 import { theme } from '~/theme';
 
@@ -173,6 +174,7 @@ export function EventFeedSection({
       } else {
         const newPost = await createFeedPost(eventId, { body, carId });
         setPosts((prev) => [newPost, ...prev]);
+        requestCelebrationRefresh();
       }
       setComposerOpen(false);
       setEditingPost(null);

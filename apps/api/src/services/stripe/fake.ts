@@ -11,6 +11,8 @@ import type {
   CreateCheckoutSessionInput,
   CreateNativeSubscriptionInput,
   CreatePaymentIntentInput,
+  CreateRecurringPriceInput,
+  CreateRecurringPriceResult,
   CreateSubscriptionCheckoutSessionInput,
   FindOrCreateCustomerInput,
   FindOrCreateCustomerResult,
@@ -44,6 +46,8 @@ type FakeCall = {
     | 'listOpenSubscriptionCheckoutSessions'
     | 'expireCheckoutSession'
     | 'retrievePrice'
+    | 'createRecurringPrice'
+    | 'archivePrice'
     | 'addSubscriptionItem'
     | 'removeSubscriptionItem'
     | 'cancelSubscriptionAtPeriodEnd'
@@ -59,6 +63,12 @@ export type FakeStripe = StripeClient & {
   calls: FakeCall[];
   /** Next Price returned by retrievePrice. Defaults to a no-metadata throw. */
   nextRetrievedPrice: Stripe.Price | null;
+  /** Next payload returned by createRecurringPrice. */
+  nextCreatedPrice: CreateRecurringPriceResult;
+  /** When set, createRecurringPrice throws this error (provider-failure path). */
+  nextCreateRecurringPriceError: Error | null;
+  /** When set, archivePrice throws this error (provider-failure path). */
+  nextArchivePriceError: Error | null;
   nextPaymentIntent: { id: string; clientSecret: string };
   /** When set, createPaymentIntent throws this AFTER recording the call. */
   nextPaymentIntentError: Error | null;
@@ -171,6 +181,9 @@ export const buildFakeStripe = (): FakeStripe => {
     nextCreateSubscriptionCheckoutSessionError: null,
     nextExpireCheckoutSessionError: null,
     nextRetrievedPrice: null,
+    nextCreatedPrice: { priceId: 'price_fake_new', productId: 'prod_fake' },
+    nextCreateRecurringPriceError: null,
+    nextArchivePriceError: null,
     nextSubscriptionItemId: null,
     nextAddSubscriptionItemError: null,
     nextRemoveSubscriptionItemError: null,
@@ -317,6 +330,19 @@ export const buildFakeStripe = (): FakeStripe => {
         throw new Error('FakeStripe.nextRetrievedPrice not set');
       }
       return fake.nextRetrievedPrice;
+    },
+
+    createRecurringPrice: async (
+      input: CreateRecurringPriceInput,
+    ): Promise<CreateRecurringPriceResult> => {
+      fake.calls.push({ kind: 'createRecurringPrice', payload: input });
+      if (fake.nextCreateRecurringPriceError) throw fake.nextCreateRecurringPriceError;
+      return fake.nextCreatedPrice;
+    },
+
+    archivePrice: async (priceId: string): Promise<void> => {
+      fake.calls.push({ kind: 'archivePrice', payload: { priceId } });
+      if (fake.nextArchivePriceError) throw fake.nextArchivePriceError;
     },
 
     addSubscriptionItem: async (

@@ -15,10 +15,12 @@ import {
   adminPremiumPlanSchema,
 } from '@ccc/shared/admin';
 import type { FastifyInstance } from 'fastify';
+import type Stripe from 'stripe';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
-import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
+import type { FakeStripe } from '../../src/services/stripe/fake.js';
+import { bearer, createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 
 const resetCatalog = async (): Promise<void> => {
   await prisma.premiumPlanPrice.deleteMany();
@@ -39,11 +41,12 @@ const staffAuth = async () => {
 
 describe('Admin premium catalog', () => {
   let app: FastifyInstance;
+  let stripe: FakeStripe;
 
   beforeEach(async () => {
     await resetDatabase();
     await resetCatalog();
-    app = await makeApp();
+    ({ app, stripe } = await makeAppWithFakeStripe());
   });
 
   afterEach(async () => {
@@ -227,12 +230,13 @@ describe('Admin premium catalog', () => {
       const plan = await prisma.premiumPlan.create({
         data: { tier: 'gold', slug: 'gold', name: 'Gold' },
       });
+      stripe.nextCreatedPrice = { priceId: 'price_x', productId: 'prod_x' };
 
       const create = await app.inject({
         method: 'PUT',
         url: `/admin/premium/plans/${plan.id}/prices/monthly`,
         headers: { authorization: header },
-        payload: { baseAmountCents: 2990, stripePriceId: 'price_x', rcProductId: 'rc_x' },
+        payload: { baseAmountCents: 2990, rcProductId: 'rc_x' },
       });
       expect(create.statusCode).toBe(200);
       expect(create.json<{ stripePriceId: string }>().stripePriceId).toBe('price_x');
@@ -273,6 +277,221 @@ describe('Admin premium catalog', () => {
         payload: { baseAmountCents: 2990 },
       });
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('sincronizacao de preco com a Stripe', () => {
+    const seedGold = () =>
+      prisma.premiumPlan.create({ data: { tier: 'gold', slug: 'gold', name: 'Gold' } });
+
+    const priceCalls = (kind: string) => stripe.calls.filter((c) => c.kind === kind);
+
+    it('cria um Price na Stripe e guarda o id retornado', async () => {
+      const { header } = await orgAuth();
+      const plan = await seedGold();
+      stripe.nextCreatedPrice = { priceId: 'price_new_1', productId: 'prod_1' };
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/admin/premium/plans/${plan.id}/prices/monthly`,
+        headers: { authorization: header },
+        payload: { baseAmountCents: 20000 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ stripePriceId: string }>().stripePriceId).toBe('price_new_1');
+      expect(priceCalls('createRecurringPrice')).toHaveLength(1);
+      expect(priceCalls('createRecurringPrice')[0]?.payload).toMatchObject({
+        amountCents: 20000,
+        currency: 'BRL',
+        interval: 'month',
+        productId: null,
+      });
+    });
+
+    it('mapeia cadencia anual para o intervalo year', async () => {
+      const { header } = await orgAuth();
+      const plan = await seedGold();
+      stripe.nextCreatedPrice = { priceId: 'price_year_1', productId: 'prod_y' };
+
+      await app.inject({
+        method: 'PUT',
+        url: `/admin/premium/plans/${plan.id}/prices/annual`,
+        headers: { authorization: header },
+        payload: { baseAmountCents: 200000 },
+      });
+
+      expect(priceCalls('createRecurringPrice')[0]?.payload).toMatchObject({ interval: 'year' });
+    });
+
+    it('nao chama a Stripe quando o valor nao muda', async () => {
+      const { header } = await orgAuth();
+      const plan = await seedGold();
+      await prisma.premiumPlanPrice.create({
+        data: {
+          planId: plan.id,
+          cadence: 'monthly',
+          baseAmountCents: 20000,
+          currency: 'BRL',
+          stripePriceId: 'price_existing',
+        },
+      });
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/admin/premium/plans/${plan.id}/prices/monthly`,
+        headers: { authorization: header },
+        payload: { baseAmountCents: 20000 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ stripePriceId: string }>().stripePriceId).toBe('price_existing');
+      expect(priceCalls('createRecurringPrice')).toHaveLength(0);
+      expect(priceCalls('archivePrice')).toHaveLength(0);
+    });
+
+    it('reusa o Product do Price antigo e arquiva ele quando o valor muda', async () => {
+      const { header } = await orgAuth();
+      const plan = await seedGold();
+      await prisma.premiumPlanPrice.create({
+        data: {
+          planId: plan.id,
+          cadence: 'monthly',
+          baseAmountCents: 20000,
+          currency: 'BRL',
+          stripePriceId: 'price_old',
+        },
+      });
+      stripe.nextRetrievedPrice = {
+        id: 'price_old',
+        product: 'prod_reused',
+      } as unknown as Stripe.Price;
+      stripe.nextCreatedPrice = { priceId: 'price_new_2', productId: 'prod_reused' };
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/admin/premium/plans/${plan.id}/prices/monthly`,
+        headers: { authorization: header },
+        payload: { baseAmountCents: 25000 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ stripePriceId: string }>().stripePriceId).toBe('price_new_2');
+      expect(priceCalls('createRecurringPrice')[0]?.payload).toMatchObject({
+        productId: 'prod_reused',
+        amountCents: 25000,
+      });
+      expect(priceCalls('archivePrice')[0]?.payload).toMatchObject({ priceId: 'price_old' });
+    });
+
+    it('nao grava o valor novo quando a Stripe falha ao criar o Price', async () => {
+      const { header } = await orgAuth();
+      const plan = await seedGold();
+      await prisma.premiumPlanPrice.create({
+        data: {
+          planId: plan.id,
+          cadence: 'monthly',
+          baseAmountCents: 20000,
+          currency: 'BRL',
+          stripePriceId: 'price_old',
+        },
+      });
+      stripe.nextRetrievedPrice = { id: 'price_old', product: 'prod_1' } as unknown as Stripe.Price;
+      stripe.nextCreateRecurringPriceError = new Error('stripe down');
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: `/admin/premium/plans/${plan.id}/prices/monthly`,
+        headers: { authorization: header },
+        payload: { baseAmountCents: 25000 },
+      });
+
+      expect(res.statusCode).toBe(502);
+      const row = await prisma.premiumPlanPrice.findFirstOrThrow({ where: { planId: plan.id } });
+      expect(row.baseAmountCents).toBe(20000);
+      expect(row.stripePriceId).toBe('price_old');
+    });
+
+    it('cria um Price para o modulo no create', async () => {
+      const { header } = await orgAuth();
+      stripe.nextCreatedPrice = { priceId: 'price_mod_1', productId: 'prod_mod' };
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/admin/premium/addon-modules',
+        headers: { authorization: header },
+        payload: {
+          key: 'wash-01',
+          name: 'Lavagem',
+          description: 'Duas lavagens por mes',
+          monthlyDeltaCents: 20000,
+          quotaPerCycle: 2,
+          quotaUnit: 'access',
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.json<{ stripePriceId: string }>().stripePriceId).toBe('price_mod_1');
+      expect(priceCalls('createRecurringPrice')[0]?.payload).toMatchObject({
+        amountCents: 20000,
+        interval: 'month',
+      });
+    });
+
+    it('cria um Price novo quando o delta do modulo muda no patch', async () => {
+      const { header } = await orgAuth();
+      const mod = await prisma.premiumAddonModule.create({
+        data: {
+          key: 'wash-01',
+          name: 'Lavagem',
+          description: 'Duas lavagens por mes',
+          monthlyDeltaCents: 20000,
+          quotaPerCycle: 2,
+          quotaUnit: 'access',
+          stripePriceId: 'price_mod_old',
+        },
+      });
+      stripe.nextRetrievedPrice = {
+        id: 'price_mod_old',
+        product: 'prod_mod',
+      } as unknown as Stripe.Price;
+      stripe.nextCreatedPrice = { priceId: 'price_mod_2', productId: 'prod_mod' };
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/admin/premium/addon-modules/${mod.id}`,
+        headers: { authorization: header },
+        payload: { monthlyDeltaCents: 25000 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ stripePriceId: string }>().stripePriceId).toBe('price_mod_2');
+      expect(priceCalls('archivePrice')[0]?.payload).toMatchObject({ priceId: 'price_mod_old' });
+    });
+
+    it('nao chama a Stripe quando o patch do modulo nao mexe no preco', async () => {
+      const { header } = await orgAuth();
+      const mod = await prisma.premiumAddonModule.create({
+        data: {
+          key: 'wash-01',
+          name: 'Lavagem',
+          description: 'Duas lavagens por mes',
+          monthlyDeltaCents: 20000,
+          quotaPerCycle: 2,
+          quotaUnit: 'access',
+          stripePriceId: 'price_mod_old',
+        },
+      });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/admin/premium/addon-modules/${mod.id}`,
+        headers: { authorization: header },
+        payload: { name: 'Lavagem Premium' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(priceCalls('createRecurringPrice')).toHaveLength(0);
     });
   });
 
@@ -331,6 +550,7 @@ describe('Admin premium catalog', () => {
   describe('addon modules', () => {
     it('creates a module', async () => {
       const { header } = await orgAuth();
+      stripe.nextCreatedPrice = { priceId: 'price_wash', productId: 'prod_wash' };
       const res = await app.inject({
         method: 'POST',
         url: '/admin/premium/addon-modules',
@@ -342,7 +562,6 @@ describe('Admin premium catalog', () => {
           monthlyDeltaCents: 1990,
           quotaPerCycle: 4,
           quotaUnit: 'access',
-          stripePriceId: 'price_wash',
         },
       });
       expect(res.statusCode).toBe(201);

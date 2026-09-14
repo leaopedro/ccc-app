@@ -35,6 +35,12 @@ const ptBR = {
     unpinAction: 'Desafixar',
     emptyTitle: 'Sem conquistas ainda',
     emptyBody: 'Participe dos encontros e adicione carros para começar a colecionar.',
+    celebration: {
+      titleOne: 'NOVA CONQUISTA!',
+      titleMany: (count: number) => `VOCÊ GANHOU ${count} CONQUISTAS`,
+      close: 'Fechar',
+      more: (count: number) => `+${count}`,
+    },
     catalog: {
       'EVT-001': {
         title: 'Primeira Largada',
@@ -126,6 +132,12 @@ const en = {
     unpinAction: 'Unpin',
     emptyTitle: 'No badges yet',
     emptyBody: 'Attend meets and add cars to start collecting.',
+    celebration: {
+      titleOne: 'NEW BADGE!',
+      titleMany: (count: number) => `YOU EARNED ${count} BADGES`,
+      close: 'Close',
+      more: (count: number) => `+${count}`,
+    },
     catalog: {
       'EVT-001': {
         title: 'First Lap',

@@ -1,0 +1,131 @@
+import { prisma } from '@ccc/db';
+import { CELEBRATION_WINDOW_DAYS } from '@ccc/shared/badges';
+import { badgeAwardedGroupBody, BADGE_AWARDED_NOTIFICATION_KIND } from '@ccc/shared/badges-copy';
+import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { DevPushSender } from '../../src/services/push/dev.js';
+import { runNotificationDeliveryTick } from '../../src/workers/notification-delivery.js';
+import { createUser, resetDatabase } from '../helpers.js';
+
+const seedBadgeNotification = async (userId: string, code: string, createdAt?: Date) => {
+  await prisma.notification.create({
+    data: {
+      userId,
+      kind: BADGE_AWARDED_NOTIFICATION_KIND,
+      title: 'Nova conquista!',
+      body: `Título de ${code}`,
+      data: { kind: BADGE_AWARDED_NOTIFICATION_KIND, code },
+      dedupeKey: `badge:${code}:${userId}`,
+      ...(createdAt ? { createdAt } : {}),
+    },
+  });
+};
+
+const seedUserWithToken = async (token: string, email: string) => {
+  const { user } = await createUser({ verified: true, email });
+  await prisma.deviceToken.create({
+    data: { userId: user.id, expoPushToken: token, platform: 'ios' },
+  });
+  return user;
+};
+
+describe('entrega de badge_awarded', () => {
+  beforeEach(async () => {
+    await resetDatabase();
+  });
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it('manda um push so para N conquistas do mesmo usuario', async () => {
+    const user = await seedUserWithToken('ExponentPushToken[bgrp111111]', 'bgrp@jdm.test');
+    for (const code of ['EVT-001', 'CAR-001', 'COM-001']) {
+      await seedBadgeNotification(user.id, code);
+    }
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+
+    // Tres linhas na central, um push so. Tres vibracoes no portao do evento
+    // e o que este agrupamento existe para evitar.
+    expect(sender.captured.length).toBe(1);
+    expect(sender.captured[0]!.body).toBe(badgeAwardedGroupBody(3));
+    const rows = await prisma.notification.findMany({ where: { userId: user.id } });
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.sentAt !== null)).toBe(true);
+  });
+
+  it('usa o corpo da propria conquista quando e so uma', async () => {
+    const user = await seedUserWithToken('ExponentPushToken[bone111111]', 'bone@jdm.test');
+    await seedBadgeNotification(user.id, 'EVT-001');
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+    expect(sender.captured.length).toBe(1);
+    expect(sender.captured[0]!.body).toBe('Título de EVT-001');
+  });
+
+  it('nao entrega com o killswitch desligado, e nao queima a linha', async () => {
+    await prisma.generalSettings.deleteMany();
+    await prisma.generalSettings.create({
+      data: { id: GENERAL_SETTINGS_SINGLETON_ID, gamificationEnabled: false },
+    });
+    const user = await seedUserWithToken('ExponentPushToken[bks1111111]', 'bks@jdm.test');
+    await seedBadgeNotification(user.id, 'EVT-001');
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+    expect(sender.captured.length).toBe(0);
+    const row = await prisma.notification.findFirstOrThrow({ where: { userId: user.id } });
+    expect(row.sentAt).toBeNull();
+  });
+
+  it('respeita pushPrefs.transactional false', async () => {
+    const user = await seedUserWithToken('ExponentPushToken[bpref11111]', 'bpref@jdm.test');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { pushPrefs: { transactional: false, marketing: false } },
+    });
+    await seedBadgeNotification(user.id, 'EVT-001');
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+    expect(sender.captured.length).toBe(0);
+    // A linha da central existe de qualquer jeito: a preferencia governa o
+    // push, nao o inbox. Carimbada para nao voltar em todo tick.
+    const row = await prisma.notification.findFirstOrThrow({ where: { userId: user.id } });
+    expect(row.sentAt).not.toBeNull();
+  });
+
+  it('carimba linha mais velha que a janela de celebracao sem push, e entrega a fresca', async () => {
+    const user = await seedUserWithToken('ExponentPushToken[bold1111111]', 'bold@jdm.test');
+    const now = new Date();
+    const staleCreatedAt = new Date(
+      now.getTime() - (CELEBRATION_WINDOW_DAYS * 24 * 60 * 60 * 1000 + 60_000),
+    );
+    await seedBadgeNotification(user.id, 'OLD-001', staleCreatedAt);
+    await seedBadgeNotification(user.id, 'NEW-001');
+
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now });
+
+    // Uma linha velha demais para o app ainda celebrar: carimbada, sem push.
+    // A fresca: entregue normalmente. Um push so, so com o corpo da fresca.
+    expect(sender.captured.length).toBe(1);
+    expect(sender.captured[0]!.body).toBe('Título de NEW-001');
+
+    const rows = await prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.sentAt !== null)).toBe(true);
+  });
+
+  it('nao mistura usuarios no mesmo push', async () => {
+    const a = await seedUserWithToken('ExponentPushToken[bmixa11111]', 'bmixa@jdm.test');
+    const b = await seedUserWithToken('ExponentPushToken[bmixb11111]', 'bmixb@jdm.test');
+    await seedBadgeNotification(a.id, 'EVT-001');
+    await seedBadgeNotification(b.id, 'CAR-001');
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now: new Date() });
+    expect(sender.captured.length).toBe(2);
+  });
+});

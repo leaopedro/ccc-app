@@ -1,5 +1,6 @@
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { useCelebrationHold } from './celebration-hold.js';
 import { garageTokens } from './garage-tokens.js';
 
 /**
@@ -34,6 +35,9 @@ export function SheetShell({
   closeLabel,
   theme,
 }: SheetShellProps) {
+  // Pega TODAS as folhas do app de uma vez, incluindo a BadgesSheet.
+  useCelebrationHold(visible);
+
   const close = closeLabel ?? 'Fechar';
   const surface = theme?.surface ?? garageTokens.surface.sheet;
   const border = theme?.border ?? garageTokens.surface.border;

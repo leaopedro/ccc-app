@@ -11,10 +11,11 @@ import { loadEnv } from '../../src/env.js';
 import { awardBadge } from '../../src/services/garage/awarder.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
 
-// Cover the chunk 22 contract: in-app notification fires from the admin
-// manual-grant path only. Auto-award write-path hooks must NOT mint a
-// Notification row. The dedupeKey is the single idempotency knob — a
-// re-grant after un-grant must not double-notify.
+// Cover the chunk 22/conquista-celebracao contract: in-app notification
+// fires on every successful grant, admin manual grant and auto-award
+// write-path hooks alike, unless the caller passes `notifyOnGrant: false`.
+// The dedupeKey is the single idempotency knob — a re-grant after un-grant,
+// or a re-evaluation of the whole badge surface, must not double-notify.
 
 const seedCatalog = async () => {
   await prisma.badge.createMany({
@@ -128,37 +129,52 @@ describe('badge notification — admin manual grant', () => {
     expect(inbox[0]!.body).toBe('Conquista CAR-003');
   });
 
-  it('auto-award (write-path hook) does NOT mint a notification', async () => {
-    // POST /me/cars triggers CAR-001 via the awarder without notifyOnGrant.
-    // The badge MUST land, but no inbox row should appear.
+  it('auto-award (write-path hook) mints a notification', async () => {
     await seedCatalog();
-    const { user } = await createUser({ email: 'no-notify@jdm.test', verified: true });
+    const { user } = await createUser({ email: 'car-notify@jdm.test', verified: true });
     const env = loadEnv();
 
     const res = await app.inject({
       method: 'POST',
       url: '/me/cars',
       headers: { authorization: bearer(env, user.id) },
-      payload: {
-        make: 'Toyota',
-        model: 'Supra',
-        year: 1998,
-        nickname: 'silent supra',
-        modifications: [],
-      },
+      payload: { make: 'Honda', model: 'Civic', year: 2004, nickname: 'civic1', modifications: [] },
     });
     expect(res.statusCode).toBe(201);
-
-    const gid = await garageId(user.id);
-    const earned = await prisma.garageBadge.findFirst({
-      where: { garageId: gid, badgeCode: 'CAR-001' },
-    });
-    expect(earned).not.toBeNull();
 
     const inbox = await prisma.notification.count({
       where: { userId: user.id, kind: BADGE_AWARDED_NOTIFICATION_KIND },
     });
-    expect(inbox).toBe(0);
+    expect(inbox).toBe(1);
+  });
+
+  it('reavaliar a superficie nao cria segunda notificacao', async () => {
+    await seedCatalog();
+    const { user } = await createUser({ email: 'car-reeval@jdm.test', verified: true });
+    const env = loadEnv();
+
+    for (const model of ['Civic', 'Integra']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/me/cars',
+        headers: { authorization: bearer(env, user.id) },
+        payload: {
+          make: 'Honda',
+          model,
+          year: 2004,
+          nickname: `nick ${model.toLowerCase()}`,
+          modifications: [],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    // O segundo carro reencontra CAR-001. O create estoura P2002 e o controle
+    // pula para o catch de fora, entao o bloco de notificacao e inalcancavel.
+    // Este teste e a trava contra alguem hoistar a notificacao para fora do try.
+    const inbox = await prisma.notification.count({
+      where: { userId: user.id, kind: BADGE_AWARDED_NOTIFICATION_KIND },
+    });
+    expect(inbox).toBe(1);
   });
 
   it('dedupeKey is idempotent — re-grant after un-grant does not double-notify', async () => {
@@ -253,19 +269,18 @@ describe('badge notification — admin manual grant', () => {
     expect(inbox).toHaveLength(1);
   });
 
-  it('awarder service: default opts (no notifyOnGrant) does not mint inbox row', async () => {
+  it('awarder service: default opts mints inbox row', async () => {
     await seedCatalog();
-    const { user } = await createUser({ email: 'svc-silent@jdm.test', verified: true });
+    const { user } = await createUser({ email: 'svc-default@jdm.test', verified: true });
     const gid = await garageId(user.id);
 
-    const outcome = await prisma.$transaction((tx) =>
-      awardBadge(tx, gid, 'EVT-001', 'check_in:t1'),
-    );
-    expect(outcome).toEqual({ awarded: true });
-
-    const inbox = await prisma.notification.count({
+    await prisma.$transaction(async (tx) => {
+      await awardBadge(tx, gid, 'EVT-001', 'test:default');
+    });
+    const row = await prisma.notification.findFirstOrThrow({
       where: { userId: user.id, kind: BADGE_AWARDED_NOTIFICATION_KIND },
     });
-    expect(inbox).toBe(0);
+    expect(row.dedupeKey).toBe(badgeAwardedDedupeKey('EVT-001', user.id));
+    expect(row.destination).toEqual({ kind: 'internal_path', path: '/garage' });
   });
 });

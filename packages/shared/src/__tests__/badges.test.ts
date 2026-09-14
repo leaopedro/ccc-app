@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { badgeAwardedGroupBody } from '../badges-copy.js';
 import {
   badgeCatalogEntrySchema,
   badgeCodeSchema,
@@ -8,7 +9,12 @@ import {
   garageBadgeOwnerStateSchema,
   garageBadgePublicSchema,
   garageBadgesPublicPayloadSchema,
+  badgeCelebrationsAckRequestSchema,
+  badgeCelebrationsResponseSchema,
+  CELEBRATION_PAGE_SIZE,
+  CELEBRATION_WINDOW_DAYS,
 } from '../badges.js';
+import { pushKindSchema } from '../push.js';
 
 describe('badgeCodeSchema', () => {
   it('accepts canonical catalog codes', () => {
@@ -113,5 +119,43 @@ describe('garageBadgesPublicPayloadSchema', () => {
         { code: 'evt-001', earnedAt: '2026-05-22T12:00:00.000Z' },
       ]),
     ).toThrow();
+  });
+});
+
+describe('celebrações', () => {
+  it('aceita uma resposta de pendentes', () => {
+    const parsed = badgeCelebrationsResponseSchema.parse({
+      enabled: true,
+      pending: [{ code: 'EVT-001', earnedAt: '2026-09-13T12:00:00.000Z' }],
+    });
+    expect(parsed.pending[0]!.code).toBe('EVT-001');
+  });
+
+  it('recusa código fora do formato de wire', () => {
+    expect(() =>
+      badgeCelebrationsResponseSchema.parse({
+        enabled: true,
+        pending: [{ code: 'evt-1', earnedAt: '2026-09-13T12:00:00.000Z' }],
+      }),
+    ).toThrow();
+  });
+
+  it('limita o ack ao tamanho da página e recusa lista vazia', () => {
+    expect(() => badgeCelebrationsAckRequestSchema.parse({ codes: [] })).toThrow();
+    const tooMany = Array.from({ length: CELEBRATION_PAGE_SIZE + 1 }, () => 'EVT-001');
+    expect(() => badgeCelebrationsAckRequestSchema.parse({ codes: tooMany })).toThrow();
+    expect(badgeCelebrationsAckRequestSchema.parse({ codes: ['EVT-001'] }).codes).toHaveLength(1);
+  });
+
+  it('fixa a janela em 7 dias', () => {
+    expect(CELEBRATION_WINDOW_DAYS).toBe(7);
+  });
+
+  it('aceita badge_awarded como kind de push', () => {
+    expect(pushKindSchema.parse('badge_awarded')).toBe('badge_awarded');
+  });
+
+  it('pluraliza o corpo do push agrupado', () => {
+    expect(badgeAwardedGroupBody(3)).toBe('Você ganhou 3 conquistas.');
   });
 });

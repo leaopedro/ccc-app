@@ -1,5 +1,6 @@
 import type { Car } from '@ccc/shared/cars';
 import type { FeedPostResponse } from '@ccc/shared/feed';
+import { useCelebrationHold } from '@ccc/ui';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -38,6 +39,11 @@ export function FeedComposerSheet({
   onSubmit,
   onClose,
 }: Props) {
+  // Não é Modal, é Animated.View inline, então o overlay CONSEGUIRIA cobrir
+  // este compositor, derrubar o teclado e pôr o rascunho em risco. E é onde o
+  // usuário está quando ganha a conquista de post.
+  useCelebrationHold(visible);
+
   const [mounted, setMounted] = useState(false);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;

@@ -1,6 +1,11 @@
 import {
+  badgeCelebrationsAckRequestSchema,
+  badgeCelebrationsAckResponseSchema,
+  badgeCelebrationsResponseSchema,
   badgeCodeSchema,
   garageBadgesOwnerResponseSchema,
+  type BadgeCelebrationsAckResponse,
+  type BadgeCelebrationsResponse,
   type GarageBadgesOwnerResponse,
 } from '@ccc/shared/badges';
 import {
@@ -133,3 +138,22 @@ export const togglePinBadge = (code: string, pinned: boolean): Promise<TogglePin
     method: 'PATCH',
     body: { pinned },
   });
+
+// Task 9 — Conquistas celebration queue.
+// GET /me/garage/badges/celebrations returns badges earned since the last
+// ack, gated by CELEBRATION_WINDOW_DAYS server-side.
+export const listCelebrations = (): Promise<BadgeCelebrationsResponse> =>
+  authedRequest('/me/garage/badges/celebrations', badgeCelebrationsResponseSchema);
+
+// POST .../celebrations/ack body `{ codes: string[] }`, 1 to
+// CELEBRATION_PAGE_SIZE entries. Parsed locally first so an empty or
+// oversized array fails before a round trip, not after a 400. `async` here
+// is load-bearing: it turns the synchronous zod throw into a rejected
+// promise instead of an exception thrown at call time.
+export const ackCelebrations = async (codes: string[]): Promise<BadgeCelebrationsAckResponse> => {
+  const parsed = badgeCelebrationsAckRequestSchema.parse({ codes });
+  return authedRequest('/me/garage/badges/celebrations/ack', badgeCelebrationsAckResponseSchema, {
+    method: 'POST',
+    body: parsed,
+  });
+};

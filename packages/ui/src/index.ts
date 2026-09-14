@@ -33,3 +33,15 @@ export { StatsRow, formatJoinedAt, type StatsRowProps } from './StatsRow.js';
 export { XPScoreboard, type XPScoreboardProps } from './XPScoreboard.js';
 export { XPTooltip, XP_RULES, type XPTooltipProps, type XPRule } from './XPTooltip.js';
 export { ProfileStats, type ProfileStatsProps } from './ProfileStats.js';
+export {
+  BadgeCelebration,
+  type BadgeCelebrationProps,
+  type BadgeCelebrationEntry,
+  type BadgeCelebrationCopy,
+} from './BadgeCelebration.js';
+export {
+  acquireCelebrationHold,
+  isCelebrationHeld,
+  subscribeCelebrationHold,
+  useCelebrationHold,
+} from './celebration-hold.js';

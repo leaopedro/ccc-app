@@ -1,8 +1,9 @@
 import type { MyTicket } from '@ccc/shared/tickets';
+import { acquireCelebrationHold } from '@ccc/ui';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Share } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ViewProps } from 'react-native';
 import {
   ActivityIndicator,
@@ -46,6 +47,16 @@ function Toast({ message, onHide }: { message: string; onHide: () => void }) {
 
 export default function TicketDetail() {
   useKeepAwake();
+  useFocusEffect(
+    useCallback(() => {
+      // A tela do QR. O usuário está com o telefone estendido no portão, brilho
+      // no máximo, e o check-in que acabou de acontecer é o caminho que concede
+      // mais conquistas de uma vez. Escurecer a tela e cobrir o QR com um modal
+      // sem auto-dismiss, com fila atrás, é o pior resultado deste projeto.
+      const release = acquireCelebrationHold();
+      return release;
+    }, []),
+  );
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const style = document.createElement('style');

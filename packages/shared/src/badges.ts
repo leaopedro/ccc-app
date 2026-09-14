@@ -68,3 +68,36 @@ export const badgeCatalogResponseSchema = z.object({
   catalog: z.array(badgeCatalogEntrySchema),
 });
 export type BadgeCatalogResponse = z.infer<typeof badgeCatalogResponseSchema>;
+
+// Fila de celebração. `celebratedAt: null` no banco é a fila; o wire carrega
+// só o código e quando foi ganha — título, descrição, raridade e ícone vêm do
+// catálogo, que é editável pelo admin. Duplicar copy aqui criaria uma segunda
+// fonte que sai de sincronia com /configuracoes/conquistas.
+export const CELEBRATION_PAGE_SIZE = 10;
+
+// Janela de skew de versão de app: a API entra antes do app, e um build antigo
+// nunca chama o ack. Sem a janela, esse usuário atualiza semanas depois e
+// recebe a fila histórica inteira de uma vez.
+export const CELEBRATION_WINDOW_DAYS = 7;
+
+export const badgeCelebrationSchema = z.object({
+  code: badgeCodeSchema,
+  earnedAt: z.string().datetime(),
+});
+export type BadgeCelebration = z.infer<typeof badgeCelebrationSchema>;
+
+export const badgeCelebrationsResponseSchema = z.object({
+  enabled: z.boolean(),
+  pending: z.array(badgeCelebrationSchema),
+});
+export type BadgeCelebrationsResponse = z.infer<typeof badgeCelebrationsResponseSchema>;
+
+export const badgeCelebrationsAckRequestSchema = z.object({
+  codes: z.array(badgeCodeSchema).min(1).max(CELEBRATION_PAGE_SIZE),
+});
+export type BadgeCelebrationsAckRequest = z.infer<typeof badgeCelebrationsAckRequestSchema>;
+
+export const badgeCelebrationsAckResponseSchema = z.object({
+  acked: z.number().int().nonnegative(),
+});
+export type BadgeCelebrationsAckResponse = z.infer<typeof badgeCelebrationsAckResponseSchema>;

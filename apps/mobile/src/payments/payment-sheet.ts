@@ -10,7 +10,7 @@
 // default. Adding it is a product decision, tracked as H4 / Task 13.
 
 import { brand } from '@ccc/design';
-import { acquireCelebrationHold } from '@ccc/ui';
+import { acquireCelebrationHold } from '@ccc/ui/celebration-hold';
 import { PaymentSheetError, useStripe } from '@stripe/stripe-react-native';
 import type { SetupParams } from '@stripe/stripe-react-native';
 import { Platform } from 'react-native';

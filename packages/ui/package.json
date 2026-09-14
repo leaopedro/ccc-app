@@ -14,6 +14,10 @@
       "types": "./src/garage-tokens.ts",
       "default": "./src/garage-tokens.ts"
     },
+    "./celebration-hold": {
+      "types": "./src/celebration-hold.ts",
+      "default": "./src/celebration-hold.ts"
+    },
     "./web": {
       "types": "./src/web/index.ts",
       "default": "./src/web/index.ts"

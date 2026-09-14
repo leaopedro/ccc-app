@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // react-native's Flow-flavored `import typeof` syntax can't be parsed by
 // vitest's SSR transform. Mock it before importing, same as
@@ -13,17 +13,26 @@ vi.mock('@stripe/stripe-react-native', () => ({
   useStripe: () => ({ initPaymentSheet, presentPaymentSheet }),
 }));
 
-// `@ccc/ui` is a barrel: importing `acquireCelebrationHold` alone still
-// evaluates every other export, including `HexBadge`'s `react-native-svg`
-// import, which vitest's SSR transform can't parse ("Unexpected token
-// 'typeof'"). Stub just the one export this module uses, and track calls so
-// the hold/release pairing itself can be asserted.
-const releaseCelebrationHold = vi.fn();
-const acquireCelebrationHold = vi.fn(() => releaseCelebrationHold);
-vi.mock('@ccc/ui', () => ({ acquireCelebrationHold }));
-
 const { buildPaymentSheetConfig, resolveSheetOutcome, usePaymentSheet, PAYMENT_SHEET_RETURN_URL } =
   await import('../payment-sheet');
+
+// `payment-sheet.ts` imports `acquireCelebrationHold` from the
+// `@ccc/ui/celebration-hold` subpath, not the `@ccc/ui` barrel, specifically
+// so this pure counter module has no rendering deps (`react-native-svg` via
+// `HexBadge`, etc.) and needs no mock here. Real, unmocked module: assert the
+// actual hold state, not a spy.
+const { isCelebrationHeld } = await import('@ccc/ui/celebration-hold');
+
+/** Lets a test observe hold state while an async call is still in flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('buildPaymentSheetConfig', () => {
   it('always carries the client secret, the merchant name and a returnURL', () => {
@@ -74,8 +83,6 @@ describe('usePaymentSheet().pay', () => {
   beforeEach(() => {
     initPaymentSheet.mockReset();
     presentPaymentSheet.mockReset();
-    acquireCelebrationHold.mockClear();
-    releaseCelebrationHold.mockClear();
   });
 
   it('returns paid when init and present both succeed', async () => {
@@ -123,15 +130,29 @@ describe('usePaymentSheet().pay', () => {
   // for the rest of the session — assert release on every branch, not just
   // the happy path.
   describe('celebration hold', () => {
-    it('acquires before presenting and releases after a successful payment', async () => {
-      initPaymentSheet.mockResolvedValue({ error: undefined });
+    // The module-level counter in `@ccc/ui/celebration-hold` is process-global
+    // and has no reset export (see `packages/ui/src/__tests__/celebration-hold.test.ts`).
+    // Every test below acquires exactly one hold and must see it released by
+    // the time it finishes, or the next test starts from a corrupted `true`.
+    afterEach(() => {
+      expect(isCelebrationHeld()).toBe(false);
+    });
+
+    it('holds while init and present are in flight, releases once paid', async () => {
+      const init = deferred<{ error: undefined }>();
+      initPaymentSheet.mockReturnValue(init.promise);
       presentPaymentSheet.mockResolvedValue({ error: undefined });
 
+      expect(isCelebrationHeld()).toBe(false);
       const { pay } = usePaymentSheet();
-      await pay('pi_1_secret_x');
+      const outcome = pay('pi_1_secret_x');
 
-      expect(acquireCelebrationHold).toHaveBeenCalledTimes(1);
-      expect(releaseCelebrationHold).toHaveBeenCalledTimes(1);
+      // Still awaiting `initPaymentSheet` — the hold must already be up.
+      expect(isCelebrationHeld()).toBe(true);
+      init.resolve({ error: undefined });
+
+      await expect(outcome).resolves.toEqual({ kind: 'paid' });
+      expect(isCelebrationHeld()).toBe(false);
     });
 
     it('releases the hold when init fails, before present is ever called', async () => {
@@ -140,7 +161,8 @@ describe('usePaymentSheet().pay', () => {
       const { pay } = usePaymentSheet();
       await pay('pi_1_secret_x');
 
-      expect(releaseCelebrationHold).toHaveBeenCalledTimes(1);
+      expect(presentPaymentSheet).not.toHaveBeenCalled();
+      expect(isCelebrationHeld()).toBe(false);
     });
 
     it('releases the hold when the user cancels the sheet', async () => {
@@ -150,7 +172,7 @@ describe('usePaymentSheet().pay', () => {
       const { pay } = usePaymentSheet();
       await pay('pi_1_secret_x');
 
-      expect(releaseCelebrationHold).toHaveBeenCalledTimes(1);
+      expect(isCelebrationHeld()).toBe(false);
     });
 
     it('releases the hold even when presentPaymentSheet throws', async () => {
@@ -160,7 +182,7 @@ describe('usePaymentSheet().pay', () => {
       const { pay } = usePaymentSheet();
       await expect(pay('pi_1_secret_x')).rejects.toThrow('native module crashed');
 
-      expect(releaseCelebrationHold).toHaveBeenCalledTimes(1);
+      expect(isCelebrationHeld()).toBe(false);
     });
   });
 });

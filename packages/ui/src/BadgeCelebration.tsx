@@ -118,8 +118,12 @@ export const BadgeCelebration = ({
               <Text style={styles.badgeDescription}>{entries[0]!.description}</Text>
             </>
           ) : (
-            entries.map((e, i) => (
-              <Text key={`${e.code}-${i}`} style={styles.badgeTitle}>
+            visible.map((e, i) => (
+              <Text
+                key={`${e.code}-${i}`}
+                testID="celebration-badge-title"
+                style={styles.badgeTitle}
+              >
                 {e.title}
               </Text>
             ))

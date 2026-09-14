@@ -265,6 +265,18 @@ describe('<BadgeCelebration />', () => {
     expect(container.textContent).toContain('+4');
   });
 
+  it('corta a lista de titulos em 6 quando sao mais que o cap', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    const many = Array.from({ length: 10 }, (_, i) => entry(`EVT-00${i % 3}`, `T${i}`, 'd'));
+    await render(<BadgeCelebration entries={many} copy={copy} onClose={() => {}} reduceMotion />);
+    // A lista de titulos tem que concordar com os hexagonos visiveis: sem o
+    // corte, 10 entradas renderizariam 10 linhas de titulo e empurrariam o
+    // botao Fechar para fora da tela em telas pequenas, sem scroll para
+    // alcanca-lo.
+    expect(container.querySelectorAll('[data-testid="celebration-badge-title"]').length).toBe(6);
+    expect(container.textContent).toContain('+4');
+  });
+
   it('chama onClose no botao Fechar', async () => {
     const { BadgeCelebration } = await import('../BadgeCelebration.js');
     const onClose = vi.fn();

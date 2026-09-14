@@ -352,6 +352,10 @@ model GarageBadge {
   pinned    Boolean   @default(false)
   pinnedAt  DateTime?
   sourceRef String?   @db.VarChar(120)
+  // `null` = pendente de celebração. É a fila inteira; não há tabela nova.
+  // Carimbado pelo ack do app (POST /me/garage/badges/celebrations/ack) ou
+  // pela própria rota de leitura, para linhas mais velhas que a janela.
+  celebratedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -361,6 +365,7 @@ model GarageBadge {
   @@unique([garageId, badgeCode])
   @@index([garageId, pinned])
   @@index([garageId, pinnedAt])
+  @@index([garageId, celebratedAt])
 }
 
 enum XpReason {

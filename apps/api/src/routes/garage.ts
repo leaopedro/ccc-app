@@ -1,5 +1,10 @@
 import { prisma } from '@ccc/db';
-import { badgeCodeSchema } from '@ccc/shared/badges';
+import {
+  badgeCelebrationsResponseSchema,
+  badgeCodeSchema,
+  CELEBRATION_PAGE_SIZE,
+  CELEBRATION_WINDOW_DAYS,
+} from '@ccc/shared/badges';
 import {
   GARAGE_RESERVED_SLUGS,
   garageCoverPatchSchema,
@@ -377,6 +382,57 @@ export const garageRoutes: FastifyPluginAsync = async (app) => {
       const garage = await ensureGarageForUser(sub);
       const { catalog, badges } = await readOwnerBadgesState(garage);
       return { enabled: true, catalog, badges };
+    });
+  });
+
+  // GET /me/garage/badges/celebrations — fila de celebração pendente.
+  // 60/min/usuário, mesmo teto do read de badges.
+  await app.register(async (scoped) => {
+    scoped.addHook('preHandler', app.authenticate);
+    await scoped.register(rateLimit, {
+      max: 60,
+      timeWindow: '1 minute',
+      hook: 'preHandler',
+      keyGenerator: (request) => {
+        const user = request.user as { sub: string } | undefined;
+        return `me-garage-celebrations:${user?.sub ?? request.ip}`;
+      },
+    });
+
+    scoped.get('/me/garage/badges/celebrations', async (request) => {
+      const { sub } = requireUser(request);
+      const enabled = await readGamificationEnabled();
+      if (!enabled) {
+        return badgeCelebrationsResponseSchema.parse({ enabled: false, pending: [] });
+      }
+
+      const garage = await ensureGarageForUser(sub);
+      const cutoff = new Date(Date.now() - CELEBRATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+      // Autolimpeza do rabo da fila. A API entra antes do app, então um build
+      // antigo nunca chama o ack e deixa tudo que ganhar em `null`. Sem isto,
+      // esse usuário atualiza semanas depois e toma a fila histórica inteira —
+      // o mesmo problema que o backfill resolveu, reaberto pela porta dos
+      // fundos. Fica aqui, e não num worker, porque é barato e auto-contido.
+      await prisma.garageBadge.updateMany({
+        where: { garageId: garage.id, celebratedAt: null, earnedAt: { lt: cutoff } },
+        data: { celebratedAt: new Date() },
+      });
+
+      const rows = await prisma.garageBadge.findMany({
+        where: { garageId: garage.id, celebratedAt: null, earnedAt: { gte: cutoff } },
+        // Ordenação TOTAL. `@default(now())` no Postgres é o início da
+        // transação, então conquistas da mesma transação empatam em `earnedAt`
+        // exatamente; sem o desempate por código a ordem varia entre chamadas.
+        orderBy: [{ earnedAt: 'asc' }, { badgeCode: 'asc' }],
+        take: CELEBRATION_PAGE_SIZE,
+        select: { badgeCode: true, earnedAt: true },
+      });
+
+      return badgeCelebrationsResponseSchema.parse({
+        enabled: true,
+        pending: rows.map((r) => ({ code: r.badgeCode, earnedAt: r.earnedAt.toISOString() })),
+      });
     });
   });
 

@@ -10,6 +10,7 @@
 // default. Adding it is a product decision, tracked as H4 / Task 13.
 
 import { brand } from '@ccc/design';
+import { acquireCelebrationHold } from '@ccc/ui';
 import { PaymentSheetError, useStripe } from '@stripe/stripe-react-native';
 import type { SetupParams } from '@stripe/stripe-react-native';
 import { Platform } from 'react-native';
@@ -61,12 +62,21 @@ export const usePaymentSheet = () => {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const pay = async (clientSecret: string): Promise<PaymentSheetOutcome> => {
-    const { error: initError } = await initPaymentSheet(
-      buildPaymentSheetConfig({ clientSecret, platform: Platform.OS }),
-    );
-    if (initError) return resolveSheetOutcome(initError);
-    const { error: presentError } = await presentPaymentSheet();
-    return resolveSheetOutcome(presentError);
+    // Segura a celebração pela janela inteira em que a sheet nativa da Stripe
+    // pode estar na tela. `finally` garante a liberação mesmo se init falhar,
+    // a apresentação lançar, ou o usuário cancelar — qualquer saída que não
+    // libere aqui trava o overlay para o resto da sessão.
+    const release = acquireCelebrationHold();
+    try {
+      const { error: initError } = await initPaymentSheet(
+        buildPaymentSheetConfig({ clientSecret, platform: Platform.OS }),
+      );
+      if (initError) return resolveSheetOutcome(initError);
+      const { error: presentError } = await presentPaymentSheet();
+      return resolveSheetOutcome(presentError);
+    } finally {
+      release();
+    }
   };
 
   return { pay };

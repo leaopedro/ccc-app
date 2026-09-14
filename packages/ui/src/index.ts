@@ -39,3 +39,9 @@ export {
   type BadgeCelebrationEntry,
   type BadgeCelebrationCopy,
 } from './BadgeCelebration.js';
+export {
+  acquireCelebrationHold,
+  isCelebrationHeld,
+  subscribeCelebrationHold,
+  useCelebrationHold,
+} from './celebration-hold.js';

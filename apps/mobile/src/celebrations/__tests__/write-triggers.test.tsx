@@ -265,11 +265,13 @@ describe('gatilho de escrita — criar carro', () => {
     const setValue = (label: string, value: string) => {
       const input = container.querySelector<HTMLInputElement>(`[aria-label="${label}"]`);
       expect(input).not.toBeNull();
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )?.set;
-      setter?.call(input, value);
+      const setNativeValue = (el: HTMLInputElement, v: string) => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(
+          el,
+          v,
+        );
+      };
+      setNativeValue(input!, value);
       input!.dispatchEvent(new Event('input', { bubbles: true }));
     };
 

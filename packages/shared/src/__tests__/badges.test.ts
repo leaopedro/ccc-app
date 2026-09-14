@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { badgeAwardedGroupBody } from '../badges-copy.js';
 import {
   badgeCatalogEntrySchema,
   badgeCodeSchema,
@@ -8,7 +9,12 @@ import {
   garageBadgeOwnerStateSchema,
   garageBadgePublicSchema,
   garageBadgesPublicPayloadSchema,
+  badgeCelebrationsAckRequestSchema,
+  badgeCelebrationsResponseSchema,
+  CELEBRATION_PAGE_SIZE,
+  CELEBRATION_WINDOW_DAYS,
 } from '../badges.js';
+import { pushKindSchema } from '../push.js';
 
 describe('badgeCodeSchema', () => {
   it('accepts canonical catalog codes', () => {
@@ -115,15 +121,6 @@ describe('garageBadgesPublicPayloadSchema', () => {
     ).toThrow();
   });
 });
-
-import {
-  badgeCelebrationsAckRequestSchema,
-  badgeCelebrationsResponseSchema,
-  CELEBRATION_PAGE_SIZE,
-  CELEBRATION_WINDOW_DAYS,
-} from '../badges.js';
-import { pushKindSchema } from '../push.js';
-import { badgeAwardedGroupBody } from '../badges-copy.js';
 
 describe('celebrações', () => {
   it('aceita uma resposta de pendentes', () => {

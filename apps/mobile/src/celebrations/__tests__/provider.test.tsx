@@ -13,7 +13,7 @@
 // leaked hold corrupts a later test's starting state.
 
 import { acquireCelebrationHold, isCelebrationHeld } from '@ccc/ui/celebration-hold';
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -75,7 +75,7 @@ vi.mock('expo-notifications', () => ({
 vi.mock('react-native', async () => {
   const ReactMod = await import('react');
   return {
-    View: (props: { children?: import('react').ReactNode }) =>
+    View: (props: { children?: ReactNode }) =>
       ReactMod.createElement('div', null, props.children),
     AccessibilityInfo: { isReduceMotionEnabled: () => Promise.resolve(false) },
     AppState: {

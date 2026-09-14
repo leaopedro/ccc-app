@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { CELEBRATION_WINDOW_DAYS } from '@ccc/shared/badges';
 import { badgeAwardedGroupBody, BADGE_AWARDED_NOTIFICATION_KIND } from '@ccc/shared/badges-copy';
 import { GENERAL_SETTINGS_SINGLETON_ID } from '@ccc/shared/general-settings';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -7,7 +8,7 @@ import { DevPushSender } from '../../src/services/push/dev.js';
 import { runNotificationDeliveryTick } from '../../src/workers/notification-delivery.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
-const seedBadgeNotification = async (userId: string, code: string) => {
+const seedBadgeNotification = async (userId: string, code: string, createdAt?: Date) => {
   await prisma.notification.create({
     data: {
       userId,
@@ -16,6 +17,7 @@ const seedBadgeNotification = async (userId: string, code: string) => {
       body: `Título de ${code}`,
       data: { kind: BADGE_AWARDED_NOTIFICATION_KIND, code },
       dedupeKey: `badge:${code}:${userId}`,
+      ...(createdAt ? { createdAt } : {}),
     },
   });
 };
@@ -90,6 +92,31 @@ describe('entrega de badge_awarded', () => {
     // push, nao o inbox. Carimbada para nao voltar em todo tick.
     const row = await prisma.notification.findFirstOrThrow({ where: { userId: user.id } });
     expect(row.sentAt).not.toBeNull();
+  });
+
+  it('carimba linha mais velha que a janela de celebracao sem push, e entrega a fresca', async () => {
+    const user = await seedUserWithToken('ExponentPushToken[bold1111111]', 'bold@jdm.test');
+    const now = new Date();
+    const staleCreatedAt = new Date(
+      now.getTime() - (CELEBRATION_WINDOW_DAYS * 24 * 60 * 60 * 1000 + 60_000),
+    );
+    await seedBadgeNotification(user.id, 'OLD-001', staleCreatedAt);
+    await seedBadgeNotification(user.id, 'NEW-001');
+
+    const sender = new DevPushSender();
+    await runNotificationDeliveryTick({ sender, now });
+
+    // Uma linha velha demais para o app ainda celebrar: carimbada, sem push.
+    // A fresca: entregue normalmente. Um push so, so com o corpo da fresca.
+    expect(sender.captured.length).toBe(1);
+    expect(sender.captured[0]!.body).toBe('Título de NEW-001');
+
+    const rows = await prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.sentAt !== null)).toBe(true);
   });
 
   it('nao mistura usuarios no mesmo push', async () => {

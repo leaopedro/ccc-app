@@ -1,4 +1,5 @@
 import { prisma } from '@ccc/db';
+import { CELEBRATION_WINDOW_DAYS } from '@ccc/shared/badges';
 import {
   BADGE_AWARDED_GROUP_NOTIFICATION_TITLE,
   BADGE_AWARDED_NOTIFICATION_KIND,
@@ -61,7 +62,7 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
     },
     orderBy: { createdAt: 'asc' },
     take: 50,
-    select: { id: true, kind: true, userId: true, body: true },
+    select: { id: true, kind: true, userId: true, body: true, createdAt: true },
   });
 
   const badgeRows = pending.filter((n) => n.kind === BADGE_KIND);
@@ -90,7 +91,31 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
     // pendentes de propósito: se religar, voltam a ser entregáveis.
     const enabled = await readGamificationEnabled();
     if (enabled) {
-      const userIds = [...new Set(badgeRows.map((r) => r.userId))];
+      // Piso de idade. `GET /me/garage/badges/celebrations` carimba a
+      // GarageBadge sozinho depois de CELEBRATION_WINDOW_DAYS, então uma
+      // linha de Notification mais velha que a janela representa uma
+      // conquista que o app já não vai celebrar — entregar o push levaria a
+      // uma fila vazia. Isto também é o que fecha a porta dos fundos do
+      // killswitch: religar gamificação meses depois não deve reviver push
+      // de linhas antigas que ficaram paradas de propósito.
+      const celebrationCutoff = new Date(
+        now.getTime() - CELEBRATION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+      );
+      const staleBadgeRows = badgeRows.filter((r) => r.createdAt < celebrationCutoff);
+      const deliverableBadgeRows = badgeRows.filter((r) => r.createdAt >= celebrationCutoff);
+
+      if (staleBadgeRows.length > 0) {
+        try {
+          await suppressGroup(
+            staleBadgeRows.map((r) => r.id),
+            now,
+          );
+        } catch (err) {
+          deps.log?.error({ err }, '[notification-delivery] stale badge suppress failed');
+        }
+      }
+
+      const userIds = [...new Set(deliverableBadgeRows.map((r) => r.userId))];
       const users = await prisma.user.findMany({
         where: { id: { in: userIds } },
         select: { id: true, pushPrefs: true },
@@ -100,7 +125,7 @@ export const runNotificationDeliveryTick = async (deps: DeliveryTickDeps): Promi
       );
 
       for (const userId of userIds) {
-        const group = badgeRows.filter((r) => r.userId === userId);
+        const group = deliverableBadgeRows.filter((r) => r.userId === userId);
         const ids = group.map((r) => r.id);
         if (!allowed.has(userId)) {
           // Preferência governa o push, não o inbox: a linha da central fica,

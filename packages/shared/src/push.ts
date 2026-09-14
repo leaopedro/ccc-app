@@ -28,6 +28,7 @@ export const pushKindSchema = z.enum([
   'box.ready',
   'box.shipped',
   'box.delivered',
+  'badge_awarded',
 ]);
 export type PushKind = z.infer<typeof pushKindSchema>;
 

@@ -12,3 +12,9 @@ export const BADGE_AWARDED_NOTIFICATION_KIND = 'badge_awarded';
 /** Build the dedupeKey for a badge-awarded notification. */
 export const badgeAwardedDedupeKey = (code: string, userId: string): string =>
   `badge:${code}:${userId}`;
+
+/** Título do push quando mais de uma conquista cai no mesmo tick. */
+export const BADGE_AWARDED_GROUP_NOTIFICATION_TITLE = 'Novas conquistas!';
+
+/** Corpo do push agrupado. `count` é sempre >= 2 no uso real. */
+export const badgeAwardedGroupBody = (count: number): string => `Você ganhou ${count} conquistas.`;

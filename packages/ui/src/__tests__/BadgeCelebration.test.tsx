@@ -20,6 +20,12 @@ declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
 }
 
+// Hoisted so `vi.mock` below (itself hoisted to the top of the file) can
+// reference it, and so tests can assert on calls without re-importing.
+const { announceForAccessibility } = vi.hoisted(() => ({
+  announceForAccessibility: vi.fn(),
+}));
+
 vi.mock('react-native', async () => {
   const ReactMod = await import('react');
   const make = (tag: string) =>
@@ -81,7 +87,11 @@ vi.mock('react-native', async () => {
       if (typeof testID === 'string') aria['data-testid'] = testID;
       void onRequestClose;
       void rest;
-      return ReactMod.createElement('div', { ref, ...aria }, children);
+      // Distinct tag from `View`/`div`: `Modal` is a separate native window,
+      // not a sibling in the same tree, and a component that swaps it for a
+      // plain `View` must fail this shape check even though both mocks
+      // render fine in jsdom.
+      return ReactMod.createElement('rn-modal', { ref, ...aria }, children);
     },
   );
 
@@ -111,6 +121,11 @@ vi.mock('react-native', async () => {
     addEventListener: () => ({ remove: () => {} }),
   };
 
+  const AccessibilityInfo = {
+    announceForAccessibility,
+    isReduceMotionEnabled: () => Promise.resolve(false),
+  };
+
   return {
     Pressable: make('button'),
     View: make('div'),
@@ -120,6 +135,7 @@ vi.mock('react-native', async () => {
     Modal,
     Animated,
     BackHandler,
+    AccessibilityInfo,
     StyleSheet: {
       create: <T,>(s: T): T => s,
       flatten: <T,>(s: T): T => s,
@@ -205,6 +221,7 @@ describe('<BadgeCelebration />', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    announceForAccessibility.mockClear();
   });
 
   afterEach(async () => {
@@ -290,5 +307,93 @@ describe('<BadgeCelebration />', () => {
     );
     click(container.querySelector('[data-testid="celebration-close"]'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('renderiza a raiz como Modal, nao View', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    await render(
+      <BadgeCelebration
+        entries={[entry('EVT-001', 'A', 'a')]}
+        copy={copy}
+        onClose={() => {}}
+        reduceMotion
+      />,
+    );
+    // Um `View`/`div` no lugar do Modal passaria por todos os outros
+    // testes deste arquivo — só esta asserção de forma pega a troca. Um
+    // `Modal` é uma janela nativa separada; um `View` renderiza atrás de
+    // toda sheet do app.
+    expect(container.querySelector('rn-modal')).not.toBeNull();
+  });
+
+  it('ignora toque no backdrop antes da janela de graca, aceita depois', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    const onClose = vi.fn();
+    await render(
+      <BadgeCelebration entries={[entry('EVT-001', 'A', 'a')]} copy={copy} onClose={onClose} />,
+    );
+
+    // Toque em voo no primeiro frame nao pode consumir a celebracao: o
+    // fechamento e permanente, e o usuario nunca chegou a ler nada.
+    click(container.querySelector('[data-testid="celebration-backdrop"]'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+
+    click(container.querySelector('[data-testid="celebration-backdrop"]'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('botao Fechar funciona de imediato, mesmo dentro da janela de graca', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    const onClose = vi.fn();
+    await render(
+      <BadgeCelebration entries={[entry('EVT-001', 'A', 'a')]} copy={copy} onClose={onClose} />,
+    );
+    click(container.querySelector('[data-testid="celebration-close"]'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('com reduceMotion, o backdrop e pressionavel desde o primeiro frame', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    const onClose = vi.fn();
+    await render(
+      <BadgeCelebration
+        entries={[entry('EVT-001', 'A', 'a')]}
+        copy={copy}
+        onClose={onClose}
+        reduceMotion
+      />,
+    );
+    click(container.querySelector('[data-testid="celebration-backdrop"]'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('anuncia o titulo via announceForAccessibility ao abrir', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    await render(
+      <BadgeCelebration
+        entries={[entry('EVT-001', 'Primeira Largada', 'a')]}
+        copy={copy}
+        onClose={() => {}}
+        reduceMotion
+      />,
+    );
+    expect(announceForAccessibility).toHaveBeenCalledWith(copy.titleOne);
+  });
+
+  it('anuncia o titulo agregado quando sao varias conquistas', async () => {
+    const { BadgeCelebration } = await import('../BadgeCelebration.js');
+    await render(
+      <BadgeCelebration
+        entries={[entry('EVT-001', 'A', 'a'), entry('CAR-001', 'B', 'b')]}
+        copy={copy}
+        onClose={() => {}}
+        reduceMotion
+      />,
+    );
+    expect(announceForAccessibility).toHaveBeenCalledWith(copy.titleMany(2));
   });
 });

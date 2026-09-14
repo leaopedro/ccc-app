@@ -1,10 +1,25 @@
-import { useEffect, useRef } from 'react';
-import { Animated, BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  BackHandler,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { garageTokens, type GarageRarity } from './garage-tokens.js';
 import { HexBadge } from './HexBadge.js';
 
 const MAX_VISIBLE = 6;
+
+// Grace period before the backdrop becomes pressable. A tap already in
+// flight when the overlay springs in must not consume a celebration the
+// user never read — that ack is permanent. `reduceMotion` skips it: there is
+// no entrance animation to protect a tap from.
+const BACKDROP_GRACE_MS = 400;
 
 export interface BadgeCelebrationEntry {
   code: string;
@@ -64,6 +79,8 @@ export const BadgeCelebration = ({
   const rise = useRef(new Animated.Value(reduceMotion ? 0 : 40)).current;
   const scale = useRef(new Animated.Value(reduceMotion ? 1 : 0.85)).current;
 
+  const [backdropDismissable, setBackdropDismissable] = useState(reduceMotion);
+
   useEffect(() => {
     if (reduceMotion) return;
     Animated.parallel([
@@ -74,6 +91,12 @@ export const BadgeCelebration = ({
   }, [reduceMotion, backdrop, rise, scale]);
 
   useEffect(() => {
+    if (reduceMotion) return;
+    const timer = setTimeout(() => setBackdropDismissable(true), BACKDROP_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [reduceMotion]);
+
+  useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       onClose();
       return true;
@@ -81,10 +104,24 @@ export const BadgeCelebration = ({
     return () => sub.remove();
   }, [onClose]);
 
+  useEffect(() => {
+    // Mirrors what a sighted user sees at the top of the overlay the moment
+    // it appears.
+    AccessibilityInfo.announceForAccessibility(
+      single ? copy.titleOne : copy.titleMany(entries.length),
+    );
+  }, [single, copy, entries.length]);
+
   return (
     <Modal transparent animationType="none" visible onRequestClose={onClose}>
       <Animated.View style={[styles.backdrop, { opacity: backdrop }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} />
+        <Pressable
+          testID="celebration-backdrop"
+          style={StyleSheet.absoluteFill}
+          onPress={backdropDismissable ? onClose : undefined}
+          disabled={!backdropDismissable}
+          accessible={false}
+        />
         <Animated.View
           accessibilityViewIsModal
           testID={testID ?? 'celebration'}

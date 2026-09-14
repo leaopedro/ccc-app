@@ -148,6 +148,12 @@ const { listEvents, getConfirmedCars } = vi.hoisted(() => ({
   getConfirmedCars: vi.fn(),
 }));
 
+// Task 8: mesma razao do MemberHome — o hook real puxa ~/api/client ->
+// expo-constants, que lanca `__DEV__ is not defined` sob jsdom.
+const homeFeedState = vi.hoisted(() => ({
+  value: { posts: [] as unknown[], loading: false, refresh: async () => {} },
+}));
+
 vi.mock('~/hooks/useHomeContent', () => ({
   useHomeContent: () => hookState.home,
 }));
@@ -156,6 +162,9 @@ vi.mock('~/hooks/useClubStats', () => ({
 }));
 vi.mock('~/hooks/useStoreProducts', () => ({
   useStoreProducts: () => hookState.storeProducts,
+}));
+vi.mock('~/hooks/useHomeFeed', () => ({
+  useHomeFeed: () => homeFeedState.value,
 }));
 vi.mock('~/api/events', () => ({
   listEvents,
@@ -288,6 +297,7 @@ beforeEach(() => {
     error: false,
     refresh: () => Promise.resolve(),
   };
+  homeFeedState.value = { posts: [], loading: false, refresh: async () => {} };
 });
 
 afterEach(async () => {
@@ -334,7 +344,30 @@ describe('GuestHome — happy path', () => {
   // position 4 to below <StoreTeaserSection> and every other test in this
   // file still passed. Pin the actual vertical order, not just presence,
   // the same way MemberHome.test.tsx does (indexOf position markers).
-  it('renders the nine blocks in the addendum-specified order', async () => {
+  it('renders the ten blocks in the addendum-specified order', async () => {
+    // Task 8 fix (Important 2): a lista de marcadores precisa conhecer a
+    // secao nova, senao mover CommunityFeedSection para outro lugar do
+    // stack passa em tudo aqui. Precisa de >=1 post: com a lista vazia a
+    // secao renderiza null e o marcador nunca apareceria.
+    homeFeedState.value = {
+      ...homeFeedState.value,
+      posts: [
+        {
+          id: 'p1',
+          eventId: 'e1',
+          car: null,
+          body: 'post do feed',
+          status: 'visible',
+          photos: [],
+          reactions: { likes: 0, mine: false },
+          commentCount: 0,
+          isOwn: false,
+          createdAt: '2026-09-13T12:00:00.000Z',
+          updatedAt: '2026-09-13T12:00:00.000Z',
+          event: { slug: 'evento-feed', title: 'Evento do Feed' },
+        },
+      ],
+    };
     await render();
     const text = container.textContent ?? '';
     const markers = [
@@ -345,8 +378,9 @@ describe('GuestHome — happy path', () => {
       inicioCopy.cta.signup, // 5. CtaSection
       inicioCopy.sections.plans, // 6. PlansSection
       inicioCopy.sections.highlights, // 7. HighlightsSection
-      inicioCopy.sections.store, // 8. StoreTeaserSection
-      inicioCopy.sections.confirmedCars, // 9. ConfirmedCarsSection
+      inicioCopy.sections.communityFeed, // 8. CommunityFeedSection
+      inicioCopy.sections.store, // 9. StoreTeaserSection
+      inicioCopy.sections.confirmedCars, // 10. ConfirmedCarsSection
     ];
     const indices = markers.map((m) => text.indexOf(m));
     indices.forEach((idx, i) => {
@@ -572,5 +606,34 @@ describe('GuestHome — member-state leak guard', () => {
     expect(text).not.toContain(inicioCopy.sections.myTickets);
     expect(text).not.toContain(inicioCopy.sections.myGarage);
     expect(text).not.toContain(inicioCopy.sections.quickAccess);
+  });
+});
+
+describe('GuestHome — community feed (Task 8)', () => {
+  it('renderiza o feed da comunidade quando ha posts', async () => {
+    homeFeedState.value = {
+      posts: [
+        {
+          id: 'p1',
+          eventId: 'e1',
+          car: null,
+          body: 'que encontro bom',
+          status: 'visible',
+          photos: [],
+          reactions: { likes: 0, mine: false },
+          commentCount: 0,
+          isOwn: false,
+          createdAt: '2026-09-13T12:00:00.000Z',
+          updatedAt: '2026-09-13T12:00:00.000Z',
+          event: { slug: 'encontro-setembro', title: 'Encontro de Setembro' },
+        },
+      ],
+      loading: false,
+      refresh: async () => {},
+    };
+
+    await render();
+
+    expect(container.textContent).toContain('que encontro bom');
   });
 });

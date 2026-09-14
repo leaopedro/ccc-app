@@ -150,6 +150,37 @@ export const feedCommentListResponseSchema = z.object({
 });
 export type FeedCommentListResponse = z.infer<typeof feedCommentListResponseSchema>;
 
+/**
+ * Quantos posts o sorteio da Início considera.
+ *
+ * O pool é cortado dos mais recentes e embaralhado em memória. `ORDER BY
+ * random()` sobre a tabela inteira não usa índice nenhum. Ver a nota de custo
+ * em routes/home-feed.ts: o LIMIT só ajuda se o WHERE casar cedo, e isso
+ * depende de filtrar por eventId.
+ */
+export const HOME_FEED_POOL_SIZE = 50;
+
+/**
+ * Post do feed da Início. Carrega o evento porque a lista é cross-evento: o
+ * card precisa rotular a origem e o toque precisa do slug para navegar.
+ * `title` e `slug` só são públicos para evento PUBLICADO (routes/events.ts:172),
+ * e é por isso que a rota filtra status: 'published'.
+ */
+export const homeFeedItemSchema = feedPostResponseSchema.extend({
+  event: z.object({ slug: z.string().min(1), title: z.string().min(1) }),
+});
+export type HomeFeedItem = z.infer<typeof homeFeedItemSchema>;
+
+/**
+ * Sem page/total, ao contrário de feedListResponseSchema: a Início mostra um
+ * punhado sorteado e não pagina. Um cursor aqui criaria a expectativa de uma
+ * segunda página que o sorteio não sabe entregar sem repetir.
+ */
+export const homeFeedResponseSchema = z.object({
+  posts: z.array(homeFeedItemSchema),
+});
+export type HomeFeedResponse = z.infer<typeof homeFeedResponseSchema>;
+
 export const feedPostPatchInputSchema = z.object({
   body: z.string().trim().min(1).max(2000).optional(),
   photoObjectKeys: z.array(z.string().min(1).max(300)).max(1).optional(),
@@ -205,6 +236,8 @@ export const FEED_PUBLIC_RESPONSE_SCHEMAS = {
   feedCommentResponse: feedCommentResponseSchema,
   feedListResponse: feedListResponseSchema,
   feedCommentListResponse: feedCommentListResponseSchema,
+  homeFeedItem: homeFeedItemSchema,
+  homeFeedResponse: homeFeedResponseSchema,
   feedReactionSummary: feedReactionSummarySchema,
   feedPostPhoto: feedPostPhotoSchema,
   publicCarPhoto: publicCarPhotoSchema,

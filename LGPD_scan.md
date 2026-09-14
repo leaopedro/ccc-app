@@ -131,7 +131,7 @@ Source bibliography is in §18 Appendix.
 - Tickets: Stripe (card/Apple Pay) or AbacatePay (Pix); webhook-driven status flip; idempotent via `(provider, providerRef)` + `PaymentWebhookEvent.eventId` unique constraints.
 - Media: client presigns via `/uploads/presign`, PUTs directly to R2. Ownership encoded in object-key prefix; API validates ownership on attach.
 - Push: device tokens registered on app launch; Expo Push delivers; `pushPrefs.marketing` (defaults `true`) controls non-transactional sends.
-- Feed: posts/comments/reactions per event; `tryAuth` soft-auth for read; reads gate on `checkFeedReadAccess`.
+- Feed: posts/comments/reactions per event; `tryAuth` soft-auth for read; reads gate on `checkFeedReadAccess`. `GET /api/home-feed` (home screen, cross-event) is a separate public route that does not go through `checkFeedReadAccess` — it filters on `Event.feedAccess: 'public'` + `Event.status: 'published'` (+ `feedEnabled: true`), excludes posts from deleted accounts (`authorUserId` null) and posts with an open `Report`, excludes authors with a `FeedBan` on that event, and applies `UserBlock`/`FeedBan(scope: 'view')` filtering when the reader is logged in.
 - Admin: organizer/admin/staff roles via `UserRole`; `AdminAudit` logs admin actions.
 - Errors: Sentry on all 3 apps; Pino logger on API with redaction list.
 

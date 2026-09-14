@@ -337,7 +337,11 @@ describe('gatilho de escrita — postar no feed', () => {
         <EventFeedSection
           eventSlug="meu-evento"
           eventId="evt_1"
-          feedSettings={{ ...defaultFeedSettings, feedAccess: 'public', postingAccess: 'attendees' }}
+          feedSettings={{
+            ...defaultFeedSettings,
+            feedAccess: 'public',
+            postingAccess: 'attendees',
+          }}
           ticketSource="purchase"
           embedded
         />,

@@ -192,10 +192,7 @@ vi.mock('lucide-react-native', async () => {
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-import type {
-  BadgeCelebrationCopy,
-  BadgeCelebrationEntry,
-} from '../BadgeCelebration.js';
+import type { BadgeCelebrationCopy, BadgeCelebrationEntry } from '../BadgeCelebration.js';
 
 const copy: BadgeCelebrationCopy = {
   titleOne: 'VOCE GANHOU UMA CONQUISTA',
@@ -262,7 +259,11 @@ describe('<BadgeCelebration />', () => {
     const { BadgeCelebration } = await import('../BadgeCelebration.js');
     await render(
       <BadgeCelebration
-        entries={[entry('EVT-001', 'A', 'a'), entry('CAR-001', 'B', 'b'), entry('COM-001', 'C', 'c')]}
+        entries={[
+          entry('EVT-001', 'A', 'a'),
+          entry('CAR-001', 'B', 'b'),
+          entry('COM-001', 'C', 'c'),
+        ]}
         copy={copy}
         onClose={() => {}}
         reduceMotion

@@ -147,7 +147,9 @@ export const BadgeCelebration = ({
             {rest > 0 ? <Text style={styles.more}>{copy.more(rest)}</Text> : null}
           </View>
 
-          <Text style={styles.title}>{single ? copy.titleOne : copy.titleMany(entries.length)}</Text>
+          <Text style={styles.title}>
+            {single ? copy.titleOne : copy.titleMany(entries.length)}
+          </Text>
 
           {single ? (
             <>

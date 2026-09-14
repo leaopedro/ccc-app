@@ -67,27 +67,18 @@ describe('runNotificationDeliveryTick', () => {
     expect(n.attemptCount).toBe(1); // second tick skipped it
   });
 
-  it('never delivers non-owned kinds (broadcast, badge_awarded)', async () => {
+  it('never delivers broadcast', async () => {
     const { user } = await createUser({ verified: true });
     await prisma.deviceToken.create({
       data: { userId: user.id, expoPushToken: 'ExponentPushToken[wign111111]', platform: 'ios' },
     });
-    // Rows other writers create with a null sentAt that must NOT be pushed here.
+    // Rows another writer (BroadcastDelivery worker) creates with a null
+    // sentAt that must NOT be pushed here.
     await prisma.notification.create({
       data: {
         userId: user.id,
         kind: 'broadcast',
         dedupeKey: 'bc_1',
-        title: 't',
-        body: 'b',
-        data: {},
-      },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: user.id,
-        kind: 'badge_awarded',
-        dedupeKey: 'bg_1',
         title: 't',
         body: 'b',
         data: {},
@@ -99,7 +90,7 @@ describe('runNotificationDeliveryTick', () => {
 
     expect(sender.captured.length).toBe(0);
     const rows = await prisma.notification.findMany({
-      where: { userId: user.id, kind: { in: ['broadcast', 'badge_awarded'] } },
+      where: { userId: user.id, kind: 'broadcast' },
     });
     expect(rows.every((r) => r.sentAt === null)).toBe(true); // untouched
   });

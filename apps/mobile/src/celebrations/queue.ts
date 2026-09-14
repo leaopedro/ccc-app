@@ -1,4 +1,4 @@
-import type { BadgeCatalogEntry, GarageBadgePublic } from '@ccc/shared/badges';
+import type { BadgeCatalogEntry, BadgeCelebration } from '@ccc/shared/badges';
 import type { BadgeCelebrationEntry } from '@ccc/ui';
 
 export type BundledCopy = Record<string, { title: string; description: string } | undefined>;
@@ -25,7 +25,7 @@ export type ResolveResult = {
  * de uma requisição ruim.
  */
 export const resolveEntries = (
-  pending: GarageBadgePublic[],
+  pending: BadgeCelebration[],
   catalog: BadgeCatalogEntry[] | null,
   bundled: BundledCopy,
 ): ResolveResult => {
@@ -53,6 +53,8 @@ export const resolveEntries = (
     const title = cat.title ?? fallback?.title;
     const description = cat.description ?? fallback?.description;
     if (!title) {
+      // Segundo caso de ack sem animação: código presente mas sem título em
+      // catálogo ou bundle. Evita quebra de renderização com copy faltante.
       ackOnly.push(p.code);
       continue;
     }

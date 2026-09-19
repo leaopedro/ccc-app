@@ -17,23 +17,12 @@ import {
 
 import { addCarPhoto, deleteCar, getCar, removeCarPhoto, updateCar } from '~/api/cars';
 import { ApiError } from '~/api/client';
+import { ModificationsField } from '~/components/ModificationsField';
 import { TextField } from '~/components/TextField';
 import { profileCopy } from '~/copy/profile';
 import { confirmDestructive, showMessage } from '~/lib/confirm';
 import { pickAndUpload } from '~/lib/upload-image';
 import { theme } from '~/theme';
-
-function ModificationPills({ modifications }: { modifications: string[] }) {
-  return (
-    <View style={styles.pillsRow}>
-      {modifications.map((mod, i) => (
-        <View key={i} style={styles.pill}>
-          <Text style={styles.pillText}>{mod}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 const PHOTO_SIZE = 140;
 
@@ -285,29 +274,13 @@ export default function CarDetail() {
       <Controller
         control={form.control}
         name="modifications"
-        render={({ field, fieldState }) => {
-          const rawText = field.value?.join(', ') ?? '';
-          return (
-            <View>
-              <TextField
-                label={profileCopy.garage.modificationsLabel}
-                hint={profileCopy.garage.modificationsHint}
-                value={rawText}
-                onChangeText={(v) => {
-                  const items = v
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter((s) => s.length > 0);
-                  field.onChange(items);
-                }}
-                error={fieldState.error?.message}
-              />
-              {field.value && field.value.length > 0 ? (
-                <ModificationPills modifications={field.value} />
-              ) : null}
-            </View>
-          );
-        }}
+        render={({ field, fieldState }) => (
+          <ModificationsField
+            value={field.value ?? []}
+            onChange={field.onChange}
+            error={fieldState.error?.message}
+          />
+        )}
       />
 
       {banner ? <Text style={styles.banner}>{banner}</Text> : null}
@@ -388,21 +361,5 @@ const styles = StyleSheet.create({
   },
   banner: {
     color: theme.colors.muted,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  pill: {
-    backgroundColor: theme.colors.border,
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  pillText: {
-    color: theme.colors.fg,
-    fontSize: theme.font.size.sm,
   },
 });

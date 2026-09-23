@@ -4,7 +4,7 @@ import { Button } from '@ccc/ui';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import type { z } from 'zod';
 
 type CarInputForm = z.input<typeof carInputSchema>;
@@ -13,21 +13,10 @@ import { createCar } from '~/api/cars';
 import { ApiError } from '~/api/client';
 import { sanitizeNext } from '~/auth/redirect-intent';
 import { requestCelebrationRefresh } from '~/celebrations/refresh-bus';
+import { ModificationsField } from '~/components/ModificationsField';
 import { TextField } from '~/components/TextField';
 import { profileCopy } from '~/copy/profile';
 import { theme } from '~/theme';
-
-function ModificationPills({ modifications }: { modifications: string[] }) {
-  return (
-    <View style={styles.pillsRow}>
-      {modifications.map((mod, i) => (
-        <View key={i} style={styles.pill}>
-          <Text style={styles.pillText}>{mod}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 export default function NewCar() {
   const router = useRouter();
@@ -132,29 +121,13 @@ export default function NewCar() {
       <Controller
         control={form.control}
         name="modifications"
-        render={({ field, fieldState }) => {
-          const rawText = field.value?.join(', ') ?? '';
-          return (
-            <View>
-              <TextField
-                label={profileCopy.garage.modificationsLabel}
-                hint={profileCopy.garage.modificationsHint}
-                value={rawText}
-                onChangeText={(v) => {
-                  const items = v
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter((s) => s.length > 0);
-                  field.onChange(items);
-                }}
-                error={fieldState.error?.message}
-              />
-              {field.value && field.value.length > 0 ? (
-                <ModificationPills modifications={field.value} />
-              ) : null}
-            </View>
-          );
-        }}
+        render={({ field, fieldState }) => (
+          <ModificationsField
+            value={field.value ?? []}
+            onChange={field.onChange}
+            error={fieldState.error?.message}
+          />
+        )}
       />
       <Button label={profileCopy.garage.save} onPress={() => void onSave()} />
     </View>
@@ -167,21 +140,5 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
     gap: theme.spacing.md,
     backgroundColor: theme.colors.bg,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  pill: {
-    backgroundColor: theme.colors.border,
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  pillText: {
-    color: theme.colors.fg,
-    fontSize: theme.font.size.sm,
   },
 });

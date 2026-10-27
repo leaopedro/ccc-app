@@ -52,6 +52,30 @@ export function canUnskip(cutoffAt: string): boolean {
   return new Date(cutoffAt).getTime() > Date.now();
 }
 
+// `cycleEnd` is an instant, not a date-only string like `cycleKey`, so it is
+// formatted in the member's own timezone: the day their cycle ends is the day
+// they will see on their phone.
+const cycleEndFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: 'numeric',
+  month: 'long',
+});
+
+// The day the current cycle ends. Null in the two cases where saying it would
+// be worse than silence:
+//
+//   - a day already past, which is what a membership whose renewal never
+//     landed keeps sitting on;
+//   - an unparseable instant, which would otherwise reach Intl.format as an
+//     Invalid Date and throw mid-render. `cycleEnd` is `z.string()`, not
+//     `.datetime()`, so the schema does not rule this out, and `NaN <= n` is
+//     false, so the staleness check alone lets it through.
+export function cycleEndLabel(cycleEnd: string): string | null {
+  const end = new Date(cycleEnd);
+  if (Number.isNaN(end.getTime())) return null;
+  if (end.getTime() <= Date.now()) return null;
+  return cycleEndFormatter.format(end);
+}
+
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
 const monthYearFormatter = new Intl.DateTimeFormat('pt-BR', {
   month: 'long',

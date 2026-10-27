@@ -821,6 +821,17 @@ model MonthlyBox {
   shippingCents       Int              @default(0)
   chargeCents         Int              @default(0)
   autoSendOptIn       Boolean          @default(false)
+  /// Qual aviso de corte ja foi enviado para esta caixa: `empty`,
+  /// `unconfirmed` ou `unpaid`. Nulo enquanto nenhum saiu.
+  ///
+  /// Serve a duas coisas que o indice unico da Notification nao resolve.
+  /// Primeiro, drenar: sem um predicado de "ja avisei", a consulta do worker
+  /// devolve as mesmas N primeiras linhas todo minuto e quem esta atras do
+  /// teto nunca e avisado. Segundo, reavisar quando o estado muda: o membro
+  /// avisado como `empty` em T-48h que depois monta e deixa de pagar precisa
+  /// ouvir sobre o pagamento, e so a comparacao com o estado JA avisado
+  /// distingue isso de um aviso repetido.
+  cutoffRemindedCase  String?          @db.VarChar(16)
   shippingAddressId   String?
   orderId             String?           @unique
   fulfillmentStatus   FulfillmentStatus @default(unfulfilled)

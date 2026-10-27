@@ -5,7 +5,11 @@ import type { Prisma } from '@prisma/client';
 import cron from 'node-cron';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { enqueueBoxNotification } from '../services/box/notifications.js';
+import {
+  enqueueBoxCutoffReminder,
+  enqueueBoxNotification,
+  type BoxCutoffReminderCase,
+} from '../services/box/notifications.js';
 import { recalcBoxTotals } from '../services/box/recalc.js';
 import { releaseCycleStock, reserveCycleStock } from '../services/box/stock.js';
 import type { StripeClient } from '../services/stripe/index.js';
@@ -123,6 +127,128 @@ const resolveBudgetOnly = async (
   const status = remaining === 0 ? 'skipped' : 'ready';
   await tx.monthlyBox.update({ where: { id: boxId }, data: { status } });
   return status;
+};
+
+/**
+ * How far ahead of the cutoff the member is warned.
+ *
+ * The cutoff resolves a box the member never confirmed straight to `skipped`,
+ * and `unskipBox` refuses past the cutoff, so a member who misses it loses the
+ * cycle with no way back. Two days is enough to notice a push, open the app and
+ * finish, without being so early that the warning is forgotten by the time it
+ * matters.
+ */
+const CUTOFF_REMINDER_LEAD_MS = 48 * 60 * 60 * 1000;
+
+/** How many boxes one reminder tick will warn. Above this, the rest wait for the next tick. */
+const REMINDER_BATCH = 200;
+
+/**
+ * The three states worth warning about, each as the database predicate that
+ * identifies it. The JS that picks the copy below must agree with these
+ * exactly, so both derive from the same two facts: the box status, and whether
+ * any line is still included.
+ *
+ * A box only enters this list when the state it is in NOW differs from the
+ * state it was last warned about. That is what both drains the queue (a box
+ * warned about its current state leaves the result set, instead of occupying a
+ * slot in the batch for the next 48h) and lets a member who moves from empty
+ * to unpaid hear about the payment.
+ */
+const REMINDER_CASES: ReadonlyArray<{
+  value: BoxCutoffReminderCase;
+  shape: Prisma.MonthlyBoxWhereInput;
+}> = [
+  { value: 'unpaid', shape: { status: 'awaiting_payment' } },
+  { value: 'unconfirmed', shape: { status: 'open', items: { some: { included: true } } } },
+  { value: 'empty', shape: { status: 'open', items: { none: { included: true } } } },
+];
+
+/**
+ * `cutoffRemindedCase <> value` on its own drops rows where the column is
+ * null, because SQL comparison against NULL is never true. The null arm is
+ * what lets a box that was never warned in.
+ */
+const notYetWarnedAbout = (value: BoxCutoffReminderCase): Prisma.MonthlyBoxWhereInput[] => [
+  { cutoffRemindedCase: null },
+  { cutoffRemindedCase: { not: value } },
+];
+
+/**
+ * Warn members whose box closes inside the reminder window.
+ *
+ * Separate from `runBoxCutoffTick` on purpose: that one changes box state and
+ * must stay transactional per box, while this one only writes inbox rows and
+ * must never hold a box lock. Both run from the same cron tick.
+ *
+ * Re-running is free, and twice over: `cutoffRemindedCase` keeps a warned box
+ * out of the next tick's result set, and the unique index on
+ * (userId, kind, dedupeKey) still refuses a duplicate row if two processes
+ * reach the same box in the same instant.
+ */
+export const runBoxCutoffReminderTick = async (deps: {
+  log?: FastifyBaseLogger;
+  now?: Date;
+}): Promise<void> => {
+  const now = deps.now ?? new Date();
+  const until = new Date(now.getTime() + CUTOFF_REMINDER_LEAD_MS);
+  const due = await prisma.monthlyBox.findMany({
+    where: {
+      cutoffAt: { gt: now, lte: until },
+      // Mesmas duas situacoes que `loadEligibleMembership` aceita. Trocar de
+      // status nao mexe na MonthlyBox, entao um membro com cartao recusado,
+      // pausado ou cancelado continua com a caixa em `open`. Sem este filtro
+      // ele recebe "monte a sua antes do corte", toca no push, e GET /me/box
+      // responde 403 -> a tela diz "sem caixa neste ciclo".
+      membership: { status: { in: ['active', 'trialing'] } },
+      // Cada arm ja carrega o status que lhe cabe, entao isto tambem e o
+      // filtro de `open`/`awaiting_payment`: nenhum outro status casa.
+      OR: REMINDER_CASES.map((c) => ({
+        AND: [c.shape, { OR: notYetWarnedAbout(c.value) }],
+      })),
+    },
+    select: {
+      id: true,
+      status: true,
+      // Presence, not the lines themselves: this only picks the copy.
+      items: { where: { included: true }, select: { id: true }, take: 1 },
+      membership: { select: { garage: { select: { userId: true } } } },
+    },
+    // Closest to its cutoff first, so a backlog warns the most urgent boxes
+    // while the warning is still worth something. `id` behind it for a total order.
+    orderBy: [{ cutoffAt: 'asc' }, { id: 'asc' }],
+    take: REMINDER_BATCH,
+  });
+  if (due.length === REMINDER_BATCH) {
+    deps.log?.warn(
+      { batch: REMINDER_BATCH },
+      '[box-cutoff] reminder batch full, remainder deferred to the next tick',
+    );
+  }
+
+  for (const box of due) {
+    const reminderCase: BoxCutoffReminderCase =
+      box.status === 'awaiting_payment' ? 'unpaid' : box.items.length > 0 ? 'unconfirmed' : 'empty';
+    try {
+      await enqueueBoxCutoffReminder(prisma, {
+        userId: box.membership.garage.userId,
+        boxId: box.id,
+        case: reminderCase,
+      });
+      // Depois do enfileiramento, nunca antes: marcar primeiro e falhar no
+      // enqueue silenciaria o aviso para sempre. Na ordem inversa, uma falha
+      // aqui so custa uma tentativa repetida no proximo tick, que o indice
+      // unico da Notification transforma em no-op.
+      await prisma.monthlyBox.update({
+        where: { id: box.id },
+        data: { cutoffRemindedCase: reminderCase },
+      });
+    } catch (err) {
+      // One member's reminder failing must not cost the rest of the batch theirs.
+      deps.log?.error({ err, boxId: box.id }, '[box-cutoff] reminder failed');
+      Sentry.captureException(err);
+    }
+  }
 };
 
 export const runBoxCutoffTick = async (deps: Deps): Promise<void> => {
@@ -283,6 +409,13 @@ export const startBoxCutoffWorker = (deps: Deps): { stop: () => void } => {
       await runBoxCutoffTick(deps);
     } catch (err) {
       deps.log?.error({ err }, '[box-cutoff] tick error');
+    }
+    // After the resolver, never before: a box that closes this very minute
+    // should be resolved, not warned about a cutoff it has already reached.
+    try {
+      await runBoxCutoffReminderTick(deps);
+    } catch (err) {
+      deps.log?.error({ err }, '[box-cutoff] reminder tick error');
     }
   });
 

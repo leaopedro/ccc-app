@@ -49,6 +49,11 @@ export const boxViewSchema = z.object({
   status: boxStatusSchema,
   fulfillmentStatus: boxFulfillmentStatusSchema,
   cycleKey: z.string(),
+  // Opcional de proposito. O app vai pra loja e roda contra a API que estiver
+  // no ar: um build novo contra uma API sem este campo falharia o parse do
+  // boxViewSchema inteiro e apagaria a tela de Caixa, nao so a linha da
+  // proxima caixa. Mesma razao do comentario em boxCheckoutResponseSchema.
+  cycleEnd: z.string().optional(),
   cutoffAt: z.string(),
   budgetCents: z.number().int(),
   currency: z.string(),

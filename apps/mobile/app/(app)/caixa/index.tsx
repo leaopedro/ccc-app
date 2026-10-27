@@ -30,7 +30,7 @@ import {
   cycleMonthLabel,
   hasDroppedLines,
   homeVariant,
-  nextCycleLabel,
+  cycleEndLabel,
 } from '~/screens/caixa/box-state';
 import { CaixaSkeleton } from '~/screens/caixa/CaixaSkeleton';
 import { CutoffBanner } from '~/screens/caixa/CutoffBanner';
@@ -230,7 +230,7 @@ function SkippedBody({
   // to offer. Showing the unskip link anyway produced a dead control: it was
   // greyed out with no explanation, and tapping it did nothing.
   if (!canUnskip(box.cutoffAt)) {
-    const opensAt = nextCycleLabel(box.cycleEnd);
+    const cycleEndsAt = box.cycleEnd ? cycleEndLabel(box.cycleEnd) : null;
     return (
       <View style={styles.centerBlock}>
         <Text variant="h3" style={styles.centerTitle}>
@@ -239,9 +239,9 @@ function SkippedBody({
         <Text variant="bodySm" tone="muted" style={styles.centerBody}>
           {caixaCopy.closed.body}
         </Text>
-        {opensAt ? (
+        {cycleEndsAt ? (
           <Text variant="bodySm" tone="muted" style={styles.centerBody}>
-            {caixaCopy.closed.next(opensAt)}
+            {caixaCopy.closed.cycleEnds(cycleEndsAt)}
           </Text>
         ) : null}
       </View>

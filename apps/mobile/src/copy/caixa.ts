@@ -25,8 +25,11 @@ export const caixaCopy = {
   // member may well have been building when the cycle closed on them.
   closed: {
     title: (month: string) => `${month} fechou`,
-    body: 'O prazo para montar acabou e essa caixa não foi confirmada.',
-    next: (date: string) => `Sua próxima caixa abre em ${date}.`,
+    body: 'O ciclo fechou e essa caixa não foi enviada.',
+    // Fala do ciclo, nao da proxima caixa: o app nao recebe
+    // `cancelAtPeriodEnd`, entao prometer uma proxima caixa seria mentir pra
+    // quem acabou de cancelar.
+    cycleEnds: (date: string) => `Este ciclo termina em ${date}.`,
   },
   awaiting: {
     banner: 'Aguardando pagamento',

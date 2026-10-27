@@ -28,6 +28,7 @@ const DELIVERABLE_KINDS = [
   'box.ready',
   'box.shipped',
   'box.delivered',
+  'box.cutoff_soon',
   'ticket.confirmed',
   'event.reminder_24h',
   'event.reminder_1h',

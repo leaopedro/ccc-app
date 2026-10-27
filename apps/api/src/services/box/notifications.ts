@@ -33,7 +33,7 @@ const COPY: Record<BoxPushKind, { title: string; body: string }> = {
  */
 export type BoxCutoffReminderCase = 'empty' | 'unconfirmed' | 'unpaid';
 
-const CUTOFF_SOON_COPY: Record<BoxCutoffReminderCase, { title: string; body: string }> = {
+export const CUTOFF_SOON_COPY: Record<BoxCutoffReminderCase, { title: string; body: string }> = {
   empty: {
     title: 'Sua caixa fecha em breve',
     body: 'Você ainda não escolheu nenhum item. Monte a sua antes do corte.',
@@ -51,9 +51,12 @@ const CUTOFF_SOON_COPY: Record<BoxCutoffReminderCase, { title: string; body: str
 /**
  * Warn a member before the cutoff closes their box.
  *
- * Idempotency is the `@@unique([userId, kind, dedupeKey])` on Notification,
- * with the box as the key: the worker may re-run every minute across the whole
- * warning window and the member still gets exactly one push.
+ * A chave de dedupe e caixa+estado, nao so a caixa. Com a caixa sozinha, o
+ * membro avisado em T-48h como `empty` ficava mudo pelas 47h seguintes: se
+ * montasse e parasse no pagamento, o unico estado onde o corte corta a caixa
+ * pelo budget, nenhum aviso falava disso. Com o estado na chave sao no maximo
+ * tres avisos por ciclo, e na pratica um ou dois, porque o membro so avanca de
+ * estado quando faz alguma coisa.
  */
 export const enqueueBoxCutoffReminder = async (
   tx: Prisma.TransactionClient | typeof prisma,
@@ -64,7 +67,7 @@ export const enqueueBoxCutoffReminder = async (
     {
       userId: input.userId,
       kind: 'box.cutoff_soon',
-      dedupeKey: input.boxId,
+      dedupeKey: `${input.boxId}:${input.case}`,
       title: copy.title,
       body: copy.body,
       data: { boxId: input.boxId },

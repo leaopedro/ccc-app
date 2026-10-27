@@ -144,15 +144,47 @@ const CUTOFF_REMINDER_LEAD_MS = 48 * 60 * 60 * 1000;
 const REMINDER_BATCH = 200;
 
 /**
+ * The three states worth warning about, each as the database predicate that
+ * identifies it. The JS that picks the copy below must agree with these
+ * exactly, so both derive from the same two facts: the box status, and whether
+ * any line is still included.
+ *
+ * A box only enters this list when the state it is in NOW differs from the
+ * state it was last warned about. That is what both drains the queue (a box
+ * warned about its current state leaves the result set, instead of occupying a
+ * slot in the batch for the next 48h) and lets a member who moves from empty
+ * to unpaid hear about the payment.
+ */
+const REMINDER_CASES: ReadonlyArray<{
+  value: BoxCutoffReminderCase;
+  shape: Prisma.MonthlyBoxWhereInput;
+}> = [
+  { value: 'unpaid', shape: { status: 'awaiting_payment' } },
+  { value: 'unconfirmed', shape: { status: 'open', items: { some: { included: true } } } },
+  { value: 'empty', shape: { status: 'open', items: { none: { included: true } } } },
+];
+
+/**
+ * `cutoffRemindedCase <> value` on its own drops rows where the column is
+ * null, because SQL comparison against NULL is never true. The null arm is
+ * what lets a box that was never warned in.
+ */
+const notYetWarnedAbout = (value: BoxCutoffReminderCase): Prisma.MonthlyBoxWhereInput[] => [
+  { cutoffRemindedCase: null },
+  { cutoffRemindedCase: { not: value } },
+];
+
+/**
  * Warn members whose box closes inside the reminder window.
  *
  * Separate from `runBoxCutoffTick` on purpose: that one changes box state and
  * must stay transactional per box, while this one only writes inbox rows and
  * must never hold a box lock. Both run from the same cron tick.
  *
- * Re-running is free. The reminder dedupes on (userId, 'box.cutoff_soon', boxId)
- * in the database, so the minute-by-minute re-query across a 48h window still
- * produces exactly one notification per box.
+ * Re-running is free, and twice over: `cutoffRemindedCase` keeps a warned box
+ * out of the next tick's result set, and the unique index on
+ * (userId, kind, dedupeKey) still refuses a duplicate row if two processes
+ * reach the same box in the same instant.
  */
 export const runBoxCutoffReminderTick = async (deps: {
   log?: FastifyBaseLogger;
@@ -162,8 +194,18 @@ export const runBoxCutoffReminderTick = async (deps: {
   const until = new Date(now.getTime() + CUTOFF_REMINDER_LEAD_MS);
   const due = await prisma.monthlyBox.findMany({
     where: {
-      status: { in: ['open', 'awaiting_payment'] },
       cutoffAt: { gt: now, lte: until },
+      // Mesmas duas situacoes que `loadEligibleMembership` aceita. Trocar de
+      // status nao mexe na MonthlyBox, entao um membro com cartao recusado,
+      // pausado ou cancelado continua com a caixa em `open`. Sem este filtro
+      // ele recebe "monte a sua antes do corte", toca no push, e GET /me/box
+      // responde 403 -> a tela diz "sem caixa neste ciclo".
+      membership: { status: { in: ['active', 'trialing'] } },
+      // Cada arm ja carrega o status que lhe cabe, entao isto tambem e o
+      // filtro de `open`/`awaiting_payment`: nenhum outro status casa.
+      OR: REMINDER_CASES.map((c) => ({
+        AND: [c.shape, { OR: notYetWarnedAbout(c.value) }],
+      })),
     },
     select: {
       id: true,
@@ -192,6 +234,14 @@ export const runBoxCutoffReminderTick = async (deps: {
         userId: box.membership.garage.userId,
         boxId: box.id,
         case: reminderCase,
+      });
+      // Depois do enfileiramento, nunca antes: marcar primeiro e falhar no
+      // enqueue silenciaria o aviso para sempre. Na ordem inversa, uma falha
+      // aqui so custa uma tentativa repetida no proximo tick, que o indice
+      // unico da Notification transforma em no-op.
+      await prisma.monthlyBox.update({
+        where: { id: box.id },
+        data: { cutoffRemindedCase: reminderCase },
       });
     } catch (err) {
       // One member's reminder failing must not cost the rest of the batch theirs.

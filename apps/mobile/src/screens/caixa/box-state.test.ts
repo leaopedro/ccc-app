@@ -6,7 +6,7 @@ import {
   cycleMonthLabel,
   cycleMonthYearLabel,
   canUnskip,
-  nextCycleLabel,
+  cycleEndLabel,
   boxStatusLabel,
   boxTimelineSteps,
 } from './box-state';
@@ -149,7 +149,7 @@ describe('boxTimelineSteps', () => {
   });
 });
 
-describe('nextCycleLabel', () => {
+describe('cycleEndLabel', () => {
   const future = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
   it('formats the instant the current cycle ends as a pt-BR day + month', () => {
@@ -157,12 +157,20 @@ describe('nextCycleLabel', () => {
       day: 'numeric',
       month: 'long',
     }).format(new Date(future(3)));
-    expect(nextCycleLabel(future(3))).toBe(formatted);
+    expect(cycleEndLabel(future(3))).toBe(formatted);
   });
 
   // A membership whose renewal never landed keeps a cycleEnd in the past. The
   // next box is not open, and no date is better than a date already gone by.
   it('is null once the cycle end is behind us', () => {
-    expect(nextCycleLabel('2020-01-03T12:00:00.000Z')).toBeNull();
+    expect(cycleEndLabel('2020-01-03T12:00:00.000Z')).toBeNull();
+  });
+
+  // `cycleEnd` is z.string(), not z.string().datetime(), so garbage reaches
+  // here. Intl.format on an Invalid Date throws, and a throw in this branch
+  // takes the whole screen to the root error boundary.
+  it('is null for an instant it cannot parse, instead of throwing', () => {
+    expect(() => cycleEndLabel('nao e uma data')).not.toThrow();
+    expect(cycleEndLabel('nao e uma data')).toBeNull();
   });
 });

@@ -31,6 +31,13 @@ const seedCatalog = async () => {
   });
 };
 
+// Uma hora atras, dentro da janela de CELEBRATION_WINDOW_DAYS. Precisa ser
+// relativo ao relogio: a rota so devolve conquistas com `earnedAt` dentro da
+// janela e carimba o resto como celebrado. Uma data fixa aqui e uma
+// bomba-relogio — as provas abaixo nasceram com 2026-09-13, passaram por uma
+// semana, e depois falharam todo dia sem ninguem tocar no codigo.
+const dentroDaJanela = (): Date => new Date(Date.now() - 60 * 60 * 1000);
+
 const garageId = async (userId: string): Promise<string> => {
   const g = await prisma.garage.findUniqueOrThrow({ where: { userId } });
   return g.id;
@@ -53,7 +60,7 @@ describe('GET /me/garage/badges/celebrations', () => {
   it('devolve so as pendentes, em ordem determinista', async () => {
     const { user } = await createUser({ verified: true });
     const gid = await garageId(user.id);
-    const earnedAt = new Date('2026-09-13T12:00:00.000Z');
+    const earnedAt = dentroDaJanela();
     // earnedAt identico de proposito: e o que acontece quando duas conquistas
     // caem na mesma transacao, porque now() no Postgres e o inicio da transacao.
     await prisma.garageBadge.createMany({
@@ -81,7 +88,7 @@ describe('GET /me/garage/badges/celebrations', () => {
   it('desempata por badgeCode quando earnedAt empata', async () => {
     const { user } = await createUser({ verified: true });
     const gid = await garageId(user.id);
-    const earnedAt = new Date('2026-09-13T12:00:00.000Z');
+    const earnedAt = dentroDaJanela();
     await prisma.garageBadge.createMany({
       data: [
         { garageId: gid, badgeCode: 'EVT-001', earnedAt },
@@ -141,7 +148,7 @@ describe('GET /me/garage/badges/celebrations', () => {
         description: code,
       })),
     });
-    const earnedAt = new Date('2026-09-13T12:00:00.000Z');
+    const earnedAt = dentroDaJanela();
     await prisma.garageBadge.createMany({
       data: codes.map((badgeCode) => ({ garageId: gid, badgeCode, earnedAt })),
     });

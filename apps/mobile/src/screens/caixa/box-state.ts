@@ -52,6 +52,24 @@ export function canUnskip(cutoffAt: string): boolean {
   return new Date(cutoffAt).getTime() > Date.now();
 }
 
+// `cycleEnd` is an instant, not a date-only string like `cycleKey`, so it is
+// formatted in the member's own timezone: the day the next box opens is the day
+// they will see on their phone.
+const nextCycleFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: 'numeric',
+  month: 'long',
+});
+
+// The day the current cycle ends, which is the day the next box opens. Null
+// when that day has already passed: a membership whose renewal never landed
+// keeps a stale cycleEnd, and promising a box on a date already gone by is
+// worse than saying nothing.
+export function nextCycleLabel(cycleEnd: string): string | null {
+  const end = new Date(cycleEnd);
+  if (end.getTime() <= Date.now()) return null;
+  return nextCycleFormatter.format(end);
+}
+
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' });
 const monthYearFormatter = new Intl.DateTimeFormat('pt-BR', {
   month: 'long',

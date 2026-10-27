@@ -15,6 +15,7 @@ export const serializeBox = (box: MonthlyBoxWithLines, uploads: Uploads): BoxVie
   status: box.status,
   fulfillmentStatus: box.fulfillmentStatus as BoxFulfillmentStatus,
   cycleKey: box.cycleKey,
+  cycleEnd: box.cycleEnd.toISOString(),
   cutoffAt: box.cutoffAt.toISOString(),
   budgetCents: box.budgetCentsSnapshot,
   currency: box.currency,

@@ -49,6 +49,7 @@ export const boxViewSchema = z.object({
   status: boxStatusSchema,
   fulfillmentStatus: boxFulfillmentStatusSchema,
   cycleKey: z.string(),
+  cycleEnd: z.string(),
   cutoffAt: z.string(),
   budgetCents: z.number().int(),
   currency: z.string(),

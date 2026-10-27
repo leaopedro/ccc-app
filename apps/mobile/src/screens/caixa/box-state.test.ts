@@ -6,6 +6,7 @@ import {
   cycleMonthLabel,
   cycleMonthYearLabel,
   canUnskip,
+  nextCycleLabel,
   boxStatusLabel,
   boxTimelineSteps,
 } from './box-state';
@@ -145,5 +146,23 @@ describe('boxTimelineSteps', () => {
       'pending',
       'pending',
     ]);
+  });
+});
+
+describe('nextCycleLabel', () => {
+  const future = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  it('formats the instant the current cycle ends as a pt-BR day + month', () => {
+    const formatted = new Intl.DateTimeFormat('pt-BR', {
+      day: 'numeric',
+      month: 'long',
+    }).format(new Date(future(3)));
+    expect(nextCycleLabel(future(3))).toBe(formatted);
+  });
+
+  // A membership whose renewal never landed keeps a cycleEnd in the past. The
+  // next box is not open, and no date is better than a date already gone by.
+  it('is null once the cycle end is behind us', () => {
+    expect(nextCycleLabel('2020-01-03T12:00:00.000Z')).toBeNull();
   });
 });

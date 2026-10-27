@@ -355,6 +355,7 @@ const BOX: BoxView = {
   status: 'open',
   fulfillmentStatus: 'unfulfilled',
   cycleKey: '2026-08',
+  cycleEnd: '2026-08-31T00:00:00.000Z',
   cutoffAt: '2026-08-25T00:00:00.000Z',
   budgetCents: 20000,
   currency: 'BRL',

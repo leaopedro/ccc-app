@@ -21,6 +21,13 @@ export const caixaCopy = {
     addAddress: 'Adicionar endereço',
   },
   skipped: { title: (month: string) => `Você pulou ${month}`, back: 'Voltar a montar' },
+  // Shown once the cutoff has passed, where "você pulou" would be a lie: the
+  // member may well have been building when the cycle closed on them.
+  closed: {
+    title: (month: string) => `${month} fechou`,
+    body: 'O prazo para montar acabou e essa caixa não foi confirmada.',
+    next: (date: string) => `Sua próxima caixa abre em ${date}.`,
+  },
   awaiting: {
     banner: 'Aguardando pagamento',
     note: 'Sem pagamento até o corte, enviamos só os itens do budget.',

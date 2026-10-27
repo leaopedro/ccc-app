@@ -30,6 +30,7 @@ import {
   cycleMonthLabel,
   hasDroppedLines,
   homeVariant,
+  nextCycleLabel,
 } from '~/screens/caixa/box-state';
 import { CaixaSkeleton } from '~/screens/caixa/CaixaSkeleton';
 import { CutoffBanner } from '~/screens/caixa/CutoffBanner';
@@ -225,7 +226,29 @@ function SkippedBody({
   unskipping: boolean;
   unskipError: boolean;
 }) {
-  const disabled = !canUnskip(box.cutoffAt) || unskipping;
+  // Past the cutoff the cycle is locked server-side, so there is no action left
+  // to offer. Showing the unskip link anyway produced a dead control: it was
+  // greyed out with no explanation, and tapping it did nothing.
+  if (!canUnskip(box.cutoffAt)) {
+    const opensAt = nextCycleLabel(box.cycleEnd);
+    return (
+      <View style={styles.centerBlock}>
+        <Text variant="h3" style={styles.centerTitle}>
+          {caixaCopy.closed.title(capitalize(cycleMonthLabel(box.cycleKey)))}
+        </Text>
+        <Text variant="bodySm" tone="muted" style={styles.centerBody}>
+          {caixaCopy.closed.body}
+        </Text>
+        {opensAt ? (
+          <Text variant="bodySm" tone="muted" style={styles.centerBody}>
+            {caixaCopy.closed.next(opensAt)}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
+  const disabled = unskipping;
 
   return (
     <View style={styles.centerBlock}>

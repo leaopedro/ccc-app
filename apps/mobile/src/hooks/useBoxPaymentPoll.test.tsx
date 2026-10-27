@@ -14,6 +14,7 @@ const view = (over: Partial<BoxView>): BoxView => ({
   status: 'awaiting_payment',
   fulfillmentStatus: 'unfulfilled',
   cycleKey: '2026-08-01',
+  cycleEnd: '2026-08-31T00:00:00.000Z',
   cutoffAt: '2026-08-27T00:00:00.000Z',
   budgetCents: 10000,
   currency: 'BRL',

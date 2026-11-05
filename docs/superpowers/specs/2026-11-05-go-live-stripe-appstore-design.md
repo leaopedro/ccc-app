@@ -169,11 +169,26 @@ add-on. E quando não consegue resolver, `:576` responde 503 para forçar
 retry em vez de gravar um zero inventado. O risco de voltar ao default `10`
 de `DEV_FEE_PERCENT` não existe neste catálogo.
 
-**O buraco real: zero endpoints de webhook em live.**
-`stripe webhook_endpoints list --live` devolve lista vazia. Esta é a única
-peça de Stripe que falta, e é exatamente a anti-meta número um: com a chave
-secreta live no Railway e nenhum endpoint registrado, o membro paga, a Stripe
-confirma, e o pedido nunca vira `paid`.
+**Os endpoints de webhook live estavam faltando, e foram criados em
+2026-11-05.** A lista vinha vazia, que era exatamente a anti-meta número um:
+chave secreta live no Railway e nenhum endpoint registrado significa membro
+pagando e pedido que nunca vira `paid`.
+
+| endpoint                                           | id                            | eventos |
+| -------------------------------------------------- | ----------------------------- | ------- |
+| `https://api.casacar.club/stripe/webhook`          | `we_1UYSn5BnUVVOBICw3NZTbION` | 7       |
+| `https://api.casacar.club/webhooks/stripe-billing` | `we_1UYSngBnUVVOBICwmsp9S6XG` | 5       |
+
+Os dois `enabled`, os dois com `api_version=2026-04-22.dahlia`, batendo com
+`services/stripe/index.ts:423`.
+
+Criar pela API e não pelo dashboard foi deliberado: o dashboard carimba o
+endpoint com a API version padrão da conta, e se ela divergir do que o
+normalizador parseia, `stripe-billing-webhook.ts:444` responde 503 para sempre
+sobre um cartão já cobrado.
+
+A chave `rk_live_` do CLI não tinha `webhook_write`; a permissão foi concedida
+por Pedro para esta criação.
 
 ## Decisões
 
@@ -204,23 +219,9 @@ Os dois scripts recebem o mesmo `T`.
 Conta, produtos e prices já estão verificados e corretos, então não há passo
 de criação de catálogo. O trabalho começa no webhook.
 
-1. Registrar os dois endpoints live, **ambos com a API version
-   `2026-04-22.dahlia`**, que é a que `services/stripe/index.ts:423` fixa.
-   Esta não é uma escolha cosmética: se o endpoint renderizar uma versão mais
-   nova que o normalizador parseia, `stripe-billing-webhook.ts:444` devolve
-   503 para sempre e a assinatura fica paga e não ativada.
-
-   `https://api.casacar.club/stripe/webhook` —
-   `checkout.session.completed`, `checkout.session.expired`,
-   `payment_intent.succeeded`, `payment_intent.payment_failed`,
-   `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`.
-
-   `https://api.casacar.club/webhooks/stripe-billing` —
-   `invoice.paid`, `invoice.payment_failed`,
-   `customer.subscription.updated`, `customer.subscription.deleted`,
-   `charge.refunded`.
-
-   Guardar os dois signing secrets.
+1. ~~Registrar os dois endpoints live.~~ **Feito em 2026-11-05**, ids e
+   eventos na seção de estado acima. Os dois signing secrets saíram na
+   resposta de criação e entram no Railway no passo 3.
 
 2. AbacatePay em live: chave e segredo de webhook. Confirmar que
    `ABACATEPAY_DEV_WEBHOOK_ENABLED` está ausente ou `false`.
@@ -229,14 +230,21 @@ de criação de catálogo. O trabalho começa no webhook.
    `GROWTH_PREMIUM_BILLING_ENABLED` resolvida, e
    `STRIPE_PRICE_PREMIUM_GOLD_MONTHLY=price_1U5UfjBnUVVOBICwgzWHUfnS`,
    `STRIPE_PRICE_PREMIUM_GOLD_ANNUAL=price_1U5UfjBnUVVOBICwS6oBJJSJ`.
-5. Repontar as linhas de `stripePriceId` para os ids live da tabela acima:
+5. Provar que o segredo trocado é o mesmo que a Stripe assina. Não existe
+   `stripe trigger` em live, então o teste é assinar um payload sintético com
+   o signing secret do endpoint e postar na rota. `400 invalid signature`
+   significa que a API ainda está noutro segredo; `200` ou `503` significam
+   assinatura verificada. Rodado em 2026-11-05 antes da troca, nos dois
+   endpoints, e os dois deram 400, que era o resultado esperado e serve de
+   controle. Repetir depois do deploy esperando sair do 400.
+6. Repontar as linhas de `stripePriceId` para os ids live da tabela acima:
    três em `PremiumPlanPrice` mensais, mais a anual de gold se estiver
    cadastrada, mais `detailing` em `PremiumAddonModule`.
-6. `mark-pre-cutover-orders --created-before=T --dry-run`, conferir as
+7. `mark-pre-cutover-orders --created-before=T --dry-run`, conferir as
    contagens, depois pra valer.
-7. `purge-test-mode --created-before=T --dry-run`, conferir, depois pra valer.
+8. `purge-test-mode --created-before=T --dry-run`, conferir, depois pra valer.
 
-Ordem de 6 e 7 importa pouco entre si, mas as duas vêm **depois** da troca de
+Ordem de 7 e 8 importa pouco entre si, mas as duas vêm **depois** da troca de
 chave: antes disso não existe corte para marcar.
 
 ## Fase 2 — Soak

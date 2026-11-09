@@ -2,6 +2,7 @@
 // aquele arquivo é compartilhado pelas outras ~2250 provas da suíte.
 import { prisma } from '@ccc/db';
 import type { Prisma } from '@ccc/db';
+import { STORE_SETTINGS_SINGLETON_ID } from '@ccc/shared/store';
 
 import { createUser } from '../helpers.js';
 
@@ -89,6 +90,29 @@ export const createPresaleProduct = async (
     include: { photos: true, variants: true },
   });
 };
+
+// PresaleSettings nasce sem id fixo (ver schema.prisma): findFirst/create, não
+// upsert por id. Atualiza a MESMA linha que `ensurePresaleSettings` vai ler
+// (ordenada createdAt asc, id asc — mesmo critério, ver services/presale/settings.ts)
+// em vez de criar uma segunda linha ao lado.
+export const setPresaleSettings = async (overrides: Partial<Prisma.PresaleSettingsCreateInput>) => {
+  const existing = await prisma.presaleSettings.findFirst({
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+  if (existing) {
+    return prisma.presaleSettings.update({ where: { id: existing.id }, data: overrides });
+  }
+  return prisma.presaleSettings.create({ data: overrides });
+};
+
+export const setPresaleEnabled = (enabled: boolean) => setPresaleSettings({ enabled });
+
+export const setStoreEnabled = (storeEnabled: boolean) =>
+  prisma.storeSettings.upsert({
+    where: { id: STORE_SETTINGS_SINGLETON_ID },
+    update: { storeEnabled },
+    create: { id: STORE_SETTINGS_SINGLETON_ID, storeEnabled },
+  });
 
 export const createProductOrder = async (overrides: Partial<Prisma.OrderCreateInput> = {}) => {
   const { user } = await createUser({ email: `presale-order-${randomSuffix()}@jdm.test` });

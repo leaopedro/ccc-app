@@ -29,6 +29,67 @@ export const createProduct = async (overrides: Partial<Prisma.ProductCreateInput
   });
 };
 
+// Builds a product eligible for the pre-sale (status active, visible in
+// presale, non-virtual, BRL, one photo, one active variant at R$99,00),
+// then layers productPatch on top of those defaults. `photos` and `variants`
+// let a test override just the nested relations without restating the rest.
+export const createPresaleProduct = async (
+  productPatch: Partial<Prisma.ProductCreateInput> = {},
+  opts: {
+    photos?: { objectKey?: string; sortOrder?: number }[];
+    variants?: Partial<{
+      name: string;
+      priceCents: number;
+      quantityTotal: number;
+      quantitySold: number;
+      active: boolean;
+    }>[];
+  } = {},
+) => {
+  const photos = opts.photos ?? [{}];
+  const variants = opts.variants ?? [{}];
+
+  const product = await createProduct({
+    visibleInPresale: true,
+    virtual: false,
+    currency: 'BRL',
+    status: 'active',
+    basePriceCents: 9900,
+    ...(photos.length > 0
+      ? {
+          photos: {
+            create: photos.map((p, idx) => ({
+              objectKey: p.objectKey ?? `presale/product/${randomSuffix()}.jpg`,
+              sortOrder: p.sortOrder ?? idx,
+            })),
+          },
+        }
+      : {}),
+    ...productPatch,
+  });
+
+  await Promise.all(
+    variants.map((v, idx) =>
+      prisma.variant.create({
+        data: {
+          productId: product.id,
+          name: v.name ?? `Variante ${idx + 1}`,
+          priceCents: v.priceCents ?? 9900,
+          quantityTotal: v.quantityTotal ?? 10,
+          quantitySold: v.quantitySold ?? 0,
+          attributes: {},
+          active: v.active ?? true,
+        },
+      }),
+    ),
+  );
+
+  return prisma.product.findUniqueOrThrow({
+    where: { id: product.id },
+    include: { photos: true, variants: true },
+  });
+};
+
 export const createProductOrder = async (overrides: Partial<Prisma.OrderCreateInput> = {}) => {
   const { user } = await createUser({ email: `presale-order-${randomSuffix()}@jdm.test` });
   const product = await createProduct();

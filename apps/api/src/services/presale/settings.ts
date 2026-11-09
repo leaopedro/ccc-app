@@ -9,8 +9,8 @@ import type { PresaleSettings } from '@prisma/client';
 // isUniqueConstraintError como em ensureStoreSettings.
 //
 // Dado isso, toda leitura usa a MESMA ordenação total e determinística
-// (createdAt asc, id asc — ver memória "Nondeterministic row pick"), então
-// mesmo que duas linhas existam, todo chamador sempre converge na mesma.
+// (createdAt asc, id asc, nunca um findFirst sem orderBy) para que, mesmo que
+// duas linhas existam, todo chamador sempre convirja na mesma.
 export const ensurePresaleSettings = async (): Promise<PresaleSettings> => {
   const existing = await prisma.presaleSettings.findFirst({
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

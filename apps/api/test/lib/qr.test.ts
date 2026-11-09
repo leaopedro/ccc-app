@@ -100,4 +100,17 @@ describe('qr signer – kind discriminator', () => {
       expect(() => signQrCode('t', '', env)).toThrow();
     });
   });
+
+  describe('presale order kind (p)', () => {
+    it('round-trip: sign then verify returns original id and kind', () => {
+      const code = signQrCode('p', 'order_1', env);
+      expect(verifyQrCode(code, env)).toEqual({ kind: 'p', id: 'order_1' });
+    });
+
+    it('rejects a ticket code presented as a presale order token', () => {
+      const ticket = signQrCode('t', 'order_1', env);
+      const forged = 'p' + ticket.slice(1);
+      expect(() => verifyQrCode(forged, env)).toThrow();
+    });
+  });
 });

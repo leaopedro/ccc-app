@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export type QrKind = 't' | 'e' | 'v';
+export type QrKind = 't' | 'e' | 'v' | 'p';
 
-const VALID_KINDS = new Set<string>(['t', 'e', 'v']);
+const VALID_KINDS = new Set<string>(['t', 'e', 'v', 'p']);
 
 type QrEnv = { readonly TICKET_CODE_SECRET: string };
 

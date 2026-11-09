@@ -17,6 +17,22 @@ describe('cepInRanges', () => {
   it('recusa CEP fora da faixa', () => {
     expect(cepInRanges('01001000', [{ from: '80000000', to: '83800000' }])).toBe(false);
   });
+
+  // A faixa com `from: '00000000'` é o que expõe o bug: sem a checagem de
+  // comprimento, um CEP malformado normaliza para `0` e passaria como
+  // "dentro da faixa". Uma faixa realista (ex. 80000000-83800000) passaria
+  // com ou sem o fix, então não provaria nada.
+  it('recusa CEP que normaliza para string vazia, mesmo com faixa que começa em zero', () => {
+    expect(cepInRanges('abc', [{ from: '00000000', to: '99999999' }])).toBe(false);
+  });
+
+  it('recusa CEP com menos de 8 dígitos, mesmo com faixa que começa em zero', () => {
+    expect(cepInRanges('8001000', [{ from: '00000000', to: '99999999' }])).toBe(false);
+  });
+
+  it('recusa CEP com mais de 8 dígitos, mesmo com faixa que começa em zero', () => {
+    expect(cepInRanges('800100000', [{ from: '00000000', to: '99999999' }])).toBe(false);
+  });
 });
 
 describe('computePresaleTotals', () => {

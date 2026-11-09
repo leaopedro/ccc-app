@@ -166,6 +166,10 @@
       "types": "./src/store.ts",
       "default": "./dist/store.js"
     },
+    "./presale": {
+      "types": "./src/presale.ts",
+      "default": "./dist/presale.js"
+    },
     "./support": {
       "types": "./src/support.ts",
       "default": "./dist/support.js"

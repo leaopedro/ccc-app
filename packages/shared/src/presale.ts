@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { orderStatusSchema } from './orders.js';
 import { stateCodeSchema } from './profile.js';
 import { cepSchema } from './store.js';
 
@@ -119,19 +120,6 @@ export const presaleOrderStatusRequestSchema = z.object({
 });
 export type PresaleOrderStatusRequest = z.infer<typeof presaleOrderStatusRequestSchema>;
 
-// Four states the /obrigado page distinguishes, not three: pending (still
-// processing), paid (confirmed), refunded (the favorited-link case an admin
-// refund days later produces), and failed/expired/cancelled (try again).
-export const presaleOrderStatusSchema = z.enum([
-  'pending',
-  'paid',
-  'refunded',
-  'failed',
-  'expired',
-  'cancelled',
-]);
-export type PresaleOrderStatus = z.infer<typeof presaleOrderStatusSchema>;
-
 const presaleOrderItemSchema = z.object({
   title: z.string().min(1),
   quantity: z.number().int().positive(),
@@ -140,9 +128,12 @@ const presaleOrderItemSchema = z.object({
 });
 export type PresaleOrderItem = z.infer<typeof presaleOrderItemSchema>;
 
+// The /obrigado page distinguishes four states, not three: pending (still
+// processing), paid (confirmed), refunded (the favorited-link case an admin
+// refund days later produces), and failed/expired/cancelled (try again).
 export const presaleOrderStatusResponseSchema = z.object({
   orderId: z.string().min(1),
-  status: presaleOrderStatusSchema,
+  status: orderStatusSchema,
   fulfillmentMethod: presaleFulfillmentMethodSchema,
   amountCents: z.number().int().nonnegative(),
   shippingCents: z.number().int().nonnegative(),

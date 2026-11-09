@@ -9,6 +9,7 @@ import {
   GARAGE_SPOT_VARIANT_NAME,
   assertVirtualSingletonProtected,
 } from '../src/garage-spot-product.js';
+import { ensurePresaleSystemUser } from '../src/presale-system-user.js';
 
 const prisma = new PrismaClient();
 
@@ -782,6 +783,16 @@ const seedBoxSettings = async (): Promise<void> => {
   console.log('Seeded box settings.');
 };
 
+const seedPresale = async (): Promise<void> => {
+  await ensurePresaleSystemUser();
+
+  const existing = await prisma.presaleSettings.findFirst();
+  if (!existing) {
+    await prisma.presaleSettings.create({ data: {} });
+  }
+  console.log('Seeded presale system user and settings.');
+};
+
 // Keep in sync with HOME_CONTENT_SINGLETON_ID in @ccc/shared/home.
 const HOME_CONTENT_SINGLETON_ID = 'home_default';
 
@@ -933,6 +944,8 @@ const main = async (): Promise<void> => {
   await seedBoxSettings();
 
   await seedHomeContent();
+
+  await seedPresale();
 };
 
 main()

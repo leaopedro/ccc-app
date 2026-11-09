@@ -1191,6 +1191,7 @@ model Product {
   shippingFeeCents Int?
   visibleInStore   Boolean       @default(true)
   virtual          Boolean       @default(false)
+  visibleInPresale Boolean       @default(false)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -1202,6 +1203,7 @@ model Product {
   @@index([status, createdAt(sort: Desc)])
   @@index([productTypeId, status])
   @@index([visibleInStore, status])
+  @@index([visibleInPresale, status])
 }
 
 model ProductPhoto {
@@ -1299,6 +1301,46 @@ model StoreSettings {
   updatedAt               DateTime @updatedAt
 }
 
+/// Singleton da campanha de pré-venda Casa In Box, no mesmo padrão de
+/// StoreSettings/BoxSettings: id com default cuid, aplicação trata como
+/// singleton (findFirst/create, sem id fixo).
+model PresaleSettings {
+  id                String   @id @default(cuid())
+  enabled           Boolean  @default(false)
+  shippingFeeCents  Int      @default(0)
+  deliveryCepRanges Json     @default("[]")
+  deliveryAreaLabel String?
+  pickupAddress     String?
+  pickupHours       String?
+  firstBatchLabel   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+/// Dados do comprador sem conta na pré-venda Casa In Box. Tabela própria em
+/// vez de ShippingAddress porque ShippingAddress pende de User e aparece no
+/// seletor de endereços do membro; o convidado não tem conta.
+model PresaleGuest {
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  name          String   @db.VarChar(140)
+  email         String   @db.VarChar(200)
+  phone         String?  @db.VarChar(20)
+  // entrega: nulos quando for retirada
+  recipientName String?  @db.VarChar(140)
+  line1         String?  @db.VarChar(140)
+  number        String?  @db.VarChar(20)
+  district      String?  @db.VarChar(100)
+  city          String?  @db.VarChar(100)
+  stateCode     String?  @db.VarChar(2)
+  postalCode    String?  @db.VarChar(9)
+  createdAt     DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+}
+
 enum CapacityDisplayMode {
   absolute
   percentage_threshold
@@ -1327,38 +1369,47 @@ enum TicketSource {
   comp
 }
 
+enum OrderOrigin {
+  app
+  casa_in_box
+}
+
 model Order {
-  id                String            @id @default(cuid())
-  userId            String
-  eventId           String?
-  tierId            String?
-  cartId            String?
-  pickupEventId     String?
-  pickupTicketId    String?
-  kind              OrderKind         @default(ticket)
-  amountCents       Int
-  baseAmountCents   Int               @default(0)
-  devFeePercent     Int               @default(10)
-  devFeeAmountCents Int               @default(0)
-  currency          String            @default("BRL") @db.VarChar(3)
-  method            PaymentMethod
-  provider          PaymentProvider
-  providerRef       String?           @db.VarChar(200)
-  brCode            String?           @db.Text
-  quantity          Int               @default(1)
-  shippingAddressId String?
-  shippingCents     Int               @default(0)
-  fulfillmentStatus FulfillmentStatus @default(unfulfilled)
-  fulfillmentMethod FulfillmentMethod @default(pickup)
-  notes             String?           @db.Text
-  status            OrderStatus       @default(pending)
-  livemode          Boolean           @default(true)
-  paidAt            DateTime?
-  failedAt          DateTime?
-  refundedAt        DateTime?
-  expiresAt         DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id                      String            @id @default(cuid())
+  userId                  String
+  eventId                 String?
+  tierId                  String?
+  cartId                  String?
+  pickupEventId           String?
+  pickupTicketId          String?
+  kind                    OrderKind         @default(ticket)
+  amountCents             Int
+  baseAmountCents         Int               @default(0)
+  devFeePercent           Int               @default(10)
+  devFeeAmountCents       Int               @default(0)
+  currency                String            @default("BRL") @db.VarChar(3)
+  method                  PaymentMethod
+  provider                PaymentProvider
+  providerRef             String?           @db.VarChar(200)
+  brCode                  String?           @db.Text
+  quantity                Int               @default(1)
+  shippingAddressId       String?
+  shippingCents           Int               @default(0)
+  fulfillmentStatus       FulfillmentStatus @default(unfulfilled)
+  fulfillmentMethod       FulfillmentMethod @default(pickup)
+  notes                   String?           @db.Text
+  status                  OrderStatus       @default(pending)
+  livemode                Boolean           @default(true)
+  origin                  OrderOrigin       @default(app)
+  clientRequestId         String?           @db.VarChar(64)
+  checkoutUrl             String?           @db.Text
+  confirmationEmailSentAt DateTime?
+  paidAt                  DateTime?
+  failedAt                DateTime?
+  refundedAt              DateTime?
+  expiresAt               DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   event           Event?           @relation(fields: [eventId], references: [id], onDelete: Restrict)
@@ -1370,8 +1421,10 @@ model Order {
   items           OrderItem[]
   pickupVouchers  PickupVoucher[]
   box             MonthlyBox?
+  presaleGuest    PresaleGuest?
 
   @@unique([provider, providerRef])
+  @@unique([origin, clientRequestId])
   @@index([userId, createdAt])
   @@index([eventId, status])
   @@index([status, createdAt])

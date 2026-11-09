@@ -106,7 +106,6 @@ export type PresaleCheckoutRequest = z.infer<typeof presaleCheckoutRequestSchema
 
 export const presaleCheckoutResponseSchema = z.object({
   orderId: z.string().min(1),
-  token: z.string().min(1),
   checkoutUrl: z.string().url(),
   amountCents: z.number().int().nonnegative(),
   shippingCents: z.number().int().nonnegative(),

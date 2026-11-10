@@ -1,4 +1,6 @@
 import { prisma } from '@ccc/db';
+import type { Prisma } from '@prisma/client';
+import * as Sentry from '@sentry/node';
 
 import { enqueueBoxNotification } from '../box/notifications.js';
 import { assignEventPickupTicket } from '../store/event-pickup.js';
@@ -18,6 +20,55 @@ export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
   | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
   | { kind: 'box' };
+
+/**
+ * Débito de estoque da pré-venda Casa In Box, e SÓ dela.
+ *
+ * O checkout da pré-venda não reserva nada (`services/presale/checkout.ts`): o
+ * saldo só se move quando o pagamento confirma. A loja é o oposto — reserva no
+ * carrinho — então debitar aqui para qualquer outro pedido de produto seria
+ * contagem dobrada. É por isso que a chamada é condicionada a `origin`.
+ *
+ * Sem guarda de teto, de propósito: passar de `quantityTotal` é consequência
+ * aceita de não reservar, e no primeiro lote (feito sob encomenda) vira fila,
+ * não cancelamento. Um guard que falhasse a liquidação deixaria o pagamento
+ * capturado sem pedido pago, que é muito pior. Então apenas registra.
+ *
+ * Roda dentro da transação `Serializable` que já flipa o status, e o
+ * early-return de `status === 'paid'` acima é o que garante débito único: um
+ * mesmo pagamento chega por DOIS eventos distintos
+ * (`payment_intent.succeeded` e `checkout.session.completed`) e a unique de
+ * `PaymentWebhookEvent` não dedupa entre tipos de evento.
+ */
+const debitPresaleStock = async (tx: Prisma.TransactionClient, orderId: string): Promise<void> => {
+  const items = await tx.orderItem.findMany({
+    where: { orderId, kind: 'product', variantId: { not: null } },
+    select: { variantId: true, quantity: true },
+    // Ordem fixa: dois pedidos concorrentes tocando as mesmas variantes em
+    // ordens opostas se travariam sob Serializable.
+    orderBy: { variantId: 'asc' },
+  });
+
+  for (const item of items) {
+    const variant = await tx.variant.update({
+      where: { id: item.variantId! },
+      data: { quantitySold: { increment: item.quantity } },
+      select: { id: true, quantitySold: true, quantityTotal: true },
+    });
+    if (variant.quantitySold > variant.quantityTotal) {
+      Sentry.captureMessage('presale: estoque vendido acima do total do lote', {
+        level: 'warning',
+        tags: { kind: 'presale-oversold' },
+        extra: {
+          orderId,
+          variantId: variant.id,
+          quantitySold: variant.quantitySold,
+          quantityTotal: variant.quantityTotal,
+        },
+      });
+    }
+  }
+};
 
 /**
  * @param livemode Provider mode this charge really happened in, when the
@@ -47,7 +98,7 @@ export const settlePaidOrder = async (
 ): Promise<SettledOrderResult> => {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { kind: true, status: true, cartId: true },
+    select: { kind: true, status: true, cartId: true, origin: true },
   });
   if (!order) throw new OrderNotFoundError(orderId);
 
@@ -85,6 +136,9 @@ export const settlePaidOrder = async (
         // Fulfill BEFORE flipping status: if any non-P2002 error fires from
         // GarageSpot create, the tx rolls back and the order stays 'pending'.
         const result = await fulfillGarageSpotsForOrder(tx, orderId);
+        if (order.origin === 'casa_in_box') {
+          await debitPresaleStock(tx, orderId);
+        }
         await tx.order.update({
           where: { id: orderId },
           data: {

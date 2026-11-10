@@ -1302,8 +1302,12 @@ model StoreSettings {
 }
 
 /// Singleton da campanha de pré-venda Casa In Box, no mesmo padrão de
-/// StoreSettings/BoxSettings: id com default cuid, aplicação trata como
-/// singleton (findFirst/create, sem id fixo).
+/// StoreSettings/BoxSettings: a coluna `id` aceita qualquer cuid, mas a
+/// aplicação sempre endereça um id FIXO (PRESALE_SETTINGS_SINGLETON_ID em
+/// @ccc/shared/presale, 'presale_default') via upsert, igual a
+/// STORE_SETTINGS_SINGLETON_ID/ensureStoreSettings — não findFirst/create por
+/// uma linha qualquer. Isso é o que impede duas chamadas concorrentes de
+/// criar duas linhas da campanha (ver ensurePresaleSettings).
 model PresaleSettings {
   id                String   @id @default(cuid())
   enabled           Boolean  @default(false)

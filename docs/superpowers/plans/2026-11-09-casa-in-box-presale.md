@@ -1007,7 +1007,52 @@ git commit -m "refactor(garage): coluna de 430px sai do root layout para o route
 
 ---
 
-## Task 13: Cliente e estado da caixa no garage
+## EMENDA 2026-11-10 — dois tiers, builder adiado
+
+O dono do produto cortou a customizacao. A pre-venda passa a vender **dois tiers
+fixos**, e a pagina de montagem fica adiada.
+
+- **Basic:** carteira, chaveiro, flanela, garrafa termica, kit brindes (cheirinhos,
+  adesivos).
+- **Premium:** tudo da Basic + camiseta + bone.
+
+Tres decisoes do dono do produto governam o que muda daqui pra baixo:
+
+1. **Cada tier e um produto do catalogo normal**, com preco proprio e variantes.
+   `visibleInPresale` marca os dois. Isso foi escolhido sobre um modelo `PresaleTier`
+   novo justamente porque preserva o backend ja construido: o checkout continua
+   recebendo `items: [{ variantId, quantity }]`, agora com uma linha so, e o
+   recalculo, o debito de estoque, o webhook, o email e o admin de produto nao mudam.
+2. **O comprador escolhe o tamanho da camiseta** no Premium. Isso e uma variante do
+   produto Premium (P, M, G, GG). O bone e tamanho unico. O Basic pode ter variante
+   unica.
+3. **O builder fica adiado com o plano guardado.** As Tasks 13 e 15 abaixo ficam como
+   estao, marcadas, para quando o assunto voltar.
+
+### Efeito nas tarefas
+
+- **Tasks 1 a 12, 16 e 17: inalteradas.** A Task 10 fica ate mais justificada — e ela
+  que marca os dois produtos-tier como elegiveis.
+- **Task 13: reduzida.** Entrega so `presale-api.ts` e `copy/presale.ts`. O
+  `presale-box.ts` (store em localStorage) existia para o carrinho do builder; sem
+  builder nao ha carrinho a persistir. Os testes de TTL, quota e evento `storage`
+  saem junto.
+- **Task 14: vira a pagina de venda.** Alem do hero, dos tres passos e do FAQ, ela
+  passa a conter os dois cards de tier com o conteudo de cada caixa, o seletor de
+  tamanho no Premium, a escolha de recebimento com CEP, e o botao de pagar. Absorve o
+  papel de selecao que era da Task 15. O `expectedTotalCents` continua obrigatorio no
+  POST, e todo 409/422 ainda precisa de tratamento nomeado — a Task 7 depende disso.
+- **Task 15: ADIADA.** Nao construir agora.
+
+### Dados comerciais que a emenda acrescenta
+
+Antes de abrir, alem do que ja estava na lista: criar os dois produtos no admin, com
+preco, fotos, descricao e as variantes de tamanho do Premium, e marcar os dois com
+`visibleInPresale`.
+
+---
+
+## Task 13 (REDUZIDA pela emenda): Cliente de API e copy no garage
 
 **Files:**
 
@@ -1070,7 +1115,7 @@ git commit -m "feat(presale): cliente da API e estado da caixa no garage"
 
 ---
 
-## Task 14: Landing de pré-venda
+## Task 14 (AMPLIADA pela emenda): Pagina de venda com dois tiers
 
 **Files:**
 
@@ -1135,7 +1180,7 @@ git commit -m "feat(presale): landing da Casa In Box"
 
 ---
 
-## Task 15: Página de montagem
+## Task 15 (ADIADA pela emenda — nao construir agora): Página de montagem
 
 **Files:**
 

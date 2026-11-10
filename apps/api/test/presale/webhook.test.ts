@@ -169,6 +169,45 @@ describe('liquidação da pré-venda Casa In Box no webhook da Stripe', () => {
     expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
   });
 
+  it('pedido de pré-venda já failed também liquida por payment_intent.succeeded', async () => {
+    const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'failed', failedAt: new Date() },
+    });
+
+    // A Stripe não garante a ordem dos dois eventos do mesmo pagamento: a
+    // recuperação não pode depender de qual chegou primeiro.
+    const res = await postWebhook(paymentIntentSucceeded(orderId));
+
+    expect(res.statusCode).toBe(200);
+    expect(await statusOf(orderId)).toBe('paid');
+    expect(await soldOf(variantId)).toBe(2);
+    expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+
+    // E o evento irmão, chegando depois, não debita de novo.
+    const sibling = await postWebhook(checkoutSessionCompleted(orderId));
+    expect(sibling.statusCode).toBe(200);
+    expect(await soldOf(variantId)).toBe(2);
+    expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+  });
+
+  it('pedido fora da pré-venda já failed continua sendo estornado', async () => {
+    const order = await createProductOrder({ providerRef: PI_ID });
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: 'failed', failedAt: new Date() },
+    });
+
+    const res = await postWebhook(paymentIntentSucceeded(order.id));
+
+    expect(res.statusCode).toBe(200);
+    expect(await statusOf(order.id)).toBe('failed');
+    expect(stripe.calls.filter((c) => c.kind === 'refund')).toEqual([
+      { kind: 'refund', payload: expect.objectContaining({ reason: 'order-failed' }) },
+    ]);
+  });
+
   it('os dois eventos de um mesmo pagamento debitam o estoque uma vez só', async () => {
     const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
 

@@ -770,7 +770,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: orderId },
-            select: { status: true, providerRef: true },
+            select: { status: true, providerRef: true, origin: true },
           });
 
           // Ja pago: nada a fazer alem de deduplicar. Uma cobranca DISTINTA na
@@ -785,6 +785,34 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
               );
             }
             return reply.status(200).send({ ok: true, deduped: !firstTime });
+          }
+
+          // Pré-venda Casa In Box em `failed`: liquida, não estorna. Espelho
+          // exato do ramo de `checkout.session.completed` mais abaixo, e tem
+          // de ser espelho: os DOIS eventos chegam para o mesmo pagamento e a
+          // Stripe não garante a ordem. Se só um lado recuperasse, o desfecho
+          // de um pedido de pré-venda dependeria de qual evento chegou
+          // primeiro — num caso estorno automático de um pagamento que deu
+          // certo, no outro liquidação. O `updateMany` contado serializa as
+          // duas entregas: só uma reabre, a outra cai no `throw` e a Stripe
+          // reentrega. Escopado a `casa_in_box`: ingresso, box e loja em
+          // `failed` seguem no estorno logo abaixo.
+          if (staleOrder?.status === 'failed' && staleOrder.origin === 'casa_in_box') {
+            const reopened = await prisma.order.updateMany({
+              where: { id: orderId, status: 'failed' },
+              data: { status: 'pending', failedAt: null },
+            });
+            if (reopened.count === 1) {
+              await settlePaidOrder(orderId, intent.id, app.env, intent.metadata, event.livemode);
+              const firstTime = await markProcessed(event.id, event);
+              request.log.warn(
+                { orderId, paymentIntentId: intent.id, firstTime },
+                'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
+              );
+              return reply
+                .status(200)
+                .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
+            }
           }
 
           // Qualquer outro estado nao-pendente: expired, cancelled, failed,

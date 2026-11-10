@@ -25,7 +25,6 @@ const productInclude = {
   productType: { select: { name: true } },
 } as const;
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export const adminStoreProductRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/products', async () => {
     const products = await prisma.product.findMany({
@@ -143,6 +142,16 @@ export const adminStoreProductRoutes: FastifyPluginAsync = async (app) => {
           message: 'singleton product type is managed by the system and cannot be changed',
         });
       }
+      if (
+        input.visibleInPresale !== undefined &&
+        input.visibleInPresale !== existing.visibleInPresale
+      ) {
+        return reply.status(400).send({
+          error: 'BadRequest',
+          message:
+            'singleton product presale visibility is managed by the system and cannot be changed',
+        });
+      }
       // Note: `virtual` and `visibleInStore` are not in adminStoreProductUpdateSchema
       // and are stripped by zod, so they can't be patched via this endpoint. The
       // singleton's `virtual=true` / `visibleInStore=false` invariants are owned
@@ -207,6 +216,7 @@ export const adminStoreProductRoutes: FastifyPluginAsync = async (app) => {
     if (input.currency !== undefined) data.currency = input.currency;
     if (input.allowPickup !== undefined) data.allowPickup = input.allowPickup;
     if (input.allowShip !== undefined) data.allowShip = input.allowShip;
+    if (input.visibleInPresale !== undefined) data.visibleInPresale = input.visibleInPresale;
     if (input.shippingFeeCents !== undefined) data.shippingFeeCents = input.shippingFeeCents;
     let auditAction: 'store.product.update' | 'store.product.archive' | 'store.product.activate' =
       'store.product.update';

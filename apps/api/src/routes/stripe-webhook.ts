@@ -6,6 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
 import { settlePaidOrder } from '../services/orders/settle.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
 import {
@@ -719,6 +720,14 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
         }
+        if (settled.kind === 'product') {
+          // Try to send presale confirmation email (will only send for casa_in_box origin)
+          await sendPresaleConfirmationEmail(orderId, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
+        }
         return reply.status(200).send({ ok: true, deduped: !firstTime });
       } catch (err) {
         // Customer paid but we can't issue a ticket (usually because an
@@ -803,12 +812,26 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
               data: { status: 'pending', failedAt: null },
             });
             if (reopened.count === 1) {
-              await settlePaidOrder(orderId, intent.id, app.env, intent.metadata, event.livemode);
+              const settled = await settlePaidOrder(
+                orderId,
+                intent.id,
+                app.env,
+                intent.metadata,
+                event.livemode,
+              );
               const firstTime = await markProcessed(event.id, event);
               request.log.warn(
                 { orderId, paymentIntentId: intent.id, firstTime },
                 'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
               );
+              if (settled.kind === 'product') {
+                // Try to send presale confirmation email (will only send for casa_in_box origin)
+                await sendPresaleConfirmationEmail(orderId, {
+                  mailer: app.mailer,
+                  env: app.env,
+                  log: request.log,
+                });
+              }
               return reply
                 .status(200)
                 .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
@@ -918,6 +941,14 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             );
           }
         }
+        if (settled.kind === 'product') {
+          // Try to send presale confirmation email (will only send for casa_in_box origin)
+          await sendPresaleConfirmationEmail(sessionOrderId, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
+        }
         return reply.status(200).send({ ok: true, deduped: !firstTime });
       } catch (err) {
         if (err instanceof TicketAlreadyExistsForEventError) {
@@ -969,7 +1000,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
               data: { status: 'pending', failedAt: null },
             });
             if (reopened.count === 1) {
-              await settlePaidOrder(
+              const settled = await settlePaidOrder(
                 sessionOrderId,
                 piId,
                 app.env,
@@ -981,6 +1012,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
                 { orderId: sessionOrderId, sessionId: session.id, firstTime },
                 'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
               );
+              if (settled.kind === 'box') {
+                await sendPresaleConfirmationEmail(sessionOrderId, {
+                  mailer: app.mailer,
+                  env: app.env,
+                  log: request.log,
+                });
+              }
               return reply
                 .status(200)
                 .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });

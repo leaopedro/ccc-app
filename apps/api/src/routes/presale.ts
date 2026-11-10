@@ -24,11 +24,14 @@ import {
 } from '@ccc/shared/presale';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
+import { verifyQrCode } from '../lib/qr.js';
 import { createPresaleOrder } from '../services/presale/checkout.js';
 import { loadEligiblePresaleProducts } from '../services/presale/eligibility.js';
 import { serializePresaleProduct } from '../services/presale/serialize.js';
 import { ensurePresaleSettings } from '../services/presale/settings.js';
+import { prisma } from '@ccc/db';
 
 export const presaleRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', async (_request, reply) => {
@@ -140,6 +143,94 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           currency: result.currency,
         }),
       );
+    });
+  });
+
+  app.post('/presale/casa-in-box/orders/status', async (request, reply) => {
+    const statusRequestSchema = z.object({
+      orderId: z.string().min(1),
+      token: z.string().min(1),
+    });
+
+    const parsed = statusRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(422).send({
+        error: 'UnprocessableEntity',
+        message: 'dados invalidos',
+      });
+    }
+
+    const { orderId, token } = parsed.data;
+
+    // Verify token: verifyQrCode throws on invalid token
+    try {
+      const verified = verifyQrCode(token, app.env);
+      // Token must match the orderId
+      if (verified.id !== orderId) {
+        return reply.status(404).send({
+          error: 'NotFound',
+          message: 'pedido nao encontrado',
+        });
+      }
+    } catch {
+      // Token invalid or malformed
+      return reply.status(404).send({
+        error: 'NotFound',
+        message: 'pedido nao encontrado',
+      });
+    }
+
+    // Load order
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        amountCents: true,
+        shippingCents: true,
+        baseAmountCents: true,
+        fulfillmentMethod: true,
+        presaleGuest: {
+          select: { name: true, email: true },
+        },
+        items: {
+          select: {
+            quantity: true,
+            subtotalCents: true,
+            variant: {
+              select: {
+                product: {
+                  select: { title: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return reply.status(404).send({
+        error: 'NotFound',
+        message: 'pedido nao encontrado',
+      });
+    }
+
+    // Return order status
+    return reply.status(200).send({
+      orderId: order.id,
+      status: order.status,
+      guestName: order.presaleGuest?.name ?? null,
+      guestEmail: order.presaleGuest?.email ?? null,
+      amountCents: order.amountCents,
+      shippingCents: order.shippingCents,
+      baseAmountCents: order.baseAmountCents,
+      fulfillmentMethod: order.fulfillmentMethod,
+      items: order.items.map((item) => ({
+        quantity: item.quantity,
+        subtotalCents: item.subtotalCents,
+        productTitle: item.variant?.product?.title ?? 'Desconhecido',
+      })),
     });
   });
 };

@@ -2,6 +2,7 @@
 // aquele arquivo é compartilhado pelas outras ~2250 provas da suíte.
 import { prisma } from '@ccc/db';
 import type { Prisma } from '@ccc/db';
+import { PRESALE_SETTINGS_SINGLETON_ID } from '@ccc/shared/presale';
 import { STORE_SETTINGS_SINGLETON_ID } from '@ccc/shared/store';
 
 import { createUser } from '../helpers.js';
@@ -91,19 +92,16 @@ export const createPresaleProduct = async (
   });
 };
 
-// PresaleSettings nasce sem id fixo (ver schema.prisma): findFirst/create, não
-// upsert por id. Atualiza a MESMA linha que `ensurePresaleSettings` vai ler
-// (ordenada createdAt asc, id asc — mesmo critério, ver services/presale/settings.ts)
-// em vez de criar uma segunda linha ao lado.
-export const setPresaleSettings = async (overrides: Partial<Prisma.PresaleSettingsCreateInput>) => {
-  const existing = await prisma.presaleSettings.findFirst({
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+// Mesma linha de id fixo que ensurePresaleSettings lê (services/presale/settings.ts):
+// upsert por PRESALE_SETTINGS_SINGLETON_ID, não findFirst/create por uma linha
+// qualquer. Usar um id solto aqui criaria uma segunda linha ao lado da que a
+// rota efetivamente lê.
+export const setPresaleSettings = async (overrides: Partial<Prisma.PresaleSettingsCreateInput>) =>
+  prisma.presaleSettings.upsert({
+    where: { id: PRESALE_SETTINGS_SINGLETON_ID },
+    update: overrides,
+    create: { id: PRESALE_SETTINGS_SINGLETON_ID, ...overrides },
   });
-  if (existing) {
-    return prisma.presaleSettings.update({ where: { id: existing.id }, data: overrides });
-  }
-  return prisma.presaleSettings.create({ data: overrides });
-};
 
 export const setPresaleEnabled = (enabled: boolean) => setPresaleSettings({ enabled });
 

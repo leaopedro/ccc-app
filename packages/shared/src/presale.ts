@@ -12,6 +12,13 @@ export type PresaleFulfillmentMethod = z.infer<typeof presaleFulfillmentMethodSc
 
 export const PRESALE_MAX_QTY_PER_VARIANT = 20;
 
+// Fixed id for the PresaleSettings singleton row, same pattern as
+// STORE_SETTINGS_SINGLETON_ID above in store.ts: the API upserts by this id
+// so concurrent first-hits can't create two rows. packages/db/prisma/seed.ts
+// does not depend on @ccc/shared, so it keeps its own copy of this literal in
+// sync by comment, same as it already does for the box/home singleton ids.
+export const PRESALE_SETTINGS_SINGLETON_ID = 'presale_default';
+
 export const presaleCampaignSchema = z.object({
   enabled: z.boolean(),
   shippingFeeCents: z.number().int().nonnegative(),

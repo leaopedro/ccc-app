@@ -783,13 +783,20 @@ const seedBoxSettings = async (): Promise<void> => {
   console.log('Seeded box settings.');
 };
 
+// Keep in sync with PRESALE_SETTINGS_SINGLETON_ID in @ccc/shared/presale.
+const PRESALE_SETTINGS_SINGLETON_ID = 'presale_default';
+
 const seedPresale = async (): Promise<void> => {
   await ensurePresaleSystemUser();
 
-  const existing = await prisma.presaleSettings.findFirst();
-  if (!existing) {
-    await prisma.presaleSettings.create({ data: {} });
-  }
+  // Fixed id, not findFirst/create: ensurePresaleSettings (apps/api) upserts
+  // on this same id. Seeding a free-form cuid row here would leave that
+  // upsert creating a second row beside it.
+  await prisma.presaleSettings.upsert({
+    where: { id: PRESALE_SETTINGS_SINGLETON_ID },
+    update: {},
+    create: { id: PRESALE_SETTINGS_SINGLETON_ID },
+  });
   console.log('Seeded presale system user and settings.');
 };
 

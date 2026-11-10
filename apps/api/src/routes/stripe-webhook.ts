@@ -813,12 +813,15 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
                 .status(200)
                 .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
             }
+            // Sibling evento já recuperou: reentrega esperada.
+            throw err;
           }
 
-          // Qualquer outro estado nao-pendente: expired, cancelled, failed,
-          // refunded. Estorna na primeira entrega e deduplica nas seguintes.
-          // `markProcessed` PRIMEIRO, para que uma reentrega nao estorne duas
-          // vezes se o refund ou o log falharem depois.
+          // Qualquer outro estado nao-pendente que nao seja pré-venda em failed:
+          // expired, cancelled, failed (ingresso/box/loja), refunded. Estorna na
+          // primeira entrega e deduplica nas seguintes. `markProcessed` PRIMEIRO,
+          // para que uma reentrega nao estorne duas vezes se o refund ou o log
+          // falharem depois.
           const firstTime = await markProcessed(event.id, event);
           if (firstTime) {
             await app.stripe.refund(intent.id, `order-${staleOrder?.status ?? 'unknown'}`);

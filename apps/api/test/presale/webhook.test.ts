@@ -307,4 +307,71 @@ describe('liquidação da pré-venda Casa In Box no webhook da Stripe', () => {
     // A loja reserva no carrinho; debitar de novo aqui seria contagem dobrada.
     expect(await soldOf(item.variantId!)).toBe(0);
   });
+
+  describe('invariante: payment_intent.succeeded nunca estorna pré-venda', () => {
+    it('pré-venda já paid quando payment_intent.succeeded chega, não estorna', async () => {
+      const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
+
+      // Primeira entrega: liquida.
+      let res = await postWebhook(checkoutSessionCompleted(orderId));
+      expect(res.statusCode).toBe(200);
+      expect(await statusOf(orderId)).toBe('paid');
+      expect(await soldOf(variantId)).toBe(2);
+      expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+
+      // Segunda entrega do mesmo pagamento: payment_intent.succeeded chega.
+      stripe.calls = [];
+      res = await postWebhook(paymentIntentSucceeded(orderId));
+
+      expect(res.statusCode).toBe(200);
+      expect(await statusOf(orderId)).toBe('paid');
+      // Nenhum débito adicional.
+      expect(await soldOf(variantId)).toBe(2);
+      // Invariante: sem refund.
+      expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+    });
+
+    it('pré-venda em failed perde a corrida ao checkout.session.completed, payment_intent reabre o 500', async () => {
+      const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+
+      // Primeira entrega do mesmo pagamento: checkout.session.completed ganha a corrida.
+      let res = await postWebhook(checkoutSessionCompleted(orderId));
+      expect(res.statusCode).toBe(200);
+      expect(await statusOf(orderId)).toBe('paid');
+      expect(await soldOf(variantId)).toBe(2);
+      expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+
+      // Segunda entrega: payment_intent.succeeded chega quando a order já é paid.
+      // A corrida foi ganha por outro evento; este deve reentregarse.
+      stripe.calls = [];
+      res = await postWebhook(paymentIntentSucceeded(orderId));
+
+      expect(res.statusCode).toBe(200);
+      expect(await statusOf(orderId)).toBe('paid');
+      expect(await soldOf(variantId)).toBe(2);
+      // Invariante: sem refund mesmo tendo perdido a corrida.
+      expect(stripe.calls.filter((c) => c.kind === 'refund')).toHaveLength(0);
+    });
+
+    it('ordem não-presale em failed ainda é estornada por payment_intent.succeeded', async () => {
+      const order = await createProductOrder({ providerRef: PI_ID });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+
+      const res = await postWebhook(paymentIntentSucceeded(order.id));
+
+      expect(res.statusCode).toBe(200);
+      expect(await statusOf(order.id)).toBe('failed');
+      // Escopo: só pré-venda é recuperada. Produtos fora da pré-venda seguem sendo estornados.
+      const refundCalls = stripe.calls.filter((c) => c.kind === 'refund');
+      expect(refundCalls).toHaveLength(1);
+      expect(refundCalls[0]?.payload).toMatchObject({ reason: 'order-failed' });
+    });
+  });
 });

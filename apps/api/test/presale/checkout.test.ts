@@ -1,0 +1,472 @@
+import { PRESALE_SYSTEM_USER_EMAIL, prisma } from '@ccc/db';
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
+import { presaleCheckoutResponseSchema } from '@ccc/shared/presale';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { loadEnv } from '../../src/env.js';
+import { verifyQrCode } from '../../src/lib/qr.js';
+import type { CreateCheckoutSessionInput } from '../../src/services/stripe/index.js';
+import type { FakeStripe } from '../../src/services/stripe/fake.js';
+import { createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
+
+import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
+
+const CHECKOUT_URL = '/presale/casa-in-box/checkout';
+const CEP_RANGES = [{ from: '80000000', to: '82999999' }];
+const IN_AREA_CEP = '80010-000';
+const OUT_OF_AREA_CEP = '01310-100';
+
+const delivery = (postalCode = IN_AREA_CEP) => ({
+  recipientName: 'Comprador Teste',
+  line1: 'Rua Exemplo',
+  number: '100',
+  district: 'Centro',
+  city: 'Curitiba',
+  stateCode: 'PR',
+  postalCode,
+});
+
+const lastSessionInput = (stripe: FakeStripe): CreateCheckoutSessionInput => {
+  const call = [...stripe.calls].reverse().find((c) => c.kind === 'createCheckoutSession');
+  if (!call) throw new Error('createCheckoutSession não foi chamado');
+  return call.payload as CreateCheckoutSessionInput;
+};
+
+describe('POST /presale/casa-in-box/checkout', () => {
+  let app: FastifyInstance;
+  let stripe: FakeStripe;
+  let variantId: string;
+  let productId: string;
+  let requestCounter = 0;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    // PresaleSettings não é limpa por resetDatabase (test/helpers.ts é
+    // compartilhado pela suíte inteira e fica intocado): zera aqui.
+    await prisma.presaleSettings.deleteMany();
+    await setPresaleSettings({
+      enabled: true,
+      shippingFeeCents: 1990,
+      deliveryCepRanges: CEP_RANGES,
+    });
+
+    const product = await createPresaleProduct({ allowPickup: true, allowShip: true });
+    productId = product.id;
+    variantId = product.variants[0]!.id;
+
+    const built = await makeAppWithFakeStripe();
+    app = built.app;
+    stripe = built.stripe;
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const payload = (overrides: Record<string, unknown> = {}) => ({
+    clientRequestId: `req-${++requestCounter}-${Math.random().toString(36).slice(2, 10)}`,
+    expectedTotalCents: 19800,
+    fulfillmentMethod: 'pickup',
+    items: [{ variantId, quantity: 2 }],
+    guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+    acceptedTermsVersion: 'terms-2026-01-01',
+    acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
+    ...overrides,
+  });
+
+  const post = (overrides: Record<string, unknown> = {}) =>
+    app.inject({ method: 'POST', url: CHECKOUT_URL, payload: payload(overrides) });
+
+  type CheckoutBody = {
+    orderId: string;
+    checkoutUrl?: string;
+    amountCents?: number;
+    shippingCents?: number;
+    currency?: string;
+    code?: string;
+    message?: string;
+    variantIds?: string[];
+    totalCents?: number;
+  };
+
+  const body = (res: Awaited<ReturnType<typeof post>>) => res.json() as CheckoutBody;
+
+  it('cria o pedido e devolve a sessão Stripe no formato público', async () => {
+    const res = await post();
+
+    expect(res.statusCode).toBe(201);
+    const parsed = presaleCheckoutResponseSchema.parse(res.json());
+    expect(parsed.amountCents).toBe(19800);
+    expect(parsed.shippingCents).toBe(0);
+    expect(parsed.currency).toBe('BRL');
+    expect(parsed.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_1');
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: parsed.orderId } });
+    expect(order.origin).toBe('casa_in_box');
+    expect(order.kind).toBe('product');
+    expect(order.method).toBe('card');
+    expect(order.provider).toBe('stripe');
+    expect(order.status).toBe('pending');
+    expect(order.amountCents).toBe(19800);
+    expect(order.baseAmountCents).toBe(19800);
+    expect(order.shippingCents).toBe(0);
+    expect(order.quantity).toBe(2);
+    expect(order.fulfillmentMethod).toBe('pickup');
+    expect(order.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_1');
+  });
+
+  it('503 quando a campanha está desligada', async () => {
+    await setPresaleSettings({ enabled: false });
+
+    const res = await post();
+    expect(res.statusCode).toBe(503);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+  });
+
+  it('soma linhas repetidas do mesmo variantId numa só', async () => {
+    const res = await post({
+      items: [
+        { variantId, quantity: 2 },
+        { variantId, quantity: 3 },
+      ],
+      expectedTotalCents: 5 * 9900,
+    });
+
+    expect(res.statusCode).toBe(201);
+    const items = await prisma.orderItem.findMany({ where: { orderId: body(res).orderId } });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.quantity).toBe(5);
+    expect(items[0]!.unitPriceCents).toBe(9900);
+    expect(items[0]!.subtotalCents).toBe(49500);
+  });
+
+  it('cobra o frete uma vez só, não por linha', async () => {
+    const res = await post({
+      fulfillmentMethod: 'ship',
+      delivery: delivery(),
+      items: [
+        { variantId, quantity: 1 },
+        { variantId, quantity: 1 },
+      ],
+      expectedTotalCents: 2 * 9900 + 1990,
+    });
+
+    expect(res.statusCode).toBe(201);
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body(res).orderId } });
+    expect(order.shippingCents).toBe(1990);
+    expect(order.amountCents).toBe(21790);
+    expect(order.fulfillmentMethod).toBe('ship');
+  });
+
+  it('409 e nenhum pedido quando expectedTotalCents diverge', async () => {
+    const res = await post({ expectedTotalCents: 1 });
+
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_TOTAL_CHANGED');
+    expect(body(res).totalCents).toBe(19800);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+    expect(stripe.calls).toHaveLength(0);
+  });
+
+  it('ignora preço mandado pelo cliente e cobra o do banco', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: {
+        ...payload(),
+        items: [{ variantId, quantity: 2, priceCents: 1, unitPriceCents: 1 }],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body(res).orderId } });
+    expect(order.amountCents).toBe(19800);
+    expect(lastSessionInput(stripe).amountCents).toBe(19800);
+  });
+
+  it('grava devFeePercent 0 e devFeeAmountCents 0', async () => {
+    const res = await post();
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body(res).orderId } });
+    expect(order.devFeePercent).toBe(0);
+    expect(order.devFeeAmountCents).toBe(0);
+  });
+
+  it('não reserva estoque: quantitySold fica igual', async () => {
+    const before = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
+
+    const res = await post();
+    expect(res.statusCode).toBe(201);
+
+    const after = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
+    expect(after.quantitySold).toBe(before.quantitySold);
+  });
+
+  it('deixa expiresAt nulo', async () => {
+    const res = await post();
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body(res).orderId } });
+    expect(order.expiresAt).toBeNull();
+  });
+
+  it.each([
+    ['flag desmarcado', { visibleInPresale: false }],
+    ['produto draft', { status: 'draft' as const }],
+    ['produto virtual', { virtual: true }],
+  ])('recusa %s nomeando o variantId', async (_label, patch) => {
+    await prisma.product.update({ where: { id: productId }, data: patch });
+
+    const res = await post();
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_ITEM_UNAVAILABLE');
+    expect(body(res).variantIds).toEqual([variantId]);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+  });
+
+  it('recusa variante inativa nomeando o variantId', async () => {
+    await prisma.variant.update({ where: { id: variantId }, data: { active: false } });
+
+    const res = await post();
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_ITEM_UNAVAILABLE');
+    expect(body(res).variantIds).toEqual([variantId]);
+  });
+
+  it('recusa variantId inexistente nomeando o id', async () => {
+    const res = await post({ items: [{ variantId: 'var_inexistente', quantity: 1 }] });
+
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_ITEM_UNAVAILABLE');
+    expect(body(res).variantIds).toEqual(['var_inexistente']);
+  });
+
+  it('422 com mensagem própria quando o total é zero', async () => {
+    await prisma.variant.update({ where: { id: variantId }, data: { priceCents: 0 } });
+
+    const res = await post({ expectedTotalCents: 0 });
+    expect(res.statusCode).toBe(422);
+    expect(body(res).code).toBe('PRESALE_TOTAL_TOO_LOW');
+    expect(body(res).message).toMatch(/\S/);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+    expect(stripe.calls).toHaveLength(0);
+  });
+
+  it('422 quando o total fica abaixo do mínimo da Stripe em BRL', async () => {
+    await prisma.variant.update({ where: { id: variantId }, data: { priceCents: 20 } });
+
+    const res = await post({ items: [{ variantId, quantity: 1 }], expectedTotalCents: 20 });
+    expect(res.statusCode).toBe(422);
+    expect(body(res).code).toBe('PRESALE_TOTAL_TOO_LOW');
+  });
+
+  it('recusa entrega com CEP fora da faixa', async () => {
+    const res = await post({
+      fulfillmentMethod: 'ship',
+      delivery: delivery(OUT_OF_AREA_CEP),
+      expectedTotalCents: 19800 + 1990,
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(body(res).code).toBe('PRESALE_CEP_OUT_OF_AREA');
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+  });
+
+  it('recusa entrega quando o produto não tem allowShip', async () => {
+    await prisma.product.update({ where: { id: productId }, data: { allowShip: false } });
+
+    const res = await post({
+      fulfillmentMethod: 'ship',
+      delivery: delivery(),
+      expectedTotalCents: 19800 + 1990,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_FULFILLMENT_UNAVAILABLE');
+    expect(body(res).variantIds).toEqual([variantId]);
+  });
+
+  it('recusa retirada quando o produto não tem allowPickup', async () => {
+    await prisma.product.update({ where: { id: productId }, data: { allowPickup: false } });
+
+    const res = await post();
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_FULFILLMENT_UNAVAILABLE');
+    expect(body(res).variantIds).toEqual([variantId]);
+  });
+
+  it('grava PresaleGuest e aponta o pedido para o usuário-sistema', async () => {
+    const res = await post({
+      fulfillmentMethod: 'ship',
+      delivery: delivery(),
+      expectedTotalCents: 19800 + 1990,
+      guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com', phone: '41999990000' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const systemUser = await prisma.user.findUniqueOrThrow({
+      where: { email: PRESALE_SYSTEM_USER_EMAIL },
+    });
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: body(res).orderId } });
+    expect(order.userId).toBe(systemUser.id);
+
+    const guest = await prisma.presaleGuest.findUniqueOrThrow({ where: { orderId: order.id } });
+    expect(guest.email).toBe('comprador@exemplo.com');
+    expect(guest.phone).toBe('41999990000');
+    expect(guest.recipientName).toBe('Comprador Teste');
+    expect(guest.postalCode).toBe(IN_AREA_CEP);
+    expect(guest.city).toBe('Curitiba');
+  });
+
+  it('não grava endereço no PresaleGuest quando é retirada', async () => {
+    const res = await post();
+
+    const guest = await prisma.presaleGuest.findUniqueOrThrow({
+      where: { orderId: body(res).orderId },
+    });
+    expect(guest.line1).toBeNull();
+    expect(guest.postalCode).toBeNull();
+    expect(guest.recipientName).toBeNull();
+  });
+
+  it('nenhuma linha de User é criada ou alterada pelo email do convidado', async () => {
+    await createUser({ email: 'membro@existente.com', name: 'Nome Original' });
+    // Aquece o usuário-sistema para que a contagem não mude por causa dele.
+    await post();
+    const before = await prisma.user.count();
+
+    const res = await post({
+      guest: { name: 'Outro Nome', email: 'membro@existente.com' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    await expect(prisma.user.count()).resolves.toBe(before);
+    const membro = await prisma.user.findUniqueOrThrow({
+      where: { email: 'membro@existente.com' },
+    });
+    expect(membro.name).toBe('Nome Original');
+  });
+
+  it('clique duplo com o mesmo clientRequestId devolve o mesmo pedido e a mesma URL', async () => {
+    const twice = payload();
+
+    const [a, b] = await Promise.all([
+      app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice }),
+      app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice }),
+    ]);
+
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect(body(a).orderId).toBe(body(b).orderId);
+    expect(body(a).checkoutUrl).toBe(body(b).checkoutUrl);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(1);
+  });
+
+  it('409 quando o clientRequestId reincide sobre pedido não-pendente', async () => {
+    const twice = payload();
+
+    const first = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+    expect(first.statusCode).toBe(201);
+    await prisma.order.update({
+      where: { id: body(first).orderId },
+      data: { status: 'failed', failedAt: new Date() },
+    });
+
+    const second = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+    expect(second.statusCode).toBe(409);
+    expect(body(second).code).toBe('PRESALE_REQUEST_STALE');
+    expect(body(second).checkoutUrl).toBeUndefined();
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(1);
+  });
+
+  it('expires_at da sessão é no mínimo 30 min à frente da criação', async () => {
+    await post();
+
+    const input = lastSessionInput(stripe);
+    expect(input.expiresAt! - Math.floor(Date.now() / 1000)).toBeGreaterThanOrEqual(30 * 60 - 5);
+  });
+
+  it('usa idempotencyKey derivada do orderId e manda orderId na metadata', async () => {
+    const res = await post();
+
+    const input = lastSessionInput(stripe);
+    expect(input.idempotencyKey).toBe(`presale_checkout_${body(res).orderId}`);
+    expect(input.metadata).toMatchObject({ orderId: body(res).orderId });
+  });
+
+  it('monta success_url e cancel_url no servidor, com token assinado do pedido', async () => {
+    const env = loadEnv();
+    const res = await post();
+    const orderId = body(res).orderId;
+
+    const input = lastSessionInput(stripe);
+    expect(input.cancelUrl).toBe(`${env.GARAGE_WEB_BASE_URL}/casa-in-box/montar`);
+
+    const success = new URL(input.successUrl);
+    expect(success.origin + success.pathname).toBe(
+      `${env.GARAGE_WEB_BASE_URL}/casa-in-box/obrigado`,
+    );
+    expect(success.searchParams.get('orderId')).toBe(orderId);
+    expect(verifyQrCode(success.searchParams.get('t')!, env)).toEqual({ kind: 'p', id: orderId });
+  });
+
+  it('ignora success_url e cancel_url mandados no corpo', async () => {
+    const env = loadEnv();
+    await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: {
+        ...payload(),
+        successUrl: 'https://evil.example/pago',
+        cancelUrl: 'https://evil.example/cancelado',
+      },
+    });
+
+    const input = lastSessionInput(stripe);
+    expect(input.successUrl.startsWith(env.GARAGE_WEB_BASE_URL)).toBe(true);
+    expect(input.cancelUrl.startsWith(env.GARAGE_WEB_BASE_URL)).toBe(true);
+  });
+
+  it('falha da Stripe deixa o pedido failed e não cobra', async () => {
+    stripe.nextCheckoutSessionError = new Error('stripe fora do ar');
+
+    const res = await post();
+    expect(res.statusCode).toBe(502);
+
+    const order = await prisma.order.findFirstOrThrow({ where: { origin: 'casa_in_box' } });
+    expect(order.status).toBe('failed');
+    expect(order.failedAt).not.toBeNull();
+    expect(order.checkoutUrl).toBeNull();
+  });
+
+  it('grava consentimento com canal web_public e evidence preenchido', async () => {
+    await post();
+
+    const consent = await prisma.consent.findFirstOrThrow({ where: { purpose: 'privacy_notice' } });
+    expect(consent.channel).toBe('web_public');
+    expect(consent.version).toBe(PRIVACY_POLICY_VERSION);
+    expect(consent.userId).toBeNull();
+    expect(consent.evidence).not.toBeNull();
+    expect(consent.evidence).toMatchObject({ guestEmail: 'comprador@exemplo.com' });
+  });
+
+  it('422 quando o corpo não passa no schema', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: { ...payload(), items: [] },
+    });
+
+    expect(res.statusCode).toBe(422);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+  });
+
+  it('o checkout tem teto de rate limit próprio, menor que o das rotas de leitura', async () => {
+    const read = await app.inject({ method: 'GET', url: '/presale/casa-in-box/campaign' });
+    const write = await post();
+
+    expect(Number(write.headers['x-ratelimit-limit'])).toBeLessThan(
+      Number(read.headers['x-ratelimit-limit']),
+    );
+  });
+});

@@ -35,6 +35,9 @@ runs `prisma migrate deploy`, then `startCommand` boots
    - `TICKET_CODE_SECRET` — `openssl rand -base64 48`.
    - `FIELD_ENCRYPTION_KEY` — `openssl rand -hex 32` (exactly 64 hex chars).
    - `APP_WEB_BASE_URL`, `MAIL_FROM`, `RESEND_API_KEY`.
+   - `GARAGE_WEB_BASE_URL` — public base of `apps/garage` (e.g.
+     `https://casacar.club`). Required, no default: the Casa In Box pre-sale
+     checkout builds the Stripe session's success/cancel URLs from it.
    - `CORS_ORIGINS=*` for the bootstrap window.
      <!-- TODO(JDMA-18): tighten to admin + mobile domains once Vercel admin domain is known -->
      Permissive `*` avoids a circular dependency on Vercel admin

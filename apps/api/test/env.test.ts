@@ -9,6 +9,7 @@ describe('env: F8 billing entries (chunk F8.01)', () => {
     JWT_ACCESS_SECRET: 'a'.repeat(32),
     REFRESH_TOKEN_PEPPER: 'b'.repeat(32),
     APP_WEB_BASE_URL: 'http://localhost:3000',
+    GARAGE_WEB_BASE_URL: 'http://localhost:3002',
     MAIL_FROM: 'test@jdm.test',
     STRIPE_SECRET_KEY: 'sk_test_' + 'c'.repeat(32),
     STRIPE_WEBHOOK_SECRET: 'd'.repeat(32),

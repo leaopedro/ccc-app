@@ -75,6 +75,8 @@ export type FakeStripe = StripeClient & {
   nextRetrievedPaymentIntent: { id: string; clientSecret: string } | null;
   nextCancelPaymentIntentError: Error | null;
   nextCheckoutSession: CheckoutSessionResult;
+  /** When set, createCheckoutSession throws this AFTER recording the call. */
+  nextCheckoutSessionError: Error | null;
   nextCheckoutSessionPaymentIntentId: string | null;
   nextSignatureValid: boolean;
   nextEvent: WebhookEvent | null;
@@ -155,6 +157,7 @@ export const buildFakeStripe = (): FakeStripe => {
       url: 'https://checkout.stripe.com/cs_test_1',
       paymentIntentId: 'pi_test_cs_1',
     },
+    nextCheckoutSessionError: null,
     nextCheckoutSessionPaymentIntentId: 'pi_test_cs_1',
     nextSignatureValid: true,
     nextEvent: null,
@@ -209,7 +212,10 @@ export const buildFakeStripe = (): FakeStripe => {
     createCheckoutSession: async (
       input: CreateCheckoutSessionInput,
     ): Promise<CheckoutSessionResult> => {
+      // Push BEFORE throwing, mesmo motivo de createPaymentIntent: um teste que
+      // afirma "a chamada aconteceu e falhou" precisa ver a chamada registrada.
       fake.calls.push({ kind: 'createCheckoutSession', payload: input });
+      if (fake.nextCheckoutSessionError) throw fake.nextCheckoutSessionError;
       return fake.nextCheckoutSession;
     },
 

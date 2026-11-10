@@ -10,6 +10,7 @@ const baseEnv = {
   JWT_ACCESS_SECRET: 'a'.repeat(48),
   REFRESH_TOKEN_PEPPER: 'b'.repeat(48),
   APP_WEB_BASE_URL: 'http://localhost:3000',
+  GARAGE_WEB_BASE_URL: 'http://localhost:3002',
   MAIL_FROM: 'noreply@jdm.test',
   STRIPE_SECRET_KEY: 'test_stripe_secret_key_minimum_32_chars_xx',
   STRIPE_WEBHOOK_SECRET: 'test_stripe_webhook_secret_32_chars_min_xx',

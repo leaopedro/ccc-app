@@ -142,6 +142,21 @@ export type FakeStripe = StripeClient & {
   nextRefundError: Error | null;
 };
 
+/**
+ * Erro no formato que a Stripe devolve quando a MESMA `idempotencyKey` ainda
+ * está em voo noutra requisição: HTTP 409 `idempotency_key_in_use`. É o que um
+ * clique duplo produz de verdade na irmã que chega por último, e
+ * `services/stripe/index.ts:423` constrói o client sem `maxNetworkRetries`,
+ * então ela recebe isso de cara em vez de esperar. Existe para os testes
+ * poderem distinguir "o provedor recusou o pagamento" de "o outro pedido do
+ * par está trabalhando", que têm consequências opostas no status do pedido.
+ */
+export const stripeIdempotencyConflictError = (): Error =>
+  Object.assign(
+    new Error('There is currently another in-progress request using this Idempotency Key'),
+    { type: 'StripeIdempotencyError', code: 'idempotency_key_in_use', statusCode: 409 },
+  );
+
 export const buildFakeStripe = (): FakeStripe => {
   // Auto-incrementing subscription-item id counter — deterministic per fake so
   // tests can assert on `si_fake_1`, `si_fake_2`, ... unless overridden.

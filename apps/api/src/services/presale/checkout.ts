@@ -141,10 +141,24 @@ const succeed = (order: Order, checkoutUrl: string): CreatePresaleOrderSuccess =
  * idempotência. É isso que faz o clique duplo convergir — a segunda
  * requisição, que perdeu a corrida da unique e encontrou o pedido do
  * vencedor ainda sem URL, pede a MESMA sessão em vez de uma segunda.
+ *
+ * `ownsStripeAttempt` NÃO é um detalhe: diz se quem chama é dono da tentativa
+ * de pagamento (criou o pedido) ou se é a irmã que perdeu a corrida da unique.
+ * Só o dono pode mexer no status. A irmã compartilha a chave de idempotência
+ * mas não a tentativa: a Stripe devolve 409 `idempotency_key_in_use` enquanto
+ * a chamada do dono ainda está em voo, e isso é "o outro está trabalhando",
+ * não "o pagamento falhou". Deixar a irmã marcar `failed` a partir desse erro
+ * era um pedido pagável marcado como morto — o dono seguia, gravava a URL
+ * viva num pedido já `failed`, devolvia 201, a pessoa pagava, e o webhook
+ * entrava em 500 eterno com o dinheiro capturado (`OrderNotPendingError` em
+ * `stripe-webhook.ts:913-926` não casa com `expired` nem `paid`, e `:928`
+ * relança). `services/stripe/index.ts:423` não configura `maxNetworkRetries`,
+ * então o clique duplo é o caminho comum para esse 409, não um caso exótico.
  */
 const ensureCheckoutSession = async (
   order: Order,
   deps: CreatePresaleOrderDeps,
+  opts: { ownsStripeAttempt: boolean },
 ): Promise<CreatePresaleOrderResult> => {
   if (order.checkoutUrl) return succeed(order, order.checkoutUrl);
 
@@ -156,8 +170,22 @@ const ensureCheckoutSession = async (
   const token = signQrCode('p', order.id, deps.env);
   const successUrl = `${base}/casa-in-box/obrigado?orderId=${encodeURIComponent(order.id)}&t=${encodeURIComponent(token)}`;
 
+  const providerFailure = () =>
+    fail(
+      502,
+      'BadGateway',
+      'PRESALE_PROVIDER_ERROR',
+      'não foi possível iniciar o pagamento agora. Tente de novo em alguns instantes.',
+    );
+
+  // O `try` cobre A CHAMADA DA STRIPE e nada mais. Englobar a escrita no banco
+  // aqui fazia um erro de banco ser logado como "Stripe recusou a sessão" e
+  // devolvido como 502 do provedor, quando a Stripe tinha aceitado e existia
+  // uma sessão viva sem ninguém apontando para ela — mentira para quem estiver
+  // de plantão.
+  let session;
   try {
-    const session = await deps.stripe.createCheckoutSession({
+    session = await deps.stripe.createCheckoutSession({
       amountCents: order.amountCents,
       currency: order.currency,
       productName: SESSION_PRODUCT_NAME,
@@ -168,28 +196,61 @@ const ensureCheckoutSession = async (
       // Recalculado na hora da chamada. Nunca derivado de um carimbo anterior.
       expiresAt: Math.floor((Date.now() + SESSION_TTL_MS) / 1000),
     });
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { checkoutUrl: session.url },
-    });
-    return succeed(order, session.url);
   } catch (err) {
+    if (!opts.ownsStripeAttempt) {
+      // Não é dona da tentativa: sai sem encostar no status. O dono ainda está
+      // em voo e decide o destino do pedido.
+      deps.log.warn(
+        { err, orderId: order.id },
+        '[presale-checkout] requisição irmã não obteve a sessão; status do pedido intocado',
+      );
+      return providerFailure();
+    }
+
     deps.log.error({ err, orderId: order.id }, '[presale-checkout] Stripe recusou a sessão');
-    // Não há reserva de estoque para devolver; só o pedido a marcar.
-    // `checkoutUrl: null` no where protege o caso em que uma requisição irmã
-    // (mesmo clientRequestId) já conseguiu a sessão enquanto esta falhava.
-    await prisma.order.updateMany({
-      where: { id: order.id, status: 'pending', checkoutUrl: null },
-      data: { status: 'failed', failedAt: new Date() },
-    });
+    // Não há reserva de estoque para devolver; só o pedido a marcar. Em
+    // try/catch próprio: uma falha de banco AQUI não pode virar rejeição solta
+    // e 500 na rota, escondendo o erro de provedor que é a causa real.
+    try {
+      await prisma.order.updateMany({
+        where: { id: order.id, status: 'pending', checkoutUrl: null },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+    } catch (markErr) {
+      deps.log.error(
+        { err: markErr, orderId: order.id },
+        '[presale-checkout] erro da Stripe, e ainda falhou ao marcar o pedido como failed',
+      );
+    }
+    return providerFailure();
+  }
+
+  // Stripe aceitou. Daqui para baixo, falha é de BANCO, nunca de provedor.
+  //
+  // `status: 'pending'` no where é defesa em profundidade: se alguma coisa
+  // tirou o pedido de `pending` enquanto a Stripe respondia, a URL NÃO pode
+  // ser entregue. Um `update` por id, sem essa cláusula, gravava a URL viva
+  // num pedido já `failed` e devolvia 201 — a pessoa pagava e o webhook ficava
+  // em 500 eterno. A sessão órfã que sobra aqui é inalcançável, porque a URL
+  // não sai desta função; nada é cobrado.
+  const claimed = await prisma.order.updateMany({
+    where: { id: order.id, status: 'pending' },
+    data: { checkoutUrl: session.url },
+  });
+  if (claimed.count === 0) {
+    deps.log.error(
+      { orderId: order.id, sessionId: session.id },
+      '[presale-checkout] sessão criada para pedido que saiu de pending; URL descartada',
+    );
     return fail(
-      502,
-      'BadGateway',
-      'PRESALE_PROVIDER_ERROR',
-      'não foi possível iniciar o pagamento agora. Tente de novo em alguns instantes.',
+      409,
+      'Conflict',
+      'PRESALE_REQUEST_STALE',
+      'esta tentativa de pagamento já foi encerrada. Tente de novo.',
     );
   }
+
+  return succeed(order, session.url);
 };
 
 /** Resultado da transação: ou uma recusa já formatada, ou o pedido criado. */
@@ -338,6 +399,12 @@ export const createPresaleOrder = async (
           // contabilidade mentiria.
           devFeePercent: 0,
           devFeeAmountCents: 0,
+          // Moeda da primeira linha que o cliente mandou. Isso só é seguro
+          // porque PRESALE_PRODUCT_WHERE fixa `currency: 'BRL'`
+          // (services/presale/eligibility.ts:16), então toda variante que
+          // chega aqui tem a MESMA moeda e qualquer uma serve. Afrouxar aquele
+          // pino sem mexer aqui vira cobrança de carrinho multimoeda somado
+          // como se fosse um número só.
           currency: byId.get(priced[0]!.variantId)!.product.currency,
           method: 'card',
           provider: 'stripe',
@@ -426,8 +493,10 @@ export const createPresaleOrder = async (
         'esta tentativa de pagamento já foi encerrada. Tente de novo.',
       );
     }
-    created = existing;
+    // Perdeu a corrida da unique: NÃO é dona da tentativa de pagamento do
+    // pedido que encontrou. Ver o cabeçalho de ensureCheckoutSession.
+    return ensureCheckoutSession(existing, deps, { ownsStripeAttempt: false });
   }
 
-  return ensureCheckoutSession(created, deps);
+  return ensureCheckoutSession(created, deps, { ownsStripeAttempt: true });
 };

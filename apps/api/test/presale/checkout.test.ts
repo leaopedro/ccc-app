@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadEnv } from '../../src/env.js';
 import { verifyQrCode } from '../../src/lib/qr.js';
 import type { CreateCheckoutSessionInput } from '../../src/services/stripe/index.js';
-import type { FakeStripe } from '../../src/services/stripe/fake.js';
+import { stripeIdempotencyConflictError, type FakeStripe } from '../../src/services/stripe/fake.js';
 import { createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
@@ -141,6 +141,25 @@ describe('POST /presale/casa-in-box/checkout', () => {
     expect(items[0]!.subtotalCents).toBe(49500);
   });
 
+  it('422 quando as linhas somadas passam do teto de 20 por variante', async () => {
+    // O schema limita 1..20 POR LINHA e aceita 50 linhas. Depois que a Ruling 8
+    // mandou somar linhas repetidas, só esta checagem impede 50x20 = 1000
+    // unidades da mesma variante num pedido só.
+    const res = await post({
+      items: [
+        { variantId, quantity: 20 },
+        { variantId, quantity: 20 },
+      ],
+      expectedTotalCents: 40 * 9900,
+    });
+
+    expect(res.statusCode).toBe(422);
+    expect(body(res).code).toBe('PRESALE_QUANTITY_TOO_HIGH');
+    expect(body(res).variantIds).toEqual([variantId]);
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+    expect(stripe.calls).toHaveLength(0);
+  });
+
   it('cobra o frete uma vez só, não por linha', async () => {
     const res = await post({
       fulfillmentMethod: 'ship',
@@ -165,7 +184,12 @@ describe('POST /presale/casa-in-box/checkout', () => {
     expect(res.statusCode).toBe(409);
     expect(body(res).code).toBe('PRESALE_TOTAL_CHANGED');
     expect(body(res).totalCents).toBe(19800);
+    // As três tabelas que a transação escreve, não só Order: contar pedido
+    // sozinho só implica as outras duas para quem já conhece o formato da
+    // transação, e é justamente isso que um teste não deve exigir do leitor.
     await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+    await expect(prisma.presaleGuest.count()).resolves.toBe(0);
+    await expect(prisma.consent.count()).resolves.toBe(0);
     expect(stripe.calls).toHaveLength(0);
   });
 
@@ -360,6 +384,62 @@ describe('POST /presale/casa-in-box/checkout', () => {
     expect(body(a).orderId).toBe(body(b).orderId);
     expect(body(a).checkoutUrl).toBe(body(b).checkoutUrl);
     await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(1);
+  });
+
+  it('irmã que perde a corrida da unique não marca failed quando a Stripe recusa', async () => {
+    // A metade um do bug crítico. Estado reproduzido: o pedido existe,
+    // continua `pending` e AINDA NÃO tem checkoutUrl, porque a criadora segue
+    // em voo na Stripe. A irmã chega com o mesmo clientRequestId, bate em
+    // P2002, pede a MESMA chave de idempotência e leva 409
+    // `idempotency_key_in_use` — que significa "o outro está trabalhando", e
+    // não "o pagamento falhou". Antes da correção, ela marcava o pedido
+    // `failed` a partir desse erro; a criadora então gravava a URL VIVA num
+    // pedido morto e devolvia 201, a pessoa pagava, e o webhook ficava em 500
+    // eterno com o dinheiro capturado.
+    const twice = payload();
+
+    const first = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+    expect(first.statusCode).toBe(201);
+    const orderId = body(first).orderId;
+    await prisma.order.update({ where: { id: orderId }, data: { checkoutUrl: null } });
+
+    stripe.nextCheckoutSessionError = stripeIdempotencyConflictError();
+    const sibling = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+
+    expect(sibling.statusCode).toBe(502);
+    expect(body(sibling).checkoutUrl).toBeUndefined();
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe('pending');
+    expect(order.failedAt).toBeNull();
+  });
+
+  it('não entrega URL pagável se o pedido sair de pending enquanto a Stripe responde', async () => {
+    // A metade dois: defesa em profundidade na escrita da criadora. O fake
+    // tira o pedido de `pending` DENTRO da chamada da Stripe, que é o que uma
+    // irmã (ou qualquer outro caminho) faria na janela real. Antes da
+    // correção, a escrita era `update` por id, sem status no where: gravava a
+    // URL viva num pedido `failed` e devolvia 201.
+    const realCreate = stripe.createCheckoutSession;
+    stripe.createCheckoutSession = async (input) => {
+      await prisma.order.updateMany({
+        where: { origin: 'casa_in_box', status: 'pending' },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+      return realCreate(input);
+    };
+
+    const res = await post();
+
+    expect(res.statusCode).toBe(409);
+    expect(body(res).code).toBe('PRESALE_REQUEST_STALE');
+    expect(body(res).checkoutUrl).toBeUndefined();
+
+    // A invariante que fecha o buraco: nenhum pedido fica `failed` carregando
+    // uma checkoutUrl, e ninguém recebeu URL de pedido que não está `pending`.
+    const order = await prisma.order.findFirstOrThrow({ where: { origin: 'casa_in_box' } });
+    expect(order.status).toBe('failed');
+    expect(order.checkoutUrl).toBeNull();
   });
 
   it('409 quando o clientRequestId reincide sobre pedido não-pendente', async () => {

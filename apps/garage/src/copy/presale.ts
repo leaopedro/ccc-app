@@ -102,6 +102,12 @@ export const presaleCopy = {
     paid: {
       title: 'Pagamento confirmado!',
       body: 'Seu pedido está garantido. Enviamos os detalhes para o seu e-mail.',
+      itemsTitle: 'O que você vai receber',
+      itemQuantity: (quantity: number) => `${quantity}x`,
+      totalLabel: 'Total pago',
+      // Fallback para retirada quando a campanha ainda não respondeu (ou
+      // falhou): nunca mostra um endereço de entrega vazio no lugar.
+      pickupFallback: 'Consulte o endereço e o horário de retirada no e-mail de confirmação.',
     },
     refunded: {
       title: 'Pedido reembolsado',
@@ -111,6 +117,27 @@ export const presaleCopy = {
       title: 'Pagamento não concluído',
       body: 'Não foi possível confirmar o pagamento. Tente novamente.',
       retryCta: 'Tentar novamente',
+    },
+    // Teto do polling (page.tsx) estourado ainda em `pending`: a liquidação
+    // vem de webhook da Stripe, então parar de girar e oferecer checagem
+    // manual em vez de tentar para sempre.
+    pollingTimeout: {
+      body: 'Isso está demorando mais que o esperado. Você pode verificar de novo a qualquer momento.',
+      checkAgainCta: 'Verificar novamente',
+    },
+    // orderId/token ausentes na querystring da própria página — não é um dos
+    // quatro estados do pedido, é a página nem conseguindo perguntar por ele.
+    missingParams: {
+      title: 'Link incompleto',
+      body: 'Este link está incompleto. Use o link enviado no e-mail de confirmação do pedido.',
+    },
+    // 404 do endpoint de status: o token não bateu com o pedido.
+    notFound: {
+      title: 'Pedido não encontrado',
+      body: 'Não encontramos esse pedido com esse link. Confira se copiou o link completo do e-mail de confirmação.',
+    },
+    loading: {
+      title: 'Carregando seu pedido...',
     },
   },
 };

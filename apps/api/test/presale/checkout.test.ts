@@ -100,7 +100,10 @@ describe('POST /presale/casa-in-box/checkout', () => {
     expect(parsed.amountCents).toBe(19800);
     expect(parsed.shippingCents).toBe(0);
     expect(parsed.currency).toBe('BRL');
-    expect(parsed.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_1');
+    expect(parsed.paymentMethod).toBe('card');
+    if (parsed.paymentMethod === 'card') {
+      expect(parsed.checkoutUrl).toBe('https://checkout.stripe.com/cs_test_1');
+    }
 
     const order = await prisma.order.findUniqueOrThrow({ where: { id: parsed.orderId } });
     expect(order.origin).toBe('casa_in_box');

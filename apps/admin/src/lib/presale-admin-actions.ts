@@ -1,6 +1,7 @@
 'use server';
 
 import { adminPresaleSettingsUpdateSchema } from '@ccc/shared/admin';
+import type { PresaleCepRange } from '@ccc/shared/presale';
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 
@@ -26,7 +27,7 @@ const num = (fd: FormData, key: string): number | undefined => {
 const bool = (fd: FormData, key: string): boolean => fd.get(key) === 'on';
 
 // CEP ranges arrive as newline-separated "start:end" lines from a textarea.
-const parseCepRanges = (raw: string | undefined): { start: string; end: string }[] =>
+const parseCepRanges = (raw: string | undefined): PresaleCepRange[] =>
   (raw ?? '')
     .split('\n')
     .map((line) => line.trim())

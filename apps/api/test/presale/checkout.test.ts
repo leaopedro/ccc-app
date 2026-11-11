@@ -284,6 +284,26 @@ describe('POST /presale/casa-in-box/checkout', () => {
     expect(body(res).code).toBe('PRESALE_TOTAL_TOO_LOW');
   });
 
+  it('503 PRESALE_SETTINGS_INVALID quando deliveryCepRanges está corrompido, nunca 422 de CEP fora da área', async () => {
+    // Faixa ilegível não é "fora de área": é configuração quebrada, e precisa
+    // responder como erro nosso, não como se o comprador tivesse digitado um
+    // CEP que não entregamos. `{ start: 'x' }` sem `end` falha
+    // presaleCepRangeSchema de propósito — bypassa o admin direto no banco,
+    // porque é exatamente o que o admin rejeitaria.
+    await setPresaleSettings({ deliveryCepRanges: [{ start: '80000000' }] });
+
+    const res = await post({
+      fulfillmentMethod: 'ship',
+      delivery: delivery(),
+      expectedTotalCents: 19800 + 1990,
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(body(res).code).toBe('PRESALE_SETTINGS_INVALID');
+    expect(body(res).code).not.toBe('PRESALE_CEP_OUT_OF_AREA');
+    await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(0);
+  });
+
   it('recusa entrega com CEP fora da faixa', async () => {
     const res = await post({
       fulfillmentMethod: 'ship',

@@ -1,10 +1,11 @@
 import { prisma, ensurePresaleSystemUser } from '@ccc/db';
 import { adminOrderDetailSchema, adminPresaleSettingsSchema } from '@ccc/shared/admin';
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
-import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
+import { bearer, createUser, makeApp, makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 import { createPresaleProduct, setPresaleEnabled } from '../presale/fixtures.js';
 
 const env = loadEnv();
@@ -474,6 +475,72 @@ describe('presale admin', () => {
       });
       const rows = await prisma.presaleSettings.findMany();
       expect(rows).toHaveLength(1);
+    });
+  });
+
+  describe('seam: faixa de CEP gravada pelo admin alimenta o checkout', () => {
+    // O admin gravava `{start,end}` e o checkout lia `{from,to}`: o primeiro
+    // PATCH real derrubava todo checkout com entrega, e nenhum teste cruzava
+    // a fronteira para pegar isso — o teste do admin só conferia o tamanho do
+    // array, e o teste do checkout semeava `{from,to}` direto no banco. Este
+    // teste escreve pela rota HTTP do admin de verdade, como a tela faria, e
+    // só depois roda o checkout — nada de seedar o banco diretamente aqui.
+    it('CEP dentro da faixa passa e CEP fora da faixa continua 422, com a faixa escrita pelo PATCH do admin', async () => {
+      const header = await org();
+
+      const patchRes = await app.inject({
+        method: 'PATCH',
+        url: '/admin/presale/settings',
+        headers: { authorization: header },
+        payload: {
+          enabled: true,
+          deliveryCepRanges: [{ start: '80000-000', end: '93800-999' }],
+          shippingFeeCents: 1990,
+        },
+      });
+      expect(patchRes.statusCode).toBe(200);
+
+      const product = await createPresaleProduct({ allowShip: true });
+      const variantId = product.variants[0]!.id;
+
+      const { app: checkoutApp } = await makeAppWithFakeStripe();
+      try {
+        const checkoutPayload = (postalCode: string) => ({
+          clientRequestId: `seam-${Math.random().toString(36).slice(2, 10)}`,
+          expectedTotalCents: 9900 + 1990,
+          fulfillmentMethod: 'ship',
+          items: [{ variantId, quantity: 1 }],
+          guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+          delivery: {
+            recipientName: 'Comprador Teste',
+            line1: 'Rua Exemplo',
+            number: '100',
+            district: 'Centro',
+            city: 'Curitiba',
+            stateCode: 'PR',
+            postalCode,
+          },
+          acceptedTermsVersion: 'terms-2026-01-01',
+          acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
+        });
+
+        const inRange = await checkoutApp.inject({
+          method: 'POST',
+          url: '/presale/casa-in-box/checkout',
+          payload: checkoutPayload('85000-000'),
+        });
+        expect(inRange.statusCode).toBe(201);
+
+        const outOfRange = await checkoutApp.inject({
+          method: 'POST',
+          url: '/presale/casa-in-box/checkout',
+          payload: checkoutPayload('01310-100'),
+        });
+        expect(outOfRange.statusCode).toBe(422);
+        expect((outOfRange.json() as { code?: string }).code).toBe('PRESALE_CEP_OUT_OF_AREA');
+      } finally {
+        await checkoutApp.close();
+      }
     });
   });
 });

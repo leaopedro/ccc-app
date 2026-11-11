@@ -1,5 +1,6 @@
 import { prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
+import { presaleOrderStatusResponseSchema } from '@ccc/shared/presale';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -20,6 +21,18 @@ const WEBHOOK_URL = '/stripe/webhook';
 const STATUS_URL = '/presale/casa-in-box/orders/status';
 const PI_ID = 'pi_presale_test_1';
 const SESSION_ID = 'cs_presale_test_1';
+const CEP_RANGES = [{ from: '80000000', to: '82999999' }];
+const IN_AREA_CEP = '80010-000';
+
+const delivery = () => ({
+  recipientName: 'Comprador Teste',
+  line1: 'Rua Exemplo',
+  number: '100',
+  district: 'Centro',
+  city: 'Curitiba',
+  stateCode: 'PR',
+  postalCode: IN_AREA_CEP,
+});
 
 describe('email de confirmacao e rota de status da pre-venda', () => {
   let app: FastifyInstance;
@@ -29,7 +42,11 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
   beforeEach(async () => {
     await resetDatabase();
     await prisma.presaleSettings.deleteMany();
-    await setPresaleSettings({ enabled: true, shippingFeeCents: 1990 });
+    await setPresaleSettings({
+      enabled: true,
+      shippingFeeCents: 1990,
+      deliveryCepRanges: CEP_RANGES,
+    });
 
     ({ app, stripe } = await makeAppWithFakeStripe());
   });
@@ -68,25 +85,33 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
   });
 
   const seedPresaleOrder = async (
-    opts: { quantity?: number; quantityTotal?: number; priceCents?: number } = {},
+    opts: {
+      quantity?: number;
+      quantityTotal?: number;
+      priceCents?: number;
+      fulfillmentMethod?: 'pickup' | 'ship';
+    } = {},
   ) => {
     const quantity = opts.quantity ?? 2;
     const priceCents = opts.priceCents ?? 9900;
+    const fulfillmentMethod = opts.fulfillmentMethod ?? 'pickup';
     const product = await createPresaleProduct(
       { allowPickup: true, allowShip: true },
       { variants: [{ priceCents, quantityTotal: opts.quantityTotal ?? 10 }] },
     );
     const variantId = product.variants[0]!.id;
+    const shippingCents = fulfillmentMethod === 'ship' ? 1990 : 0;
 
     const res = await app.inject({
       method: 'POST',
       url: CHECKOUT_URL,
       payload: {
         clientRequestId: `req-${++counter}-${Math.random().toString(36).slice(2, 10)}`,
-        expectedTotalCents: priceCents * quantity,
-        fulfillmentMethod: 'pickup',
+        expectedTotalCents: priceCents * quantity + shippingCents,
+        fulfillmentMethod,
         items: [{ variantId, quantity }],
         guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+        ...(fulfillmentMethod === 'ship' ? { delivery: delivery() } : {}),
         acceptedTermsVersion: 'terms-2026-01-01',
         acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
       },
@@ -179,8 +204,77 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
       const res = await postStatus({ orderId, token });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toMatchObject({ orderId, status: state });
+      const body = res.json();
+      expect(body).toMatchObject({ orderId, status: state });
+      // A resposta tem que bater exatamente com o contrato compartilhado
+      // (packages/shared/src/presale.ts) — é o que o garage valida.
+      expect(() => presaleOrderStatusResponseSchema.parse(body)).not.toThrow();
     }
+  });
+
+  it('pedido de entrega devolve o endereco completo em delivery', async () => {
+    const { orderId } = await seedPresaleOrder({ quantity: 2, fulfillmentMethod: 'ship' });
+    const token = signQrCode('p', orderId, env);
+
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(res.json());
+    expect(body.fulfillmentMethod).toBe('ship');
+    expect(body.delivery).toEqual(delivery());
+  });
+
+  it('pedido de retirada devolve delivery nulo', async () => {
+    const { orderId } = await seedPresaleOrder({ quantity: 2, fulfillmentMethod: 'pickup' });
+    const token = signQrCode('p', orderId, env);
+
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(res.json());
+    expect(body.fulfillmentMethod).toBe('pickup');
+    expect(body.delivery).toBeNull();
+  });
+
+  it('a resposta traz currency, items[].title e items[].unitPriceCents do contrato', async () => {
+    const { orderId } = await seedPresaleOrder({ quantity: 2, priceCents: 9900 });
+    const token = signQrCode('p', orderId, env);
+
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.currency).toBe('BRL');
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        title: 'Produto Teste Presale',
+        quantity: 2,
+        unitPriceCents: 9900,
+        subtotalCents: 19800,
+      }),
+    ]);
+    // Campos que o schema nao conhece nao podem vazar na resposta.
+    expect(body).not.toHaveProperty('guestName');
+    expect(body).not.toHaveProperty('guestEmail');
+    expect(body).not.toHaveProperty('baseAmountCents');
+  });
+
+  it('uma resposta que viole o contrato falha dentro da rota (G2)', async () => {
+    const { orderId } = await seedPresaleOrder({ quantity: 2 });
+
+    // A rota precisa do currency do pedido para montar uma resposta valida;
+    // sem ele, presaleOrderStatusResponseSchema.parse() tem que derrubar a
+    // requisicao antes que o reply.send() saia com um shape quebrado.
+    await prisma.$executeRawUnsafe(`UPDATE "Order" SET currency = '' WHERE id = $1`, orderId);
+
+    const token = signQrCode('p', orderId, env);
+    const res = await postStatus({ orderId, token });
+
+    // presaleOrderStatusResponseSchema.parse() lanca ZodError, que o
+    // error-handler global (plugins/error-handler.ts) traduz em 400 — nunca
+    // chega a reply.send() com um shape fora do contrato.
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: 'ValidationError' });
   });
 
   it('o token nao aparece em querystring', async () => {

@@ -20,6 +20,7 @@ import {
   presaleCampaignSchema,
   presaleCheckoutRequestSchema,
   presaleCheckoutResponseSchema,
+  presaleOrderStatusResponseSchema,
   presaleProductListResponseSchema,
 } from '@ccc/shared/presale';
 import rateLimit from '@fastify/rate-limit';
@@ -188,14 +189,23 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
         status: true,
         amountCents: true,
         shippingCents: true,
-        baseAmountCents: true,
+        currency: true,
         fulfillmentMethod: true,
         presaleGuest: {
-          select: { name: true, email: true },
+          select: {
+            recipientName: true,
+            line1: true,
+            number: true,
+            district: true,
+            city: true,
+            stateCode: true,
+            postalCode: true,
+          },
         },
         items: {
           select: {
             quantity: true,
+            unitPriceCents: true,
             subtotalCents: true,
             variant: {
               select: {
@@ -216,21 +226,44 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const guest = order.presaleGuest;
+    const delivery =
+      order.fulfillmentMethod === 'ship' &&
+      guest?.recipientName &&
+      guest.line1 &&
+      guest.number &&
+      guest.district &&
+      guest.city &&
+      guest.stateCode &&
+      guest.postalCode
+        ? {
+            recipientName: guest.recipientName,
+            line1: guest.line1,
+            number: guest.number,
+            district: guest.district,
+            city: guest.city,
+            stateCode: guest.stateCode,
+            postalCode: guest.postalCode,
+          }
+        : null;
+
     // Return order status
-    return reply.status(200).send({
-      orderId: order.id,
-      status: order.status,
-      guestName: order.presaleGuest?.name ?? null,
-      guestEmail: order.presaleGuest?.email ?? null,
-      amountCents: order.amountCents,
-      shippingCents: order.shippingCents,
-      baseAmountCents: order.baseAmountCents,
-      fulfillmentMethod: order.fulfillmentMethod,
-      items: order.items.map((item) => ({
-        quantity: item.quantity,
-        subtotalCents: item.subtotalCents,
-        productTitle: item.variant?.product?.title ?? 'Desconhecido',
-      })),
-    });
+    return reply.status(200).send(
+      presaleOrderStatusResponseSchema.parse({
+        orderId: order.id,
+        status: order.status,
+        fulfillmentMethod: order.fulfillmentMethod,
+        amountCents: order.amountCents,
+        shippingCents: order.shippingCents,
+        currency: order.currency,
+        items: order.items.map((item) => ({
+          title: item.variant?.product?.title ?? 'Desconhecido',
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          subtotalCents: item.subtotalCents,
+        })),
+        delivery,
+      }),
+    );
   });
 };

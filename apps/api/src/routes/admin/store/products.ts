@@ -79,6 +79,7 @@ export const adminStoreProductRoutes: FastifyPluginAsync = async (app) => {
           currency: input.currency,
           allowPickup: input.allowPickup,
           allowShip: input.allowShip,
+          visibleInPresale: input.visibleInPresale,
           shippingFeeCents: input.shippingFeeCents ?? null,
           status: 'draft',
         },

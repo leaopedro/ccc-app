@@ -3,6 +3,8 @@ import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadEnv } from '../../src/env.js';
+import { signQrCode } from '../../src/lib/qr.js';
 import type { FakeStripe } from '../../src/services/stripe/fake.js';
 import type { WebhookEvent } from '../../src/services/stripe/index.js';
 import { makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
@@ -10,6 +12,8 @@ import { makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
 import type { DevMailer } from '../../src/services/mailer/dev.js';
 import type { MailMessage } from '../../src/services/mailer/index.js';
+
+const env = loadEnv();
 
 const CHECKOUT_URL = '/presale/casa-in-box/checkout';
 const WEBHOOK_URL = '/stripe/webhook';
@@ -171,8 +175,11 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
         },
       });
 
-      // The test just needs to verify all 4 states are handled
-      expect(['pending', 'paid', 'refunded', 'failed']).toContain(state);
+      const token = signQrCode('p', orderId, env);
+      const res = await postStatus({ orderId, token });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ orderId, status: state });
     }
   });
 

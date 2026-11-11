@@ -39,6 +39,7 @@ const baseProduct: AdminStoreProductDetail = {
   status: 'draft',
   virtual: false,
   visibleInStore: true,
+  visibleInPresale: false,
   allowPickup: false,
   allowShip: false,
   shippingFeeCents: null,

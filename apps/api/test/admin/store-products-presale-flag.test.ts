@@ -1,11 +1,12 @@
 import { prisma } from '@ccc/db';
-import { GARAGE_SPOT_PRODUCT_SLUG } from '@ccc/shared/garage';
+import { GARAGE_SPOT_PRODUCT_SLUG, GARAGE_SPOT_PRODUCT_TYPE_NAME } from '@ccc/shared/garage';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { loadEligiblePresaleProducts } from '../../src/services/presale/eligibility.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
+import { createPresaleProduct } from '../presale/fixtures.js';
 
 const seedProductType = async () =>
   prisma.productType.upsert({
@@ -25,6 +26,34 @@ const seedDraftProduct = async (slug: string) => {
       productTypeId: productType.id,
       status: 'draft',
       visibleInPresale: false,
+    },
+  });
+};
+
+// Same upsert pattern as test/cart/garage-checkout.test.ts: resetDatabase()
+// clears Product and nothing in this suite re-seeds the garage-spot
+// singleton, so a bare findUnique always returns null here.
+const ensureGarageProduct = async () => {
+  const pt = await prisma.productType.upsert({
+    where: { name: GARAGE_SPOT_PRODUCT_TYPE_NAME },
+    update: {},
+    create: { name: GARAGE_SPOT_PRODUCT_TYPE_NAME, sortOrder: 99 },
+  });
+  return prisma.product.upsert({
+    where: { slug: GARAGE_SPOT_PRODUCT_SLUG },
+    update: {},
+    create: {
+      slug: GARAGE_SPOT_PRODUCT_SLUG,
+      title: 'Vaga de Garagem Adicional',
+      description: '-',
+      productTypeId: pt.id,
+      basePriceCents: 5000,
+      currency: 'BRL',
+      status: 'active',
+      allowPickup: false,
+      allowShip: false,
+      virtual: true,
+      visibleInStore: false,
     },
   });
 };
@@ -72,28 +101,26 @@ describe('PATCH /admin/store/products/:id visibleInPresale flag', () => {
   });
 
   it('desmarcar tira o produto da pré-venda', async () => {
-    const product = await seedDraftProduct('camiseta-presale-2');
-    await prisma.product.update({
-      where: { id: product.id },
-      data: { visibleInPresale: true },
-    });
+    // Eligible to start: active, non-virtual, BRL, with a photo and an active
+    // variant (PRESALE_PRODUCT_WHERE). A bare draft product with no photos
+    // would already be ineligible regardless of the flag, making the
+    // assertion below pass for the wrong reason.
+    const product = await createPresaleProduct({ slug: 'camiseta-presale-2' });
+    const eligibleBefore = await loadEligiblePresaleProducts();
+    expect(eligibleBefore.map((p) => p.id)).toContain(product.id);
 
     await patch(app, product.id, { visibleInPresale: false });
 
     const eligible = await loadEligiblePresaleProducts();
-    expect(eligible).toHaveLength(0);
+    expect(eligible.map((p) => p.id)).not.toContain(product.id);
   });
 
   it('400 ao tentar marcar um produto singleton', async () => {
-    const garageSpot = await prisma.product.findUnique({
-      where: { slug: GARAGE_SPOT_PRODUCT_SLUG },
-    });
+    const garageSpot = await ensureGarageProduct();
 
-    if (garageSpot) {
-      const singletonRes = await patch(app, garageSpot.id, { visibleInPresale: true });
-      expect(singletonRes.statusCode).toBe(400);
-      expect(singletonRes.json()).toMatchObject({ error: 'BadRequest' });
-    }
+    const singletonRes = await patch(app, garageSpot.id, { visibleInPresale: true });
+    expect(singletonRes.statusCode).toBe(400);
+    expect(singletonRes.json()).toMatchObject({ error: 'BadRequest' });
   });
 
   it('exige papel de admin', async () => {

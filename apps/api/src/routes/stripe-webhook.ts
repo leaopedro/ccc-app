@@ -720,8 +720,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
         }
-        if (settled.kind === 'product') {
-          // Try to send presale confirmation email (will only send for casa_in_box origin)
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
           await sendPresaleConfirmationEmail(orderId, {
             mailer: app.mailer,
             env: app.env,
@@ -941,8 +940,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             );
           }
         }
-        if (settled.kind === 'product') {
-          // Try to send presale confirmation email (will only send for casa_in_box origin)
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
           await sendPresaleConfirmationEmail(sessionOrderId, {
             mailer: app.mailer,
             env: app.env,
@@ -1012,7 +1010,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
                 { orderId: sessionOrderId, sessionId: session.id, firstTime },
                 'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
               );
-              if (settled.kind === 'box') {
+              if (settled.kind === 'product') {
                 await sendPresaleConfirmationEmail(sessionOrderId, {
                   mailer: app.mailer,
                   env: app.env,

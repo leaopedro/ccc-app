@@ -165,8 +165,8 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
     // Verify token: verifyQrCode throws on invalid token
     try {
       const verified = verifyQrCode(token, app.env);
-      // Token must match the orderId
-      if (verified.id !== orderId) {
+      // Token must be the presale-status kind, and must match the orderId
+      if (verified.kind !== 'p' || verified.id !== orderId) {
         return reply.status(404).send({
           error: 'NotFound',
           message: 'pedido nao encontrado',

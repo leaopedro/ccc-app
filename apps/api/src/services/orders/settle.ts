@@ -18,7 +18,7 @@ type IssueEnv = { readonly TICKET_CODE_SECRET: string };
 
 export type SettledOrderResult =
   | { kind: 'ticket' | 'extras_only'; issued: IssueResult }
-  | { kind: 'product' | 'mixed'; issued?: IssueResult[] }
+  | { kind: 'product' | 'mixed'; issued?: IssueResult[]; origin: string | null }
   | { kind: 'box' };
 
 /**
@@ -112,20 +112,20 @@ export const settlePaidOrder = async (
   if (order.kind === 'mixed') {
     if (order.status === 'paid') {
       await assignEventPickupTicket(orderId, env);
-      return { kind: 'mixed' };
+      return { kind: 'mixed', origin: order.origin };
     }
     if (order.status !== 'pending') {
       throw new OrderNotPendingError(orderId, order.status);
     }
     const issued = await issueTicketsForMixedOrder(orderId, providerRef, env);
     await assignEventPickupTicket(orderId, env);
-    return { kind: 'mixed', issued };
+    return { kind: 'mixed', issued, origin: order.origin };
   }
 
   if (order.kind === 'product') {
     if (order.status === 'paid') {
       await assignEventPickupTicket(orderId, env);
-      return { kind: order.kind };
+      return { kind: order.kind, origin: order.origin };
     }
     if (order.status !== 'pending') {
       throw new OrderNotPendingError(orderId, order.status);
@@ -153,7 +153,7 @@ export const settlePaidOrder = async (
     );
 
     await assignEventPickupTicket(orderId, env);
-    return { kind: order.kind };
+    return { kind: order.kind, origin: order.origin };
   }
 
   if (order.kind === 'box') {

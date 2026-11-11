@@ -41,6 +41,7 @@ const virtualProduct: AdminStoreProductDetail = {
   status: 'draft',
   virtual: true,
   visibleInStore: false,
+  visibleInPresale: false,
   allowPickup: false,
   allowShip: false,
   shippingFeeCents: null,
@@ -132,10 +133,19 @@ describe('ProductForm interaction — virtual product', () => {
     act(() => {
       root.render(<ProductForm product={virtualProduct} productTypes={productTypes} />);
     });
-    const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    // Scoped to the "Atributos do sistema" fieldset: those two checkboxes are
+    // system-managed and must stay readOnly. The presale checkbox elsewhere in
+    // the form is interactive by design, so a blanket query over every
+    // checkbox would wrongly fail once it exists.
+    const legend = Array.from(container.querySelectorAll('legend')).find(
+      (el) => el.textContent === 'Atributos do sistema',
     );
-    expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+    const fieldset = legend?.closest('fieldset');
+    expect(fieldset).not.toBeNull();
+    const checkboxes = Array.from(
+      fieldset!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    );
+    expect(checkboxes).toHaveLength(2);
     for (const cb of checkboxes) {
       expect(cb.readOnly).toBe(true);
     }

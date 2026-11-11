@@ -10,40 +10,77 @@ export const presaleCopy = {
     subtitle: 'Garanta a sua caixa antes do primeiro lote esgotar.',
     cta: 'Quero a minha caixa',
     firstBatchLabel: (label: string) => `Primeiro lote: ${label}`,
+    // A foto do dono do produto (boné, camiseta, carteira, chaveiro e dois
+    // cheirinhos) não inclui flanela, garrafa térmica nem adesivos, que também
+    // vêm na caixa. Sem esta legenda a foto afirma um conteúdo que a caixa não
+    // entrega. Task 14, item "Hero: slot sim, binário não".
+    photoCaption:
+      'Composição ilustrativa. A caixa real também inclui flanela, garrafa térmica e adesivos.',
+    photoAlt: 'Itens da Casa In Box dispostos sobre uma caixa escura',
   },
 
   steps: {
     title: 'Como funciona',
     items: [
-      { title: 'Escolha a caixa', body: 'Selecione o tier que combina com você.' },
-      { title: 'Finalize o pedido', body: 'Preencha seus dados e escolha retirada ou entrega.' },
-      { title: 'Pague com segurança', body: 'Pagamento processado pela Stripe.' },
+      { title: 'Escolha o seu tier', body: 'Compare o que vem em cada caixa e escolha a sua.' },
       {
-        title: 'Acompanhe o pedido',
-        body: 'Enviamos a confirmação por e-mail assim que o pagamento for aprovado.',
+        title: 'Escolha como receber',
+        body: 'Retirada na Pocket CASA ou entrega no seu endereço.',
+      },
+      {
+        title: 'Pague com segurança',
+        body: 'Pagamento processado pela Stripe. Acompanhe pelo e-mail de confirmação.',
       },
     ],
   },
 
   faq: {
     title: 'Perguntas frequentes',
+    // `requiresField` nomeia a chave de PresaleCampaign que precisa estar
+    // preenchida para a pergunta aparecer. Sem o campo, a pergunta some —
+    // ver `visibleFaqItems` em components/presale/selection.ts. Itens sem
+    // `requiresField` aparecem sempre.
     items: [
       {
         question: 'Quando a caixa chega?',
         body: 'Assim que o primeiro lote for produzido, dentro do prazo informado na página da campanha.',
+        requiresField: 'firstBatchLabel',
       },
       {
         question: 'Posso retirar em vez de receber em casa?',
         body: 'Sim, a retirada é feita no Pocket CASA, no endereço e horário informados no checkout.',
+        requiresField: 'pickupAddress',
       },
       {
         question: 'Minha região está coberta pela entrega?',
         body: 'A entrega cobre a área informada na página. Fora dela, escolha a retirada.',
+        requiresField: 'deliveryAreaLabel',
       },
       {
         question: 'Como funciona o pagamento?',
         body: 'O pagamento é processado pela Stripe. Seus dados de cartão não passam pelos nossos servidores.',
       },
+    ],
+  },
+
+  // Conteúdo de cada caixa. Vem da copy, não da API — só título e preço vêm
+  // dos produtos (Task 14: "a lista de conteúdo de cada caixa vem da copy").
+  tierContents: {
+    basic: [
+      'Carteira',
+      'Chaveiro',
+      'Flanela',
+      'Garrafa térmica',
+      'Kit de brindes (cheirinhos e adesivos)',
+    ],
+    premium: [
+      'Carteira',
+      'Chaveiro',
+      'Flanela',
+      'Garrafa térmica',
+      'Kit de brindes (cheirinhos e adesivos)',
+      'Camiseta',
+      'Boné',
     ],
   },
 
@@ -54,6 +91,29 @@ export const presaleCopy = {
     unavailable: 'Indisponível no momento',
     selectCta: 'Selecionar',
     selectedCta: 'Selecionado',
+    contentsTitle: 'O que vem na caixa',
+  },
+
+  sizeSelector: {
+    label: 'Tamanho da camiseta',
+  },
+
+  guest: {
+    title: 'Seus dados',
+    nameLabel: 'Nome completo',
+    emailLabel: 'E-mail',
+    phoneLabel: 'Telefone (opcional)',
+  },
+
+  delivery: {
+    title: 'Endereço de entrega',
+    recipientNameLabel: 'Nome de quem recebe',
+    line1Label: 'Rua',
+    numberLabel: 'Número',
+    districtLabel: 'Bairro',
+    cityLabel: 'Cidade',
+    stateCodeLabel: 'UF',
+    postalCodeLabel: 'CEP',
   },
 
   fulfillment: {
@@ -64,6 +124,19 @@ export const presaleCopy = {
     pickupHoursLabel: 'Horário de retirada',
     deliveryAreaLabel: (label: string) => `Entregamos em: ${label}`,
     shippingFeeLabel: (amount: string) => `Taxa de entrega: ${amount}`,
+  },
+
+  // Checkbox de consentimento, obrigatório antes de pagar (ADENDO do brief
+  // amendado — consentimento informado precisa linkar para o documento real,
+  // não só mencioná-lo). `privacyLabel`/`termsLabel` são os textos que viram
+  // os links para /privacidade e /termos; o componente monta o <a>, a copy
+  // só guarda o texto.
+  consent: {
+    prefix: 'Li e aceito a ',
+    privacyLabel: 'política de privacidade',
+    middle: ' e os ',
+    termsLabel: 'termos de uso',
+    suffix: '.',
   },
 
   checkout: {

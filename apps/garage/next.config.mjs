@@ -1,3 +1,5 @@
+import { withSentryConfig } from '@sentry/nextjs';
+
 const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'off' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -38,4 +40,10 @@ const config = {
   },
 };
 
-export default config;
+export default withSentryConfig(config, {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT_GARAGE,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  disableLogger: true,
+});

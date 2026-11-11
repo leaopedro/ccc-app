@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
 import { presaleCopy } from '~/copy/presale';
@@ -11,10 +12,10 @@ import { presaleCopy } from '~/copy/presale';
 // não têm fronteira própria ainda, mas nenhuma delas lança em render hoje —
 // ampliar o escopo agora seria consertar um problema que não existe.
 //
-// apps/garage não tem @sentry/* (diferente de apps/admin e apps/api, que
-// têm) — console.error é o canal de operador disponível aqui. A copy visível
-// nunca inclui `error.message`/stack: a mensagem de slug desconhecido cita
-// constantes internas (PRESALE_TIER_SLUGS) que não são para o comprador ver.
+// Sentry.captureException é o canal de operador aqui (apps/garage agora tem
+// @sentry/*, igual admin e api). A copy visível nunca inclui
+// `error.message`/stack: a mensagem de slug desconhecido cita constantes
+// internas (PRESALE_TIER_SLUGS) que não são para o comprador ver.
 export default function CasaInBoxError({
   error,
   reset,
@@ -23,7 +24,7 @@ export default function CasaInBoxError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[casa-in-box] falha ao renderizar a página de pré-venda:', error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

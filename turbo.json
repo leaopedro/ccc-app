@@ -15,6 +15,7 @@
         "SENTRY_AUTH_TOKEN",
         "SENTRY_ORG",
         "SENTRY_PROJECT_ADMIN",
+        "SENTRY_PROJECT_GARAGE",
         "SENTRY_PROJECT_MOBILE"
       ]
     },

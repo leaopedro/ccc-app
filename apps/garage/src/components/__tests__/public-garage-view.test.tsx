@@ -5,7 +5,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import PublicGarageNotFound from '../../../app/g/[slug]/not-found';
+import PublicGarageNotFound from '../../../app/(garage)/g/[slug]/not-found';
 import { PublicGarageView } from '../public-garage-view';
 
 type Garage = GaragePublicResponse['garage'];

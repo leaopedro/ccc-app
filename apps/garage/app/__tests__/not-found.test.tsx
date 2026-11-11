@@ -33,4 +33,8 @@ describe('RootNotFound', () => {
     const html = renderToStaticMarkup(<RootNotFound />);
     expect(html).not.toContain('Garagem não encontrada');
   });
+
+  it('o 404 global continua dentro da coluna de 430px', () => {
+    expect(renderToStaticMarkup(<RootNotFound />)).toContain('max-w-[430px]');
+  });
 });

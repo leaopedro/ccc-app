@@ -19,13 +19,21 @@ const CompassIcon = ({ size = 28 }: { size?: number }) => (
 // Root 404: everything that is not /g/:slug lands here, including the bare
 // domain. This host serves public garage profiles and nothing else, so there
 // is no home page to offer — the way out is the main site.
+//
+// This file renders inside the ROOT layout, not the (garage) route group's
+// layout, so it carries its own copy of the 430px column: a not-found inside
+// the group would miss unmatched URLs entirely, and leaving this page
+// unwrapped would stretch NotFoundShell's max-w-xs across the desktop
+// viewport.
 export default function RootNotFound() {
   return (
-    <NotFoundShell
-      icon={<CompassIcon size={28} />}
-      title="Página não encontrada"
-      description="Este endereço hospeda apenas perfis públicos de garagem."
-      code="HTTP 404"
-    />
+    <div className="mx-auto w-full max-w-[430px] min-h-screen bg-bg shadow-2xl">
+      <NotFoundShell
+        icon={<CompassIcon size={28} />}
+        title="Página não encontrada"
+        description="Este endereço hospeda apenas perfis públicos de garagem."
+        code="HTTP 404"
+      />
+    </div>
   );
 }

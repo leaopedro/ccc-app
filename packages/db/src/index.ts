@@ -26,3 +26,4 @@ export type {
 } from '@prisma/client';
 
 export * from './garage-spot-product.js';
+export * from './presale-system-user.js';

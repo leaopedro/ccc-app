@@ -189,6 +189,42 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
         <aside className="flex flex-col gap-6">
           <section>
             <h2 className="mb-2 text-sm font-semibold uppercase text-[color:var(--color-muted)]">
+              Origem
+            </h2>
+            <p className="text-xs">
+              {order.origin === 'casa_in_box' ? 'Casa In Box (Pre-venda)' : 'App'}
+            </p>
+          </section>
+
+          {order.presaleGuest ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold uppercase text-[color:var(--color-muted)]">
+                Convidado (Pre-venda)
+              </h2>
+              <p className="text-sm font-semibold">{order.presaleGuest.name}</p>
+              <p className="text-xs text-[color:var(--color-muted)]">{order.presaleGuest.email}</p>
+              {order.presaleGuest.phone ? (
+                <p className="text-xs text-[color:var(--color-muted)]">
+                  {order.presaleGuest.phone}
+                </p>
+              ) : null}
+              {order.presaleGuest.line1 ? (
+                <div className="mt-1 text-xs">
+                  <p>{order.presaleGuest.recipientName}</p>
+                  <p>
+                    {order.presaleGuest.line1}, {order.presaleGuest.number}
+                  </p>
+                  <p>
+                    {order.presaleGuest.district} - {order.presaleGuest.city},{' '}
+                    {order.presaleGuest.stateCode}
+                  </p>
+                  <p>{order.presaleGuest.postalCode}</p>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          <section>
+            <h2 className="mb-2 text-sm font-semibold uppercase text-[color:var(--color-muted)]">
               Cliente
             </h2>
             <p className="text-sm">

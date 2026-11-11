@@ -83,6 +83,11 @@ import {
   type AdminPremiumPriceUpsert,
 } from '@ccc/shared/admin';
 import {
+  adminPresaleOrderSearchResponseSchema,
+  adminPresaleSettingsSchema,
+  type AdminPresaleSettingsUpdate,
+} from '@ccc/shared/admin';
+import {
   adminBoxCatalogItemSchema,
   adminBoxCatalogListSchema,
   adminBoxMonthlyListResponseSchema,
@@ -1094,6 +1099,23 @@ export const updateBoxSettings = (input: AdminBoxSettingsUpdate) =>
     method: 'PUT',
     body: JSON.stringify(input),
     schema: adminBoxSettingsSchema,
+  });
+
+// --- Presale Admin ---
+
+export const getPresaleSettings = () =>
+  apiFetch('/admin/presale/settings', { schema: adminPresaleSettingsSchema });
+
+export const updatePresaleSettings = (input: AdminPresaleSettingsUpdate) =>
+  apiFetch('/admin/presale/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    schema: adminPresaleSettingsSchema,
+  });
+
+export const searchPresaleOrders = (email: string) =>
+  apiFetch(`/admin/presale/orders?email=${encodeURIComponent(email)}`, {
+    schema: adminPresaleOrderSearchResponseSchema,
   });
 
 // --- Box monthly fulfillment console (Fase 4b) ---

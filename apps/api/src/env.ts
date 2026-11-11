@@ -20,6 +20,14 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
   APP_WEB_BASE_URL: z.string().url(),
+  // Base pública do apps/garage (casacar.club). Obrigatória e SEM default de
+  // propósito: o checkout da pré-venda monta `success_url` e `cancel_url` da
+  // sessão Stripe a partir daqui (services/presale/checkout.ts), e essas URLs
+  // nunca vêm do corpo da requisição — o endpoint é público, aceitá-las seria
+  // redirect aberto e spoof de confirmação de pagamento. Um default silencioso
+  // mandaria o comprador para o lugar errado DEPOIS de pagar; falhar no boot é
+  // melhor do que isso.
+  GARAGE_WEB_BASE_URL: z.string().url(),
   MAIL_FROM: z.string().email(),
   RESEND_API_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),

@@ -1,8 +1,9 @@
-// Bumped 2026-08-29: subscription billing moved from RevenueCat to Stripe. The
-// published document named RevenueCat as an Operador in both the payment prose
-// and the subprocessor table, while the code charges through Stripe. Naming a
-// processor that does not process is an LGPD accuracy defect, and it is a
-// visible contradiction to an App Review reviewer once iOS charges via Stripe.
+// Bumped 2026-11-10: the Casa In Box pre-sale (T17) collects personal data
+// from buyers who never create an account — name, email, phone, delivery
+// address — into PresaleGuest. Section 3 and section 4 below did not mention
+// an account-less buyer at all, only ticket/store purchases tied to a `User`.
+// That is a missing processing activity, not a wording nit: a titular reading
+// this document could not tell their own data was collected this way.
 //
 // This constant is NOT inert. Two consumers:
 //   1. apps/admin/src/components/cookie-banner.tsx:39 compares it against the
@@ -11,9 +12,11 @@
 //   2. apps/mobile/app/(auth)/privacidade.tsx:2 bundles this module into the
 //      iOS binary. That is why this change must land BEFORE submission, not in
 //      parallel with it.
-// The API does not read it. Whether existing users need fresh consent is a
-// legal call, tracked in the payments roadmap.
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-29' as const;
+// The API does not read it directly for consent gating, but
+// services/presale/checkout.ts stamps every `Consent` row created by the
+// pre-sale checkout with this exact constant — so the bump also changes what
+// version a NEW pre-sale consent evidence row records, same request cycle.
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-10' as const;
 
 /**
  * The version this one replaced. Interpolated into section 12 instead of being
@@ -24,7 +27,7 @@ export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-29' as const;
  * section. The date is gone entirely because the version string already carries
  * it; one source, not three.
  */
-export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-14' as const;
+export const PREVIOUS_PRIVACY_POLICY_VERSION = 'privacy-2026-08-29' as const;
 
 export type PolicySection = {
   id: string;
@@ -75,6 +78,12 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 - Endereço de entrega e telefone (para pedidos com frete)
 - Código de ingresso (QR) — assinado com HMAC; não armazena dados de localização
 
+**Compra sem conta (convidado da pré-venda Casa In Box)**
+- Nome completo, e-mail e telefone informados no checkout, mesmo sem login ou cadastro
+- Endereço de entrega (destinatário, logradouro, número, bairro, cidade, UF, CEP) quando o pedido é para envio; nada disso é coletado na retirada
+- Esses dados ficam vinculados só ao pedido, nunca a uma conta de usuário
+- Pedido que chegou a ser pago é mantido pelo prazo fiscal de 5 anos, igual a qualquer outro pedido — isso vale mesmo que o pedido tenha sido estornado depois; pedido que nunca foi pago (abandonado no checkout) tem esses dados apagados automaticamente 90 dias após a criação do pedido, incluindo o nome e o e-mail que também ficavam registrados no comprovante interno do seu consentimento — esse comprovante continua existindo (data e versão da política aceita), só que sem identificar mais quem foi
+
 **Suporte**
 - Telefone, mensagens e anexos que você enviar ao abrir um chamado de suporte
 
@@ -103,6 +112,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 | Criar e manter sua conta | Nome, e-mail, senha | Art. 7, V — execução de contrato |
 | Emitir ingressos e QR codes | E-mail, dados do pedido | Art. 7, V — execução de contrato |
 | Processar pagamentos | Dados do pedido | Art. 7, V — execução de contrato |
+| Processar compra sem conta (convidado da pré-venda) | Nome, e-mail, telefone, endereço de entrega | Art. 7, V — execução de contrato |
 | Enviar e-mails transacionais | E-mail | Art. 7, V — execução de contrato |
 | Guardar registros fiscais | Dados do pedido, valor | Art. 7, II — obrigação legal |
 | Restringir o acesso a maiores de 18 anos | Autodeclaração de maioridade | Art. 7, IX — interesse legítimo (proteção de menores) |

@@ -75,6 +75,8 @@ export type FakeStripe = StripeClient & {
   nextRetrievedPaymentIntent: { id: string; clientSecret: string } | null;
   nextCancelPaymentIntentError: Error | null;
   nextCheckoutSession: CheckoutSessionResult;
+  /** When set, createCheckoutSession throws this AFTER recording the call. */
+  nextCheckoutSessionError: Error | null;
   nextCheckoutSessionPaymentIntentId: string | null;
   nextSignatureValid: boolean;
   nextEvent: WebhookEvent | null;
@@ -140,6 +142,21 @@ export type FakeStripe = StripeClient & {
   nextRefundError: Error | null;
 };
 
+/**
+ * Erro no formato que a Stripe devolve quando a MESMA `idempotencyKey` ainda
+ * está em voo noutra requisição: HTTP 409 `idempotency_key_in_use`. É o que um
+ * clique duplo produz de verdade na irmã que chega por último, e
+ * `services/stripe/index.ts:423` constrói o client sem `maxNetworkRetries`,
+ * então ela recebe isso de cara em vez de esperar. Existe para os testes
+ * poderem distinguir "o provedor recusou o pagamento" de "o outro pedido do
+ * par está trabalhando", que têm consequências opostas no status do pedido.
+ */
+export const stripeIdempotencyConflictError = (): Error =>
+  Object.assign(
+    new Error('There is currently another in-progress request using this Idempotency Key'),
+    { type: 'StripeIdempotencyError', code: 'idempotency_key_in_use', statusCode: 409 },
+  );
+
 export const buildFakeStripe = (): FakeStripe => {
   // Auto-incrementing subscription-item id counter — deterministic per fake so
   // tests can assert on `si_fake_1`, `si_fake_2`, ... unless overridden.
@@ -155,6 +172,7 @@ export const buildFakeStripe = (): FakeStripe => {
       url: 'https://checkout.stripe.com/cs_test_1',
       paymentIntentId: 'pi_test_cs_1',
     },
+    nextCheckoutSessionError: null,
     nextCheckoutSessionPaymentIntentId: 'pi_test_cs_1',
     nextSignatureValid: true,
     nextEvent: null,
@@ -209,7 +227,10 @@ export const buildFakeStripe = (): FakeStripe => {
     createCheckoutSession: async (
       input: CreateCheckoutSessionInput,
     ): Promise<CheckoutSessionResult> => {
+      // Push BEFORE throwing, mesmo motivo de createPaymentIntent: um teste que
+      // afirma "a chamada aconteceu e falhou" precisa ver a chamada registrada.
       fake.calls.push({ kind: 'createCheckoutSession', payload: input });
+      if (fake.nextCheckoutSessionError) throw fake.nextCheckoutSessionError;
       return fake.nextCheckoutSession;
     },
 

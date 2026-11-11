@@ -157,6 +157,86 @@ async function purgeOldSubscriptionWebhookEvents(now: Date): Promise<PurgeResult
   };
 }
 
+// Pré-venda Casa In Box: PresaleGuest é o único lugar que guarda nome,
+// e-mail, telefone e endereço de quem comprou sem criar conta (ROPA PAY-03).
+// Um pedido pago mantém o convidado pelo mesmo prazo fiscal de PAY-01/02 (5
+// anos no Order) — ele NUNCA é alvo aqui. Só um pedido de origin casa_in_box
+// que nunca foi pago (abandonado no checkout) perde finalidade depois da
+// janela abaixo, e o convidado é purgado. `retentionDays` fica explícito no
+// parâmetro (em vez de embutido como as outras janelas deste arquivo) só
+// para o teste poder exercitar o limite exato sem esperar 90 dias de verdade.
+//
+// Filtro é por `paidAt: null`, NÃO por `status`. "Nunca foi pago" e "não
+// está com status paid agora" não são a mesma pergunta: routes/stripe-
+// webhook.ts (charge.refunded) vira um pedido de 'paid' para 'refunded' sem
+// limpar `paidAt` — ele continua guardando a data em que o pedido foi pago
+// de verdade. `status: { not: 'paid' }` deixava esse pedido estornado passar
+// pelo filtro e seu convidado ia para a purga; `paidAt: null` exclui
+// qualquer pedido que já foi pago alguma vez, seja qual for o status atual
+// (paid ou refunded), sem precisar enumerar os dois.
+export const PRESALE_GUEST_ABANDONED_RETENTION_DAYS = 90;
+
+// Marcador explícito de redação, não string vazia — vazio também significa
+// "nunca preenchido", e isso apagaria o rastro de que o dado foi removido de
+// propósito (legal.ts §3, ropa.md PAY-03).
+const PII_REDACTED = '[purgado]';
+
+// checkout.ts:471 grava guestEmail/guestName dentro de Consent.evidence, e a
+// purga acima (PresaleGuest) nunca alcançava esse JSON — o nome e o e-mail
+// sobreviviam escondidos ali mesmo depois do convidado purgado. A linha de
+// Consent tem que sobreviver (prova do consentimento, com data e versão de
+// política); o que não pode sobreviver é o que identifica a pessoa dentro
+// dela. `userId: null` é um discriminador seguro: `recordConsent`
+// (services/consent.ts) exige um `userId` de verdade para toda consent
+// autenticada — o checkout da pré-venda é o ÚNICO fluxo que grava Consent
+// com `userId: null`.
+async function redactAbandonedPresaleConsentEvidence(orderIds: readonly string[]): Promise<void> {
+  if (orderIds.length === 0) return;
+  const orderIdSet = new Set(orderIds);
+
+  const candidates = await prisma.consent.findMany({
+    where: { userId: null },
+    select: { id: true, evidence: true },
+  });
+
+  for (const consent of candidates) {
+    const evidence = consent.evidence as Record<string, unknown> | null;
+    if (!evidence || typeof evidence.orderId !== 'string') continue;
+    if (!orderIdSet.has(evidence.orderId)) continue;
+    // Idempotente: uma linha já redigida não gera escrita de novo.
+    if (evidence.guestEmail === PII_REDACTED && evidence.guestName === PII_REDACTED) continue;
+
+    await prisma.consent.update({
+      where: { id: consent.id },
+      data: {
+        evidence: { ...evidence, guestEmail: PII_REDACTED, guestName: PII_REDACTED },
+      },
+    });
+  }
+}
+
+export async function purgeAbandonedPresaleGuests(
+  now: Date,
+  retentionDays: number,
+): Promise<PurgeResult> {
+  const cutoff = new Date(now.getTime() - retentionDays * MS_PER_DAY);
+  const where = { origin: 'casa_in_box' as const, paidAt: null, createdAt: { lt: cutoff } };
+
+  // Ids coletados antes do delete: deleteMany não devolve quais linhas
+  // apagou, e a redação do Consent abaixo precisa saber exatamente de quais
+  // pedidos — mesmo critério de seleção, sem inventar outro.
+  const abandonedOrders = await prisma.order.findMany({ where, select: { id: true } });
+  const orderIds = abandonedOrders.map((o) => o.id);
+
+  const { count } = await prisma.presaleGuest.deleteMany({
+    where: { orderId: { in: orderIds } },
+  });
+
+  await redactAbandonedPresaleConsentEvidence(orderIds);
+
+  return { table: 'PresaleGuest', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
 async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise<PurgeResult> {
   const due = await prisma.uploadDeletionQueue.findMany({
     where: { deleteAfter: { lte: now } },
@@ -273,6 +353,7 @@ const PURGE_JOBS = [
   purgeOldSupportTickets,
   purgeOldAdminAudits,
   purgeOldSubscriptionWebhookEvents,
+  (now: Date) => purgeAbandonedPresaleGuests(now, PRESALE_GUEST_ABANDONED_RETENTION_DAYS),
 ] as const;
 
 export const runRetentionTick = async (deps: RetentionWorkerDeps): Promise<PurgeResult[]> => {

@@ -66,6 +66,20 @@ const loadOrder = (orderId: string) =>
         orderBy: { createdAt: 'asc' },
         include: { extra: { select: { name: true } } },
       },
+      presaleGuest: {
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          recipientName: true,
+          line1: true,
+          number: true,
+          district: true,
+          city: true,
+          stateCode: true,
+          postalCode: true,
+        },
+      },
     },
   });
 
@@ -179,5 +193,7 @@ export const getAdminOrderDetail = async (orderId: string): Promise<AdminOrderDe
     fulfillmentSurface: fulfillmentSurfaceOf(order),
     paidAt: order.paidAt ? order.paidAt.toISOString() : null,
     createdAt: order.createdAt.toISOString(),
+    origin: order.origin,
+    presaleGuest: order.presaleGuest ?? null,
   };
 };

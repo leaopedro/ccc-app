@@ -74,6 +74,8 @@ const ticketOrder = (over: Partial<AdminOrderDetail> = {}): AdminOrderDetail => 
   fulfillmentSurface: 'none',
   paidAt: '2026-08-01T12:00:00.000Z',
   createdAt: '2026-08-01T11:00:00.000Z',
+  origin: 'app',
+  presaleGuest: null,
   ...over,
 });
 

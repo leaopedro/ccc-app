@@ -9,6 +9,7 @@ import {
   GARAGE_SPOT_VARIANT_NAME,
   assertVirtualSingletonProtected,
 } from '../src/garage-spot-product.js';
+import { ensurePresaleSystemUser } from '../src/presale-system-user.js';
 
 const prisma = new PrismaClient();
 
@@ -782,6 +783,23 @@ const seedBoxSettings = async (): Promise<void> => {
   console.log('Seeded box settings.');
 };
 
+// Keep in sync with PRESALE_SETTINGS_SINGLETON_ID in @ccc/shared/presale.
+const PRESALE_SETTINGS_SINGLETON_ID = 'presale_default';
+
+const seedPresale = async (): Promise<void> => {
+  await ensurePresaleSystemUser();
+
+  // Fixed id, not findFirst/create: ensurePresaleSettings (apps/api) upserts
+  // on this same id. Seeding a free-form cuid row here would leave that
+  // upsert creating a second row beside it.
+  await prisma.presaleSettings.upsert({
+    where: { id: PRESALE_SETTINGS_SINGLETON_ID },
+    update: {},
+    create: { id: PRESALE_SETTINGS_SINGLETON_ID },
+  });
+  console.log('Seeded presale system user and settings.');
+};
+
 // Keep in sync with HOME_CONTENT_SINGLETON_ID in @ccc/shared/home.
 const HOME_CONTENT_SINGLETON_ID = 'home_default';
 
@@ -933,6 +951,8 @@ const main = async (): Promise<void> => {
   await seedBoxSettings();
 
   await seedHomeContent();
+
+  await seedPresale();
 };
 
 main()

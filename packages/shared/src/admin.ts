@@ -15,6 +15,7 @@ import {
   postingAccessSchema,
 } from './feed.js';
 import { orderStatusSchema } from './orders.js';
+import { presaleCepRangesSchema } from './presale.js';
 import { stateCodeSchema } from './profile.js';
 import { storeFulfillmentStatusSchema } from './store.js';
 import { ticketSourceSchema, ticketStatusSchema } from './tickets.js';
@@ -1018,6 +1019,7 @@ export const adminStoreProductDetailSchema = z.object({
   status: adminStoreProductStatusSchema,
   virtual: z.boolean(),
   visibleInStore: z.boolean(),
+  visibleInPresale: z.boolean(),
   allowPickup: z.boolean(),
   allowShip: z.boolean(),
   shippingFeeCents: z.number().int().nonnegative().nullable(),
@@ -1037,6 +1039,7 @@ export const adminStoreProductCreateSchema = z.object({
   currency: z.string().length(3).default('BRL'),
   allowPickup: z.boolean().default(false),
   allowShip: z.boolean().default(false),
+  visibleInPresale: z.boolean().default(false),
   shippingFeeCents: z
     .preprocess(
       (v) => (v === '' || v === null || v === undefined ? null : v),
@@ -1055,6 +1058,7 @@ export const adminStoreProductUpdateSchema = z
     currency: z.string().length(3).optional(),
     allowPickup: z.boolean().optional(),
     allowShip: z.boolean().optional(),
+    visibleInPresale: z.boolean().optional(),
     shippingFeeCents: z
       .preprocess(
         (v) => (v === '' || v === null || v === undefined ? null : v),
@@ -1344,6 +1348,69 @@ export type AdminOrderLine = z.infer<typeof adminOrderLineSchema>;
 export const adminOrderFulfillmentSurfaceSchema = z.enum(['store', 'box', 'none']);
 export type AdminOrderFulfillmentSurface = z.infer<typeof adminOrderFulfillmentSurfaceSchema>;
 
+// --- Presale Admin ---
+
+export const adminPresaleGuestSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  phone: z.string().nullable(),
+  recipientName: z.string().nullable(),
+  line1: z.string().nullable(),
+  number: z.string().nullable(),
+  district: z.string().nullable(),
+  city: z.string().nullable(),
+  stateCode: z.string().nullable(),
+  postalCode: z.string().nullable(),
+});
+export type AdminPresaleGuest = z.infer<typeof adminPresaleGuestSchema>;
+
+export const adminPresaleSettingsSchema = z.object({
+  enabled: z.boolean(),
+  pickupAddress: z.string().nullable(),
+  pickupHours: z.string().nullable(),
+  deliveryAreaLabel: z.string().nullable(),
+  // Mesma definição que o checkout da API usa. Importada, nunca redigitada.
+  deliveryCepRanges: presaleCepRangesSchema,
+  shippingFeeCents: z.number().int().nonnegative(),
+  firstBatchLabel: z.string().nullable(),
+});
+export type AdminPresaleSettings = z.infer<typeof adminPresaleSettingsSchema>;
+
+export const adminPresaleSettingsUpdateSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    pickupAddress: z.string().nullable().optional(),
+    pickupHours: z.string().nullable().optional(),
+    deliveryAreaLabel: z.string().nullable().optional(),
+    deliveryCepRanges: presaleCepRangesSchema.optional(),
+    shippingFeeCents: z.number().int().nonnegative().optional(),
+    firstBatchLabel: z.string().nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
+export type AdminPresaleSettingsUpdate = z.infer<typeof adminPresaleSettingsUpdateSchema>;
+
+export const adminPresaleOrderSearchItemSchema = z.object({
+  id: z.string(),
+  shortId: z.string(),
+  status: orderStatusSchema,
+  amountCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  paidAt: z.string().nullable(),
+  createdAt: z.string(),
+  presaleGuest: z
+    .object({
+      name: z.string(),
+      email: z.string(),
+    })
+    .nullable(),
+});
+export type AdminPresaleOrderSearchItem = z.infer<typeof adminPresaleOrderSearchItemSchema>;
+
+export const adminPresaleOrderSearchResponseSchema = z.object({
+  orders: z.array(adminPresaleOrderSearchItemSchema),
+});
+export type AdminPresaleOrderSearchResponse = z.infer<typeof adminPresaleOrderSearchResponseSchema>;
+
 /**
  * Kind-agnostic order detail, backing the admin's refund surface.
  *
@@ -1383,6 +1450,8 @@ export const adminOrderDetailSchema = z.object({
   fulfillmentSurface: adminOrderFulfillmentSurfaceSchema,
   paidAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
+  origin: z.enum(['app', 'casa_in_box']),
+  presaleGuest: adminPresaleGuestSchema.nullable(),
 });
 export type AdminOrderDetail = z.infer<typeof adminOrderDetailSchema>;
 

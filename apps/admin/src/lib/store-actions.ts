@@ -70,6 +70,7 @@ export const createProductAction = async (
     currency: (fd.get('currency') as string) || 'BRL',
     allowPickup: fd.get('allowPickup') === 'true',
     allowShip: fd.get('allowShip') === 'true',
+    visibleInPresale: fd.get('visibleInPresale') === 'true',
     shippingFeeCents,
   });
   if (!parsed.success) {
@@ -104,6 +105,8 @@ export const updateProductAction = async (
   if (typeof allowPickup === 'string') raw.allowPickup = allowPickup === 'true';
   const allowShip = fd.get('allowShip');
   if (typeof allowShip === 'string') raw.allowShip = allowShip === 'true';
+  const visibleInPresale = fd.get('visibleInPresale');
+  if (typeof visibleInPresale === 'string') raw.visibleInPresale = visibleInPresale === 'true';
   const shippingFee = fd.get('shippingFeeCents');
   if (typeof shippingFee === 'string') {
     raw.shippingFeeCents = shippingFee === '' ? null : Number(shippingFee);

@@ -6,6 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
 import { settlePaidOrder } from '../services/orders/settle.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
 import {
@@ -719,6 +720,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
         }
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+          await sendPresaleConfirmationEmail(orderId, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
+        }
         return reply.status(200).send({ ok: true, deduped: !firstTime });
       } catch (err) {
         // Customer paid but we can't issue a ticket (usually because an
@@ -770,7 +778,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: orderId },
-            select: { status: true, providerRef: true },
+            select: { status: true, providerRef: true, origin: true },
           });
 
           // Ja pago: nada a fazer alem de deduplicar. Uma cobranca DISTINTA na
@@ -787,10 +795,55 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             return reply.status(200).send({ ok: true, deduped: !firstTime });
           }
 
-          // Qualquer outro estado nao-pendente: expired, cancelled, failed,
-          // refunded. Estorna na primeira entrega e deduplica nas seguintes.
-          // `markProcessed` PRIMEIRO, para que uma reentrega nao estorne duas
-          // vezes se o refund ou o log falharem depois.
+          // Pré-venda Casa In Box em `failed`: liquida, não estorna. Espelho
+          // exato do ramo de `checkout.session.completed` mais abaixo, e tem
+          // de ser espelho: os DOIS eventos chegam para o mesmo pagamento e a
+          // Stripe não garante a ordem. Se só um lado recuperasse, o desfecho
+          // de um pedido de pré-venda dependeria de qual evento chegou
+          // primeiro — num caso estorno automático de um pagamento que deu
+          // certo, no outro liquidação. O `updateMany` contado serializa as
+          // duas entregas: só uma reabre, a outra cai no `throw` e a Stripe
+          // reentrega. Escopado a `casa_in_box`: ingresso, box e loja em
+          // `failed` seguem no estorno logo abaixo.
+          if (staleOrder?.status === 'failed' && staleOrder.origin === 'casa_in_box') {
+            const reopened = await prisma.order.updateMany({
+              where: { id: orderId, status: 'failed' },
+              data: { status: 'pending', failedAt: null },
+            });
+            if (reopened.count === 1) {
+              const settled = await settlePaidOrder(
+                orderId,
+                intent.id,
+                app.env,
+                intent.metadata,
+                event.livemode,
+              );
+              const firstTime = await markProcessed(event.id, event);
+              request.log.warn(
+                { orderId, paymentIntentId: intent.id, firstTime },
+                'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
+              );
+              if (settled.kind === 'product') {
+                // Try to send presale confirmation email (will only send for casa_in_box origin)
+                await sendPresaleConfirmationEmail(orderId, {
+                  mailer: app.mailer,
+                  env: app.env,
+                  log: request.log,
+                });
+              }
+              return reply
+                .status(200)
+                .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
+            }
+            // Sibling evento já recuperou: reentrega esperada.
+            throw err;
+          }
+
+          // Qualquer outro estado nao-pendente que nao seja pré-venda em failed:
+          // expired, cancelled, failed (ingresso/box/loja), refunded. Estorna na
+          // primeira entrega e deduplica nas seguintes. `markProcessed` PRIMEIRO,
+          // para que uma reentrega nao estorne duas vezes se o refund ou o log
+          // falharem depois.
           const firstTime = await markProcessed(event.id, event);
           if (firstTime) {
             await app.stripe.refund(intent.id, `order-${staleOrder?.status ?? 'unknown'}`);
@@ -887,6 +940,13 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
             );
           }
         }
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+          await sendPresaleConfirmationEmail(sessionOrderId, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
+        }
         return reply.status(200).send({ ok: true, deduped: !firstTime });
       } catch (err) {
         if (err instanceof TicketAlreadyExistsForEventError) {
@@ -912,7 +972,7 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: sessionOrderId },
-            select: { status: true },
+            select: { status: true, origin: true },
           });
           if (staleOrder?.status === 'expired') {
             await app.stripe.refund(piId, 'order-expired');
@@ -923,6 +983,44 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
           if (staleOrder?.status === 'paid') {
             await markProcessed(event.id, event);
             return reply.status(200).send({ ok: true, deduped: true });
+          }
+          // Pré-venda Casa In Box: a Stripe diz que o pagamento entrou, e aqui
+          // a verdade é o dinheiro. Rede de segurança — com a mudança acima um
+          // pedido de pré-venda não vira mais `failed` por cartão recusado,
+          // mas se chegar aqui `failed` por outro caminho, liquidar é melhor
+          // que 500 eterno com a cobrança capturada. O `updateMany` contado é
+          // o que serializa duas entregas simultâneas: só uma reabre, a outra
+          // cai no `throw` e a Stripe reentrega. Escopado a `casa_in_box`:
+          // para ingresso, box e loja o `failed` segue caindo no `throw`.
+          if (staleOrder?.status === 'failed' && staleOrder.origin === 'casa_in_box') {
+            const reopened = await prisma.order.updateMany({
+              where: { id: sessionOrderId, status: 'failed' },
+              data: { status: 'pending', failedAt: null },
+            });
+            if (reopened.count === 1) {
+              const settled = await settlePaidOrder(
+                sessionOrderId,
+                piId,
+                app.env,
+                session.metadata,
+                event.livemode,
+              );
+              const firstTime = await markProcessed(event.id, event);
+              request.log.warn(
+                { orderId: sessionOrderId, sessionId: session.id, firstTime },
+                'stripe webhook: pré-venda estava failed e a Stripe confirmou o pagamento; liquidada',
+              );
+              if (settled.kind === 'product') {
+                await sendPresaleConfirmationEmail(sessionOrderId, {
+                  mailer: app.mailer,
+                  env: app.env,
+                  log: request.log,
+                });
+              }
+              return reply
+                .status(200)
+                .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
+            }
           }
         }
         throw err;
@@ -971,6 +1069,27 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (event.type === 'payment_intent.payment_failed' && orderId) {
+      // Pré-venda Casa In Box: num Checkout hospedado um cartão recusado NÃO é
+      // terminal. A sessão segue aberta e a pessoa tenta outro cartão, então o
+      // pedido tem de continuar `pending`; quem fecha a janela é o
+      // `expires_at` da sessão. Marcá-lo `failed` aqui fazia a tentativa
+      // seguinte, bem-sucedida, cair em OrderNotPendingError e virar 500 que a
+      // Stripe retenta por três dias, com o dinheiro já capturado. Não há
+      // reserva de estoque para devolver (o débito acontece na liquidação),
+      // então não há nada a desfazer.
+      const failing = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { origin: true },
+      });
+      if (failing?.origin === 'casa_in_box') {
+        const firstTime = await markProcessed(event.id, event);
+        request.log.info(
+          { orderId, paymentIntentId: intent.id, firstTime },
+          'stripe webhook: pagamento recusado em pré-venda, pedido segue pending',
+        );
+        return reply.status(200).send({ ok: true, deduped: !firstTime, reason: 'presale-retry' });
+      }
+
       await prisma.$transaction(async (tx) => {
         const updated = await tx.order.updateMany({
           where: { id: orderId, status: 'pending' },

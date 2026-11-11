@@ -62,6 +62,7 @@ export const serializeAdminProductDetail = (
     status: p.status,
     virtual: p.virtual,
     visibleInStore: p.visibleInStore,
+    visibleInPresale: p.visibleInPresale,
     allowPickup: p.allowPickup,
     allowShip: p.allowShip,
     shippingFeeCents: p.shippingFeeCents,

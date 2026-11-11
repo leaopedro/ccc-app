@@ -24,6 +24,7 @@ import { adminBoxPartnersRoutes } from './box-partners-admin.js';
 import { adminBoxSettingsRoutes } from './box-settings-admin.js';
 import { adminPremiumCatalogRoutes } from './premium-catalog-admin.js';
 import { adminPremiumRedemptionRoutes } from './premium-redemptions.js';
+import { adminPresaleRoutes } from './presale-admin.js';
 import { adminOrderDetailRoutes } from './orders.js';
 import { adminRefundRoutes } from './refunds.js';
 import { adminStoreInventoryRoutes } from './store/inventory.js';
@@ -85,6 +86,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await scope.register(adminBoxPartnersRoutes);
     await scope.register(adminBoxSettingsRoutes);
     await scope.register(adminBoxFulfillmentRoutes);
+    await scope.register(adminPresaleRoutes);
   });
 
   // Broadcasts: organizer/admin with tight rate limit.

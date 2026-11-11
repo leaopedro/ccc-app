@@ -47,6 +47,7 @@ import { orderRoutes } from './routes/orders.js';
 import { platformGatePlugin } from './plugins/platform-gate.js';
 import { premiumCatalogRoutes } from './routes/premium-catalog.js';
 import { premiumPricingRoutes } from './routes/premium-pricing.js';
+import { presaleRoutes } from './routes/presale.js';
 import { revenuecatWebhookRoutes } from './routes/revenuecat-webhook.js';
 import { storeRoutes } from './routes/store.js';
 import { stripeBillingWebhookRoutes } from './routes/stripe-billing-webhook.js';
@@ -179,6 +180,7 @@ export const buildApp = async (
   await app.register(feedRoutes);
   await app.register(meBlocksRoutes);
   await app.register(storeRoutes);
+  await app.register(presaleRoutes);
   await app.register(cartRoutes);
   await app.register(orderRoutes);
   await app.register(stripeWebhookRoutes);

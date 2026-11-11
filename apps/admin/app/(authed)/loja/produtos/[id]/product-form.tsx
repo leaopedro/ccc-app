@@ -68,6 +68,7 @@ export const ProductForm = ({
   const v = state.values ?? {};
   const [allowPickup, setAllowPickup] = useState(product.allowPickup);
   const [allowShip, setAllowShip] = useState(product.allowShip);
+  const [visibleInPresale, setVisibleInPresale] = useState(product.visibleInPresale);
   // Re-sync both toggles to server truth after a revalidate hands us a new
   // `product`. Render-phase adjustment rather than an effect: React re-renders
   // with the corrected toggles before committing, so the stale value never
@@ -76,14 +77,21 @@ export const ProductForm = ({
   const [prevShipping, setPrevShipping] = useState({
     allowPickup: product.allowPickup,
     allowShip: product.allowShip,
+    visibleInPresale: product.visibleInPresale,
   });
   if (
     prevShipping.allowPickup !== product.allowPickup ||
-    prevShipping.allowShip !== product.allowShip
+    prevShipping.allowShip !== product.allowShip ||
+    prevShipping.visibleInPresale !== product.visibleInPresale
   ) {
-    setPrevShipping({ allowPickup: product.allowPickup, allowShip: product.allowShip });
+    setPrevShipping({
+      allowPickup: product.allowPickup,
+      allowShip: product.allowShip,
+      visibleInPresale: product.visibleInPresale,
+    });
     setAllowPickup(product.allowPickup);
     setAllowShip(product.allowShip);
+    setVisibleInPresale(product.visibleInPresale);
   }
   const currentTypeMissing = !productTypes.some((t) => t.id === product.productTypeId);
   const hasPhotos = product.photos.length > 0;
@@ -191,6 +199,18 @@ export const ProductForm = ({
             )}
           </>
         ) : null}
+        <fieldset className="sm:col-span-2 flex flex-col gap-2">
+          <legend className="mb-1 text-sm text-[color:var(--color-muted)]">Pré-venda</legend>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={visibleInPresale}
+              onChange={(e) => setVisibleInPresale(e.target.checked)}
+            />
+            <span>Mostrar na pré-venda Casa In Box</span>
+          </label>
+        </fieldset>
+        <input type="hidden" name="visibleInPresale" value={visibleInPresale ? 'true' : 'false'} />
         <label className="flex flex-col gap-1">
           <span className="text-sm text-[color:var(--color-muted)]">Status</span>
           {isSingleton ? (

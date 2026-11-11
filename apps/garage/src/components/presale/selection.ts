@@ -17,22 +17,51 @@ import {
 export type TierKind = 'basic' | 'premium';
 
 /**
- * Cada tier é um produto comum do catálogo (emenda 2026-11-10); não existe
- * campo "tier" nem convenção de slug para diferenciá-los. O único sinal que a
- * API devolve é a contagem de variantes: o Premium embute a camiseta (P/M/G/GG)
- * no mesmo produto, o Basic não carrega item com tamanho. Não inventar outra
- * heurística sem reabrir essa decisão com o controlador.
+ * Os dois únicos slugs que esta pré-venda reconhece. Allowlist explícita e
+ * nomeada — NÃO contagem de variantes (fix-task-14-findings.md, T14-C1): no
+ * dia em que o Basic ganhar uma segunda variante por um motivo alheio a
+ * tamanho (uma cor, um volume de garrafa), uma heurística por contagem passa
+ * a mostrar o conteúdo do Premium cobrando o preço do Basic, sem erro nenhum.
+ *
+ * Estes dois slugs são requisito de deploy: quem criar os produtos no admin
+ * tem que usar exatamente estes valores — ver "Checklist de deploy" em
+ * docs/superpowers/specs/2026-11-09-casa-in-box-presale-design.md.
+ */
+const PRESALE_TIER_SLUGS = {
+  'casa-in-box-basic': 'basic',
+  'casa-in-box-premium': 'premium',
+} as const satisfies Record<string, TierKind>;
+
+/**
+ * Chaveado em `product.slug`. Slug fora da allowlist LANÇA — não degrada para
+ * um tier "mais provável" nem some em silêncio. Quem liga a campanha olha a
+ * página logo depois de criar os produtos no admin; um erro visível ali se
+ * conserta em minutos, uma lista de conteúdo errada não se denuncia sozinha.
  */
 export function classifyTier(product: PresaleProduct): TierKind {
-  return product.variants.length > 1 ? 'premium' : 'basic';
+  const kind = (PRESALE_TIER_SLUGS as Record<string, TierKind | undefined>)[product.slug];
+  if (!kind) {
+    throw new Error(
+      `slug de produto da pré-venda não reconhecido: "${product.slug}". ` +
+        `Slugs esperados: ${Object.keys(PRESALE_TIER_SLUGS).join(', ')}.`,
+    );
+  }
+  return kind;
 }
 
-/** Seletor de tamanho só aparece em produto com mais de uma variante. */
+/**
+ * Seletor de tamanho só aparece em produto com mais de uma variante — isso é
+ * independente do tier (verdadeiro mesmo que o Basic um dia ganhe uma
+ * variante de cor), e no máximo é cosmético, então continua por contagem.
+ */
 export function hasSizeOptions(product: PresaleProduct): boolean {
   return product.variants.length > 1;
 }
 
-/** Lista de conteúdo da caixa, da copy — nunca da API (ver copy/presale.ts). */
+/**
+ * Lista de conteúdo da caixa, da copy — nunca da API (ver copy/presale.ts).
+ * Propaga o throw de `classifyTier` para slug desconhecido de propósito.
+ */
 export function tierContentsFor(product: PresaleProduct): string[] {
   return presaleCopy.tierContents[classifyTier(product)];
 }

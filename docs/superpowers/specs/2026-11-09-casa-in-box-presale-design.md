@@ -726,6 +726,14 @@ A campanha nasce `enabled: false`. Antes de abrir, preencher no admin:
    a falha só aparece no clique de pagar, do celular do comprador.
 5. Entrada no ROPA, política de privacidade publicada, páginas de privacidade e
    termos acessíveis em `garage.casacar.club`.
+6. **Os dois produtos-tier criados no admin precisam usar exatamente os slugs
+   `casa-in-box-basic` e `casa-in-box-premium`.** A página de venda
+   (`apps/garage/src/components/presale/selection.ts`, `PRESALE_TIER_SLUGS`)
+   usa o slug para decidir qual lista de conteúdo da caixa mostrar — nunca a
+   contagem de variantes, porque isso quebraria no dia em que o Basic ganhasse
+   uma segunda variante por um motivo alheio a tamanho. Slug fora desses dois
+   valores faz a página lançar (`classifyTier`), de propósito: é para quem
+   ligar a campanha notar na hora, não para o comprador ver a caixa errada.
 
 ## Deixado para quem implementa
 

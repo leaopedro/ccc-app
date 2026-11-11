@@ -8,9 +8,11 @@ import {
   hasSizeOptions,
   isFulfillmentSupported,
   resolveCheckoutError,
+  tierContentsFor,
   visibleFaqItems,
 } from '../selection';
 
+import { presaleCopy } from '~/copy/presale';
 import { PresaleConflictError, PresaleInvalidRequestError } from '~/lib/presale-api';
 
 const campaign: PresaleCampaign = {
@@ -58,15 +60,55 @@ const premiumProduct: PresaleProduct = {
   ],
 };
 
-describe('hasSizeOptions / classifyTier', () => {
-  it('a single-variant product has no size options and classifies as basic', () => {
+describe('hasSizeOptions', () => {
+  it('a single-variant product has no size options', () => {
     expect(hasSizeOptions(basicProduct)).toBe(false);
-    expect(classifyTier(basicProduct)).toBe('basic');
   });
 
-  it('a multi-variant product has size options and classifies as premium', () => {
+  it('a multi-variant product has size options, regardless of tier', () => {
     expect(hasSizeOptions(premiumProduct)).toBe(true);
+  });
+});
+
+describe('classifyTier / tierContentsFor (keyed on slug, not variant count)', () => {
+  it('a recognized slug classifies into its tier', () => {
+    expect(classifyTier(basicProduct)).toBe('basic');
     expect(classifyTier(premiumProduct)).toBe('premium');
+  });
+
+  it("a recognized slug returns that tier's contents list", () => {
+    expect(tierContentsFor(basicProduct)).toEqual(presaleCopy.tierContents.basic);
+    expect(tierContentsFor(premiumProduct)).toEqual(presaleCopy.tierContents.premium);
+  });
+
+  it('an unrecognized slug throws instead of guessing', () => {
+    const unknown: PresaleProduct = { ...basicProduct, slug: 'caneca-casa-club' };
+    expect(() => classifyTier(unknown)).toThrow();
+    expect(() => tierContentsFor(unknown)).toThrow();
+  });
+
+  // T14-C1: variant count must NOT decide the tier. A Basic product that
+  // gains a second variant for a reason unrelated to sizing (a colour, a
+  // bottle volume) must keep showing Basic's contents — not silently switch
+  // to Premium's while still charging Basic's price under the Basic title.
+  it('a Basic product with two variants still returns Basic contents', () => {
+    const basicWithTwoVariants: PresaleProduct = {
+      ...basicProduct,
+      variants: [
+        ...basicProduct.variants,
+        {
+          id: 'v-basic-2',
+          title: 'Azul',
+          priceCents: 9900,
+          currency: 'BRL',
+          stockOnHand: 5,
+          isActive: true,
+        },
+      ],
+    };
+
+    expect(classifyTier(basicWithTwoVariants)).toBe('basic');
+    expect(tierContentsFor(basicWithTwoVariants)).toEqual(presaleCopy.tierContents.basic);
   });
 });
 

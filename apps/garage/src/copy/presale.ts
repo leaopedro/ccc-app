@@ -144,6 +144,16 @@ export const presaleCopy = {
     submitting: 'Processando pedido...',
   },
 
+  // Copy do error.tsx de /casa-in-box (fronteira de erro de renderização,
+  // não de checkout — por isso separada de `errors` acima). Nunca mostra a
+  // mensagem bruta do erro (ex.: slug de produto fora da allowlist em
+  // `classifyTier`, components/presale/selection.ts) ao comprador.
+  pageError: {
+    title: 'Não foi possível carregar a página',
+    body: 'Algo deu errado ao montar esta página. Tente novamente em instantes.',
+    retryCta: 'Tentar novamente',
+  },
+
   errors: {
     // 409 do checkout: o servidor recalculou preço/estoque e discorda do que
     // o cliente mandou. Resposta certa é recarregar, nunca "corrija o form".

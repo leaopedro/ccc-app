@@ -1,14 +1,19 @@
 'use server';
 
 import { adminPresaleSettingsUpdateSchema } from '@ccc/shared/admin';
+import type { AdminPresaleOrderSearchItem } from '@ccc/shared/admin';
 import type { PresaleCepRange } from '@ccc/shared/presale';
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 
-import { updatePresaleSettings } from './admin-api';
+import { searchPresaleOrders, updatePresaleSettings } from './admin-api';
 import { ApiError } from './api';
 
 export type PresaleFormState = { error: string | null };
+export type PresaleOrderSearchState = {
+  orders: AdminPresaleOrderSearchItem[];
+  error: string | null;
+};
 
 const zodMessage = (issues: { message: string }[]): string =>
   issues.map((i) => i.message).join('; ');
@@ -62,4 +67,17 @@ export const updatePresaleSettingsAction = async (
   }
   revalidatePath(PRESALE_PATH);
   return { error: null };
+};
+
+export const searchPresaleOrdersAction = async (
+  email: string,
+): Promise<PresaleOrderSearchState> => {
+  try {
+    const result = await searchPresaleOrders(email);
+    return { orders: result.orders, error: null };
+  } catch (e) {
+    unstable_rethrow(e);
+    if (e instanceof ApiError) return { orders: [], error: e.message };
+    return { orders: [], error: 'Erro ao buscar pedidos' };
+  }
 };

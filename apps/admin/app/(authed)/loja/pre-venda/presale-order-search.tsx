@@ -4,8 +4,7 @@ import type { AdminPresaleOrderSearchItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { searchPresaleOrders } from '~/lib/admin-api';
-import { ApiError } from '~/lib/api';
+import { searchPresaleOrdersAction } from '~/lib/presale-admin-actions';
 
 const inputCls =
   'rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm';
@@ -22,15 +21,10 @@ export const PresaleOrderSearch = () => {
 
     setLoading(true);
     setError(null);
-    try {
-      const result = await searchPresaleOrders(email);
-      setOrders(result.orders);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao buscar pedidos');
-      setOrders([]);
-    } finally {
-      setLoading(false);
-    }
+    const result = await searchPresaleOrdersAction(email);
+    setOrders(result.orders);
+    setError(result.error);
+    setLoading(false);
   };
 
   return (

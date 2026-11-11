@@ -17,6 +17,11 @@ const createPresaleOrder = async (opts: {
   status: OrderStatus;
   createdAt: Date;
   origin?: OrderOrigin;
+  // Override for the refunded-but-was-paid case: routes/stripe-webhook.ts
+  // flips `status` to 'refunded' on a full refund but never clears `paidAt`
+  // (it still records the moment the order WAS paid). Defaults to the old
+  // paid-iff-status-paid behavior so the other tests don't need to change.
+  paidAt?: Date | null;
 }) => {
   const userId = await ensurePresaleSystemUser();
   const suffix = Math.random().toString(36).slice(2, 10);
@@ -32,7 +37,8 @@ const createPresaleOrder = async (opts: {
       status: opts.status,
       origin: opts.origin ?? 'casa_in_box',
       createdAt: opts.createdAt,
-      paidAt: opts.status === 'paid' ? opts.createdAt : null,
+      paidAt:
+        opts.paidAt !== undefined ? opts.paidAt : opts.status === 'paid' ? opts.createdAt : null,
       presaleGuest: {
         create: {
           name: 'Convidado Teste',
@@ -90,6 +96,26 @@ describe('purgeAbandonedPresaleGuests', () => {
 
     await expect(
       prisma.presaleGuest.findUnique({ where: { orderId: paidOld.id } }),
+    ).resolves.not.toBeNull();
+  });
+
+  it('nunca toca pedido pago e depois estornado, por mais antigo que seja (T17-C1)', async () => {
+    // routes/stripe-webhook.ts:646-653 vira `status: 'paid'` -> 'refunded' num
+    // reembolso total da Stripe e NÃO limpa `paidAt`. Esse pedido passava no
+    // filtro antigo `status: { not: 'paid' }` porque 'refunded' !== 'paid'.
+    // `paidAt` continua preenchido com a data em que foi pago de verdade —
+    // esse é o sinal certo de "já foi pago alguma vez", não o status atual.
+    const now = new Date();
+    const paidThenRefunded = await createPresaleOrder({
+      status: 'refunded',
+      createdAt: new Date(now.getTime() - (RETENTION_DAYS + 1) * MS_PER_DAY),
+      paidAt: new Date(now.getTime() - (RETENTION_DAYS + 1) * MS_PER_DAY),
+    });
+
+    await purgeAbandonedPresaleGuests(now, RETENTION_DAYS);
+
+    await expect(
+      prisma.presaleGuest.findUnique({ where: { orderId: paidThenRefunded.id } }),
     ).resolves.not.toBeNull();
   });
 

@@ -82,7 +82,7 @@ Você pode enviar dúvidas, solicitações de direitos, reclamações e comunica
 - Nome completo, e-mail e telefone informados no checkout, mesmo sem login ou cadastro
 - Endereço de entrega (destinatário, logradouro, número, bairro, cidade, UF, CEP) quando o pedido é para envio; nada disso é coletado na retirada
 - Esses dados ficam vinculados só ao pedido, nunca a uma conta de usuário
-- Pedido pago é mantido pelo prazo fiscal de 5 anos, igual a qualquer outro pedido; pedido não pago (abandonado no checkout) tem esses dados apagados automaticamente 90 dias após a criação do pedido
+- Pedido que chegou a ser pago é mantido pelo prazo fiscal de 5 anos, igual a qualquer outro pedido — isso vale mesmo que o pedido tenha sido estornado depois; pedido que nunca foi pago (abandonado no checkout) tem esses dados apagados automaticamente 90 dias após a criação do pedido
 
 **Suporte**
 - Telefone, mensagens e anexos que você enviar ao abrir um chamado de suporte

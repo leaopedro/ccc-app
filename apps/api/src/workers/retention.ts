@@ -165,6 +165,15 @@ async function purgeOldSubscriptionWebhookEvents(now: Date): Promise<PurgeResult
 // janela abaixo, e o convidado é purgado. `retentionDays` fica explícito no
 // parâmetro (em vez de embutido como as outras janelas deste arquivo) só
 // para o teste poder exercitar o limite exato sem esperar 90 dias de verdade.
+//
+// Filtro é por `paidAt: null`, NÃO por `status`. "Nunca foi pago" e "não
+// está com status paid agora" não são a mesma pergunta: routes/stripe-
+// webhook.ts (charge.refunded) vira um pedido de 'paid' para 'refunded' sem
+// limpar `paidAt` — ele continua guardando a data em que o pedido foi pago
+// de verdade. `status: { not: 'paid' }` deixava esse pedido estornado passar
+// pelo filtro e seu convidado ia para a purga; `paidAt: null` exclui
+// qualquer pedido que já foi pago alguma vez, seja qual for o status atual
+// (paid ou refunded), sem precisar enumerar os dois.
 export const PRESALE_GUEST_ABANDONED_RETENTION_DAYS = 90;
 
 export async function purgeAbandonedPresaleGuests(
@@ -176,7 +185,7 @@ export async function purgeAbandonedPresaleGuests(
     where: {
       order: {
         origin: 'casa_in_box',
-        status: { not: 'paid' },
+        paidAt: null,
         createdAt: { lt: cutoff },
       },
     },

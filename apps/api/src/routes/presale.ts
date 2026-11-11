@@ -39,6 +39,23 @@ import { loadEligiblePresaleProducts } from '../services/presale/eligibility.js'
 import { serializePresaleProduct } from '../services/presale/serialize.js';
 import { ensurePresaleSettings } from '../services/presale/settings.js';
 import { prisma } from '@ccc/db';
+import type { OrderStatus } from '@prisma/client';
+
+// O worker (workers/order-expiry.ts) é quem de fato grava `status: 'expired'`
+// no banco, mas só roda em tick — entre o código Pix vencer e o próximo tick
+// o pedido fica `pending` no banco. Esta rota de LEITURA não escreve status
+// (orders só viram `paid` por webhook verificado), então ela sinaliza
+// "expirado" so na RESPOSTA, sem tocar o pedido, comparando `expiresAt` com
+// um `now` injetado — nunca `Date.now()` dentro do handler, mesmo padrão de
+// `deps.now ?? new Date()` em workers/order-expiry.ts.
+const resolveDisplayStatus = (
+  status: OrderStatus,
+  expiresAt: Date | null,
+  now: Date,
+): OrderStatus => {
+  if (status === 'pending' && expiresAt !== null && expiresAt < now) return 'expired';
+  return status;
+};
 
 const requirePresaleEnabled = async (_request: FastifyRequest, reply: FastifyReply) => {
   const settings = await ensurePresaleSettings();
@@ -221,6 +238,8 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
         shippingCents: true,
         currency: true,
         fulfillmentMethod: true,
+        brCode: true,
+        expiresAt: true,
         presaleGuest: {
           select: {
             recipientName: true,
@@ -281,7 +300,7 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(200).send(
       presaleOrderStatusResponseSchema.parse({
         orderId: order.id,
-        status: order.status,
+        status: resolveDisplayStatus(order.status, order.expiresAt, new Date()),
         fulfillmentMethod: order.fulfillmentMethod,
         amountCents: order.amountCents,
         shippingCents: order.shippingCents,
@@ -293,6 +312,11 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           subtotalCents: item.subtotalCents,
         })),
         delivery,
+        // brCode so existe em pedido Pix (Order.brCode), null em cartao.
+        // pixExpiresAt deriva de Order.expiresAt — cartao fica NULO (ver
+        // services/presale/checkout.ts), entao nao precisa de outro check.
+        brCode: order.brCode,
+        pixExpiresAt: order.expiresAt ? order.expiresAt.toISOString() : null,
       }),
     );
   });

@@ -141,6 +141,11 @@ export const resetDatabase = async (): Promise<void> => {
   await prisma.uploadDeletionQueue.deleteMany();
   await prisma.boxCatalogItem.deleteMany();
   await prisma.boxSettings.deleteMany();
+  // Same idiom as storeSettings/boxSettings above: singleton with no parent
+  // row to cascade it, recreated on demand by ensurePresaleSettings(). Left
+  // out until fix round 2, it survived every reset and whichever test file
+  // PATCHed it leaked the mutation into every file that ran after.
+  await prisma.presaleSettings.deleteMany();
   await prisma.partnerModule.deleteMany();
   await prisma.partner.deleteMany();
   await prisma.mfaRecoveryCode.deleteMany();

@@ -9,9 +9,13 @@ import { createPresaleProduct, setPresaleEnabled } from '../presale/fixtures.js'
 
 const env = loadEnv();
 
+// Unico por construcao (sufixo aleatorio), nao por relogio: duas chamadas de
+// createUser no mesmo milissegundo colidiriam em User.email @unique.
+const randomSuffix = () => Math.random().toString(36).slice(2, 10);
+
 const org = async () => {
   const { user } = await createUser({
-    email: `org-${Date.now()}@jdm-test.local`,
+    email: `org-${randomSuffix()}@jdm-test.local`,
     name: 'org',
     verified: true,
     role: 'organizer',
@@ -21,7 +25,7 @@ const org = async () => {
 
 const admin = async () => {
   const { user } = await createUser({
-    email: `admin-${Date.now()}@jdm-test.local`,
+    email: `admin-${randomSuffix()}@jdm-test.local`,
     name: 'admin',
     verified: true,
     role: 'admin',
@@ -89,7 +93,7 @@ describe('presale admin', () => {
     });
 
     it('rejeita PATCH sem admin/organizer', async () => {
-      const { user } = await createUser({ email: `user-${Date.now()}@jdm.test`, role: 'user' });
+      const { user } = await createUser({ email: `user-${randomSuffix()}@jdm.test`, role: 'user' });
       const userToken = bearer(env, user.id, 'user');
 
       const res = await app.inject({
@@ -307,7 +311,7 @@ describe('presale admin', () => {
     });
 
     it('rejeita requisição sem admin/organizer', async () => {
-      const { user } = await createUser({ email: `user-${Date.now()}@jdm.test`, role: 'user' });
+      const { user } = await createUser({ email: `user-${randomSuffix()}@jdm.test`, role: 'user' });
       const userToken = bearer(env, user.id, 'user');
 
       const res = await app.inject({
@@ -385,7 +389,7 @@ describe('presale admin', () => {
       const header = await admin();
 
       const { user: regularUser } = await createUser({
-        email: `regular-user-${Date.now()}@jdm.test`,
+        email: `regular-user-${randomSuffix()}@jdm.test`,
         verified: true,
       });
 
@@ -419,7 +423,7 @@ describe('presale admin', () => {
 
     it('rejeita acesso sem admin/organizer', async () => {
       const { user: regularUser } = await createUser({
-        email: `regular-user-${Date.now()}@jdm.test`,
+        email: `regular-user-${randomSuffix()}@jdm.test`,
         verified: true,
       });
 
@@ -440,7 +444,7 @@ describe('presale admin', () => {
       });
 
       const { user } = await createUser({
-        email: `regular-user-${Date.now()}@jdm.test`,
+        email: `regular-user-${randomSuffix()}@jdm.test`,
         verified: true,
         role: 'user',
       });

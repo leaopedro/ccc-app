@@ -8,6 +8,7 @@
  */
 
 import { prisma } from '@ccc/db';
+import { presaleOrderStatusUrl } from '@ccc/shared/presale';
 import type { FastifyBaseLogger } from 'fastify';
 
 import { signQrCode } from '../../lib/qr.js';
@@ -69,8 +70,9 @@ export const sendPresaleConfirmationEmail = async (
 
   // Monta o token para a rota de status
   const token = signQrCode('p', orderId, deps.env);
-  const base = deps.env.GARAGE_WEB_BASE_URL.replace(/\/+$/, '');
-  const statusLink = `${base}/casa-in-box/obrigado?orderId=${encodeURIComponent(orderId)}&t=${encodeURIComponent(token)}`;
+  // Mesma função que monta o success_url da Stripe. A rota e os nomes dos
+  // parâmetros moram em @ccc/shared/presale, não aqui.
+  const statusLink = presaleOrderStatusUrl(deps.env.GARAGE_WEB_BASE_URL, orderId, token);
 
   // Composicao do email: itens, totais, forma de entrega
   const itemsHtml = order.items

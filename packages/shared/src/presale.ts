@@ -148,3 +148,55 @@ export const presaleOrderStatusResponseSchema = z.object({
   delivery: presaleDeliveryInputSchema.nullable(),
 });
 export type PresaleOrderStatusResponse = z.infer<typeof presaleOrderStatusResponseSchema>;
+
+// Faixa de CEP coberta pela entrega. UMA definição, importada pelo admin
+// (`adminPresaleSettingsSchema` em admin.ts) e pelo checkout da API
+// (services/presale/checkout.ts). Nunca redigite o shape: o admin gravava
+// `{start,end}` e o checkout lia `{from,to}`, então o primeiro operador que
+// configurasse uma faixa pelo admin derrubava TODO checkout com entrega.
+// `{start,end}` é a grafia escolhida porque é a que já está persistida.
+export const presaleCepRangeSchema = z.object({
+  start: z.string(),
+  end: z.string(),
+});
+export type PresaleCepRange = z.infer<typeof presaleCepRangeSchema>;
+
+export const presaleCepRangesSchema = z.array(presaleCepRangeSchema);
+export type PresaleCepRanges = z.infer<typeof presaleCepRangesSchema>;
+
+// Nomes dos parâmetros da querystring da página de status do pedido. A API
+// monta a URL (success_url da Stripe e link do e-mail de confirmação) e o
+// app garage a lê; eram dois arquivos diferentes digitando o nome à mão, e
+// discordaram (`t` contra `token`), então 100% de quem pagava caía na tela
+// de "faltam parâmetros". Importe daqui dos dois lados.
+export const PRESALE_ORDER_STATUS_QUERY = {
+  orderId: 'orderId',
+  token: 't',
+} as const;
+
+// Rotas do app garage que a API precisa montar por fora (success_url,
+// cancel_url, link do e-mail). Mesma razão da constante acima: o cancel_url
+// apontava para `/casa-in-box/montar`, rota do builder que a emenda de
+// 2026-11-10 adiou, e o comprador que clicava em voltar na Stripe tomava 404.
+export const PRESALE_GARAGE_PATHS = {
+  landing: '/casa-in-box',
+  orderStatus: '/casa-in-box/obrigado',
+} as const;
+
+/** Monta a URL da página de status do pedido a partir da base do garage.
+ *  Único lugar que conhece rota e nomes de parâmetro juntos: o success_url
+ *  da Stripe (services/presale/checkout.ts) e o link do e-mail de
+ *  confirmação (services/presale/confirmation-email.ts) chamam esta função
+ *  em vez de montar a string cada um do seu jeito. */
+export const presaleOrderStatusUrl = (
+  garageBaseUrl: string,
+  orderId: string,
+  token: string,
+): string => {
+  const base = garageBaseUrl.replace(/\/+$/, '');
+  const query = new URLSearchParams({
+    [PRESALE_ORDER_STATUS_QUERY.orderId]: orderId,
+    [PRESALE_ORDER_STATUS_QUERY.token]: token,
+  });
+  return `${base}${PRESALE_GARAGE_PATHS.orderStatus}?${query.toString()}`;
+};

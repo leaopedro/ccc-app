@@ -21,7 +21,7 @@ const WEBHOOK_URL = '/stripe/webhook';
 const STATUS_URL = '/presale/casa-in-box/orders/status';
 const PI_ID = 'pi_presale_test_1';
 const SESSION_ID = 'cs_presale_test_1';
-const CEP_RANGES = [{ from: '80000000', to: '82999999' }];
+const CEP_RANGES = [{ start: '80000000', end: '82999999' }];
 const IN_AREA_CEP = '80010-000';
 
 const delivery = () => ({

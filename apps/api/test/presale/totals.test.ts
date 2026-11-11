@@ -9,29 +9,29 @@ describe('cepInRanges', () => {
   });
 
   it('aceita CEP dentro da faixa, com e sem máscara', () => {
-    const r = [{ from: '80000-000', to: '83800-000' }];
+    const r = [{ start: '80000-000', end: '83800-000' }];
     expect(cepInRanges('80010000', r)).toBe(true);
     expect(cepInRanges('80010-000', r)).toBe(true);
   });
 
   it('recusa CEP fora da faixa', () => {
-    expect(cepInRanges('01001000', [{ from: '80000000', to: '83800000' }])).toBe(false);
+    expect(cepInRanges('01001000', [{ start: '80000000', end: '83800000' }])).toBe(false);
   });
 
-  // A faixa com `from: '00000000'` é o que expõe o bug: sem a checagem de
+  // A faixa com `start: '00000000'` é o que expõe o bug: sem a checagem de
   // comprimento, um CEP malformado normaliza para `0` e passaria como
   // "dentro da faixa". Uma faixa realista (ex. 80000000-83800000) passaria
   // com ou sem o fix, então não provaria nada.
   it('recusa CEP que normaliza para string vazia, mesmo com faixa que começa em zero', () => {
-    expect(cepInRanges('abc', [{ from: '00000000', to: '99999999' }])).toBe(false);
+    expect(cepInRanges('abc', [{ start: '00000000', end: '99999999' }])).toBe(false);
   });
 
   it('recusa CEP com menos de 8 dígitos, mesmo com faixa que começa em zero', () => {
-    expect(cepInRanges('8001000', [{ from: '00000000', to: '99999999' }])).toBe(false);
+    expect(cepInRanges('8001000', [{ start: '00000000', end: '99999999' }])).toBe(false);
   });
 
   it('recusa CEP com mais de 8 dígitos, mesmo com faixa que começa em zero', () => {
-    expect(cepInRanges('800100000', [{ from: '00000000', to: '99999999' }])).toBe(false);
+    expect(cepInRanges('800100000', [{ start: '00000000', end: '99999999' }])).toBe(false);
   });
 });
 

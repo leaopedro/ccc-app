@@ -1,6 +1,6 @@
 import { PRESALE_SYSTEM_USER_EMAIL, prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
-import { presaleCheckoutResponseSchema } from '@ccc/shared/presale';
+import { PRESALE_GARAGE_PATHS, presaleCheckoutResponseSchema } from '@ccc/shared/presale';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,7 +13,7 @@ import { createUser, makeAppWithFakeStripe, resetDatabase } from '../helpers.js'
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
 
 const CHECKOUT_URL = '/presale/casa-in-box/checkout';
-const CEP_RANGES = [{ from: '80000000', to: '82999999' }];
+const CEP_RANGES = [{ start: '80000000', end: '82999999' }];
 const IN_AREA_CEP = '80010-000';
 const OUT_OF_AREA_CEP = '01310-100';
 
@@ -480,7 +480,7 @@ describe('POST /presale/casa-in-box/checkout', () => {
     const orderId = body(res).orderId;
 
     const input = lastSessionInput(stripe);
-    expect(input.cancelUrl).toBe(`${env.GARAGE_WEB_BASE_URL}/casa-in-box/montar`);
+    expect(input.cancelUrl).toBe(`${env.GARAGE_WEB_BASE_URL}${PRESALE_GARAGE_PATHS.landing}`);
 
     const success = new URL(input.successUrl);
     expect(success.origin + success.pathname).toBe(

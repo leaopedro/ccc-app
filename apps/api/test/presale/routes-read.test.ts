@@ -64,7 +64,7 @@ describe('GET /presale/casa-in-box/campaign e /products', () => {
       pickupAddress: 'Pocket CASA, Rua Augusta 123',
       pickupHours: 'seg a sex, 9h às 18h',
       firstBatchLabel: '1º lote',
-      deliveryCepRanges: [{ from: '01000000', to: '05999999' }],
+      deliveryCepRanges: [{ start: '01000000', end: '05999999' }],
     });
 
     const res = await app.inject({ method: 'GET', url: '/presale/casa-in-box/campaign' });

@@ -15,6 +15,7 @@ import {
   postingAccessSchema,
 } from './feed.js';
 import { orderStatusSchema } from './orders.js';
+import { presaleCepRangesSchema } from './presale.js';
 import { stateCodeSchema } from './profile.js';
 import { storeFulfillmentStatusSchema } from './store.js';
 import { ticketSourceSchema, ticketStatusSchema } from './tickets.js';
@@ -1368,12 +1369,8 @@ export const adminPresaleSettingsSchema = z.object({
   pickupAddress: z.string().nullable(),
   pickupHours: z.string().nullable(),
   deliveryAreaLabel: z.string().nullable(),
-  deliveryCepRanges: z.array(
-    z.object({
-      start: z.string(),
-      end: z.string(),
-    }),
-  ),
+  // Mesma definição que o checkout da API usa. Importada, nunca redigitada.
+  deliveryCepRanges: presaleCepRangesSchema,
   shippingFeeCents: z.number().int().nonnegative(),
   firstBatchLabel: z.string().nullable(),
 });
@@ -1385,14 +1382,7 @@ export const adminPresaleSettingsUpdateSchema = z
     pickupAddress: z.string().nullable().optional(),
     pickupHours: z.string().nullable().optional(),
     deliveryAreaLabel: z.string().nullable().optional(),
-    deliveryCepRanges: z
-      .array(
-        z.object({
-          start: z.string(),
-          end: z.string(),
-        }),
-      )
-      .optional(),
+    deliveryCepRanges: presaleCepRangesSchema.optional(),
     shippingFeeCents: z.number().int().nonnegative().optional(),
     firstBatchLabel: z.string().nullable().optional(),
   })

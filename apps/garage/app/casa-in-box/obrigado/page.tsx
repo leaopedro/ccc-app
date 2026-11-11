@@ -1,7 +1,7 @@
 'use client';
 
 import type { OrderStatus } from '@ccc/shared/orders';
-import type { PresaleOrderStatusResponse } from '@ccc/shared/presale';
+import { PRESALE_ORDER_STATUS_QUERY, type PresaleOrderStatusResponse } from '@ccc/shared/presale';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
@@ -164,8 +164,8 @@ function PollingOrderStatus({ orderId, token }: { orderId: string; token: string
 
 function ObrigadoContent() {
   const searchParams = useSearchParams();
-  const orderId = searchParams.get('orderId');
-  const token = searchParams.get('token');
+  const orderId = searchParams.get(PRESALE_ORDER_STATUS_QUERY.orderId);
+  const token = searchParams.get(PRESALE_ORDER_STATUS_QUERY.token);
 
   // orderId/token missing from the page's own querystring — not one of the
   // four order states, the page can't even ask for one.

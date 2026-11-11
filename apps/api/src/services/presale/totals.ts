@@ -10,13 +10,16 @@
 // Esta cópia acrescenta uma checagem de comprimento (exatamente 8 dígitos)
 // que o original em box/charge.ts não tem — não faça as duas convergirem,
 // isso reabriria a falha de CEP malformado descrita abaixo.
+import type { PresaleCepRange } from '@ccc/shared/presale';
+
 const normalizeCep = (cep: string): string => cep.replace(/\D/g, '');
 
-/** True when the postal code falls inside any delivery-enabled numeric range. */
-export const cepInRanges = (
-  postalCode: string,
-  ranges: Array<{ from: string; to: string }>,
-): boolean => {
+/** True when the postal code falls inside any delivery-enabled numeric range.
+ *  O shape da faixa vem de `presaleCepRangeSchema` (@ccc/shared/presale), a
+ *  mesma definição que o admin usa para gravar. Não retipe `{start,end}`
+ *  aqui: foi exatamente a divergência de grafia que tornou a entrega
+ *  invendável. */
+export const cepInRanges = (postalCode: string, ranges: PresaleCepRange[]): boolean => {
   const normalized = normalizeCep(postalCode);
   // CEP brasileiro tem 8 dígitos. Sem esta checagem, `Number('')` é `0` (não
   // NaN), então um CEP vazio ou malformado seria comparado como 0 contra as
@@ -26,9 +29,9 @@ export const cepInRanges = (
   const n = Number(normalized);
   if (!Number.isFinite(n)) return false;
   return ranges.some((r) => {
-    const from = Number(normalizeCep(r.from));
-    const to = Number(normalizeCep(r.to));
-    return n >= from && n <= to;
+    const start = Number(normalizeCep(r.start));
+    const end = Number(normalizeCep(r.end));
+    return n >= start && n <= end;
   });
 };
 

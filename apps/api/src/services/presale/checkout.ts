@@ -31,13 +31,15 @@
 import { ensurePresaleSystemUser, prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import {
+  PRESALE_GARAGE_PATHS,
   PRESALE_MAX_QTY_PER_VARIANT,
   PRESALE_SETTINGS_SINGLETON_ID,
+  presaleCepRangesSchema,
+  presaleOrderStatusUrl,
   type PresaleCheckoutRequest,
 } from '@ccc/shared/presale';
 import type { Order } from '@prisma/client';
 import type { FastifyBaseLogger } from 'fastify';
-import { z } from 'zod';
 
 import { isUniqueConstraintErrorOn } from '../../lib/prisma-errors.js';
 import { signQrCode } from '../../lib/qr.js';
@@ -55,10 +57,9 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 /** Aparece no recibo e na página da Stripe. */
 const SESSION_PRODUCT_NAME = 'Casa In Box (pré-venda)';
 
-const deliveryCepRangesSchema = z.array(z.object({ from: z.string(), to: z.string() }));
-
 export type PresaleCheckoutErrorCode =
   | 'PRESALE_DISABLED'
+  | 'PRESALE_SETTINGS_INVALID'
   | 'PRESALE_ITEM_UNAVAILABLE'
   | 'PRESALE_QUANTITY_TOO_HIGH'
   | 'PRESALE_FULFILLMENT_UNAVAILABLE'
@@ -168,7 +169,10 @@ const ensureCheckoutSession = async (
   // autenticado; num endpoint público isso é redirect aberto e spoof de
   // confirmação de pagamento.
   const token = signQrCode('p', order.id, deps.env);
-  const successUrl = `${base}/casa-in-box/obrigado?orderId=${encodeURIComponent(order.id)}&t=${encodeURIComponent(token)}`;
+  // Rota e nomes de parâmetro vêm de @ccc/shared/presale, que é também de
+  // onde a página do garage os lê. Digitar a querystring à mão aqui foi o
+  // que mandou 100% dos compradores para a tela de "faltam parâmetros".
+  const successUrl = presaleOrderStatusUrl(base, order.id, token);
 
   const providerFailure = () =>
     fail(
@@ -191,7 +195,10 @@ const ensureCheckoutSession = async (
       productName: SESSION_PRODUCT_NAME,
       metadata: { orderId: order.id },
       successUrl,
-      cancelUrl: `${base}/casa-in-box/montar`,
+      // Volta para a landing da pré-venda. `/casa-in-box/montar` era a rota
+      // do builder, adiada pela emenda de 2026-11-10: clicar em voltar na
+      // Stripe dava 404.
+      cancelUrl: `${base}${PRESALE_GARAGE_PATHS.landing}`,
       idempotencyKey: `presale_checkout_${order.id}`,
       // Recalculado na hora da chamada. Nunca derivado de um carimbo anterior.
       expiresAt: Math.floor((Date.now() + SESSION_TTL_MS) / 1000),
@@ -344,8 +351,25 @@ export const createPresaleOrder = async (
       if (input.fulfillmentMethod === 'ship') {
         // `delivery` é obrigatório para 'ship' pelo cruzamento do schema de
         // entrada (packages/shared/src/presale.ts).
-        const ranges = deliveryCepRangesSchema.safeParse(settings.deliveryCepRanges);
-        if (!ranges.success || !cepInRanges(input.delivery!.postalCode, ranges.data)) {
+        const ranges = presaleCepRangesSchema.safeParse(settings.deliveryCepRanges);
+        // Faixa ilegível NÃO é "fora de área". Juntar os dois num `||` só
+        // escondia uma configuração quebrada atrás de uma recusa que parece
+        // normal: o comprador lia "não entregamos no seu CEP", ninguém via
+        // alarme, e a entrega ficava invendável em silêncio. Erro nosso
+        // responde como erro nosso, com log de erro e código próprio.
+        if (!ranges.success) {
+          deps.log.error(
+            { issues: ranges.error.issues, settingsId: settings.id },
+            '[presale-checkout] deliveryCepRanges ilegível; entrega indisponível até corrigir',
+          );
+          return fail(
+            503,
+            'ServiceUnavailable',
+            'PRESALE_SETTINGS_INVALID',
+            'a entrega está indisponível no momento. Você pode retirar na Pocket CASA.',
+          );
+        }
+        if (!cepInRanges(input.delivery!.postalCode, ranges.data)) {
           return fail(
             422,
             'UnprocessableEntity',

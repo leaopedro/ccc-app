@@ -1399,6 +1399,28 @@ export const adminPresaleSettingsUpdateSchema = z
   .refine((v) => Object.keys(v).length > 0, { message: 'no fields to update' });
 export type AdminPresaleSettingsUpdate = z.infer<typeof adminPresaleSettingsUpdateSchema>;
 
+export const adminPresaleOrderSearchItemSchema = z.object({
+  id: z.string(),
+  shortId: z.string(),
+  status: orderStatusSchema,
+  amountCents: z.number().int().nonnegative(),
+  currency: z.string(),
+  paidAt: z.string().nullable(),
+  createdAt: z.string(),
+  presaleGuest: z
+    .object({
+      name: z.string(),
+      email: z.string(),
+    })
+    .nullable(),
+});
+export type AdminPresaleOrderSearchItem = z.infer<typeof adminPresaleOrderSearchItemSchema>;
+
+export const adminPresaleOrderSearchResponseSchema = z.object({
+  orders: z.array(adminPresaleOrderSearchItemSchema),
+});
+export type AdminPresaleOrderSearchResponse = z.infer<typeof adminPresaleOrderSearchResponseSchema>;
+
 /**
  * Kind-agnostic order detail, backing the admin's refund surface.
  *

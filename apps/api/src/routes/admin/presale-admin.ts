@@ -3,8 +3,13 @@ import { adminPresaleSettingsSchema, adminPresaleSettingsUpdateSchema } from '@c
 import { PRESALE_SETTINGS_SINGLETON_ID } from '@ccc/shared/presale';
 import type { Prisma } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 type Row = Prisma.PresaleSettingsGetPayload<Record<string, never>>;
+
+const ordersQuerySchema = z.object({
+  email: z.string().optional(),
+});
 
 const serialize = (row: Row) => ({
   enabled: row.enabled,
@@ -57,7 +62,8 @@ export const adminPresaleRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/presale/orders', async (request, reply) => {
-    const email = request.query?.email;
+    const query = ordersQuerySchema.safeParse(request.query);
+    const email = query.success ? query.data.email : undefined;
     if (typeof email !== 'string' || !email.trim()) {
       return reply.status(400).send({ error: 'Email query parameter required' });
     }

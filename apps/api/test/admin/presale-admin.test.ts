@@ -5,11 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { bearer, createUser, makeApp, resetDatabase } from '../helpers.js';
-import {
-  createPresaleProduct,
-  setPresaleEnabled,
-  setPresaleSettings,
-} from '../presale/fixtures.js';
+import { createPresaleProduct, setPresaleEnabled } from '../presale/fixtures.js';
 
 const env = loadEnv();
 

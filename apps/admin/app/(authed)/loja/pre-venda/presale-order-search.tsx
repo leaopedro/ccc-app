@@ -1,16 +1,18 @@
 'use client';
 
+import type { AdminPresaleOrderSearchItem } from '@ccc/shared/admin';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { searchPresaleOrders } from '~/lib/admin-api';
+import { ApiError } from '~/lib/api';
 
 const inputCls =
   'rounded border border-[color:var(--color-border)] bg-transparent px-2 py-1 text-sm';
 
 export const PresaleOrderSearch = () => {
   const [email, setEmail] = useState('');
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<AdminPresaleOrderSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,8 +25,8 @@ export const PresaleOrderSearch = () => {
     try {
       const result = await searchPresaleOrders(email);
       setOrders(result.orders);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao buscar pedidos');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Erro ao buscar pedidos');
       setOrders([]);
     } finally {
       setLoading(false);
@@ -33,7 +35,12 @@ export const PresaleOrderSearch = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={handleSearch} className="flex gap-2">
+      <form
+        onSubmit={(e) => {
+          void handleSearch(e);
+        }}
+        className="flex gap-2"
+      >
         <input
           type="email"
           value={email}

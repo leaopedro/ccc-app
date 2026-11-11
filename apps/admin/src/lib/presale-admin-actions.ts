@@ -4,8 +4,8 @@ import { adminPresaleSettingsUpdateSchema } from '@ccc/shared/admin';
 import { revalidatePath } from 'next/cache';
 import { unstable_rethrow } from 'next/navigation';
 
-import { getPresaleSettings, searchPresaleOrders, updatePresaleSettings } from './admin-api';
-import { ApiError, apiFetch } from './api';
+import { updatePresaleSettings } from './admin-api';
+import { ApiError } from './api';
 
 export type PresaleFormState = { error: string | null };
 

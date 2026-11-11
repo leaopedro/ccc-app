@@ -83,6 +83,11 @@ import {
   type AdminPremiumPriceUpsert,
 } from '@ccc/shared/admin';
 import {
+  adminPresaleOrderSearchResponseSchema,
+  adminPresaleSettingsSchema,
+  type AdminPresaleSettingsUpdate,
+} from '@ccc/shared/admin';
+import {
   adminBoxCatalogItemSchema,
   adminBoxCatalogListSchema,
   adminBoxMonthlyListResponseSchema,
@@ -101,7 +106,6 @@ import {
   type AdminPartnerModuleUpdate,
   type AdminPartnerUpdate,
 } from '@ccc/shared/admin-box';
-import { adminPresaleSettingsSchema, type AdminPresaleSettingsUpdate } from '@ccc/shared/admin';
 import {
   adminGamificationCopySchema,
   type AdminGamificationCopy,
@@ -1111,25 +1115,7 @@ export const updatePresaleSettings = (input: AdminPresaleSettingsUpdate) =>
 
 export const searchPresaleOrders = (email: string) =>
   apiFetch(`/admin/presale/orders?email=${encodeURIComponent(email)}`, {
-    schema: z.object({
-      orders: z.array(
-        z.object({
-          id: z.string(),
-          shortId: z.string(),
-          status: z.string(),
-          amountCents: z.number(),
-          currency: z.string(),
-          paidAt: z.string().nullable(),
-          createdAt: z.string(),
-          presaleGuest: z
-            .object({
-              name: z.string(),
-              email: z.string(),
-            })
-            .nullable(),
-        }),
-      ),
-    }),
+    schema: adminPresaleOrderSearchResponseSchema,
   });
 
 // --- Box monthly fulfillment console (Fase 4b) ---

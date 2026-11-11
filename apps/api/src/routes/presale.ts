@@ -127,13 +127,19 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (parsed.data.paymentMethod === 'pix' && !app.abacatepay) {
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'pix provider not configured' });
+      }
+
       const result = await createPresaleOrder(
         {
           ...parsed.data,
           ipAddress: request.ip,
           userAgent: request.headers['user-agent'] ?? null,
         },
-        { stripe: app.stripe, env: app.env, log: request.log },
+        { stripe: app.stripe, abacatepay: app.abacatepay, env: app.env, log: request.log },
       );
 
       if (!result.ok) {
@@ -147,13 +153,26 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return reply.status(201).send(
-        presaleCheckoutResponseSchema.parse({
-          orderId: result.orderId,
-          checkoutUrl: result.checkoutUrl,
-          amountCents: result.amountCents,
-          shippingCents: result.shippingCents,
-          currency: result.currency,
-        }),
+        presaleCheckoutResponseSchema.parse(
+          result.paymentMethod === 'pix'
+            ? {
+                orderId: result.orderId,
+                paymentMethod: 'pix',
+                brCode: result.brCode,
+                pixExpiresAt: result.pixExpiresAt,
+                amountCents: result.amountCents,
+                shippingCents: result.shippingCents,
+                currency: result.currency,
+              }
+            : {
+                orderId: result.orderId,
+                paymentMethod: 'card',
+                checkoutUrl: result.checkoutUrl,
+                amountCents: result.amountCents,
+                shippingCents: result.shippingCents,
+                currency: result.currency,
+              },
+        ),
       );
     });
   });

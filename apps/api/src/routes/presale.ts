@@ -156,7 +156,13 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           ipAddress: request.ip,
           userAgent: request.headers['user-agent'] ?? null,
         },
-        { stripe: app.stripe, abacatepay: app.abacatepay, env: app.env, log: request.log },
+        {
+          stripe: app.stripe,
+          abacatepay: app.abacatepay,
+          mailer: app.mailer,
+          env: app.env,
+          log: request.log,
+        },
       );
 
       if (!result.ok) {

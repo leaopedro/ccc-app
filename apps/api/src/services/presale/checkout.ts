@@ -53,9 +53,11 @@ import type { FastifyBaseLogger } from 'fastify';
 import { isUniqueConstraintErrorOn } from '../../lib/prisma-errors.js';
 import { signQrCode } from '../../lib/qr.js';
 import type { AbacatePayClient } from '../abacatepay/index.js';
+import type { Mailer } from '../mailer/index.js';
 import type { StripeClient } from '../stripe/index.js';
 
 import { PRESALE_PRODUCT_WHERE } from './eligibility.js';
+import { sendPresalePixCodeEmail } from './pix-code-email.js';
 import { cepInRanges, computePresaleTotals } from './totals.js';
 
 /** Mínimo que a Stripe aceita cobrar em BRL: R$ 0,50. */
@@ -97,6 +99,7 @@ export type CreatePresaleOrderDeps = {
   // chamar createPresaleOrder com paymentMethod 'pix' nesse caso; o branch
   // card nunca toca em deps.abacatepay.
   abacatepay: AbacatePayClient | null;
+  mailer: Mailer;
   env: { TICKET_CODE_SECRET: string; GARAGE_WEB_BASE_URL: string };
   log: FastifyBaseLogger;
 };
@@ -392,6 +395,23 @@ const ensurePixBilling = async (
       'Conflict',
       'PRESALE_REQUEST_STALE',
       'esta tentativa de pagamento já foi encerrada. Tente de novo.',
+    );
+  }
+
+  // brCode gravado. Dispara o email do código agora, não depois: é o
+  // comprador sair desta tela para pagar no banco que faz a venda morrer se
+  // fechar a aba. Falha de envio é degradada — o comprador já tem o código
+  // na resposta do checkout — e não pode derrubar essa resposta.
+  try {
+    await sendPresalePixCodeEmail(order.id, {
+      mailer: deps.mailer,
+      env: deps.env,
+      log: deps.log,
+    });
+  } catch (err) {
+    deps.log.warn(
+      { err, orderId: order.id },
+      '[presale-checkout] falha ao enviar email do código Pix',
     );
   }
 

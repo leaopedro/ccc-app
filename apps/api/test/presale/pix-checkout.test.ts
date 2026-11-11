@@ -1,10 +1,14 @@
-import { prisma } from '@ccc/db';
+import { ensurePresaleSystemUser, prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import { presaleCheckoutResponseSchema } from '@ccc/shared/presale';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FakeAbacatePay } from '../../src/services/abacatepay/fake.js';
+import {
+  ensurePixBilling,
+  type CreatePresaleOrderDeps,
+} from '../../src/services/presale/checkout.js';
 import type { FakeStripe } from '../../src/services/stripe/fake.js';
 import { makeAppWithFakes, resetDatabase } from '../helpers.js';
 
@@ -73,6 +77,44 @@ describe('POST /presale/casa-in-box/checkout (pix)', () => {
 
   const pixCalls = () => abacatepay.calls.filter((c) => c.method === 'createPixBilling');
 
+  const deps = (): CreatePresaleOrderDeps => ({
+    stripe: app.stripe,
+    abacatepay: app.abacatepay,
+    mailer: app.mailer,
+    env: app.env,
+    log: app.log,
+  });
+
+  // Pedido pendente de Pix criado direto no banco (fora do fluxo HTTP), para
+  // chamar `ensurePixBilling` isolado e testar a reivindicação de forma
+  // determinística — sem Promise.all, sem depender do timing do fake.
+  const createPendingPixOrder = async (
+    overrides: Partial<{ expiresAt: Date | null; brCode: string | null }> = {},
+  ) => {
+    const userId = await ensurePresaleSystemUser();
+    return prisma.order.create({
+      data: {
+        userId,
+        kind: 'product',
+        origin: 'casa_in_box',
+        clientRequestId: `claim-race-${Math.random().toString(36).slice(2, 10)}`,
+        amountCents: 19800,
+        baseAmountCents: 19800,
+        devFeePercent: 0,
+        devFeeAmountCents: 0,
+        currency: 'BRL',
+        method: 'pix',
+        provider: 'abacatepay',
+        status: 'pending',
+        quantity: 2,
+        shippingCents: 0,
+        fulfillmentMethod: 'pickup',
+        expiresAt: overrides.expiresAt ?? null,
+        brCode: overrides.brCode ?? null,
+      },
+    });
+  };
+
   it('pix grava brCode, providerRef e expiresAt de 1h', async () => {
     const before = Date.now();
     const res = await post();
@@ -124,6 +166,56 @@ describe('POST /presale/casa-in-box/checkout (pix)', () => {
     expect(body(a).brCode).toBe(body(b).brCode);
     await expect(prisma.order.count({ where: { origin: 'casa_in_box' } })).resolves.toBe(1);
     expect(pixCalls()).toHaveLength(1);
+  });
+
+  // T2-C1: a Stripe fecha o clique duplo sozinha com idempotencyKey; o
+  // AbacatePay não tem esse conceito (recusa campo desconhecido com 422), e
+  // o teste acima só prova "funcionou desta vez" porque o fake responde
+  // rápido demais para abrir a corrida de verdade. Os dois testes abaixo
+  // prendem o MECANISMO (a reivindicação via compare-and-set em
+  // `Order.expiresAt`) de forma determinística, sem depender de nenhum
+  // timing: escrevem o estado que uma requisição concorrente já teria
+  // deixado, e chamam `ensurePixBilling` isolado.
+  it('T2-C1: reivindicação já em voo (expiresAt preenchido, brCode ainda não) nunca chama o provedor', async () => {
+    const order = await createPendingPixOrder({ expiresAt: new Date(Date.now() + 3600_000) });
+
+    const result = await ensurePixBilling(order, deps());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('esperava a resposta retentável');
+    expect(result.status).toBe(502);
+    expect(result.code).toBe('PRESALE_PROVIDER_ERROR');
+    expect(pixCalls()).toHaveLength(0);
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.brCode).toBeNull();
+    expect(after.providerRef).toBeNull();
+    expect(after.status).toBe('pending');
+  });
+
+  it('T2-C1: reivindicação perdida mas vencedora já terminou devolve o brCode dela, sem chamar o provedor de novo', async () => {
+    const winnerExpiresAt = new Date(Date.now() + 3600_000);
+    const order = await createPendingPixOrder({
+      expiresAt: winnerExpiresAt,
+      brCode: 'ja-cobrado-pela-vencedora',
+    });
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { providerRef: 'pix_char_vencedora' },
+    });
+    // `order` (o objeto em mãos) é a leitura ANTERIOR à vitória da outra
+    // requisição: ainda tem brCode nulo, como quem perdeu a corrida de
+    // verdade teria.
+    const stale = { ...order, brCode: null, providerRef: null, expiresAt: null };
+
+    const result = await ensurePixBilling(stale, deps());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('esperava sucesso');
+    if (result.paymentMethod !== 'pix') throw new Error('esperava resposta pix');
+    expect(result.brCode).toBe('ja-cobrado-pela-vencedora');
+    expect(result.pixExpiresAt).toBe(winnerExpiresAt.toISOString());
+    expect(pixCalls()).toHaveLength(0);
   });
 
   it('provedor fora do ar devolve 502 e não deixa pedido sem código', async () => {

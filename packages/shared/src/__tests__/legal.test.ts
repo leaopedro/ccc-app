@@ -28,15 +28,15 @@ describe('privacy policy — subscription processor', () => {
   });
 
   it('bumps both version constants together', () => {
-    expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-08-29');
+    expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-11-10');
     // Bumping the current version without moving the previous one makes
     // section 12 announce a predecessor two versions back.
-    expect(PREVIOUS_PRIVACY_POLICY_VERSION).toBe('privacy-2026-08-14');
+    expect(PREVIOUS_PRIVACY_POLICY_VERSION).toBe('privacy-2026-08-29');
   });
 
   it('interpolates both versions into section 12', () => {
     const body = sectionBody('alteracoes');
-    expect(body).toContain('privacy-2026-08-29');
-    expect(body).toContain('privacy-2026-08-14');
+    expect(body).toContain(PRIVACY_POLICY_VERSION);
+    expect(body).toContain(PREVIOUS_PRIVACY_POLICY_VERSION);
   });
 });

@@ -157,6 +157,33 @@ async function purgeOldSubscriptionWebhookEvents(now: Date): Promise<PurgeResult
   };
 }
 
+// Pré-venda Casa In Box: PresaleGuest é o único lugar que guarda nome,
+// e-mail, telefone e endereço de quem comprou sem criar conta (ROPA PAY-03).
+// Um pedido pago mantém o convidado pelo mesmo prazo fiscal de PAY-01/02 (5
+// anos no Order) — ele NUNCA é alvo aqui. Só um pedido de origin casa_in_box
+// que nunca foi pago (abandonado no checkout) perde finalidade depois da
+// janela abaixo, e o convidado é purgado. `retentionDays` fica explícito no
+// parâmetro (em vez de embutido como as outras janelas deste arquivo) só
+// para o teste poder exercitar o limite exato sem esperar 90 dias de verdade.
+export const PRESALE_GUEST_ABANDONED_RETENTION_DAYS = 90;
+
+export async function purgeAbandonedPresaleGuests(
+  now: Date,
+  retentionDays: number,
+): Promise<PurgeResult> {
+  const cutoff = new Date(now.getTime() - retentionDays * MS_PER_DAY);
+  const { count } = await prisma.presaleGuest.deleteMany({
+    where: {
+      order: {
+        origin: 'casa_in_box',
+        status: { not: 'paid' },
+        createdAt: { lt: cutoff },
+      },
+    },
+  });
+  return { table: 'PresaleGuest', deletedCount: count, skippedHolds: 0, failedCount: 0 };
+}
+
 async function purgeQueuedUploadDeletions(now: Date, uploads?: Uploads): Promise<PurgeResult> {
   const due = await prisma.uploadDeletionQueue.findMany({
     where: { deleteAfter: { lte: now } },
@@ -273,6 +300,7 @@ const PURGE_JOBS = [
   purgeOldSupportTickets,
   purgeOldAdminAudits,
   purgeOldSubscriptionWebhookEvents,
+  (now: Date) => purgeAbandonedPresaleGuests(now, PRESALE_GUEST_ABANDONED_RETENTION_DAYS),
 ] as const;
 
 export const runRetentionTick = async (deps: RetentionWorkerDeps): Promise<PurgeResult[]> => {

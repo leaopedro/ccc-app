@@ -10,6 +10,12 @@ import { cepSchema } from './store.js';
 export const presaleFulfillmentMethodSchema = z.enum(['pickup', 'ship']);
 export type PresaleFulfillmentMethod = z.infer<typeof presaleFulfillmentMethodSchema>;
 
+// Card via hosted Stripe Checkout (existing flow) or Pix via AbacatePay: the
+// buyer copies a code and pays from their bank app, so there's no redirect
+// back and the order sits pending until a webhook confirms it.
+export const presalePaymentMethodSchema = z.enum(['card', 'pix']);
+export type PresalePaymentMethod = z.infer<typeof presalePaymentMethodSchema>;
+
 export const PRESALE_MAX_QTY_PER_VARIANT = 20;
 
 // Fixed id for the PresaleSettings singleton row, same pattern as
@@ -91,6 +97,7 @@ export const presaleCheckoutRequestSchema = z
     delivery: presaleDeliveryInputSchema.optional(),
     acceptedTermsVersion: z.string().min(1).max(40),
     acceptedPrivacyVersion: z.string().min(1).max(40),
+    paymentMethod: presalePaymentMethodSchema.default('card'),
   })
   .superRefine((value, ctx) => {
     if (value.fulfillmentMethod === 'ship' && !value.delivery) {
@@ -111,13 +118,31 @@ export const presaleCheckoutRequestSchema = z
   });
 export type PresaleCheckoutRequest = z.infer<typeof presaleCheckoutRequestSchema>;
 
-export const presaleCheckoutResponseSchema = z.object({
+const presaleCheckoutResponseBaseSchema = z.object({
   orderId: z.string().min(1),
-  checkoutUrl: z.string().url(),
   amountCents: z.number().int().nonnegative(),
   shippingCents: z.number().int().nonnegative(),
   currency: z.string().length(3),
 });
+
+// Discriminated by paymentMethod: card keeps the Stripe redirect contract
+// (checkoutUrl), pix carries the copy-paste code and its deadline instead.
+// They are mutually exclusive on the wire — never both, never neither.
+export const presaleCheckoutResponseSchema = z.discriminatedUnion('paymentMethod', [
+  presaleCheckoutResponseBaseSchema
+    .extend({
+      paymentMethod: z.literal('card'),
+      checkoutUrl: z.string().url(),
+    })
+    .strict(),
+  presaleCheckoutResponseBaseSchema
+    .extend({
+      paymentMethod: z.literal('pix'),
+      brCode: z.string().min(1),
+      pixExpiresAt: z.string().datetime(),
+    })
+    .strict(),
+]);
 export type PresaleCheckoutResponse = z.infer<typeof presaleCheckoutResponseSchema>;
 
 export const presaleOrderStatusRequestSchema = z.object({
@@ -146,6 +171,11 @@ export const presaleOrderStatusResponseSchema = z.object({
   currency: z.string().length(3),
   items: z.array(presaleOrderItemSchema),
   delivery: presaleDeliveryInputSchema.nullable(),
+  // Null for card orders. For pix, brCode mirrors Order.brCode and
+  // pixExpiresAt is derived from Order.expiresAt — no separate deadline
+  // column, there is exactly one source of truth for when a pix code dies.
+  brCode: z.string().nullable(),
+  pixExpiresAt: z.string().datetime().nullable(),
 });
 export type PresaleOrderStatusResponse = z.infer<typeof presaleOrderStatusResponseSchema>;
 

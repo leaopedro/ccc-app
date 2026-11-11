@@ -73,6 +73,38 @@ describe('sendPresalePixCodeEmail', () => {
     return order;
   };
 
+  it('mailer falhando solta o carimbo, e a chamada seguinte ENVIA', async () => {
+    // O carimbo é posto ANTES do envio de propósito: é ele que fecha a corrida
+    // de envio duplo. Mas carimbar sem soltar transformaria uma falha
+    // transitória do mailer em perda definitiva do email — e é por causa deste
+    // email que a janela do Pix é de 1 hora e não de 15 minutos.
+    const order = await seedPixOrder();
+
+    const brokenMailer = {
+      send: () => Promise.reject(new Error('mailer fora do ar')),
+    };
+
+    const failed = await sendPresalePixCodeEmail(order.id, {
+      mailer: brokenMailer as never,
+      env,
+      log: { warn: () => {}, error: () => {} } as never,
+    });
+
+    expect(failed).toBe(false);
+
+    // A reivindicação foi solta: sem isso o `where: { pixCodeEmailSentAt: null }`
+    // nunca mais casaria e a retentativa abaixo seria impossível.
+    const afterFailure = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(afterFailure.pixCodeEmailSentAt).toBeNull();
+
+    // A asserção que importa: a segunda chamada envia DE VERDADE. Sem ela o
+    // teste provaria só que a primeira falhou, não que a retentativa funciona.
+    const retried = await sendPresalePixCodeEmail(order.id, { mailer, env, log: console as never });
+
+    expect(retried).toBe(true);
+    expect(mailer.captured).toHaveLength(1);
+  });
+
   it('envia uma vez e marca pixCodeEmailSentAt', async () => {
     const order = await seedPixOrder();
 

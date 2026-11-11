@@ -123,12 +123,29 @@ export const sendPresalePixCodeEmail = async (
       html,
     });
   } catch (err) {
-    deps.log.warn(
-      { err, orderId, guestEmail: order.presaleGuest.email },
-      'sendPresalePixCodeEmail: falha ao enviar email',
-    );
-    // Não reverte: o pedido já existe e o comprador já tem o código na tela
-    // do checkout. Falha de email é degradado, não derruba nada.
+    // SOLTA a reivindicação. O `updateMany` acima carimbou `pixCodeEmailSentAt`
+    // ANTES do envio, que é o que fecha a corrida de envio duplo. Mas carimbar e
+    // não soltar transforma uma falha transitória do mailer em perda definitiva:
+    // nenhuma chamada futura passa no `where: { pixCodeEmailSentAt: null }`, e
+    // este é justamente o email por causa do qual a janela do Pix é de 1 hora e
+    // não de 15 minutos.
+    //
+    // Mesmo formato da reivindicação da cobrança em `checkout.ts`: reivindica,
+    // age, e solta se a ação falhar.
+    //
+    // O email do convidado NÃO vai para o log: é dado pessoal, e o `orderId` já
+    // basta para investigar.
+    await prisma.order.updateMany({
+      where: { id: orderId, origin: 'casa_in_box' },
+      data: { pixCodeEmailSentAt: null },
+    });
+
+    deps.log.warn({ err, orderId }, 'sendPresalePixCodeEmail: falha ao enviar email');
+
+    // Devolver `true` aqui mentiria para quem chama e para quem lê o log: nada
+    // foi enviado. O checkout não quebra por causa disso — quem chama já trata
+    // a falha de envio como degradação, não como erro.
+    return false;
   }
 
   return true;

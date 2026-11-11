@@ -292,4 +292,35 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
     // Invalid token should return 404
     expect(res.statusCode).toBe(404);
   });
+
+  it('campanha desligada: status de um pedido existente continua 200, checkout continua 503 (I1)', async () => {
+    // Pedido criado com a campanha ligada — representa quem já comprou antes
+    // do encerramento. O link de status (Stripe success_url e e-mail de
+    // confirmação) tem que continuar vivo depois que a campanha fecha.
+    const { orderId } = await seedPresaleOrder({ quantity: 2 });
+    const token = signQrCode('p', orderId, env);
+
+    await setPresaleSettings({ enabled: false });
+
+    const statusRes = await postStatus({ orderId, token });
+    expect(statusRes.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(statusRes.json());
+    expect(body.orderId).toBe(orderId);
+
+    // Vitrine e checkout continuam guardados pelo killswitch.
+    const checkoutRes = await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: {
+        clientRequestId: `req-${++counter}-${Math.random().toString(36).slice(2, 10)}`,
+        expectedTotalCents: 9900,
+        fulfillmentMethod: 'pickup',
+        items: [{ variantId: 'qualquer', quantity: 1 }],
+        guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+        acceptedTermsVersion: 'terms-2026-01-01',
+        acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
+      },
+    });
+    expect(checkoutRes.statusCode).toBe(503);
+  });
 });

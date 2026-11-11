@@ -10,10 +10,16 @@
  * browser (box revalidation on the montagem/builder page). Task 9 adds the
  * order-status handler to this same plugin.
  *
- * The 503 killswitch below reads PresaleSettings.enabled. It is intentionally
- * its own preHandler, NOT storeRoutes' (routes/store.ts), which reads
- * storeSettings.storeEnabled — reusing that one would turn the pre-sale off
- * together with the store.
+ * O killswitch (`requirePresaleEnabled`) reads PresaleSettings.enabled. It is
+ * intentionally its own preHandler, NOT storeRoutes' (routes/store.ts), which
+ * reads storeSettings.storeEnabled — reusing that one would turn the pre-sale
+ * off together with the store.
+ *
+ * It is applied to the showcase (campaign/products) and checkout routes
+ * ONLY — never to `/orders/status`. Someone who already paid has to be able
+ * to follow their order after the campaign closes, and the status link in
+ * the confirmation e-mail has to keep working; a dead campaign cannot take
+ * down a paid buyer's receipt.
  */
 
 import {
@@ -24,7 +30,7 @@ import {
   presaleProductListResponseSchema,
 } from '@ccc/shared/presale';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { verifyQrCode } from '../lib/qr.js';
@@ -34,15 +40,17 @@ import { serializePresaleProduct } from '../services/presale/serialize.js';
 import { ensurePresaleSettings } from '../services/presale/settings.js';
 import { prisma } from '@ccc/db';
 
-export const presaleRoutes: FastifyPluginAsync = async (app) => {
-  app.addHook('preHandler', async (_request, reply) => {
-    const settings = await ensurePresaleSettings();
-    if (settings.enabled) return;
-    return reply
-      .status(503)
-      .send({ error: 'ServiceUnavailable', message: 'pré-venda está desligada' });
-  });
+const requirePresaleEnabled = async (_request: FastifyRequest, reply: FastifyReply) => {
+  const settings = await ensurePresaleSettings();
+  if (settings.enabled) return;
+  // Não dar `await` aqui: FastifyReply é thenable, e dar `await` num early
+  // return de guarda já fez guarda silenciosamente sumir neste repo antes.
+  return reply
+    .status(503)
+    .send({ error: 'ServiceUnavailable', message: 'pré-venda está desligada' });
+};
 
+export const presaleRoutes: FastifyPluginAsync = async (app) => {
   // `trustProxy` não está setado em app.ts (apps/api/src/app.ts:99-103), então
   // atrás do Railway `req.ip` é o endereço do proxy para todo mundo — esta
   // chave colapsa num ÚNICO BALDE GLOBAL, não um limite por cliente (mesma
@@ -65,7 +73,7 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
     keyGenerator: (req) => `presale:${req.ip}`,
   });
 
-  app.get('/presale/casa-in-box/campaign', async () => {
+  app.get('/presale/casa-in-box/campaign', { preHandler: requirePresaleEnabled }, async () => {
     const settings = await ensurePresaleSettings();
     return presaleCampaignSchema.parse({
       enabled: settings.enabled,
@@ -77,7 +85,7 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.get('/presale/casa-in-box/products', async () => {
+  app.get('/presale/casa-in-box/products', { preHandler: requirePresaleEnabled }, async () => {
     const products = await loadEligiblePresaleProducts();
     return presaleProductListResponseSchema.parse({
       items: products.map((product) => serializePresaleProduct(product, app.uploads)),
@@ -105,6 +113,9 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
       hook: 'preHandler',
       keyGenerator: (req) => `presale-checkout:${req.ip}`,
     });
+    // Killswitch depois do rate limit nesta mesma escopo: roda só pra quem
+    // não foi barrado pelo teto acima.
+    scoped.addHook('preHandler', requirePresaleEnabled);
 
     scoped.post('/presale/casa-in-box/checkout', async (request, reply) => {
       const parsed = presaleCheckoutRequestSchema.safeParse(request.body ?? {});

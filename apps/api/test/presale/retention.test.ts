@@ -3,6 +3,12 @@
 // abandonado, nunca toca pedido pago (por mais antigo que seja) e nunca toca
 // pedido que não é origin: casa_in_box. Datas sempre relativas a um `now`
 // injetado — nunca literal fixo (CLAUDE.md).
+//
+// I2: a mesma purga também tem que redigir guestEmail/guestName de dentro de
+// Consent.evidence para os MESMOS pedidos que alcança — checkout.ts:471
+// grava esses dois campos lá, e a purga de PresaleGuest nunca tocava esse
+// JSON. A linha de Consent sobrevive sempre (prova do consentimento); só as
+// chaves que identificam a pessoa são redigidas.
 import { ensurePresaleSystemUser, prisma } from '@ccc/db';
 import type { OrderOrigin, OrderStatus } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -48,6 +54,30 @@ const createPresaleOrder = async (opts: {
     },
   });
 };
+
+// Mesmo shape que checkout.ts:471 grava de verdade: userId null (é o
+// discriminador que a purga usa para achar só consent de convidado da
+// pré-venda) e evidence com guestEmail/guestName ao lado do orderId.
+const createPresaleConsent = (orderId: string, opts: { guestEmail?: string } = {}) =>
+  prisma.consent.create({
+    data: {
+      userId: null,
+      purpose: 'privacy_notice',
+      version: 'privacy-2026-01-01',
+      channel: 'web_public',
+      ipAddress: null,
+      userAgent: null,
+      evidence: {
+        source: 'presale_checkout',
+        orderId,
+        clientRequestId: `req-${orderId}`,
+        guestEmail: opts.guestEmail ?? 'convidado@exemplo.com',
+        guestName: 'Convidado Teste',
+        acceptedPrivacyVersion: 'privacy-2026-01-01',
+        acceptedTermsVersion: 'terms-2026-01-01',
+      },
+    },
+  });
 
 describe('purgeAbandonedPresaleGuests', () => {
   beforeEach(async () => {
@@ -136,5 +166,61 @@ describe('purgeAbandonedPresaleGuests', () => {
     await expect(
       prisma.presaleGuest.findUnique({ where: { orderId: nonPresale.id } }),
     ).resolves.not.toBeNull();
+  });
+
+  it('redige guestEmail/guestName de dentro de Consent.evidence do pedido abandonado purgado (I2)', async () => {
+    const now = new Date();
+    const abandoned = await createPresaleOrder({
+      status: 'expired',
+      createdAt: new Date(now.getTime() - (RETENTION_DAYS + 1) * MS_PER_DAY),
+    });
+    const consent = await createPresaleConsent(abandoned.id);
+
+    await purgeAbandonedPresaleGuests(now, RETENTION_DAYS);
+
+    const after = await prisma.consent.findUniqueOrThrow({ where: { id: consent.id } });
+    // A linha sobrevive — é a prova do consentimento, com data e versão de
+    // política — mas o que identifica a pessoa dentro dela não.
+    const evidence = after.evidence as Record<string, unknown>;
+    expect(evidence.guestEmail).toBe('[purgado]');
+    expect(evidence.guestName).toBe('[purgado]');
+    // Campos não identificadores continuam intactos.
+    expect(evidence.orderId).toBe(abandoned.id);
+    expect(evidence.acceptedPrivacyVersion).toBe('privacy-2026-01-01');
+  });
+
+  it('nunca redige Consent.evidence de pedido pago, por mais antigo que seja (I2)', async () => {
+    const now = new Date();
+    const paidOld = await createPresaleOrder({
+      status: 'paid',
+      createdAt: new Date(now.getTime() - 10 * 365 * MS_PER_DAY),
+    });
+    const consent = await createPresaleConsent(paidOld.id, { guestEmail: 'pago@exemplo.com' });
+
+    await purgeAbandonedPresaleGuests(now, RETENTION_DAYS);
+
+    const after = await prisma.consent.findUniqueOrThrow({ where: { id: consent.id } });
+    const evidence = after.evidence as Record<string, unknown>;
+    expect(evidence.guestEmail).toBe('pago@exemplo.com');
+    expect(evidence.guestName).toBe('Convidado Teste');
+  });
+
+  it('nunca redige Consent.evidence de pedido pago e depois estornado, por mais antigo que seja (I2)', async () => {
+    const now = new Date();
+    const paidThenRefunded = await createPresaleOrder({
+      status: 'refunded',
+      createdAt: new Date(now.getTime() - (RETENTION_DAYS + 1) * MS_PER_DAY),
+      paidAt: new Date(now.getTime() - (RETENTION_DAYS + 1) * MS_PER_DAY),
+    });
+    const consent = await createPresaleConsent(paidThenRefunded.id, {
+      guestEmail: 'estornado@exemplo.com',
+    });
+
+    await purgeAbandonedPresaleGuests(now, RETENTION_DAYS);
+
+    const after = await prisma.consent.findUniqueOrThrow({ where: { id: consent.id } });
+    const evidence = after.evidence as Record<string, unknown>;
+    expect(evidence.guestEmail).toBe('estornado@exemplo.com');
+    expect(evidence.guestName).toBe('Convidado Teste');
   });
 });

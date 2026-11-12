@@ -9,6 +9,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacateWebhookEvent } from '../services/abacatepay/index.js';
 import { releaseAllReservationsForOrders } from '../services/orders/expire.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
 import { flagManualRefund } from '../services/orders/manual-refund-flag.js';
 import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
@@ -532,6 +533,17 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
               Sentry.captureException(pushErr);
             });
           }
+        }
+        // Escopado por origin ANTES de tocar o pedido (achado I2): envio não
+        // escopado carimbava confirmationEmailSentAt em pedido comum da loja.
+        // Idempotência vem do dedupe por event id acima; o compare-and-set
+        // de sendPresaleConfirmationEmail cobre o replay do mesmo evento.
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+          await sendPresaleConfirmationEmail(order.id, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
         }
         // M2: Don't leak internal state in response
         return reply.status(200).send({ ok: true });

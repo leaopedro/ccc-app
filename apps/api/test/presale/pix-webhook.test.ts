@@ -1,0 +1,186 @@
+// Liquidação da pré-venda Casa In Box pelo webhook do AbacatePay (Pix).
+// Espelha test/presale/webhook.test.ts (Stripe/cartão), mas para o caminho
+// Pix: sendPresaleConfirmationEmail precisa ser chamado aqui também — hoje só
+// routes/stripe-webhook.ts chama. Escopo por origin === 'casa_in_box' ANTES
+// de tocar o pedido (achado I2): envio não escopado carimbava pedido comum
+// da loja com um UPDATE que não deveria acontecer.
+import { prisma } from '@ccc/db';
+import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { buildApp } from '../../src/app.js';
+import { type Env, loadEnv } from '../../src/env.js';
+import { buildFakeAbacatePay } from '../../src/services/abacatepay/fake.js';
+import type { DevMailer } from '../../src/services/mailer/dev.js';
+import { buildFakeStripe } from '../../src/services/stripe/fake.js';
+import { createUser, resetDatabase } from '../helpers.js';
+
+import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
+
+const baseEnv = loadEnv();
+const TEST_WEBHOOK_SECRET = 'test-webhook-secret-presale-pix';
+const env: Env = { ...baseEnv, ABACATEPAY_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET };
+
+const CHECKOUT_URL = '/presale/casa-in-box/checkout';
+const WEBHOOK_URL = `/abacatepay/webhook?webhookSecret=${TEST_WEBHOOK_SECRET}`;
+
+// Mesma forma v2 usada em test/abacatepay/webhook.test.ts: data.transparent,
+// não data flat.
+const makeTransparentCompletedPayload = (
+  billingId: string,
+  eventId: string,
+  metadata: Record<string, string> = {},
+) =>
+  JSON.stringify({
+    id: eventId,
+    event: 'transparent.completed',
+    apiVersion: 2,
+    devMode: false,
+    data: {
+      transparent: {
+        id: billingId,
+        amount: 19800,
+        paidAmount: 19800,
+        status: 'PAID',
+        frequency: 'ONE_TIME',
+        methods: ['PIX'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      },
+    },
+  });
+
+describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)', () => {
+  let app: FastifyInstance;
+  let counter = 0;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    // PresaleSettings não é limpa por resetDatabase (test/helpers.ts é
+    // compartilhado pela suíte inteira e fica intocado): zera aqui.
+    await prisma.presaleSettings.deleteMany();
+    await setPresaleSettings({ enabled: true, shippingFeeCents: 1990 });
+
+    app = await buildApp(env, { stripe: buildFakeStripe(), abacatepay: buildFakeAbacatePay() });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  /** Cria o pedido pelo endpoint público de pré-venda, pagamento Pix. */
+  const seedPresalePixOrder = async (opts: { quantity?: number; priceCents?: number } = {}) => {
+    const quantity = opts.quantity ?? 2;
+    const priceCents = opts.priceCents ?? 9900;
+    const product = await createPresaleProduct(
+      { allowPickup: true, allowShip: true },
+      { variants: [{ priceCents, quantityTotal: 10 }] },
+    );
+    const variantId = product.variants[0]!.id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: {
+        clientRequestId: `req-pix-${++counter}-${Math.random().toString(36).slice(2, 10)}`,
+        expectedTotalCents: priceCents * quantity,
+        fulfillmentMethod: 'pickup',
+        paymentMethod: 'pix',
+        items: [{ variantId, quantity }],
+        guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+        acceptedTermsVersion: 'terms-2026-01-01',
+        acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
+      },
+    });
+    if (res.statusCode !== 201) {
+      throw new Error(`checkout pix de pré-venda falhou: ${res.statusCode} ${res.body}`);
+    }
+    const body = res.json() as { orderId: string };
+    return prisma.order.findUniqueOrThrow({ where: { id: body.orderId } });
+  };
+
+  const postWebhook = (payload: string) =>
+    app.inject({
+      method: 'POST',
+      url: WEBHOOK_URL,
+      headers: { 'content-type': 'application/json', 'x-webhook-signature': 'valid-sig' },
+      payload,
+    });
+
+  it('liquida pedido de pré-venda e envia email de confirmação', async () => {
+    const order = await seedPresalePixOrder();
+    const mailer = app.mailer as DevMailer;
+    // O checkout já disparou o email do código Pix; zera para isolar o email
+    // de confirmação que o webhook deve enviar.
+    mailer.clear();
+
+    const res = await postWebhook(
+      makeTransparentCompletedPayload(order.providerRef!, 'evt_pix_presale_settle_1', {
+        orderId: order.id,
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updated.status).toBe('paid');
+    expect(updated.confirmationEmailSentAt).not.toBeNull();
+
+    expect(mailer.captured).toHaveLength(1);
+    expect(mailer.captured[0]!.to).toBe('comprador@exemplo.com');
+  });
+
+  it('evento repetido liquida uma vez e envia email uma vez', async () => {
+    const order = await seedPresalePixOrder();
+    const mailer = app.mailer as DevMailer;
+    mailer.clear();
+    const payload = makeTransparentCompletedPayload(
+      order.providerRef!,
+      'evt_pix_presale_replay_1',
+      { orderId: order.id },
+    );
+
+    const first = await postWebhook(payload);
+    expect(first.statusCode).toBe(200);
+
+    const second = await postWebhook(payload);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ ok: true });
+
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updated.status).toBe('paid');
+    expect(mailer.captured).toHaveLength(1);
+  });
+
+  it('pedido comum da loja não ganha comportamento novo', async () => {
+    const { user } = await createUser({
+      email: `loja-pix-${Math.random().toString(36).slice(2, 8)}@jdm.test`,
+    });
+    const billingId = `pix_char_loja_${Math.random().toString(36).slice(2, 10)}`;
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'product',
+        amountCents: 9000,
+        quantity: 1,
+        method: 'pix',
+        provider: 'abacatepay',
+        providerRef: billingId,
+        status: 'pending',
+      },
+    });
+    const mailer = app.mailer as DevMailer;
+
+    const res = await postWebhook(
+      makeTransparentCompletedPayload(billingId, 'evt_pix_store_order_1'),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updated.status).toBe('paid');
+    // I2: nenhum comportamento novo para pedido comum da loja.
+    expect(updated.confirmationEmailSentAt).toBeNull();
+    expect(mailer.captured).toHaveLength(0);
+  });
+});

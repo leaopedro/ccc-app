@@ -248,6 +248,7 @@ export const buildApp = async (
       const pixReconcileWorker = startPixReconcileWorker({
         abacatepay: app.abacatepay,
         push: app.push,
+        mailer: app.mailer,
         env,
         log: app.log,
       });

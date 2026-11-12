@@ -40,12 +40,33 @@
  *          checkout by that customer failed with CART_ALREADY_CHECKING_OUT,
  *          silently and forever.
  *        - standalone order -> `settlePaidOrder` and the per-order push.
- *   4. PAID + order already `expired` locally: order-expiry already RELEASED
- *      THE STOCK for this row. Settling now would oversell (same class of
- *      bug flagged in the Stripe cart path). Refunding is not possible —
- *      AbacatePayClient exposes no refund call. The only honest move is a
- *      loud, deduplicated Sentry alert for manual handling; the order is
- *      left `expired` and untouched.
+ *   4. PAID + order already `expired` locally: whether this is settleable
+ *      depends on the REASON an expired order is normally unsafe to settle —
+ *      not on its `kind` or `origin` label. The cart path reserves stock at
+ *      checkout (services/cart/checkout.ts increments `Variant.quantitySold`
+ *      up front) and order-expiry.ts RELEASES that reservation the moment it
+ *      flips the row to `expired`. Settling such a row late would resell
+ *      stock already returned to the shelf — same class of bug flagged in
+ *      the Stripe cart path. Refunding is not possible — AbacatePayClient
+ *      exposes no refund call — so the only honest move there is a loud,
+ *      deduplicated Sentry alert for manual handling, leaving the order
+ *      `expired` and untouched.
+ *
+ *      The pré-venda Casa In Box order (`Order.origin === 'casa_in_box'`)
+ *      reserves NOTHING at checkout — the debit happens only at settlement
+ *      (services/orders/settle.ts: debitPresaleStock). order-expiry.ts never
+ *      had anything to release for it, so settling it after local expiry
+ *      cannot oversell: the reason the cart's expired row is dangerous does
+ *      not hold here. `origin` is the only column that currently carries
+ *      "reserved no stock" — checking it alone (without also requiring
+ *      `kind`) is deliberate: a store product order also has `kind:'product'`
+ *      but a DIFFERENT origin, and still reserved stock through the cart, so
+ *      it must still take the alert-only path above. (This mirrors the
+ *      origin-only check in routes/stripe-webhook.ts's
+ *      `payment_intent.payment_failed` branch, same reasoning.) A recovered
+ *      pré-venda guest has no account — no `userId`, so push is impossible —
+ *      and gets the same confirmation email the webhook sends
+ *      (sendPresaleConfirmationEmail), not a push.
  *
  * A row error never crashes the tick.
  */
@@ -58,15 +79,18 @@ import cron from 'node-cron';
 import type { Env } from '../env.js';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacatePayClient } from '../services/abacatepay/index.js';
+import type { Mailer } from '../services/mailer/index.js';
 import { ORDER_EXPIRY_MS } from '../services/orders/expire.js';
 import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
 import { settlePaidOrder, type SettledOrderResult } from '../services/orders/settle.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import type { PushSender } from '../services/push/types.js';
 
 export type PixReconcileTickDeps = {
   abacatepay: AbacatePayClient;
   push: PushSender;
+  mailer: Mailer;
   env: Env;
   alertDepth: number;
   now?: Date;
@@ -84,6 +108,21 @@ const QUERY_LIMIT = 200;
  * constant, so the two stay proportional if the order TTL ever changes.
  */
 const GRACE_MS = ORDER_EXPIRY_MS / 5;
+
+/**
+ * `deps.log` is optional on this worker (kept that way for every existing
+ * caller/test), but `sendPresaleConfirmationEmail` calls `deps.log.error`/
+ * `.warn` directly with no optional chaining. Falls back to a silent logger
+ * rather than widening `log` to required across this whole file.
+ */
+const silentLog = {
+  error: () => undefined,
+  warn: () => undefined,
+  info: () => undefined,
+  debug: () => undefined,
+  trace: () => undefined,
+  fatal: () => undefined,
+} as unknown as FastifyBaseLogger;
 
 /**
  * Upper bound on how far back the sweep looks (fix round 2, CRITICAL).
@@ -121,6 +160,7 @@ type StaleRow = {
   cartId: string | null;
   status: OrderStatus;
   amountCents: number;
+  origin: string;
 };
 
 /**
@@ -208,13 +248,25 @@ const notifyRecoveredCart = async (
   }
 };
 
-/** Same `ticket.confirmed` push the webhook's single-order branch sends. */
+/**
+ * Same `ticket.confirmed` push the webhook's single-order branch sends — OR,
+ * for a recovered pré-venda Casa In Box order, the same confirmation email
+ * the webhook sends (sendPresaleConfirmationEmail). A pré-venda guest has no
+ * account: no `userId` exists, so a push is impossible by construction. Any
+ * other `kind`/`origin` combination gets neither — unchanged from before.
+ */
 const notifyRecoveredOrder = async (
   orderId: string,
   settled: SettledOrderResult,
   push: PushSender,
+  mailer: Mailer,
+  env: Env,
   log?: FastifyBaseLogger,
 ): Promise<void> => {
+  if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+    await sendPresaleConfirmationEmail(orderId, { mailer, env, log: log ?? silentLog });
+    return;
+  }
   if (settled.kind !== 'ticket' && settled.kind !== 'extras_only') return;
   try {
     await sendTransactionalPush(
@@ -270,7 +322,14 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
     },
     orderBy: { createdAt: 'asc' },
     take: QUERY_LIMIT,
-    select: { id: true, providerRef: true, cartId: true, status: true, amountCents: true },
+    select: {
+      id: true,
+      providerRef: true,
+      cartId: true,
+      status: true,
+      amountCents: true,
+      origin: true,
+    },
   });
 
   // Saturation alarm. `alertDepth` MUST stay strictly below QUERY_LIMIT
@@ -348,8 +407,37 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
       if (upstream.status !== 'PAID') continue;
 
       if (row.status === 'expired') {
-        await flagExpiredButPaid(row, providerRef, log);
-        continue;
+        // Settling an expired row is only dangerous for the REASON order-
+        // expiry.ts is dangerous to skip: it already released a stock
+        // reservation made at checkout, and settling now would resell it.
+        // `origin === 'casa_in_box'` is, today, the only column that marks
+        // "this order reserved nothing at checkout" (see the top-of-file
+        // note, point 4) — a pré-venda order never had anything released, so
+        // nothing is oversold by settling it late. Checked alone, not
+        // combined with `kind`, on purpose: an ordinary store product order
+        // shares `kind: 'product'` but a different `origin`, and DID reserve
+        // stock via the cart, so it must still fall into the alert-only path
+        // below.
+        if (row.origin !== 'casa_in_box') {
+          await flagExpiredButPaid(row, providerRef, log);
+          continue;
+        }
+        // settlePaidOrder's own guard (services/orders/settle.ts) refuses any
+        // order whose status is not 'pending', regardless of origin — that
+        // guard exists for the cart's protection and knows nothing about
+        // "did this reserve stock". Reclaim the row here, in this worker,
+        // rather than loosening that guard: a guarded updateMany keyed on
+        // `status: 'expired'` so a concurrent writer (another tick, the
+        // webhook's own manual-refund branch) racing this same row loses
+        // gracefully — `count === 0` just skips this tick, and the next tick
+        // retries from the provider re-check above.
+        const reclaimed = await prisma.order.updateMany({
+          where: { id: row.id, status: 'expired' },
+          data: { status: 'pending' },
+        });
+        if (reclaimed.count === 0) continue;
+        // Fall through to the normal standalone-order settle path below —
+        // a pré-venda order never has a cartId.
       }
 
       // Cart order: go through the SAME settle path the webhook goes through
@@ -395,7 +483,7 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
         'pix-reconcile: settled a Pix the webhook never delivered',
       );
 
-      await notifyRecoveredOrder(row.id, settled, deps.push, log);
+      await notifyRecoveredOrder(row.id, settled, deps.push, deps.mailer, deps.env, log);
     } catch (err) {
       Sentry.captureException(err, {
         extra: { orderId: row.id, providerRef, worker: 'pix-reconcile' },
@@ -412,6 +500,7 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
 export const startPixReconcileWorker = (deps: {
   abacatepay: AbacatePayClient;
   push: PushSender;
+  mailer: Mailer;
   env: Env;
   log: FastifyBaseLogger;
 }): { stop: () => void } => {
@@ -423,6 +512,7 @@ export const startPixReconcileWorker = (deps: {
     void runPixReconcileTick({
       abacatepay: deps.abacatepay,
       push: deps.push,
+      mailer: deps.mailer,
       env: deps.env,
       alertDepth: deps.env.RECONCILE_ALERT_DEPTH,
       log: deps.log,

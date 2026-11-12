@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { buildFakeAbacatePay } from '../../src/services/abacatepay/fake.js';
+import { DevMailer } from '../../src/services/mailer/dev.js';
 import { DevPushSender } from '../../src/services/push/dev.js';
 import { runPixReconcileTick } from '../../src/workers/pix-reconcile.js';
 import { createUser, resetDatabase } from '../helpers.js';
@@ -13,6 +14,11 @@ const NOW = new Date('2026-09-05T12:00:00.000Z');
 const OLD = new Date('2026-09-05T11:00:00.000Z');
 
 describe('runPixReconcileTick', () => {
+  // None of these tests exercise the pré-venda email branch (that is
+  // test/presale/pix-recovery.test.ts) — a single shared fake mailer here is
+  // just to satisfy the required `mailer` dependency.
+  const mailer = new DevMailer();
+
   beforeEach(async () => {
     await resetDatabase();
   });
@@ -85,7 +91,7 @@ describe('runPixReconcileTick', () => {
     abacatepay.nextStatus = { id: 'pix_char_paid', status: 'PAID', paidAt: NOW.toISOString() };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const row = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -101,7 +107,7 @@ describe('runPixReconcileTick', () => {
     abacatepay.nextStatus = { id: 'pix_char_pending', status: 'PENDING', paidAt: null };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const row = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -115,7 +121,7 @@ describe('runPixReconcileTick', () => {
     const abacatepay = buildFakeAbacatePay();
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     expect(abacatepay.calls.filter((c) => c.method === 'getPixBilling')).toHaveLength(0);
   });
@@ -125,7 +131,7 @@ describe('runPixReconcileTick', () => {
     const abacatepay = buildFakeAbacatePay();
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     expect(abacatepay.calls.filter((c) => c.method === 'getPixBilling')).toHaveLength(0);
   });
@@ -143,7 +149,7 @@ describe('runPixReconcileTick', () => {
     };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const rows = await prisma.order.findMany({
       where: { id: { in: [bad.id, good.id] } },
@@ -158,8 +164,8 @@ describe('runPixReconcileTick', () => {
     const abacatepay = buildFakeAbacatePay();
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const row = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -180,7 +186,7 @@ describe('runPixReconcileTick', () => {
     abacatepay.nextStatus = { id: 'pix_char_expired', status: 'EXPIRED', paidAt: null };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const row = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -207,7 +213,7 @@ describe('runPixReconcileTick', () => {
     };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     const row = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -237,10 +243,10 @@ describe('runPixReconcileTick', () => {
     };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
     expect(abacatepay.calls.filter((c) => c.method === 'getPixBilling')).toHaveLength(1);
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
     // Second tick must not call the provider again for this row.
     expect(abacatepay.calls.filter((c) => c.method === 'getPixBilling')).toHaveLength(1);
 
@@ -338,7 +344,7 @@ describe('runPixReconcileTick', () => {
     };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 150, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 150, now: NOW });
 
     const settledOrder = await prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -367,7 +373,7 @@ describe('runPixReconcileTick', () => {
     const abacatepay = buildFakeAbacatePay();
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 150, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 150, now: NOW });
 
     const fetched = abacatepay.calls.filter((c) => c.method === 'getPixBilling');
     expect(fetched).toHaveLength(1);
@@ -400,7 +406,7 @@ describe('runPixReconcileTick', () => {
     abacatepay.nextStatus = { id: 'pix_char_depth_a', status: 'PENDING', paidAt: null };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 2, now: NOW, log });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 2, now: NOW, log });
 
     const depthWarning = warnings.find(
       (w) => (w as { kind?: string }).kind === 'pix-reconcile.queue_depth_alert',
@@ -421,7 +427,7 @@ describe('runPixReconcileTick', () => {
     abacatepay.nextStatus = { id: 'pix_char_push', status: 'PAID', paidAt: NOW.toISOString() };
     const push = new DevPushSender();
 
-    await runPixReconcileTick({ abacatepay, push, env, alertDepth: 200, now: NOW });
+    await runPixReconcileTick({ abacatepay, push, mailer, env, alertDepth: 200, now: NOW });
 
     expect(push.captured).toHaveLength(1);
     expect(push.captured[0]?.title).toBe('Pagamento confirmado');

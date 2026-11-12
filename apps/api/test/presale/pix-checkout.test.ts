@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FakeAbacatePay } from '../../src/services/abacatepay/fake.js';
+import type { DevMailer } from '../../src/services/mailer/dev.js';
 import {
   ensurePixBilling,
   type CreatePresaleOrderDeps,
@@ -216,6 +217,42 @@ describe('POST /presale/casa-in-box/checkout (pix)', () => {
     expect(result.brCode).toBe('ja-cobrado-pela-vencedora');
     expect(result.pixExpiresAt).toBe(winnerExpiresAt.toISOString());
     expect(pixCalls()).toHaveLength(0);
+  });
+
+  // T3-I1 (fix round 2): sendPresalePixCodeEmail agora solta o carimbo
+  // quando o envio falha, então o clique duplo que bate no curto-circuito
+  // `if (order.brCode) ...` de ensurePixBilling precisa tentar o email de
+  // novo — é exatamente o que um comprador faz quando a mensagem não chegou.
+  it('T3-I1: clique duplo depois da primeira entrega falhar reenvia o email pelo curto-circuito idempotente', async () => {
+    const twice = payload();
+
+    const first = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+    expect(first.statusCode).toBe(201);
+    const orderId = body(first).orderId;
+
+    // Estado que sendPresalePixCodeEmail deixa quando o mailer falha: o
+    // carimbo solto, com o brCode já gravado pela primeira passagem.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { pixCodeEmailSentAt: null },
+    });
+
+    const mailer = app.mailer as DevMailer;
+    mailer.clear();
+
+    // Mesmo clientRequestId: cai no `if (order.brCode) return succeedPix(...)`
+    // dentro de ensurePixBilling, sem chamar o AbacatePay de novo.
+    const second = await app.inject({ method: 'POST', url: CHECKOUT_URL, payload: twice });
+
+    expect(second.statusCode).toBe(201);
+    expect(body(second).orderId).toBe(orderId);
+    expect(pixCalls()).toHaveLength(1);
+
+    expect(mailer.captured).toHaveLength(1);
+    expect(mailer.captured[0]!.to).toBe('comprador@exemplo.com');
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(after.pixCodeEmailSentAt).not.toBeNull();
   });
 
   it('provedor fora do ar devolve 502 e não deixa pedido sem código', async () => {

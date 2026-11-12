@@ -340,7 +340,26 @@ export const ensurePixBilling = async (
   order: Order,
   deps: CreatePresaleOrderDeps,
 ): Promise<CreatePresaleOrderResult> => {
-  if (order.brCode) return succeedPix(order, order.brCode, order.expiresAt!.toISOString());
+  if (order.brCode) {
+    // Caminho idêmpotente (reload, clique duplo depois do brCode já gravado):
+    // tenta o email aqui também. O compare-and-set dentro de
+    // sendPresalePixCodeEmail garante no-máximo-uma-entrega mesmo com vários
+    // chamadores batendo neste ponto — ver o cabeçalho daquela função. Falha
+    // de envio é degradada, igual ao chamador original logo abaixo.
+    try {
+      await sendPresalePixCodeEmail(order.id, {
+        mailer: deps.mailer,
+        env: deps.env,
+        log: deps.log,
+      });
+    } catch (err) {
+      deps.log.warn(
+        { err, orderId: order.id },
+        '[presale-checkout] falha ao enviar email do código Pix (curto-circuito idempotente)',
+      );
+    }
+    return succeedPix(order, order.brCode, order.expiresAt!.toISOString());
+  }
 
   const abacatepay = deps.abacatepay;
   if (!abacatepay) {
@@ -383,6 +402,21 @@ export const ensurePixBilling = async (
     // o buraco que a reivindicação existe para fechar.
     const current = await prisma.order.findUnique({ where: { id: order.id } });
     if (current?.brCode) {
+      // Perdeu a corrida de reivindicação e o vencedor já terminou: mesma
+      // tentativa de email do curto-circuito acima, pelo mesmo motivo — quem
+      // chega aqui é quem recarregou a página ou clicou pagar de novo.
+      try {
+        await sendPresalePixCodeEmail(current.id, {
+          mailer: deps.mailer,
+          env: deps.env,
+          log: deps.log,
+        });
+      } catch (err) {
+        deps.log.warn(
+          { err, orderId: current.id },
+          '[presale-checkout] falha ao enviar email do código Pix (perdeu a corrida)',
+        );
+      }
       return succeedPix(current, current.brCode, current.expiresAt!.toISOString());
     }
     deps.log.warn(

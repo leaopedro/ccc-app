@@ -27,8 +27,10 @@ export type SendPresalePixCodeEmailDeps = {
 
 /**
  * Envia o email com o código Pix copia-e-cola de um pedido de pré-venda.
- * Devolve true se enviou, false se já tinha sido enviado (dedupe ativo) ou
- * se o pedido não é elegível (fora de escopo, sem brCode, não encontrado).
+ * Devolve true SÓ se o email saiu de fato. Devolve false se já tinha sido
+ * enviado (dedupe ativo), se o pedido não é elegível (fora de escopo, sem
+ * brCode, não encontrado), ou se o mailer falhou — neste último caso a
+ * reivindicação é solta e a próxima chamada tenta de novo.
  *
  * Compare-and-set: `updateMany({ where: { id, origin: 'casa_in_box',
  * pixCodeEmailSentAt: null }, ... })` só envia se count === 1. Escopado por

@@ -161,12 +161,29 @@ export const sendPresaleConfirmationEmail = async (
       html,
     });
   } catch (err) {
+    // SOLTA a reivindicação (mesmo formato de pix-code-email.ts). O
+    // `updateMany` acima carimbou `confirmationEmailSentAt` ANTES do envio —
+    // o que fecha a corrida de envio duplo — mas carimbar e não soltar
+    // transforma uma falha transitória do mailer em perda definitiva: esta
+    // branch tornou este email o ÚNICO canal de confirmação do comprador de
+    // Pix (o convidado não tem conta), então nenhuma chamada futura
+    // (webhook replay, pix-reconcile) voltaria a tentar enviar.
+    //
+    // Dinheiro já entrou, então isso não reverte o pedido nem derruba o
+    // webhook — apenas solta o carimbo para a próxima entrega tentar de
+    // novo.
+    await prisma.order.updateMany({
+      where: { id: orderId },
+      data: { confirmationEmailSentAt: null },
+    });
+
     deps.log.warn(
       { err, orderId, guestEmail: order.presaleGuest.email },
       'sendPresaleConfirmationEmail: falha ao enviar email',
     );
-    // Nao reverte: dinheiro entrou, não tem sentido derrubar o webhook
-    // porque o mailer caiu. Apenas loga e segue.
+
+    // Devolver `true` aqui mentiria para quem chama: nada foi enviado.
+    return false;
   }
 
   return true;

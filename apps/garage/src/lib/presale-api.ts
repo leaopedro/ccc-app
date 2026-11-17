@@ -1,6 +1,4 @@
 import {
-  PRESALE_GARAGE_PATHS,
-  PRESALE_ORDER_STATUS_QUERY,
   presaleCampaignSchema,
   presaleCheckoutResponseSchema,
   presaleOrderStatusResponseSchema,
@@ -134,27 +132,6 @@ export const startPresaleCheckout = async (
 
   const json: unknown = await res.json();
   return presaleCheckoutResponseSchema.parse(json);
-};
-
-/**
- * Where a Pix checkout sends the buyer: the same order status page a card
- * checkout lands on after Stripe, but reached by a direct client-side
- * navigation instead of an external redirect — there is no hosted page to
- * send a Pix buyer to, the code is already in `startPresaleCheckout`'s
- * response.
- *
- * Built from `orderId` alone, unlike `presaleOrderStatusUrl` on the API side
- * (`@ccc/shared/presale`), which also signs a `token`. That token is
- * HMAC-signed server-side (`signQrCode`, `TICKET_CODE_SECRET`) and the Pix
- * checkout response carries no such field today — only the confirmation
- * email does, via its own link. So this first landing arrives without the
- * token `fetchPresaleOrderStatus` sends in its POST body; whoever builds the
- * order status page (Task 8) has to account for that until a token is wired
- * through the Pix response too.
- */
-export const pixOrderStatusPath = (orderId: string): string => {
-  const query = new URLSearchParams({ [PRESALE_ORDER_STATUS_QUERY.orderId]: orderId });
-  return `${PRESALE_GARAGE_PATHS.orderStatus}?${query.toString()}`;
 };
 
 /**

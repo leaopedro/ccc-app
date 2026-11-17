@@ -3,6 +3,7 @@
 // (apps/garage/vitest.config.ts:20 — sem jsdom, sem interação de navegador).
 import type {
   PresaleCampaign,
+  PresaleCheckoutResponse,
   PresaleFulfillmentMethod,
   PresalePaymentMethod,
   PresaleProduct,
@@ -124,6 +125,22 @@ export function buildCheckoutPayload(input: {
     acceptedTermsVersion: input.acceptedTermsVersion,
     acceptedPrivacyVersion: input.acceptedPrivacyVersion,
   };
+}
+
+/**
+ * Decide para onde o comprador vai depois do checkout. Cartão tem
+ * `checkoutUrl` (Stripe); Pix tem `statusUrl`, montado no servidor com
+ * `presaleOrderStatusUrl` (orderId + token assinado). Pura de propósito —
+ * sem isto, decidir a URL dentro do `.then()` do componente não tem como ser
+ * testado (apps/garage/vitest.config.ts roda em `environment: 'node'`, sem
+ * `window`). O componente só atribui o retorno a `window.location.href`.
+ *
+ * Nunca monte a URL do Pix aqui no cliente (orderId sem token): foi isso que
+ * mandou 100% dos compradores de Pix para a tela de "faltam parâmetros".
+ * O servidor já monta `statusUrl` com o token assinado — só usar.
+ */
+export function checkoutRedirectUrl(res: PresaleCheckoutResponse): string {
+  return res.paymentMethod === 'card' ? res.checkoutUrl : res.statusUrl;
 }
 
 export type CheckoutErrorCopy = { title: string; body: string };

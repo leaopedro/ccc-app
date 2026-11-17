@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fetchPresaleCampaign,
-  pixOrderStatusPath,
   PresaleApiError,
   PresaleConflictError,
   PresaleInvalidRequestError,
@@ -160,12 +159,5 @@ describe('startPresaleCheckout', () => {
       clientRequestId: string;
     };
     expect(firstBody.clientRequestId).not.toBe(secondBody.clientRequestId);
-  });
-});
-
-describe('pixOrderStatusPath', () => {
-  it('points to the order status page with orderId in the query, never the token', () => {
-    const path = pixOrderStatusPath('order_1');
-    expect(path).toBe('/casa-in-box/obrigado?orderId=order_1');
   });
 });

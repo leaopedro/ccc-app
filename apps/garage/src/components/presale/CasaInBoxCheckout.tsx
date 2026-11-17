@@ -15,6 +15,7 @@ import { Faq } from './Faq';
 import { TierCard } from './TierCard';
 import {
   buildCheckoutPayload,
+  checkoutRedirectUrl,
   computeExpectedTotalCents,
   isFulfillmentSupported,
   resolveCheckoutError,
@@ -23,7 +24,7 @@ import {
 
 import { presaleCopy } from '~/copy/presale';
 import { fmtCurrencyCents } from '~/lib/format';
-import { pixOrderStatusPath, startPresaleCheckout } from '~/lib/presale-api';
+import { startPresaleCheckout } from '~/lib/presale-api';
 
 type Props = {
   campaign: PresaleCampaign;
@@ -159,15 +160,7 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
 
     startPresaleCheckout(payload)
       .then((res) => {
-        // Resposta discriminada por `paymentMethod`: cartão tem `checkoutUrl`,
-        // Pix tem `brCode`/`pixExpiresAt` e nenhuma URL externa. Estreitar aqui
-        // em vez de `as` é o ponto — um cast caducaria o compilador justo
-        // contra a mudança de formato que a união existe para pegar.
-        if (res.paymentMethod === 'card') {
-          window.location.href = res.checkoutUrl;
-          return;
-        }
-        window.location.href = pixOrderStatusPath(res.orderId);
+        window.location.href = checkoutRedirectUrl(res);
       })
       .catch((err: unknown) => {
         setSubmitState({ phase: 'error', copy: resolveCheckoutError(err) });

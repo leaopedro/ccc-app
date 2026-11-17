@@ -1,8 +1,9 @@
-import type { PresaleCampaign, PresaleProduct } from '@ccc/shared/presale';
+import type { PresaleCampaign, PresaleCheckoutResponse, PresaleProduct } from '@ccc/shared/presale';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildCheckoutPayload,
+  checkoutRedirectUrl,
   classifyTier,
   computeExpectedTotalCents,
   hasSizeOptions,
@@ -261,6 +262,48 @@ describe('buildCheckoutPayload', () => {
       acceptedPrivacyVersion: 'privacy-2026-11-10',
     });
     expect(payload.delivery).toEqual(delivery);
+  });
+});
+
+describe('checkoutRedirectUrl', () => {
+  const cardResponse: PresaleCheckoutResponse = {
+    orderId: 'order_1',
+    paymentMethod: 'card',
+    checkoutUrl: 'https://checkout.stripe.com/pay/cs_test_1',
+    amountCents: 9900,
+    shippingCents: 0,
+    currency: 'brl',
+  };
+
+  const pixResponse: PresaleCheckoutResponse = {
+    orderId: 'order_2',
+    paymentMethod: 'pix',
+    brCode: '00020126...',
+    pixExpiresAt: '2026-11-18T00:00:00.000Z',
+    statusUrl:
+      'https://garage.casacar.club/casa-in-box/obrigado?orderId=order_2&t=signed-token-abc',
+    amountCents: 9900,
+    shippingCents: 0,
+    currency: 'brl',
+  };
+
+  it('returns checkoutUrl for a card response', () => {
+    expect(checkoutRedirectUrl(cardResponse)).toBe(cardResponse.checkoutUrl);
+  });
+
+  it('returns statusUrl for a pix response', () => {
+    expect(checkoutRedirectUrl(pixResponse)).toBe(pixResponse.statusUrl);
+  });
+
+  // Seam test: the status route (routes/presale.ts) requires BOTH orderId and
+  // a signed token to answer. A URL missing either sends the buyer to a
+  // "missing parameters" screen — this already happened once with a
+  // client-assembled querystring. Assert on the parsed query, not a
+  // substring, so a different-but-still-broken shape can't slip through.
+  it('the returned pix URL carries both orderId and a token in its querystring', () => {
+    const url = new URL(checkoutRedirectUrl(pixResponse));
+    expect(url.searchParams.get('orderId')).toBe('order_2');
+    expect(url.searchParams.get('t')).toBe('signed-token-abc');
   });
 });
 

@@ -51,7 +51,20 @@ export const runOrderExpiryTick = async (
   const now = deps.now ?? new Date();
 
   const stale = await prisma.order.findMany({
-    where: { status: 'pending', expiresAt: { not: null, lt: now } },
+    // Pré-venda Casa In Box (`Order.origin === 'casa_in_box'`) never reserves
+    // stock at checkout (services/presale/checkout.ts header), so the flip to
+    // `expired` buys it nothing — `releaseAllReservationsForOrders` already
+    // no-ops for this origin. It used to cost something real instead: the
+    // AbacatePay webhook has no idea a worker relabeled the row, so a late
+    // `transparent.completed` for one of these hit `OrderNotPendingError` and
+    // fired `flagManualRefund({reason:'order-expired'})` — telling an
+    // operator to refund an order we are about to ship, for a provider with
+    // no refund API. Excluding the origin here removes the cause instead of
+    // teaching the webhook, the display route, and the page to agree: the
+    // row just stays `pending`, the webhook's normal settle path handles a
+    // late payment with no special case, and `expiresAt` still drives the
+    // "código venceu" read in routes/presale.ts untouched.
+    where: { status: 'pending', expiresAt: { not: null, lt: now }, origin: { not: 'casa_in_box' } },
     select: { id: true, provider: true, providerRef: true },
     orderBy: { expiresAt: 'asc' },
     take: QUERY_LIMIT,

@@ -1,15 +1,24 @@
-// CRITICAL fix: order-expiry.ts só passou a enxergar pedido de pré-venda
-// Pix depois que esta branch passou a gravar `Order.expiresAt` para a janela
-// de 1h (services/presale/checkout.ts). A pré-venda NÃO reserva estoque no
-// checkout — o débito só acontece na liquidação
-// (services/orders/settle.ts: debitPresaleStock) — então
-// `releaseAllReservationsForOrders` (services/orders/expire.ts) tem que
-// pular esses pedidos, nunca tocar `Variant.quantitySold` por causa deles.
+// C2 fix (review final do branch Pix): order-expiry.ts passou a EXCLUIR
+// `origin: 'casa_in_box'` da própria query, em vez de só não liberar reserva
+// para esse pedido. Antes desta troca, um pedido de pré-venda Pix vencido
+// virava `status: 'expired'` de verdade no banco (só não tocava
+// `Variant.quantitySold`) — e isso é exatamente o que fazia um
+// `transparent.completed` tardio bater em `OrderNotPendingError` no webhook
+// e disparar `flagManualRefund({reason:'order-expired'})`: um alerta de
+// dinheiro pedindo para estornar um pedido que íamos despachar, para um
+// provedor sem API de estorno.
 //
-// Os dois testes abaixo passam pelo CAMINHO REAL de expiração
+// O flip para `expired` nunca comprou nada aqui: ele existe para devolver
+// reserva de estoque, e a pré-venda não reserva nada no checkout (débito só
+// na liquidação, services/orders/settle.ts: debitPresaleStock). Em vez de
+// ensinar essa regra ao webhook, ao display route e à página — três lugares
+// que precisam concordar para sempre — a causa foi removida: o pedido nunca
+// entra em order-expiry, fica `pending` até liquidar.
+//
+// Os testes abaixo passam pelo CAMINHO REAL de expiração
 // (runOrderExpiryTick), nunca escrevendo `status: 'expired'` direto pelo
-// Prisma — é exatamente esse atalho que escondeu o bug no teste da Task 5
-// (pix-recovery.test.ts).
+// Prisma — é exatamente esse atalho que escondeu o bug original (Task 5,
+// pix-recovery.test.ts).
 import { prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { FastifyInstance } from 'fastify';
@@ -24,7 +33,7 @@ import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
 
 const CHECKOUT_URL = '/presale/casa-in-box/checkout';
 
-describe('order-expiry.ts não libera reserva de pedido de pré-venda Pix', () => {
+describe('order-expiry.ts nunca expira pedido de pré-venda Pix (C2)', () => {
   let app: FastifyInstance;
   let stripe: FakeStripe;
   let abacatepay: FakeAbacatePay;
@@ -80,7 +89,7 @@ describe('order-expiry.ts não libera reserva de pedido de pré-venda Pix', () =
     return { order, variantId };
   };
 
-  it('pedido de pré-venda Pix vencido expira de verdade e NÃO toca quantitySold de variante nenhuma', async () => {
+  it('pedido de pré-venda Pix vencido NÃO é visto pelo worker: continua pending, quantitySold intocado', async () => {
     const { order, variantId } = await seedPresalePixOrder();
     expect(order.expiresAt).not.toBeNull();
     expect(order.origin).toBe('casa_in_box');
@@ -95,23 +104,26 @@ describe('order-expiry.ts não libera reserva de pedido de pré-venda Pix', () =
       now: new Date(order.expiresAt!.getTime() + 1000),
     });
 
-    expect(result.expired).toBe(1);
+    // C2: a query do worker exclui `origin: 'casa_in_box'` — este pedido
+    // nunca entra no `stale` findMany, então o tick não conta nem processa
+    // nada para ele.
+    expect(result.expired).toBe(0);
 
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect(after.status).toBe('expired'); // caminho real de expiração, de verdade no banco
+    expect(after.status).toBe('pending'); // continua pending, nunca expired
 
     const afterVariant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
     expect(afterVariant.quantitySold).toBe(0);
   });
 
-  it('caso de corrupção: quantitySold alto por causa de OUTROS pedidos continua EXATAMENTE o mesmo depois da expiração da pré-venda', async () => {
+  it('caso de corrupção: quantitySold alto por causa de OUTROS pedidos continua EXATAMENTE o mesmo mesmo com o prazo da pré-venda vencido', async () => {
     const { order, variantId } = await seedPresalePixOrder({ quantity: 1 });
 
     // Simula outros clientes reais que compraram essa mesma variante pelo
     // carrinho (reserva de verdade, Variant.quantitySold incrementado).
     // Qualquer valor >= a quantidade do pedido de pré-venda bastaria para o
     // guard de assertReservationReleased passar silenciosamente — o ponto do
-    // teste é que ele não pode nem tentar.
+    // teste é que ele não pode nem tentar, porque o pedido nem é visto.
     await prisma.variant.update({
       where: { id: variantId },
       data: { quantitySold: { increment: 7 } },
@@ -124,10 +136,10 @@ describe('order-expiry.ts não libera reserva de pedido de pré-venda Pix', () =
       now: new Date(order.expiresAt!.getTime() + 1000),
     });
 
-    expect(result.expired).toBe(1);
+    expect(result.expired).toBe(0);
 
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect(after.status).toBe('expired');
+    expect(after.status).toBe('pending');
 
     const afterVariant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
     expect(afterVariant.quantitySold).toBe(7); // inalterado — nada foi revendido/abatido

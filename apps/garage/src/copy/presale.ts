@@ -228,7 +228,7 @@ export const presaleCopy = {
       deadlineLabel: (time: string) => `Válido até ${time}`,
       expired: {
         title: 'O código Pix expirou',
-        body: 'Esse código não vale mais. Use o link do e-mail de confirmação do pedido para tentar de novo.',
+        body: 'Esse código não vale mais. Se você já pagou, a confirmação chega por e-mail.',
       },
     },
     // orderId/token ausentes na querystring da própria página — não é um dos

@@ -39,23 +39,6 @@ import { loadEligiblePresaleProducts } from '../services/presale/eligibility.js'
 import { serializePresaleProduct } from '../services/presale/serialize.js';
 import { ensurePresaleSettings } from '../services/presale/settings.js';
 import { prisma } from '@ccc/db';
-import type { OrderStatus } from '@prisma/client';
-
-// O worker (workers/order-expiry.ts) é quem de fato grava `status: 'expired'`
-// no banco, mas só roda em tick — entre o código Pix vencer e o próximo tick
-// o pedido fica `pending` no banco. Esta rota de LEITURA não escreve status
-// (orders só viram `paid` por webhook verificado), então ela sinaliza
-// "expirado" so na RESPOSTA, sem tocar o pedido, comparando `expiresAt` com
-// um `now` injetado — nunca `Date.now()` dentro do handler, mesmo padrão de
-// `deps.now ?? new Date()` em workers/order-expiry.ts.
-const resolveDisplayStatus = (
-  status: OrderStatus,
-  expiresAt: Date | null,
-  now: Date,
-): OrderStatus => {
-  if (status === 'pending' && expiresAt !== null && expiresAt < now) return 'expired';
-  return status;
-};
 
 const requirePresaleEnabled = async (_request: FastifyRequest, reply: FastifyReply) => {
   const settings = await ensurePresaleSettings();
@@ -303,11 +286,17 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           }
         : null;
 
-    // Return order status
+    // Return order status. Status é devolvido CRU do banco — esta rota é de
+    // LEITURA e nunca reinterpreta `pending` como `expired` por `expiresAt`
+    // vencido: para a pré-venda isso nunca foi verdade no banco (order-
+    // expiry.ts exclui `origin: 'casa_in_box'` da própria query, C2) e
+    // fingir que era convidava quem já pagou a comprar de novo. `expiresAt`
+    // sai como `pixExpiresAt` abaixo; é o garage quem decide, a partir dele,
+    // se mostra o código ou a copy de "código venceu".
     return reply.status(200).send(
       presaleOrderStatusResponseSchema.parse({
         orderId: order.id,
-        status: resolveDisplayStatus(order.status, order.expiresAt, new Date()),
+        status: order.status,
         fulfillmentMethod: order.fulfillmentMethod,
         amountCents: order.amountCents,
         shippingCents: order.shippingCents,

@@ -40,33 +40,29 @@
  *          checkout by that customer failed with CART_ALREADY_CHECKING_OUT,
  *          silently and forever.
  *        - standalone order -> `settlePaidOrder` and the per-order push.
- *   4. PAID + order already `expired` locally: whether this is settleable
- *      depends on the REASON an expired order is normally unsafe to settle —
- *      not on its `kind` or `origin` label. The cart path reserves stock at
- *      checkout (services/cart/checkout.ts increments `Variant.quantitySold`
- *      up front) and order-expiry.ts RELEASES that reservation the moment it
+ *   4. PAID + order already `expired` locally: this is unsafe to settle
+ *      because the cart path reserves stock at checkout
+ *      (services/cart/checkout.ts increments `Variant.quantitySold` up
+ *      front) and order-expiry.ts RELEASES that reservation the moment it
  *      flips the row to `expired`. Settling such a row late would resell
  *      stock already returned to the shelf — same class of bug flagged in
  *      the Stripe cart path. Refunding is not possible — AbacatePayClient
- *      exposes no refund call — so the only honest move there is a loud,
+ *      exposes no refund call — so the only honest move is a loud,
  *      deduplicated Sentry alert for manual handling, leaving the order
  *      `expired` and untouched.
  *
- *      The pré-venda Casa In Box order (`Order.origin === 'casa_in_box'`)
- *      reserves NOTHING at checkout — the debit happens only at settlement
- *      (services/orders/settle.ts: debitPresaleStock). order-expiry.ts never
- *      had anything to release for it, so settling it after local expiry
- *      cannot oversell: the reason the cart's expired row is dangerous does
- *      not hold here. `origin` is the only column that currently carries
- *      "reserved no stock" — checking it alone (without also requiring
- *      `kind`) is deliberate: a store product order also has `kind:'product'`
- *      but a DIFFERENT origin, and still reserved stock through the cart, so
- *      it must still take the alert-only path above. (This mirrors the
- *      origin-only check in routes/stripe-webhook.ts's
- *      `payment_intent.payment_failed` branch, same reasoning.) A recovered
- *      pré-venda guest has no account — no `userId`, so push is impossible —
- *      and gets the same confirmation email the webhook sends
- *      (sendPresaleConfirmationEmail), not a push.
+ *      This used to carry an exception for the pré-venda Casa In Box order
+ *      (`Order.origin === 'casa_in_box'`), which reserves nothing at
+ *      checkout and so could not be oversold by a late settle — this worker
+ *      reclaimed that one `origin` back to `pending` here and fell through
+ *      to settle it. That reclaim is gone: workers/order-expiry.ts now
+ *      excludes `origin: 'casa_in_box'` from its query entirely (see its
+ *      header), so that origin never becomes `expired` locally in the first
+ *      place — it just stays `pending` until a webhook or this sweep settles
+ *      it, same as every other row in the `pending` branch above. A pré-venda
+ *      guest has no account — no `userId`, so push is impossible — and gets
+ *      the confirmation email instead (sendPresaleConfirmationEmail), via
+ *      `notifyRecoveredOrder` below.
  *
  * A row error never crashes the tick.
  */
@@ -160,7 +156,6 @@ type StaleRow = {
   cartId: string | null;
   status: OrderStatus;
   amountCents: number;
-  origin: string;
 };
 
 /**
@@ -328,7 +323,6 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
       cartId: true,
       status: true,
       amountCents: true,
-      origin: true,
     },
   });
 
@@ -410,34 +404,18 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
         // Settling an expired row is only dangerous for the REASON order-
         // expiry.ts is dangerous to skip: it already released a stock
         // reservation made at checkout, and settling now would resell it.
-        // `origin === 'casa_in_box'` is, today, the only column that marks
-        // "this order reserved nothing at checkout" (see the top-of-file
-        // note, point 4) — a pré-venda order never had anything released, so
-        // nothing is oversold by settling it late. Checked alone, not
-        // combined with `kind`, on purpose: an ordinary store product order
-        // shares `kind: 'product'` but a different `origin`, and DID reserve
-        // stock via the cart, so it must still fall into the alert-only path
-        // below.
-        if (row.origin !== 'casa_in_box') {
-          await flagExpiredButPaid(row, providerRef, log);
-          continue;
-        }
-        // settlePaidOrder's own guard (services/orders/settle.ts) refuses any
-        // order whose status is not 'pending', regardless of origin — that
-        // guard exists for the cart's protection and knows nothing about
-        // "did this reserve stock". Reclaim the row here, in this worker,
-        // rather than loosening that guard: a guarded updateMany keyed on
-        // `status: 'expired'` so a concurrent writer (another tick, the
-        // webhook's own manual-refund branch) racing this same row loses
-        // gracefully — `count === 0` just skips this tick, and the next tick
-        // retries from the provider re-check above.
-        const reclaimed = await prisma.order.updateMany({
-          where: { id: row.id, status: 'expired' },
-          data: { status: 'pending' },
-        });
-        if (reclaimed.count === 0) continue;
-        // Fall through to the normal standalone-order settle path below —
-        // a pré-venda order never has a cartId.
+        // The pré-venda Casa In Box order used to be the one exception —
+        // `origin === 'casa_in_box'` reserves nothing at checkout, so this
+        // branch used to reclaim it back to `pending` and fall through to
+        // settle. That reclaim is now dead: workers/order-expiry.ts excludes
+        // `origin: 'casa_in_box'` from its own query (C2 fix), so that origin
+        // can no longer reach this worker with `status: 'expired'` at all —
+        // it stays `pending` until settled, same as every other stale row
+        // below. Every row that DOES arrive here `expired` reserved stock via
+        // the cart and release already happened, so the only honest move is
+        // the alert.
+        await flagExpiredButPaid(row, providerRef, log);
+        continue;
       }
 
       // Cart order: go through the SAME settle path the webhook goes through

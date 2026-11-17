@@ -7,13 +7,45 @@
 import { prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// C2: espiona o Sentry para provar que um pagamento tardio para um pedido de
+// pré-venda com o prazo do código vencido NÃO dispara o alerta de
+// manual-refund (flagManualRefund usa Sentry.captureMessage, não grava em
+// tabela nenhuma — sem o spy não haveria como diferenciar "não disparou" de
+// "disparou e não checamos"). Namespace ESM não é configurável, por isso o
+// mock vai no topo do módulo (mesmo padrão de test/abacatepay/webhook.test.ts).
+vi.mock('@sentry/node', () => {
+  const noop = () => undefined;
+  return {
+    init: vi.fn(),
+    addBreadcrumb: vi.fn(),
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+    setUser: vi.fn(),
+    withScope: (
+      cb: (scope: {
+        setTag: (k: string, v: unknown) => void;
+        setLevel: (l: string) => void;
+        setExtras: (e: Record<string, unknown>) => void;
+        setExtra: (k: string, v: unknown) => void;
+        setContext: (k: string, v: unknown) => void;
+      }) => void,
+    ) => cb({ setTag: noop, setLevel: noop, setExtras: noop, setExtra: noop, setContext: noop }),
+  };
+});
+
+const Sentry = (await import('@sentry/node')) as unknown as {
+  captureMessage: ReturnType<typeof vi.fn>;
+};
 
 import { buildApp } from '../../src/app.js';
 import { type Env, loadEnv } from '../../src/env.js';
 import { buildFakeAbacatePay } from '../../src/services/abacatepay/fake.js';
 import type { DevMailer } from '../../src/services/mailer/dev.js';
+import type { FakeStripe } from '../../src/services/stripe/fake.js';
 import { buildFakeStripe } from '../../src/services/stripe/fake.js';
+import { runOrderExpiryTick } from '../../src/workers/order-expiry.js';
 import { createUser, resetDatabase } from '../helpers.js';
 
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
@@ -54,6 +86,7 @@ const makeTransparentCompletedPayload = (
 
 describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)', () => {
   let app: FastifyInstance;
+  let stripe: FakeStripe;
   let counter = 0;
 
   beforeEach(async () => {
@@ -63,7 +96,8 @@ describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)'
     await prisma.presaleSettings.deleteMany();
     await setPresaleSettings({ enabled: true, shippingFeeCents: 1990 });
 
-    app = await buildApp(env, { stripe: buildFakeStripe(), abacatepay: buildFakeAbacatePay() });
+    stripe = buildFakeStripe();
+    app = await buildApp(env, { stripe, abacatepay: buildFakeAbacatePay() });
   });
 
   afterEach(async () => {
@@ -182,5 +216,47 @@ describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)'
     // I2: nenhum comportamento novo para pedido comum da loja.
     expect(updated.confirmationEmailSentAt).toBeNull();
     expect(mailer.captured).toHaveLength(0);
+  });
+
+  // C2 — a promessa central da feature: quem paga o Pix DEPOIS do prazo de
+  // uma hora ainda recebe a caixa. O tick REAL de order-expiry.ts roda
+  // primeiro aqui (não um UPDATE direto simulando o que ele "teria feito") —
+  // antes do fix da C2 isso vira o pedido para `expired` no banco, e este
+  // mesmo `transparent.completed` bate em `OrderNotPendingError` dentro do
+  // webhook, disparando `flagManualRefund({reason:'order-expired'})`: o
+  // alerta de estornar um pedido que estamos prestes a despachar, para um
+  // provedor sem API de estorno. Depois do fix, order-expiry.ts exclui
+  // `origin: 'casa_in_box'` da própria query — o pedido nunca entra no tick,
+  // fica `pending`, e o webhook liquida pelo caminho normal.
+  it('transparent.completed tardio para pedido de pré-venda com prazo vencido liquida normalmente, sem manual-refund, e envia o email (C2)', async () => {
+    const order = await seedPresalePixOrder();
+    const mailer = app.mailer as DevMailer;
+    mailer.clear();
+    Sentry.captureMessage.mockClear();
+
+    // Tick real de order-expiry.ts, `now` depois do prazo do código Pix —
+    // nunca um carimbo de data fixo.
+    await runOrderExpiryTick({ stripe, now: new Date(order.expiresAt!.getTime() + 1000) });
+
+    const res = await postWebhook(
+      makeTransparentCompletedPayload(order.providerRef!, 'evt_pix_presale_late_1', {
+        orderId: order.id,
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updated.status).toBe('paid');
+    expect(updated.confirmationEmailSentAt).not.toBeNull();
+
+    expect(mailer.captured).toHaveLength(1);
+    expect(mailer.captured[0]!.to).toBe('comprador@exemplo.com');
+
+    // Ponto central do teste: nenhum alerta de manual-refund (nem
+    // 'order-expired', nem qualquer outro) saiu do caminho de liquidação.
+    const manualRefundCalls = Sentry.captureMessage.mock.calls.filter((call) =>
+      String(call[0]).includes('manual refund'),
+    );
+    expect(manualRefundCalls).toHaveLength(0);
   });
 });

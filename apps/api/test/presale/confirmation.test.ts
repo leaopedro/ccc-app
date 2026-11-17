@@ -291,12 +291,15 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
     expect(body.pixExpiresAt).toBeNull();
   });
 
-  it('pix com prazo vencido e pedido ainda pending é sinalizado como expirado', async () => {
+  it('pix com prazo vencido e pedido ainda pending continua pending na resposta (C2)', async () => {
     const { orderId } = await seedPresalePixOrder();
 
-    // Ninguem rodou o worker de expiracao (workers/order-expiry.ts) ainda,
-    // entao o pedido continua 'pending' no banco. O prazo vencido vem de um
-    // delta relativo ao agora do teste, nunca um carimbo fixo.
+    // workers/order-expiry.ts exclui origin: 'casa_in_box' da propria query
+    // (C2): um pedido de pre-venda nunca vira 'expired' no banco, entao o
+    // prazo vencido (delta relativo ao agora do teste, nunca um carimbo
+    // fixo) tem que deixar o pedido 'pending' tanto no banco quanto na
+    // resposta. Reportar 'expired' aqui convidaria quem ja pagou a comprar
+    // de novo (achado C2, item b).
     await prisma.order.update({
       where: { id: orderId },
       data: { expiresAt: new Date(Date.now() - 60_000) },
@@ -308,8 +311,7 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
 
     expect(res.statusCode).toBe(200);
     const body = presaleOrderStatusResponseSchema.parse(res.json());
-    expect(body.status).toBe('expired');
-    // A rota e de LEITURA: ela nao grava o status, so sinaliza na resposta.
+    expect(body.status).toBe('pending');
     expect(await statusOf(orderId)).toBe('pending');
   });
 

@@ -8,6 +8,15 @@
 // revender. O convidado da pré-venda também não tem conta: não há `userId`
 // para push, então o aviso tem que ser o email de confirmação
 // (sendPresaleConfirmationEmail), o mesmo que o webhook já envia.
+//
+// C2 fix: workers/order-expiry.ts agora exclui `origin: 'casa_in_box'` da
+// própria query, então um pedido de pré-venda nunca mais vira `status:
+// 'expired'` no banco — ele fica `pending` para sempre até liquidar. Por
+// isso os testes abaixo não forçam mais `status: 'expired'` (esse estado é
+// agora impossível para esta origem); eles só vencem o PRAZO do código
+// (`expiresAt` no passado, pedido continua `pending`) e provam que o sweep
+// liquida pelo caminho normal de `pending`, sem precisar de reivindicação
+// nenhuma.
 import { prisma } from '@ccc/db';
 import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type { FastifyInstance } from 'fastify';
@@ -76,10 +85,14 @@ describe('recuperação tardia de pré-venda (pix-reconcile)', () => {
     return prisma.order.findUniqueOrThrow({ where: { id: body.orderId } });
   };
 
-  /** Marca o pedido como localmente expirado, como order-expiry.ts já teria
-   * feito depois da janela de uma hora, sem depender de rodar o worker. */
-  const expireLocally = (orderId: string) =>
-    prisma.order.update({ where: { id: orderId }, data: { status: 'expired' } });
+  /** Vence o prazo do código Pix sem mudar o status — order-expiry.ts exclui
+   * `origin: 'casa_in_box'` da própria query (C2), então o pedido nunca vira
+   * `expired` no banco; fica `pending` com `expiresAt` no passado. */
+  const expirePixDeadline = (orderId: string) =>
+    prisma.order.update({
+      where: { id: orderId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
 
   // Mesmo fixture de ticket usado em test/workers/pix-reconcile.test.ts, para
   // provar que o caminho de ingresso (push, não email) não mudou.
@@ -120,9 +133,9 @@ describe('recuperação tardia de pré-venda (pix-reconcile)', () => {
     return { user, event, order };
   };
 
-  it('pedido expirado localmente e pago no provedor vira paid', async () => {
+  it('pedido com prazo do código vencido (ainda pending) e pago no provedor vira paid', async () => {
     const order = await seedPresalePixOrder();
-    await expireLocally(order.id);
+    await expirePixDeadline(order.id);
     abacatepay.nextStatus = {
       id: order.providerRef!,
       status: 'PAID',
@@ -161,7 +174,7 @@ describe('recuperação tardia de pré-venda (pix-reconcile)', () => {
 
   it('a recuperação envia email ao comprador, não só alerta interno', async () => {
     const order = await seedPresalePixOrder();
-    await expireLocally(order.id);
+    await expirePixDeadline(order.id);
     abacatepay.nextStatus = {
       id: order.providerRef!,
       status: 'PAID',

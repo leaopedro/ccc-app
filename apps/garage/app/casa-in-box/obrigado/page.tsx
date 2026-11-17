@@ -5,7 +5,11 @@ import { PRESALE_ORDER_STATUS_QUERY, type PresaleOrderStatusResponse } from '@cc
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
-import { OrderStatusView, type OrderDisplayStatus } from '~/components/presale/OrderStatusView';
+import {
+  isPixExpired,
+  OrderStatusView,
+  type OrderDisplayStatus,
+} from '~/components/presale/OrderStatusView';
 import { presaleCopy } from '~/copy/presale';
 import { fetchPresaleCampaign, fetchPresaleOrderStatus, PresaleApiError } from '~/lib/presale-api';
 
@@ -13,6 +17,11 @@ import { fetchPresaleCampaign, fetchPresaleOrderStatus, PresaleApiError } from '
 // `paid` from verified provider webhooks, never from a client call), which
 // can lag the success redirect by a few seconds. This page only reads
 // status — it polls, it never writes one.
+//
+// This cap applies to CARD orders only (sized for a near-instant Stripe
+// redirect). Pix orders poll on the same interval but stop at their own
+// pace: bounded by `pixExpiresAt` (checked below via `isPixExpired`), not by
+// an attempts count — the buyer may be away in their bank app for minutes.
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 30; // 30 * 2s = 60s cap, then stop and offer a manual check.
 
@@ -71,6 +80,30 @@ function PollingOrderStatus({ orderId, token }: { orderId: string; token: string
           const displayStatus = toDisplayStatus(order.status);
 
           if (displayStatus === 'pending') {
+            const isPixOrder = order.brCode !== null && order.pixExpiresAt !== null;
+
+            if (
+              isPixOrder &&
+              order.pixExpiresAt !== null &&
+              isPixExpired(order.pixExpiresAt, new Date())
+            ) {
+              // The code died before the server confirmed it (poll lag): stop
+              // here. OrderStatusView's own pix-expired branch tells the
+              // buyer and points at the email link — no generic timeout
+              // banner, "verificar novamente" would be pointless.
+              setState({ phase: 'loaded', order, timedOut: false });
+              return;
+            }
+
+            if (isPixOrder) {
+              // Pix: keep polling while the charge can still be paid. No
+              // attempts cap — `isPixExpired` above is what stops this.
+              setState({ phase: 'loaded', order, timedOut: false });
+              timer = setTimeout(check, POLL_INTERVAL_MS);
+              return;
+            }
+
+            // Card: existing 60s cap.
             attemptsRef.current += 1;
             const timedOut = attemptsRef.current >= POLL_MAX_ATTEMPTS;
             setState({ phase: 'loaded', order, timedOut });
@@ -145,7 +178,12 @@ function PollingOrderStatus({ orderId, token }: { orderId: string; token: string
 
   return (
     <div className="flex flex-col gap-6">
-      <OrderStatusView status={displayStatus} order={state.order} pickupAddress={pickupAddress} />
+      <OrderStatusView
+        status={displayStatus}
+        order={state.order}
+        pickupAddress={pickupAddress}
+        now={new Date()}
+      />
       {displayStatus === 'pending' && state.timedOut ? (
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
           <p className="text-sm text-fg-secondary">{presaleCopy.orderStatus.pollingTimeout.body}</p>

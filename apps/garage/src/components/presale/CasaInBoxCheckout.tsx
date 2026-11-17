@@ -11,7 +11,6 @@ import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
 import { TERMS_VERSION } from '@ccc/shared/terms';
 import { useState } from 'react';
 
-import { Faq } from './Faq';
 import { TierCard } from './TierCard';
 import {
   buildCheckoutPayload,
@@ -59,9 +58,14 @@ type SubmitState =
 /**
  * O componente cliente que carrega seleção e checkout (Task 14). Orquestra
  * as seções 3 a 7 da página: cards de tier, recebimento (com o checkbox de
- * consentimento do adendo), FAQ e o botão de pagar. Mantém a lógica de
- * seleção em funções puras (./selection.ts) — este arquivo só segura estado
- * e efeitos de borda (fetch, redirect).
+ * consentimento do adendo) e o botão de pagar. Mantém a lógica de seleção em
+ * funções puras (./selection.ts) — este arquivo só segura estado e efeitos
+ * de borda (fetch, redirect).
+ *
+ * O FAQ (achado P1) saiu daqui: o comprador não pode mais ser interrompido
+ * por um bloco editorial entre o consentimento e o pagamento. Quem renderiza
+ * o FAQ agora é a página (app/casa-in-box/page.tsx), depois deste componente
+ * — ou seja, depois do botão de pagar.
  */
 export function CasaInBoxCheckout({ campaign, products }: Props) {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
@@ -335,8 +339,6 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
             {presaleCopy.consent.suffix}
           </span>
         </label>
-
-        <Faq campaign={campaign} />
 
         <div className="flex flex-col gap-4">
           <h2 className="text-xl font-semibold text-fg">{presaleCopy.paymentMethod.title}</h2>

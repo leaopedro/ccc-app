@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { CasaInBoxCheckout } from '~/components/presale/CasaInBoxCheckout';
+import { Faq } from '~/components/presale/Faq';
 import { Hero } from '~/components/presale/Hero';
 import { Steps } from '~/components/presale/Steps';
 import { fetchPresaleCampaign, fetchPresaleProducts } from '~/lib/presale-api';
@@ -22,10 +23,14 @@ export default async function CasaInBoxPage() {
       <Hero campaign={campaign} />
       <Steps />
       <CasaInBoxCheckout campaign={campaign} products={products} />
+      <Faq campaign={campaign} />
     </main>
   );
 }
 
-// O FAQ (item 6 do brief) é renderizado dentro de CasaInBoxCheckout, entre o
-// formulário de recebimento (item 5, com o checkbox de consentimento) e o
-// botão de pagar (item 7) — essa é a ordem pedida pelo brief amendado.
+// O FAQ (achado P1 do page-findings.md) vem DEPOIS de CasaInBoxCheckout, ou
+// seja, depois do botão de pagar. Ele morava dentro do checkout, entre o
+// consentimento e o seletor de meio de pagamento — uma interrupção
+// editorial no meio do fluxo de compra. O fluxo agora corre de ponta a
+// ponta (tiers -> recebimento -> dados -> consentimento -> pagamento ->
+// botão de pagar) sem nada no meio; o FAQ fica fora, no fim da página.

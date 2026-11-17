@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import { Faq } from '../Faq';
 
+import { presaleCopy } from '~/copy/presale';
+
 const campaign: PresaleCampaign = {
   enabled: true,
   shippingFeeCents: 1990,
@@ -23,5 +25,17 @@ describe('Faq', () => {
     const noPickup: PresaleCampaign = { ...campaign, pickupAddress: null };
     const html = renderToStaticMarkup(<Faq campaign={noPickup} />);
     expect(html).not.toContain('retirar');
+  });
+
+  // Achado P2: a resposta antiga só mencionava a Stripe, como se cartão
+  // fosse o único meio de pagamento — falso desde que o Pix via AbacatePay
+  // existe. Trava a regressão: a resposta tem que cobrir os dois provedores.
+  it('explica o pagamento por cartão (Stripe) e por Pix (AbacatePay), não só cartão', () => {
+    const html = renderToStaticMarkup(<Faq campaign={campaign} />);
+    expect(html).toContain('Stripe');
+    expect(html).toContain('AbacatePay');
+    expect(html).toContain(
+      presaleCopy.faq.items.find((item) => item.question === 'Como funciona o pagamento?')!.body,
+    );
   });
 });

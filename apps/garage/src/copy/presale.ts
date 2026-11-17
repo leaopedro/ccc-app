@@ -57,8 +57,16 @@ export const presaleCopy = {
         requiresField: 'deliveryAreaLabel',
       },
       {
+        // Corrigido (achado P2): a resposta antiga só descrevia cartão. Desde
+        // que o Pix via AbacatePay entrou (Task 7), metade das compras não
+        // passa pela Stripe nenhuma. Confirmado em
+        // apps/api/src/services/presale/checkout.ts: cartão redireciona para
+        // uma sessão hospedada da Stripe (nenhum dado de cartão nosso
+        // backend vê); Pix gera um brCode no AbacatePay (nenhum dado de
+        // cartão existe nesse caminho). Nos dois, nenhum dado de pagamento
+        // passa pelos nossos servidores.
         question: 'Como funciona o pagamento?',
-        body: 'O pagamento é processado pela Stripe. Seus dados de cartão não passam pelos nossos servidores.',
+        body: 'No cartão, o pagamento é processado pela Stripe. No Pix, o código é gerado pelo AbacatePay. Nos dois casos, seus dados de pagamento não passam pelos nossos servidores.',
       },
     ],
   },

@@ -140,6 +140,16 @@ export const presaleCheckoutResponseSchema = z.discriminatedUnion('paymentMethod
       paymentMethod: z.literal('pix'),
       brCode: z.string().min(1),
       pixExpiresAt: z.string().datetime(),
+      // Card carries the token inside checkoutUrl's success_url (built
+      // server-side with signQrCode + presaleOrderStatusUrl). Pix has no
+      // redirect, so without this the buyer lands on the status page with
+      // only orderId and no token to query it — the email link works
+      // because it is built the same server-side way, so the only broken
+      // path was the immediate one. Built server-side here too, never a
+      // bare token the client assembles into a URL itself: hand-rolling
+      // this querystring on both sides once sent every pre-sale buyer to a
+      // "missing parameters" screen.
+      statusUrl: z.string().url(),
     })
     .strict(),
 ]);

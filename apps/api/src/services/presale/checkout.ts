@@ -117,7 +117,7 @@ export type CreatePresaleOrderSuccess = {
   currency: string;
 } & (
   | { paymentMethod: 'card'; checkoutUrl: string }
-  | { paymentMethod: 'pix'; brCode: string; pixExpiresAt: string }
+  | { paymentMethod: 'pix'; brCode: string; pixExpiresAt: string; statusUrl: string }
 );
 
 export type CreatePresaleOrderFailure = {
@@ -164,16 +164,31 @@ const succeedCard = (order: Order, checkoutUrl: string): CreatePresaleOrderSucce
   currency: order.currency,
 });
 
+/**
+ * Mesmo par que `ensureCheckoutSession` já monta para o success_url da
+ * Stripe: `signQrCode('p', ...)` + `presaleOrderStatusUrl`, aqui reaproveitado
+ * para o `statusUrl` do ramo Pix. Um lugar só conhece rota e nome de
+ * parâmetro — nunca o cliente montando a querystring à mão (ver o cabeçalho
+ * de `ensureCheckoutSession`).
+ */
+const buildPresaleStatusUrl = (orderId: string, deps: CreatePresaleOrderDeps): string => {
+  const base = deps.env.GARAGE_WEB_BASE_URL.replace(/\/+$/, '');
+  const token = signQrCode('p', orderId, deps.env);
+  return presaleOrderStatusUrl(base, orderId, token);
+};
+
 const succeedPix = (
   order: Order,
   brCode: string,
   pixExpiresAt: string,
+  deps: CreatePresaleOrderDeps,
 ): CreatePresaleOrderSuccess => ({
   ok: true,
   orderId: order.id,
   paymentMethod: 'pix',
   brCode,
   pixExpiresAt,
+  statusUrl: buildPresaleStatusUrl(order.id, deps),
   amountCents: order.amountCents,
   shippingCents: order.shippingCents,
   currency: order.currency,
@@ -358,7 +373,7 @@ export const ensurePixBilling = async (
         '[presale-checkout] falha ao enviar email do código Pix (curto-circuito idempotente)',
       );
     }
-    return succeedPix(order, order.brCode, order.expiresAt!.toISOString());
+    return succeedPix(order, order.brCode, order.expiresAt!.toISOString(), deps);
   }
 
   const abacatepay = deps.abacatepay;
@@ -417,7 +432,7 @@ export const ensurePixBilling = async (
           '[presale-checkout] falha ao enviar email do código Pix (perdeu a corrida)',
         );
       }
-      return succeedPix(current, current.brCode, current.expiresAt!.toISOString());
+      return succeedPix(current, current.brCode, current.expiresAt!.toISOString(), deps);
     }
     deps.log.warn(
       { orderId: order.id },
@@ -495,7 +510,7 @@ export const ensurePixBilling = async (
     );
   }
 
-  return succeedPix(order, billing.brCode, claimedExpiresAt.toISOString());
+  return succeedPix(order, billing.brCode, claimedExpiresAt.toISOString(), deps);
 };
 
 /** Resultado da transação: ou uma recusa já formatada, ou o pedido criado. */

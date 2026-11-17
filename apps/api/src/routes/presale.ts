@@ -183,6 +183,7 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
                 paymentMethod: 'pix',
                 brCode: result.brCode,
                 pixExpiresAt: result.pixExpiresAt,
+                statusUrl: result.statusUrl,
                 amountCents: result.amountCents,
                 shippingCents: result.shippingCents,
                 currency: result.currency,

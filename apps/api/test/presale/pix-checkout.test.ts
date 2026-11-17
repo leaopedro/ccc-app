@@ -4,6 +4,8 @@ import { presaleCheckoutResponseSchema } from '@ccc/shared/presale';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadEnv } from '../../src/env.js';
+import { verifyQrCode } from '../../src/lib/qr.js';
 import type { FakeAbacatePay } from '../../src/services/abacatepay/fake.js';
 import type { DevMailer } from '../../src/services/mailer/dev.js';
 import {
@@ -16,6 +18,7 @@ import { makeAppWithFakes, resetDatabase } from '../helpers.js';
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
 
 const CHECKOUT_URL = '/presale/casa-in-box/checkout';
+const STATUS_URL = '/presale/casa-in-box/orders/status';
 
 describe('POST /presale/casa-in-box/checkout (pix)', () => {
   let app: FastifyInstance;
@@ -66,6 +69,7 @@ describe('POST /presale/casa-in-box/checkout (pix)', () => {
     paymentMethod?: string;
     brCode?: string;
     pixExpiresAt?: string;
+    statusUrl?: string;
     checkoutUrl?: string;
     amountCents?: number;
     shippingCents?: number;
@@ -285,5 +289,75 @@ describe('POST /presale/casa-in-box/checkout (pix)', () => {
     expect(order.brCode).toBeNull();
     expect(stripe.calls).toHaveLength(1);
     expect(pixCalls()).toHaveLength(0);
+
+    // Union .strict(): cartão não carrega statusUrl, que é exclusivo do ramo
+    // pix. Checa o JSON cru, não só o tipo estreitado pelo parse acima.
+    expect((res.json() as CheckoutBody).statusUrl).toBeUndefined();
+  });
+
+  // CRITICAL fix: o ramo pix da resposta não carregava token/URL nenhum, e o
+  // comprador caía na tela de status sem conseguir consultá-lo — o link do
+  // email funcionava (montado no servidor com token) porque o redirect
+  // imediato não. `statusUrl` tem que vir montado pelo MESMO par que o
+  // success_url do cartão já usa: signQrCode('p', ...) + presaleOrderStatusUrl.
+  describe('statusUrl no ramo pix', () => {
+    const env = loadEnv();
+
+    it('vem montado pelo helper compartilhado, com orderId e token válidos', async () => {
+      const res = await post();
+      expect(res.statusCode).toBe(201);
+      const parsed = presaleCheckoutResponseSchema.parse(res.json());
+      if (parsed.paymentMethod !== 'pix') throw new Error('esperava resposta pix');
+
+      const statusUrl = new URL(parsed.statusUrl);
+      expect(statusUrl.origin + statusUrl.pathname).toBe(
+        `${env.GARAGE_WEB_BASE_URL}/casa-in-box/obrigado`,
+      );
+      expect(statusUrl.searchParams.get('orderId')).toBe(parsed.orderId);
+      const token = statusUrl.searchParams.get('t');
+      expect(token).toBeTruthy();
+      // Montado pelo helper, não à mão: o kind tem que ser 'p' e o id tem
+      // que bater com o orderId — exatamente o que verifyQrCode valida.
+      expect(verifyQrCode(token!, env)).toEqual({ kind: 'p', id: parsed.orderId });
+    });
+
+    it('o token do statusUrl é ACEITO pela rota de status daquele pedido (atravessa a costura)', async () => {
+      const res = await post();
+      const parsed = presaleCheckoutResponseSchema.parse(res.json());
+      if (parsed.paymentMethod !== 'pix') throw new Error('esperava resposta pix');
+
+      const statusUrl = new URL(parsed.statusUrl);
+      const token = statusUrl.searchParams.get('t')!;
+
+      const statusRes = await app.inject({
+        method: 'POST',
+        url: STATUS_URL,
+        payload: { orderId: parsed.orderId, token },
+      });
+
+      expect(statusRes.statusCode).toBe(200);
+      expect(statusRes.json()).toMatchObject({ orderId: parsed.orderId });
+    });
+
+    it('o token de um pedido NÃO serve para outro', async () => {
+      const first = await post();
+      const second = await post();
+      const firstOrder = presaleCheckoutResponseSchema.parse(first.json());
+      const secondOrder = presaleCheckoutResponseSchema.parse(second.json());
+      if (firstOrder.paymentMethod !== 'pix' || secondOrder.paymentMethod !== 'pix') {
+        throw new Error('esperava resposta pix');
+      }
+
+      const firstToken = new URL(firstOrder.statusUrl).searchParams.get('t')!;
+
+      // Token do primeiro pedido, orderId do segundo: a rota tem que recusar.
+      const crossRes = await app.inject({
+        method: 'POST',
+        url: STATUS_URL,
+        payload: { orderId: secondOrder.orderId, token: firstToken },
+      });
+
+      expect(crossRes.statusCode).toBe(404);
+    });
   });
 });

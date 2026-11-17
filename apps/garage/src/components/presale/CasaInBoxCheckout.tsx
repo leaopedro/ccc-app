@@ -4,6 +4,7 @@ import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type {
   PresaleCampaign,
   PresaleFulfillmentMethod,
+  PresalePaymentMethod,
   PresaleProduct,
 } from '@ccc/shared/presale';
 import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
@@ -22,7 +23,7 @@ import {
 
 import { presaleCopy } from '~/copy/presale';
 import { fmtCurrencyCents } from '~/lib/format';
-import { startPresaleCheckout } from '~/lib/presale-api';
+import { pixOrderStatusPath, startPresaleCheckout } from '~/lib/presale-api';
 
 type Props = {
   campaign: PresaleCampaign;
@@ -69,6 +70,9 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
     products[0]?.variants[0]?.id ?? null,
   );
   const [fulfillmentMethod, setFulfillmentMethod] = useState<PresaleFulfillmentMethod>('pickup');
+  // Cartão continua pré-selecionado: quem não mexe no seletor mantém o
+  // comportamento de hoje (CLAUDE.md "não mexer no caminho de cartão").
+  const [paymentMethod, setPaymentMethod] = useState<PresalePaymentMethod>('card');
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
@@ -129,6 +133,7 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
     const payload = buildCheckoutPayload({
       variantId: selectedVariant.id,
       fulfillmentMethod,
+      paymentMethod,
       expectedTotalCents,
       guest: {
         name: guestName.trim(),
@@ -154,7 +159,15 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
 
     startPresaleCheckout(payload)
       .then((res) => {
-        window.location.href = res.checkoutUrl;
+        // Resposta discriminada por `paymentMethod`: cartão tem `checkoutUrl`,
+        // Pix tem `brCode`/`pixExpiresAt` e nenhuma URL externa. Estreitar aqui
+        // em vez de `as` é o ponto — um cast caducaria o compilador justo
+        // contra a mudança de formato que a união existe para pegar.
+        if (res.paymentMethod === 'card') {
+          window.location.href = res.checkoutUrl;
+          return;
+        }
+        window.location.href = pixOrderStatusPath(res.orderId);
       })
       .catch((err: unknown) => {
         setSubmitState({ phase: 'error', copy: resolveCheckoutError(err) });
@@ -331,6 +344,36 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
         </label>
 
         <Faq campaign={campaign} />
+
+        <div className="flex flex-col gap-4">
+          <h2 className="text-xl font-semibold text-fg">{presaleCopy.paymentMethod.title}</h2>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('card')}
+              aria-pressed={paymentMethod === 'card'}
+              className={`rounded-full border px-5 py-2 text-sm font-semibold ${
+                paymentMethod === 'card'
+                  ? 'border-accent bg-accent text-bg'
+                  : 'border-border text-fg-secondary'
+              }`}
+            >
+              {presaleCopy.paymentMethod.card}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('pix')}
+              aria-pressed={paymentMethod === 'pix'}
+              className={`rounded-full border px-5 py-2 text-sm font-semibold ${
+                paymentMethod === 'pix'
+                  ? 'border-accent bg-accent text-bg'
+                  : 'border-border text-fg-secondary'
+              }`}
+            >
+              {presaleCopy.paymentMethod.pix}
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-3">
           <p className="text-lg font-semibold text-fg">

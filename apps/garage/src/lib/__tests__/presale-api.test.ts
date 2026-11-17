@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fetchPresaleCampaign,
+  pixOrderStatusPath,
   PresaleApiError,
   PresaleConflictError,
   PresaleInvalidRequestError,
@@ -20,6 +21,7 @@ const validCampaign = {
 const validCheckoutInput = {
   expectedTotalCents: 29990,
   fulfillmentMethod: 'pickup' as const,
+  paymentMethod: 'card' as const,
   items: [{ variantId: 'variant_1', quantity: 1 }],
   guest: { name: 'Fulano', email: 'fulano@example.com' },
   acceptedTermsVersion: 'v1',
@@ -28,6 +30,7 @@ const validCheckoutInput = {
 
 const validCheckoutResponse = {
   orderId: 'order_1',
+  paymentMethod: 'card' as const,
   checkoutUrl: 'https://checkout.stripe.com/pay/cs_test_1',
   amountCents: 29990,
   shippingCents: 0,
@@ -157,5 +160,12 @@ describe('startPresaleCheckout', () => {
       clientRequestId: string;
     };
     expect(firstBody.clientRequestId).not.toBe(secondBody.clientRequestId);
+  });
+});
+
+describe('pixOrderStatusPath', () => {
+  it('points to the order status page with orderId in the query, never the token', () => {
+    const path = pixOrderStatusPath('order_1');
+    expect(path).toBe('/casa-in-box/obrigado?orderId=order_1');
   });
 });

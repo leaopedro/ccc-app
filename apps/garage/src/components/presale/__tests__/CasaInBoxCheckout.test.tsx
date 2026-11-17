@@ -82,4 +82,17 @@ describe('CasaInBoxCheckout', () => {
     expect(html).toContain('href="/privacidade"');
     expect(html).toContain('href="/termos"');
   });
+
+  // Task 7: o comprador agora escolhe o meio de pagamento na própria página.
+  it('oferece cartão e Pix, com cartão pré-selecionado', () => {
+    const html = renderToStaticMarkup(
+      <CasaInBoxCheckout campaign={campaign} products={[basicProduct, premiumProduct]} />,
+    );
+    const cardButtonMatch = html.match(/<button[^>]*>Cartão<\/button>/);
+    const pixButtonMatch = html.match(/<button[^>]*>Pix<\/button>/);
+    expect(cardButtonMatch).not.toBeNull();
+    expect(pixButtonMatch).not.toBeNull();
+    expect(cardButtonMatch![0]).toContain('aria-pressed="true"');
+    expect(pixButtonMatch![0]).toContain('aria-pressed="false"');
+  });
 });

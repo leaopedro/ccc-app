@@ -4,6 +4,7 @@
 import type {
   PresaleCampaign,
   PresaleFulfillmentMethod,
+  PresalePaymentMethod,
   PresaleProduct,
 } from '@ccc/shared/presale';
 
@@ -103,6 +104,7 @@ export function buildCheckoutPayload(input: {
   variantId: string;
   quantity?: number;
   fulfillmentMethod: PresaleFulfillmentMethod;
+  paymentMethod: PresalePaymentMethod;
   expectedTotalCents: number;
   guest: { name: string; email: string; phone?: string };
   delivery?: NonNullable<StartPresaleCheckoutInput['delivery']>;
@@ -112,6 +114,7 @@ export function buildCheckoutPayload(input: {
   return {
     items: [{ variantId: input.variantId, quantity: input.quantity ?? 1 }],
     fulfillmentMethod: input.fulfillmentMethod,
+    paymentMethod: input.paymentMethod,
     expectedTotalCents: input.expectedTotalCents,
     guest: input.guest,
     // Entrega não se aplica à retirada (presaleCheckoutRequestSchema rejeita

@@ -126,6 +126,15 @@ export const presaleCopy = {
     shippingFeeLabel: (amount: string) => `Taxa de entrega: ${amount}`,
   },
 
+  // Seletor de meio de pagamento (Task 7, emenda da pré-venda Pix). Cartão
+  // continua pré-selecionado para não mudar o comportamento de quem não mexe
+  // no seletor.
+  paymentMethod: {
+    title: 'Como você quer pagar?',
+    card: 'Cartão',
+    pix: 'Pix',
+  },
+
   // Checkbox de consentimento, obrigatório antes de pagar (ADENDO do brief
   // amendado — consentimento informado precisa linkar para o documento real,
   // não só mencioná-lo). `privacyLabel`/`termsLabel` são os textos que viram

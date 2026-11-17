@@ -181,6 +181,7 @@ describe('buildCheckoutPayload', () => {
     const payload = buildCheckoutPayload({
       variantId: 'v-basic',
       fulfillmentMethod: 'pickup',
+      paymentMethod: 'card',
       expectedTotalCents: 9900,
       guest: { name: 'Fulano', email: 'fulano@example.com' },
       acceptedTermsVersion: 'terms-2026-08-14',
@@ -191,10 +192,37 @@ describe('buildCheckoutPayload', () => {
     expect(payload.delivery).toBeUndefined();
   });
 
+  // Task 7: o seletor de método na página de venda só tem efeito se o payload
+  // de fato carregar a escolha — sem isto o seletor seria só decoração.
+  it('o payload de checkout carrega o método escolhido', () => {
+    const cardPayload = buildCheckoutPayload({
+      variantId: 'v-basic',
+      fulfillmentMethod: 'pickup',
+      paymentMethod: 'card',
+      expectedTotalCents: 9900,
+      guest: { name: 'Fulano', email: 'fulano@example.com' },
+      acceptedTermsVersion: 'terms-2026-08-14',
+      acceptedPrivacyVersion: 'privacy-2026-11-10',
+    });
+    expect(cardPayload.paymentMethod).toBe('card');
+
+    const pixPayload = buildCheckoutPayload({
+      variantId: 'v-basic',
+      fulfillmentMethod: 'pickup',
+      paymentMethod: 'pix',
+      expectedTotalCents: 9900,
+      guest: { name: 'Fulano', email: 'fulano@example.com' },
+      acceptedTermsVersion: 'terms-2026-08-14',
+      acceptedPrivacyVersion: 'privacy-2026-11-10',
+    });
+    expect(pixPayload.paymentMethod).toBe('pix');
+  });
+
   it('drops delivery when fulfillment is pickup even if a delivery object is passed in', () => {
     const payload = buildCheckoutPayload({
       variantId: 'v-basic',
       fulfillmentMethod: 'pickup',
+      paymentMethod: 'card',
       expectedTotalCents: 9900,
       guest: { name: 'Fulano', email: 'fulano@example.com' },
       delivery: {
@@ -225,6 +253,7 @@ describe('buildCheckoutPayload', () => {
     const payload = buildCheckoutPayload({
       variantId: 'v-basic',
       fulfillmentMethod: 'ship',
+      paymentMethod: 'card',
       expectedTotalCents: 11890,
       guest: { name: 'Fulano', email: 'fulano@example.com' },
       delivery,

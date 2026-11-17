@@ -190,13 +190,14 @@ describe('presaleCheckoutResponseSchema', () => {
     ).toBe(false);
   });
 
-  it('resposta de pix exige brCode e pixExpiresAt, e recusa checkoutUrl', () => {
+  it('resposta de pix exige brCode, pixExpiresAt e statusUrl, e recusa checkoutUrl', () => {
     expect(
       presaleCheckoutResponseSchema.safeParse({
         ...baseFields,
         paymentMethod: 'pix',
         brCode: '000201br.code',
         pixExpiresAt: new Date().toISOString(),
+        statusUrl: 'https://casacar.club/presale/status?orderId=order_1&t=abc',
       }).success,
     ).toBe(true);
 
@@ -214,7 +215,17 @@ describe('presaleCheckoutResponseSchema', () => {
         paymentMethod: 'pix',
         brCode: '000201br.code',
         pixExpiresAt: new Date().toISOString(),
+        statusUrl: 'https://casacar.club/presale/status?orderId=order_1&t=abc',
         checkoutUrl: 'https://checkout.stripe.com/abc',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'pix',
+        brCode: '000201br.code',
+        pixExpiresAt: new Date().toISOString(),
       }).success,
     ).toBe(false);
   });

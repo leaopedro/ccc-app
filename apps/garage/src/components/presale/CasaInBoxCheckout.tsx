@@ -320,12 +320,18 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
           </div>
         </div>
 
-        <label className="flex items-start gap-3 text-sm text-fg-secondary">
+        {/* Achado P6: era o checkbox cru do navegador, pequeno e sem
+            estilo, no controle que carrega o peso legal da página e
+            destrava o botão de pagar. Estilo e área de clique maiores
+            (padding + borda do cartão); comportamento intocado — continua
+            desmarcado por padrão e continua sendo o único dono de
+            `consentAccepted`. */}
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface p-4 text-sm text-fg-secondary">
           <input
             type="checkbox"
             checked={consentAccepted}
             onChange={(e) => setConsentAccepted(e.target.checked)}
-            className="mt-1"
+            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent"
           />
           <span>
             {presaleCopy.consent.prefix}

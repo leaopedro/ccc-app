@@ -70,6 +70,17 @@ export function OrderStatusView({ status, order, now, pickupAddress = null }: Pr
             {copy.pix.codeLabel}
           </h2>
           <p className="break-all font-mono text-sm">{order.brCode}</p>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                void navigator.clipboard.writeText(order.brCode as string);
+              }
+            }}
+            className="inline-flex w-fit items-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg"
+          >
+            {copy.pix.copyCta}
+          </button>
           <p className="text-xs text-fg-secondary">
             {copy.pix.deadlineLabel(fmtTime(order.pixExpiresAt))}
           </p>

@@ -225,6 +225,7 @@ export const presaleCopy = {
     // de volta, nunca um botão de "verificar novamente" (o código já morreu).
     pix: {
       codeLabel: 'Código Pix copia e cola',
+      copyCta: 'Copiar código',
       deadlineLabel: (time: string) => `Válido até ${time}`,
       expired: {
         title: 'O código Pix expirou',

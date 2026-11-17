@@ -8,6 +8,7 @@ import {
 } from '../../../../src/components/presale/OrderStatusView';
 
 import { presaleCopy } from '~/copy/presale';
+import { fmtTime } from '~/lib/format';
 
 const now = new Date();
 
@@ -119,6 +120,10 @@ describe('OrderStatusView', () => {
     );
     expect(html).toContain(pixPendingOrder.brCode as string);
     expect(html).toContain(presaleCopy.orderStatus.pix.codeLabel);
+    expect(html).toContain(presaleCopy.orderStatus.pix.copyCta);
+    expect(html).toContain(
+      presaleCopy.orderStatus.pix.deadlineLabel(fmtTime(pixPendingOrder.pixExpiresAt as string)),
+    );
     expect(html).not.toContain('undefined');
   });
 

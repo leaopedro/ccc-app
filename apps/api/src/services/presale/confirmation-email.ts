@@ -177,10 +177,10 @@ export const sendPresaleConfirmationEmail = async (
       data: { confirmationEmailSentAt: null },
     });
 
-    deps.log.warn(
-      { err, orderId, guestEmail: order.presaleGuest.email },
-      'sendPresaleConfirmationEmail: falha ao enviar email',
-    );
+    // O email do convidado NÃO vai para o log: é dado pessoal, e o
+    // `orderId` já basta para investigar (mesmo formato de
+    // pix-code-email.ts).
+    deps.log.warn({ err, orderId }, 'sendPresaleConfirmationEmail: falha ao enviar email');
 
     // Devolver `true` aqui mentiria para quem chama: nada foi enviado.
     return false;

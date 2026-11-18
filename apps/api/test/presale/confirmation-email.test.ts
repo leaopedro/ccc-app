@@ -1,6 +1,6 @@
 import { ensurePresaleSystemUser, prisma } from '@ccc/db';
 import { presaleOrderStatusUrl } from '@ccc/shared/presale';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../../src/env.js';
 import { signQrCode } from '../../src/lib/qr.js';
@@ -111,6 +111,33 @@ describe('sendPresaleConfirmationEmail', () => {
 
     expect(retried).toBe(true);
     expect(mailer.captured).toHaveLength(1);
+  });
+
+  // D (achado da revisão cruzada): o email do convidado é dado pessoal e não
+  // pode ir para o log. O arquivo irmão pix-code-email.ts já deixa só
+  // `orderId` na falha; este teste prova que confirmation-email.ts faz o
+  // mesmo, inspecionando os argumentos reais passados a `log.warn`.
+  it('log de falha do mailer não carrega o email do convidado', async () => {
+    const order = await seedOrder();
+    const warn = vi.fn();
+
+    const brokenMailer = {
+      send: () => Promise.reject(new Error('mailer fora do ar')),
+    };
+
+    const failed = await sendPresaleConfirmationEmail(order.id, {
+      mailer: brokenMailer as never,
+      env,
+      log: { warn, error: () => {} } as never,
+    });
+
+    expect(failed).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    const [logPayload] = warn.mock.calls[0]!;
+    const serialized = JSON.stringify(logPayload);
+    expect(serialized).not.toContain('comprador@exemplo.com');
+    expect(logPayload).not.toHaveProperty('guestEmail');
   });
 
   it('envia uma vez e marca confirmationEmailSentAt', async () => {

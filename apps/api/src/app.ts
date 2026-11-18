@@ -72,6 +72,7 @@ import { startNotificationDeliveryWorker } from './workers/notification-delivery
 import { startOrderExpiryWorker } from './workers/order-expiry.js';
 import { startPixReconcileWorker } from './workers/pix-reconcile.js';
 import { startPremiumTicketBackfillWorker } from './workers/premium-ticket-backfill.js';
+import { startPresaleEmailSweepWorker } from './workers/presale-email-sweep.js';
 import { startRetentionWorker } from './workers/retention.js';
 
 declare module 'fastify' {
@@ -248,6 +249,7 @@ export const buildApp = async (
       const pixReconcileWorker = startPixReconcileWorker({
         abacatepay: app.abacatepay,
         push: app.push,
+        mailer: app.mailer,
         env,
         log: app.log,
       });
@@ -255,6 +257,22 @@ export const buildApp = async (
         pixReconcileWorker.stop();
       });
     }
+
+    // Finding B (revisão cruzada do branch da pré-venda): o confirmation-
+    // email e o pix-code-email carimbam antes de enviar e soltam o carimbo
+    // se o mailer falhar, mas nada chamava a função de novo depois disso —
+    // o webhook devolve 200 e engole o erro, e o provedor nunca reentrega.
+    // Esta varredura é o "alguém chama de novo" que faltava. Não é gated
+    // por app.abacatepay porque a confirmação também cobre pedido pago no
+    // cartão (Stripe).
+    const presaleEmailSweepWorker = startPresaleEmailSweepWorker({
+      mailer: app.mailer,
+      env,
+      log: app.log,
+    });
+    app.addHook('onClose', () => {
+      presaleEmailSweepWorker.stop();
+    });
 
     // F8.12: hourly reconciliation sweep — feature-flagged off by default
     // (canon §F8.11). Registers only when GROWTH_PREMIUM_BILLING_ENABLED is

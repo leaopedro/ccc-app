@@ -96,12 +96,17 @@ export function TierCard({
         ) : null}
       </div>
 
+      {/* `mt-auto` (achado P5): o card é um flex column e o grid pai já
+          iguala a altura das duas colunas; sem isto o botão ficava logo
+          depois do preço e sobrava um vão vazio abaixo dele no card mais
+          curto (Basic). Com `mt-auto` o botão é empurrado para o fim do
+          card, ancorado embaixo nos dois. */}
       <button
         type="button"
         onClick={onSelect}
         disabled={disabled}
         aria-pressed={isSelected}
-        className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-auto inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSelected ? copy.selectedCta : copy.selectCta}
       </button>

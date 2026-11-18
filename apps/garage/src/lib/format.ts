@@ -7,3 +7,10 @@
 export function fmtCurrencyCents(cents: number, currency: string): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(cents / 100);
 }
+
+/** Formats a Pix deadline (`pixExpiresAt`) as a local HH:mm clock time. */
+export function fmtTime(iso: string): string {
+  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(iso),
+  );
+}

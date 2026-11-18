@@ -22,10 +22,24 @@
  * Nada de `quantitySold: { increment }`. O débito acontece na liquidação.
  * Reserva num POST anônimo deixaria qualquer um esgotar a campanha de graça,
  * e o rate limit não defende porque `trustProxy` está desligado
- * (`app.ts:99-103`). Como não há reserva, `Order.expiresAt` fica NULO: o
- * worker (`workers/order-expiry.ts:124`) filtra `expiresAt: { not: null }`,
- * então nulo o mantém fora e ninguém mata o pedido no meio do 3DS. Quem fecha
- * a janela é o `expires_at` da própria sessão.
+ * (`app.ts:99-103`). Como não há reserva, pedido de CARTÃO fica com
+ * `Order.expiresAt` NULO: o worker (`workers/order-expiry.ts:124`) filtra
+ * `expiresAt: { not: null }`, então nulo o mantém fora e ninguém mata o
+ * pedido no meio do 3DS. Quem fecha a janela é o `expires_at` da própria
+ * sessão. Pedido de PIX é diferente: não há redirecionamento de volta, o
+ * comprador só paga copiando o código no banco, então é `Order.expiresAt`
+ * quem marca o prazo do código — não existe coluna `pixExpiresAt` separada;
+ * a resposta pública deriva dela. Fica NULO na criação, igual ao cartão, e só
+ * vira `agora + 3600s` quando `ensurePixBilling` reivindica a tentativa de
+ * cobrança — ver o porquê lá: é compare-and-set, não carimbo de criação.
+ *
+ * O ramo Pix segue a mesma fronteira da transação acima (chamada ao
+ * AbacatePay fora dela, só o provedor dentro do `try`), mas a exclusão de
+ * clique duplo é outra: a Stripe resolve com `idempotencyKey`, o AbacatePay
+ * não tem esse conceito e recusa campo desconhecido em `/transparents/create`
+ * com 422 — então `ensurePixBilling` reivindica no banco ANTES de chamar o
+ * provedor (ver lá). `createPixBilling` nunca recebe `customer`: isso
+ * exigiria CPF, que esta pré-venda deliberadamente não coleta.
  */
 
 import { ensurePresaleSystemUser, prisma } from '@ccc/db';
@@ -43,9 +57,12 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import { isUniqueConstraintErrorOn } from '../../lib/prisma-errors.js';
 import { signQrCode } from '../../lib/qr.js';
+import type { AbacatePayClient } from '../abacatepay/index.js';
+import type { Mailer } from '../mailer/index.js';
 import type { StripeClient } from '../stripe/index.js';
 
 import { PRESALE_PRODUCT_WHERE } from './eligibility.js';
+import { sendPresalePixCodeEmail } from './pix-code-email.js';
 import { cepInRanges, computePresaleTotals } from './totals.js';
 
 /** Mínimo que a Stripe aceita cobrar em BRL: R$ 0,50. */
@@ -56,6 +73,10 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 
 /** Aparece no recibo e na página da Stripe. */
 const SESSION_PRODUCT_NAME = 'Casa In Box (pré-venda)';
+
+/** Prazo do código Pix: 3600s, gravado em `Order.expiresAt` na criação. */
+const PIX_TTL_SECONDS = 3600;
+const PIX_TTL_MS = PIX_TTL_SECONDS * 1000;
 
 export type PresaleCheckoutErrorCode =
   | 'PRESALE_DISABLED'
@@ -78,6 +99,12 @@ export type CreatePresaleOrderInput = PresaleCheckoutRequest & {
 
 export type CreatePresaleOrderDeps = {
   stripe: StripeClient;
+  // Nula quando ABACATEPAY_API_KEY/ABACATEPAY_WEBHOOK_SECRET não estão
+  // configuradas (ver app.ts). routes/presale.ts recusa com 503 antes de
+  // chamar createPresaleOrder com paymentMethod 'pix' nesse caso; o branch
+  // card nunca toca em deps.abacatepay.
+  abacatepay: AbacatePayClient | null;
+  mailer: Mailer;
   env: { TICKET_CODE_SECRET: string; GARAGE_WEB_BASE_URL: string };
   log: FastifyBaseLogger;
 };
@@ -85,11 +112,13 @@ export type CreatePresaleOrderDeps = {
 export type CreatePresaleOrderSuccess = {
   ok: true;
   orderId: string;
-  checkoutUrl: string;
   amountCents: number;
   shippingCents: number;
   currency: string;
-};
+} & (
+  | { paymentMethod: 'card'; checkoutUrl: string }
+  | { paymentMethod: 'pix'; brCode: string; pixExpiresAt: string; statusUrl: string }
+);
 
 export type CreatePresaleOrderFailure = {
   ok: false;
@@ -125,10 +154,41 @@ const normalizeItems = (
   return [...byVariant].map(([variantId, quantity]) => ({ variantId, quantity }));
 };
 
-const succeed = (order: Order, checkoutUrl: string): CreatePresaleOrderSuccess => ({
+const succeedCard = (order: Order, checkoutUrl: string): CreatePresaleOrderSuccess => ({
   ok: true,
   orderId: order.id,
+  paymentMethod: 'card',
   checkoutUrl,
+  amountCents: order.amountCents,
+  shippingCents: order.shippingCents,
+  currency: order.currency,
+});
+
+/**
+ * Mesmo par que `ensureCheckoutSession` já monta para o success_url da
+ * Stripe: `signQrCode('p', ...)` + `presaleOrderStatusUrl`, aqui reaproveitado
+ * para o `statusUrl` do ramo Pix. Um lugar só conhece rota e nome de
+ * parâmetro — nunca o cliente montando a querystring à mão (ver o cabeçalho
+ * de `ensureCheckoutSession`).
+ */
+const buildPresaleStatusUrl = (orderId: string, deps: CreatePresaleOrderDeps): string => {
+  const base = deps.env.GARAGE_WEB_BASE_URL.replace(/\/+$/, '');
+  const token = signQrCode('p', orderId, deps.env);
+  return presaleOrderStatusUrl(base, orderId, token);
+};
+
+const succeedPix = (
+  order: Order,
+  brCode: string,
+  pixExpiresAt: string,
+  deps: CreatePresaleOrderDeps,
+): CreatePresaleOrderSuccess => ({
+  ok: true,
+  orderId: order.id,
+  paymentMethod: 'pix',
+  brCode,
+  pixExpiresAt,
+  statusUrl: buildPresaleStatusUrl(order.id, deps),
   amountCents: order.amountCents,
   shippingCents: order.shippingCents,
   currency: order.currency,
@@ -161,7 +221,7 @@ const ensureCheckoutSession = async (
   deps: CreatePresaleOrderDeps,
   opts: { ownsStripeAttempt: boolean },
 ): Promise<CreatePresaleOrderResult> => {
-  if (order.checkoutUrl) return succeed(order, order.checkoutUrl);
+  if (order.checkoutUrl) return succeedCard(order, order.checkoutUrl);
 
   const base = deps.env.GARAGE_WEB_BASE_URL.replace(/\/+$/, '');
   // success_url e cancel_url são montadas AQUI, no servidor, nunca aceitas do
@@ -257,7 +317,200 @@ const ensureCheckoutSession = async (
     );
   }
 
-  return succeed(order, session.url);
+  return succeedCard(order, session.url);
+};
+
+/**
+ * Garante que o pedido tenha uma cobrança Pix no AbacatePay, e devolve o
+ * `brCode`. Mesma fronteira de transação de `ensureCheckoutSession` acima
+ * (chamada ao provedor FORA da transação, só ela dentro do `try`), mas a
+ * exclusão de clique duplo é outra: a Stripe resolve sozinha com
+ * `idempotencyKey: presale_checkout_<orderId>`; `AbacatePayClient.createPixBilling`
+ * NÃO tem chave de idempotência, e não dá para inventar uma — o próprio
+ * cliente recusa campo desconhecido em `/transparents/create` com 422. Sem o
+ * provedor para fechar isso por nós, a exclusão tem que ser NOSSA: uma
+ * reivindicação no banco, ANTES de chamar o provedor.
+ *
+ * A reivindicação é um compare-and-set em `Order.expiresAt`: fica NULO até o
+ * fluxo de Pix começar, e o fluxo de Pix precisa gravá-lo de qualquer jeito —
+ * é o prazo do código. Não é coluna nova nem sentinela inventada: é o campo
+ * que já significa "este pedido Pix começou". Quem vira `expiresAt` de nulo
+ * para `agora + PIX_TTL_SECONDS` é quem liga para o AbacatePay; quem perde a
+ * corrida NUNCA chama o provedor — relê o pedido e devolve o `brCode` se o
+ * vencedor já tiver terminado, ou o 502 retentável que o cliente já sabe
+ * tratar se o vencedor ainda estiver em voo. Isso também colapsa o conceito
+ * de "dona da tentativa" que o cartão precisa (`ownsStripeAttempt`): aqui a
+ * reivindicação de `expiresAt` já é a única fonte de verdade sobre quem pode
+ * chamar o provedor, então tanto quem criou o pedido quanto quem perdeu a
+ * corrida da unique de `clientRequestId` passam pela MESMA função sem
+ * parâmetro extra.
+ *
+ * Se quem reivindicou tiver o AbacatePay recusado, o `catch` solta a
+ * reivindicação (`expiresAt: null` junto com `status: 'failed'`) — senão
+ * `expiresAt` preenchido com `brCode` nulo bloquearia qualquer tentativa
+ * legítima depois para sempre (toda reivindicação futura bateria em
+ * `expiresAt: null` e nunca casaria).
+ */
+export const ensurePixBilling = async (
+  order: Order,
+  deps: CreatePresaleOrderDeps,
+): Promise<CreatePresaleOrderResult> => {
+  if (order.brCode) {
+    // Caminho idêmpotente (reload, clique duplo depois do brCode já gravado):
+    // tenta o email aqui também. O compare-and-set dentro de
+    // sendPresalePixCodeEmail garante no-máximo-uma-entrega mesmo com vários
+    // chamadores batendo neste ponto — ver o cabeçalho daquela função. Falha
+    // de envio é degradada, igual ao chamador original logo abaixo.
+    try {
+      await sendPresalePixCodeEmail(order.id, {
+        mailer: deps.mailer,
+        env: deps.env,
+        log: deps.log,
+      });
+    } catch (err) {
+      deps.log.warn(
+        { err, orderId: order.id },
+        '[presale-checkout] falha ao enviar email do código Pix (curto-circuito idempotente)',
+      );
+    }
+    return succeedPix(order, order.brCode, order.expiresAt!.toISOString(), deps);
+  }
+
+  const abacatepay = deps.abacatepay;
+  if (!abacatepay) {
+    // routes/presale.ts recusa com 503 antes de chamar createPresaleOrder com
+    // paymentMethod 'pix' quando o provedor não está configurado; chegar
+    // aqui sem ele é bug de outra camada, não resposta normal de negócio.
+    deps.log.error(
+      { orderId: order.id },
+      '[presale-checkout] ensurePixBilling chamado sem AbacatePay configurado',
+    );
+    return fail(
+      502,
+      'BadGateway',
+      'PRESALE_PROVIDER_ERROR',
+      'não foi possível iniciar o pagamento agora. Tente de novo em alguns instantes.',
+    );
+  }
+
+  const providerFailure = () =>
+    fail(
+      502,
+      'BadGateway',
+      'PRESALE_PROVIDER_ERROR',
+      'não foi possível iniciar o pagamento agora. Tente de novo em alguns instantes.',
+    );
+
+  // Reivindicação ANTES de chamar o provedor: só quem vira `expiresAt` de
+  // nulo para o prazo pode ligar para o AbacatePay. Ver o porquê no
+  // cabeçalho desta função — é o que falta aqui porque não há
+  // `idempotencyKey` para a Stripe resolver sozinha.
+  const claimedExpiresAt = new Date(Date.now() + PIX_TTL_MS);
+  const claim = await prisma.order.updateMany({
+    where: { id: order.id, status: 'pending', expiresAt: null },
+    data: { expiresAt: claimedExpiresAt },
+  });
+
+  if (claim.count === 0) {
+    // Perdeu a reivindicação: outra requisição está criando a cobrança AGORA
+    // (ou já terminou). NUNCA chama o provedor a partir daqui — é exatamente
+    // o buraco que a reivindicação existe para fechar.
+    const current = await prisma.order.findUnique({ where: { id: order.id } });
+    if (current?.brCode) {
+      // Perdeu a corrida de reivindicação e o vencedor já terminou: mesma
+      // tentativa de email do curto-circuito acima, pelo mesmo motivo — quem
+      // chega aqui é quem recarregou a página ou clicou pagar de novo.
+      try {
+        await sendPresalePixCodeEmail(current.id, {
+          mailer: deps.mailer,
+          env: deps.env,
+          log: deps.log,
+        });
+      } catch (err) {
+        deps.log.warn(
+          { err, orderId: current.id },
+          '[presale-checkout] falha ao enviar email do código Pix (perdeu a corrida)',
+        );
+      }
+      return succeedPix(current, current.brCode, current.expiresAt!.toISOString(), deps);
+    }
+    deps.log.warn(
+      { orderId: order.id },
+      '[presale-checkout] perdeu a reivindicação da cobrança Pix; vencedor ainda em voo ou falhou',
+    );
+    return providerFailure();
+  }
+
+  // O `try` cobre A CHAMADA DO ABACATEPAY e nada mais, pelo mesmo motivo do
+  // ramo da Stripe acima: englobar a escrita no banco fazia um erro de banco
+  // ser logado como "provedor recusou" e devolvido como 502, quando o
+  // provedor tinha aceitado e existia uma cobrança viva sem ninguém apontando
+  // para ela.
+  let billing;
+  try {
+    billing = await abacatepay.createPixBilling({
+      amountCents: order.amountCents,
+      description: SESSION_PRODUCT_NAME,
+      expiresInSeconds: PIX_TTL_SECONDS,
+      metadata: { orderId: order.id },
+      // Sem `customer`: exigiria CPF, que esta pré-venda não coleta.
+    });
+  } catch (err) {
+    deps.log.error({ err, orderId: order.id }, '[presale-checkout] AbacatePay recusou a cobrança');
+    try {
+      // Solta a reivindicação junto com o failed: sem `expiresAt: null` aqui,
+      // o pedido fica com o prazo preenchido e `brCode` nulo para sempre, e
+      // nenhuma reivindicação futura (nossa ou de uma irmã) encontraria
+      // `expiresAt: null` para casar.
+      await prisma.order.updateMany({
+        where: { id: order.id, status: 'pending', brCode: null },
+        data: { status: 'failed', failedAt: new Date(), expiresAt: null },
+      });
+    } catch (markErr) {
+      deps.log.error(
+        { err: markErr, orderId: order.id },
+        '[presale-checkout] erro do AbacatePay, e ainda falhou ao marcar o pedido como failed',
+      );
+    }
+    return providerFailure();
+  }
+
+  // AbacatePay aceitou. Daqui para baixo, falha é de BANCO, nunca de provedor.
+  const claimed = await prisma.order.updateMany({
+    where: { id: order.id, status: 'pending' },
+    data: { providerRef: billing.id, brCode: billing.brCode },
+  });
+  if (claimed.count === 0) {
+    deps.log.error(
+      { orderId: order.id, billingId: billing.id },
+      '[presale-checkout] cobrança criada para pedido que saiu de pending; brCode descartado',
+    );
+    return fail(
+      409,
+      'Conflict',
+      'PRESALE_REQUEST_STALE',
+      'esta tentativa de pagamento já foi encerrada. Tente de novo.',
+    );
+  }
+
+  // brCode gravado. Dispara o email do código agora, não depois: é o
+  // comprador sair desta tela para pagar no banco que faz a venda morrer se
+  // fechar a aba. Falha de envio é degradada — o comprador já tem o código
+  // na resposta do checkout — e não pode derrubar essa resposta.
+  try {
+    await sendPresalePixCodeEmail(order.id, {
+      mailer: deps.mailer,
+      env: deps.env,
+      log: deps.log,
+    });
+  } catch (err) {
+    deps.log.warn(
+      { err, orderId: order.id },
+      '[presale-checkout] falha ao enviar email do código Pix',
+    );
+  }
+
+  return succeedPix(order, billing.brCode, claimedExpiresAt.toISOString(), deps);
 };
 
 /** Resultado da transação: ou uma recusa já formatada, ou o pedido criado. */
@@ -430,13 +683,17 @@ export const createPresaleOrder = async (
           // pino sem mexer aqui vira cobrança de carrinho multimoeda somado
           // como se fosse um número só.
           currency: byId.get(priced[0]!.variantId)!.product.currency,
-          method: 'card',
-          provider: 'stripe',
+          method: input.paymentMethod === 'pix' ? 'pix' : 'card',
+          provider: input.paymentMethod === 'pix' ? 'abacatepay' : 'stripe',
           status: 'pending',
           quantity: priced.reduce((sum, item) => sum + item.quantity, 0),
           shippingCents: totals.shippingCents,
           fulfillmentMethod: input.fulfillmentMethod,
-          // Sem reserva, expirar não libera nada — ver o cabeçalho do arquivo.
+          // Sempre NULO na criação, cartão e Pix igual — ver o cabeçalho do
+          // arquivo. Pix grava o prazo depois, em `ensurePixBilling`: lá é
+          // reivindicação (compare-and-set), não carimbo de criação, porque
+          // o AbacatePay não tem chave de idempotência para fechar o clique
+          // duplo sozinho como a Stripe fecha.
           expiresAt: null,
           items: {
             create: priced.map((item) => ({
@@ -519,8 +776,12 @@ export const createPresaleOrder = async (
     }
     // Perdeu a corrida da unique: NÃO é dona da tentativa de pagamento do
     // pedido que encontrou. Ver o cabeçalho de ensureCheckoutSession.
-    return ensureCheckoutSession(existing, deps, { ownsStripeAttempt: false });
+    return existing.method === 'pix'
+      ? ensurePixBilling(existing, deps)
+      : ensureCheckoutSession(existing, deps, { ownsStripeAttempt: false });
   }
 
-  return ensureCheckoutSession(created, deps, { ownsStripeAttempt: true });
+  return created.method === 'pix'
+    ? ensurePixBilling(created, deps)
+    : ensureCheckoutSession(created, deps, { ownsStripeAttempt: true });
 };

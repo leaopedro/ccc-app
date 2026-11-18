@@ -85,12 +85,14 @@ export const PresaleSettingsClient = ({ settings }: { settings: AdminPresaleSett
         />
       </label>
       <label className={labelCls}>
-        Descricao do primeiro lote
+        Descricao do primeiro lote (so o valor; a pagina ja escreve &quot;Primeiro lote: &quot; na
+        frente — nao repita esse prefixo aqui)
         <input
           name="firstBatchLabel"
           maxLength={140}
           defaultValue={settings.firstBatchLabel ?? ''}
           className={inputCls}
+          placeholder="ex: 15 de dezembro"
         />
       </label>
       <div className="flex items-center gap-3">

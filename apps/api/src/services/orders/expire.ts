@@ -38,8 +38,38 @@ export const releaseAllReservationsForOrders = async (
 ): Promise<void> => {
   if (orderIds.length === 0) return;
 
+  // Pre-venda Casa In Box (`Order.origin === 'casa_in_box'`) never reserves
+  // stock at checkout — the debit only happens at settlement
+  // (services/orders/settle.ts: debitPresaleStock; see the header of
+  // services/presale/checkout.ts for why). This branch started writing
+  // `Order.expiresAt` for the pre-sale Pix window, which is what first let
+  // these orders be seen by order-expiry.ts at all — `expiresAt: null` used
+  // to keep the entire pre-sale out of that worker's `not: null` filter.
+  // Without this exclusion, the `updateMany` guarded by
+  // `quantitySold: { gte: qty }` below either throws (variant stock sold by
+  // OTHER real orders is too low to cover a reservation this order never
+  // made, rolling back the whole transaction INCLUDING the flip to
+  // `expired`) or silently decrements stock that belongs to someone else's
+  // paid order. `origin` is, today, the only column that carries "this
+  // order reserved nothing" — same reasoning as the `origin`-only check in
+  // workers/pix-reconcile.ts (point 4 of its header comment). Checked alone,
+  // not combined with `kind`, on purpose: an ordinary store product order
+  // shares `kind: 'product'` but a different `origin`, and DID reserve
+  // stock via the cart, so it must still go through the release below.
+  // Anyone adding a new origin that also does not reserve stock must revisit
+  // this filter.
+  const origins = await tx.order.findMany({
+    where: { id: { in: orderIds } },
+    select: { id: true, origin: true },
+  });
+  const releasableOrderIds = origins
+    .filter((order) => order.origin !== 'casa_in_box')
+    .map((order) => order.id);
+
+  if (releasableOrderIds.length === 0) return;
+
   const items = await tx.orderItem.findMany({
-    where: { orderId: { in: orderIds } },
+    where: { orderId: { in: releasableOrderIds } },
     select: {
       orderId: true,
       kind: true,
@@ -51,7 +81,7 @@ export const releaseAllReservationsForOrders = async (
   });
 
   const orderIdsWithItems = new Set(items.map((i) => i.orderId));
-  const legacyOrderIds = orderIds.filter((id) => !orderIdsWithItems.has(id));
+  const legacyOrderIds = releasableOrderIds.filter((id) => !orderIdsWithItems.has(id));
   const legacyOrders =
     legacyOrderIds.length > 0
       ? await tx.order.findMany({
@@ -102,7 +132,7 @@ export const releaseAllReservationsForOrders = async (
   }
 
   const orderExtras = await tx.orderExtra.findMany({
-    where: { orderId: { in: orderIds } },
+    where: { orderId: { in: releasableOrderIds } },
     select: { extraId: true, quantity: true },
   });
   const extraReleases = new Map<string, number>();

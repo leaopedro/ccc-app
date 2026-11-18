@@ -104,9 +104,10 @@ const envSchema = z.object({
   STRIPE_BILLING_WEBHOOK_SECRET: z.string().min(1).optional(),
   REVENUECAT_WEBHOOK_AUTH_HEADER: z.string().min(1).optional(),
   REVENUECAT_REST_API_KEY: z.string().min(1).optional(),
-  // Queue-depth alarm threshold for BOTH reconciliation sweeps
-  // (workers/billing-reconcile.ts and workers/pix-reconcile.ts). Both cap their
-  // window at QUERY_LIMIT = 200.
+  // Queue-depth alarm threshold shared by the reconciliation/sweep workers
+  // (workers/billing-reconcile.ts, workers/pix-reconcile.ts, and
+  // workers/presale-email-sweep.ts). All three cap their window at
+  // QUERY_LIMIT = 200.
   //
   // Default 150, not 200 (fix round 2, CRITICAL). At 200 the threshold equalled
   // the query limit, so the alarm could only fire once the window was ALREADY

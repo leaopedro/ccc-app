@@ -224,4 +224,58 @@ describe('runOrderExpiryTick', () => {
     const afterNext = await prisma.order.findUniqueOrThrow({ where: { id: next.id } });
     expect(afterNext.status).toBe('expired');
   });
+
+  // Regressao do fix de pre-venda (services/orders/expire.ts): o novo filtro
+  // por `origin` so pode EXCLUIR pedido de pre-venda Casa In Box da
+  // liberacao. Um pedido de carrinho comum (`origin: 'app'`, default) tem
+  // que continuar lancando quando a liberacao falha, e a transacao do tick
+  // tem que continuar dando rollback por inteiro — o pedido fica `pending`,
+  // nao `expired`, exatamente como antes deste fix.
+  it('pedido de carrinho com reserva insuficiente continua lancando e nao expira (regressao)', async () => {
+    const { user } = await createUser({ verified: true });
+    const stripe = buildFakeStripe();
+    const { variant } = await seedActiveProduct(10);
+
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        kind: 'product',
+        amountCents: 9000 * 3,
+        baseAmountCents: 9000 * 3,
+        method: 'card',
+        provider: 'stripe',
+        providerRef: 'pi_insuficiente',
+        status: 'pending',
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+    await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        kind: 'product',
+        variantId: variant.id,
+        quantity: 3,
+        unitPriceCents: 9000,
+        subtotalCents: 9000 * 3,
+      },
+    });
+    // Reserva real do pedido seria 3, mas so 1 foi de fato incrementado —
+    // simula drift/corrupcao previa, o guard tem que lancar.
+    await prisma.variant.update({
+      where: { id: variant.id },
+      data: { quantitySold: { increment: 1 } },
+    });
+
+    const result = await runOrderExpiryTick({ stripe });
+
+    // O erro e capturado por tick (nao derruba a varredura), mas este pedido
+    // especifico nao pode contar como expirado.
+    expect(result.expired).toBe(0);
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('pending'); // rollback: flip para expired tambem desfeito
+
+    const afterVariant = await prisma.variant.findUniqueOrThrow({ where: { id: variant.id } });
+    expect(afterVariant.quantitySold).toBe(1); // nada decrementado
+  });
 });

@@ -20,6 +20,7 @@ const validCampaign = {
 const validCheckoutInput = {
   expectedTotalCents: 29990,
   fulfillmentMethod: 'pickup' as const,
+  paymentMethod: 'card' as const,
   items: [{ variantId: 'variant_1', quantity: 1 }],
   guest: { name: 'Fulano', email: 'fulano@example.com' },
   acceptedTermsVersion: 'v1',
@@ -28,6 +29,7 @@ const validCheckoutInput = {
 
 const validCheckoutResponse = {
   orderId: 'order_1',
+  paymentMethod: 'card' as const,
   checkoutUrl: 'https://checkout.stripe.com/pay/cs_test_1',
   amountCents: 29990,
   shippingCents: 0,
@@ -138,7 +140,7 @@ describe('startPresaleCheckout', () => {
     expect((body.clientRequestId as string).length).toBeGreaterThan(0);
   });
 
-  it('generates a fresh clientRequestId on each call (not persisted/reused)', async () => {
+  it('derives the same clientRequestId for the same selection submitted twice (Finding F)', async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify(validCheckoutResponse), {
@@ -149,6 +151,64 @@ describe('startPresaleCheckout', () => {
     );
     await startPresaleCheckout(validCheckoutInput);
     await startPresaleCheckout(validCheckoutInput);
+
+    const firstBody = JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string) as {
+      clientRequestId: string;
+    };
+    const secondBody = JSON.parse(fetchSpy.mock.calls[1]?.[1]?.body as string) as {
+      clientRequestId: string;
+    };
+    expect(firstBody.clientRequestId).toBe(secondBody.clientRequestId);
+    expect(firstBody.clientRequestId.length).toBeLessThanOrEqual(64);
+  });
+
+  it('mints a different clientRequestId when the tier/size (variantId) changes', async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(validCheckoutResponse), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    await startPresaleCheckout(validCheckoutInput);
+    await startPresaleCheckout({
+      ...validCheckoutInput,
+      items: [{ variantId: 'variant_2', quantity: 1 }],
+    });
+
+    const firstBody = JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string) as {
+      clientRequestId: string;
+    };
+    const secondBody = JSON.parse(fetchSpy.mock.calls[1]?.[1]?.body as string) as {
+      clientRequestId: string;
+    };
+    expect(firstBody.clientRequestId).not.toBe(secondBody.clientRequestId);
+  });
+
+  it('mints a different clientRequestId when the fulfillment method changes', async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(validCheckoutResponse), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    await startPresaleCheckout(validCheckoutInput);
+    await startPresaleCheckout({
+      ...validCheckoutInput,
+      fulfillmentMethod: 'ship',
+      delivery: {
+        recipientName: 'Fulano',
+        line1: 'Rua A',
+        number: '123',
+        district: 'Centro',
+        city: 'São Paulo',
+        stateCode: 'SP',
+        postalCode: '01001-000',
+      },
+    });
 
     const firstBody = JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string) as {
       clientRequestId: string;

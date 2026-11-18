@@ -5,7 +5,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
-import { settlePaidOrder } from '../services/orders/settle.js';
+import { creditPresaleStockOnRefund, settlePaidOrder } from '../services/orders/settle.js';
 import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
@@ -646,6 +646,17 @@ export const stripeWebhookRoutes: FastifyPluginAsync = async (app) => {
         });
         await markProcessed(event.id, event);
         return reply.status(200).send({ ok: true, ignored: true, reason: 'partial-refund' });
+      }
+
+      // E (achado da revisão cruzada): devolve ao lote o estoque que
+      // debitPresaleStock (services/orders/settle.ts) debitou na liquidação,
+      // SÓ para pedido `origin: 'casa_in_box'` ainda `paid` — creditPresaleStockOnRefund
+      // filtra por isso e flipa o status sozinha, com o mesmo `updateMany`
+      // contado que guarda contra dupla devolução. Chamado ANTES do
+      // updateMany em massa abaixo: depois dele o pedido já está `refunded` e
+      // o `where: { status: 'paid' }` interno não casaria mais nada.
+      for (const id of affectedIds) {
+        await prisma.$transaction((tx) => creditPresaleStockOnRefund(tx, id));
       }
 
       await prisma.order.updateMany({

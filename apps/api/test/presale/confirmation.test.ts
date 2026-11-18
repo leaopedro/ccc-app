@@ -8,7 +8,7 @@ import { loadEnv } from '../../src/env.js';
 import { signQrCode } from '../../src/lib/qr.js';
 import type { FakeStripe } from '../../src/services/stripe/fake.js';
 import type { WebhookEvent } from '../../src/services/stripe/index.js';
-import { makeAppWithFakeStripe, resetDatabase } from '../helpers.js';
+import { makeAppWithFakes, resetDatabase } from '../helpers.js';
 
 import { createPresaleProduct, setPresaleSettings } from './fixtures.js';
 import type { DevMailer } from '../../src/services/mailer/dev.js';
@@ -48,7 +48,7 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
       deliveryCepRanges: CEP_RANGES,
     });
 
-    ({ app, stripe } = await makeAppWithFakeStripe());
+    ({ app, stripe } = await makeAppWithFakes());
   });
 
   afterEach(async () => {
@@ -121,6 +121,37 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
       throw new Error(`checkout de pre-venda falhou: ${res.statusCode} ${res.body}`);
     }
     return { orderId: (res.json() as { orderId: string }).orderId, variantId };
+  };
+
+  const seedPresalePixOrder = async (opts: { quantity?: number; priceCents?: number } = {}) => {
+    const quantity = opts.quantity ?? 2;
+    const priceCents = opts.priceCents ?? 9900;
+    const product = await createPresaleProduct(
+      { allowPickup: true, allowShip: true },
+      { variants: [{ priceCents, quantityTotal: 10 }] },
+    );
+    const variantId = product.variants[0]!.id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: CHECKOUT_URL,
+      payload: {
+        clientRequestId: `req-pix-${++counter}-${Math.random().toString(36).slice(2, 10)}`,
+        expectedTotalCents: priceCents * quantity,
+        fulfillmentMethod: 'pickup',
+        paymentMethod: 'pix',
+        items: [{ variantId, quantity }],
+        guest: { name: 'Comprador Teste', email: 'comprador@exemplo.com' },
+        acceptedTermsVersion: 'terms-2026-01-01',
+        acceptedPrivacyVersion: PRIVACY_POLICY_VERSION,
+      },
+    });
+
+    if (res.statusCode !== 201) {
+      throw new Error(`checkout pix de pre-venda falhou: ${res.statusCode} ${res.body}`);
+    }
+    const body = res.json() as { orderId: string; brCode: string; pixExpiresAt: string };
+    return { orderId: body.orderId, brCode: body.brCode, pixExpiresAt: body.pixExpiresAt };
   };
 
   const postStatus = (body: { orderId: string; token: string }) =>
@@ -234,6 +265,54 @@ describe('email de confirmacao e rota de status da pre-venda', () => {
     const body = presaleOrderStatusResponseSchema.parse(res.json());
     expect(body.fulfillmentMethod).toBe('pickup');
     expect(body.delivery).toBeNull();
+  });
+
+  it('status de pedido pix devolve brCode e pixExpiresAt', async () => {
+    const { orderId, brCode, pixExpiresAt } = await seedPresalePixOrder();
+    const token = signQrCode('p', orderId, env);
+
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(res.json());
+    expect(body.brCode).toBe(brCode);
+    expect(body.pixExpiresAt).toBe(pixExpiresAt);
+  });
+
+  it('status de pedido de cartão devolve os dois nulos', async () => {
+    const { orderId } = await seedPresaleOrder({ quantity: 2 });
+    const token = signQrCode('p', orderId, env);
+
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(res.json());
+    expect(body.brCode).toBeNull();
+    expect(body.pixExpiresAt).toBeNull();
+  });
+
+  it('pix com prazo vencido e pedido ainda pending continua pending na resposta (C2)', async () => {
+    const { orderId } = await seedPresalePixOrder();
+
+    // workers/order-expiry.ts exclui origin: 'casa_in_box' da propria query
+    // (C2): um pedido de pre-venda nunca vira 'expired' no banco, entao o
+    // prazo vencido (delta relativo ao agora do teste, nunca um carimbo
+    // fixo) tem que deixar o pedido 'pending' tanto no banco quanto na
+    // resposta. Reportar 'expired' aqui convidaria quem ja pagou a comprar
+    // de novo (achado C2, item b).
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    expect(await statusOf(orderId)).toBe('pending');
+
+    const token = signQrCode('p', orderId, env);
+    const res = await postStatus({ orderId, token });
+
+    expect(res.statusCode).toBe(200);
+    const body = presaleOrderStatusResponseSchema.parse(res.json());
+    expect(body.status).toBe('pending');
+    expect(await statusOf(orderId)).toBe('pending');
   });
 
   it('a resposta traz currency, items[].title e items[].unitPriceCents do contrato', async () => {

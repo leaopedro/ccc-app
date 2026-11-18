@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { PRESALE_MAX_QTY_PER_VARIANT, presaleCheckoutRequestSchema } from '../presale.js';
+import {
+  PRESALE_MAX_QTY_PER_VARIANT,
+  presaleCheckoutRequestSchema,
+  presaleCheckoutResponseSchema,
+  presaleOrderStatusResponseSchema,
+} from '../presale.js';
 
 const validDelivery = {
   recipientName: 'Maria Silva',
@@ -132,5 +137,116 @@ describe('presaleCheckoutRequestSchema', () => {
     expect(
       presaleCheckoutRequestSchema.safeParse(req({ fulfillmentMethod: 'courier' })).success,
     ).toBe(false);
+  });
+
+  it('paymentMethod default é card quando omitido', () => {
+    expect(presaleCheckoutRequestSchema.parse(req({})).paymentMethod).toBe('card');
+  });
+
+  it('aceita paymentMethod pix explícito', () => {
+    expect(presaleCheckoutRequestSchema.parse(req({ paymentMethod: 'pix' })).paymentMethod).toBe(
+      'pix',
+    );
+  });
+
+  it('recusa paymentMethod desconhecido', () => {
+    expect(presaleCheckoutRequestSchema.safeParse(req({ paymentMethod: 'boleto' })).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('presaleCheckoutResponseSchema', () => {
+  const baseFields = {
+    orderId: 'order_1',
+    amountCents: 10_000,
+    shippingCents: 0,
+    currency: 'BRL',
+  };
+
+  it('resposta de cartão exige checkoutUrl e recusa brCode', () => {
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'card',
+        checkoutUrl: 'https://checkout.stripe.com/abc',
+      }).success,
+    ).toBe(true);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'card',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'card',
+        checkoutUrl: 'https://checkout.stripe.com/abc',
+        brCode: '000201br.code',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('resposta de pix exige brCode, pixExpiresAt e statusUrl, e recusa checkoutUrl', () => {
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'pix',
+        brCode: '000201br.code',
+        pixExpiresAt: new Date().toISOString(),
+        statusUrl: 'https://casacar.club/presale/status?orderId=order_1&t=abc',
+      }).success,
+    ).toBe(true);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'pix',
+        brCode: '000201br.code',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'pix',
+        brCode: '000201br.code',
+        pixExpiresAt: new Date().toISOString(),
+        statusUrl: 'https://casacar.club/presale/status?orderId=order_1&t=abc',
+        checkoutUrl: 'https://checkout.stripe.com/abc',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      presaleCheckoutResponseSchema.safeParse({
+        ...baseFields,
+        paymentMethod: 'pix',
+        brCode: '000201br.code',
+        pixExpiresAt: new Date().toISOString(),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('presaleOrderStatusResponseSchema', () => {
+  it('status devolve brCode e pixExpiresAt nulos em pedido de cartão', () => {
+    const parsed = presaleOrderStatusResponseSchema.parse({
+      orderId: 'order_1',
+      status: 'paid',
+      fulfillmentMethod: 'pickup',
+      amountCents: 10_000,
+      shippingCents: 0,
+      currency: 'BRL',
+      items: [],
+      delivery: null,
+      brCode: null,
+      pixExpiresAt: null,
+    });
+
+    expect(parsed.brCode).toBeNull();
+    expect(parsed.pixExpiresAt).toBeNull();
   });
 });

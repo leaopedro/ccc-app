@@ -4,16 +4,17 @@ import { PRIVACY_POLICY_VERSION } from '@ccc/shared/legal';
 import type {
   PresaleCampaign,
   PresaleFulfillmentMethod,
+  PresalePaymentMethod,
   PresaleProduct,
 } from '@ccc/shared/presale';
 import { BRAZIL_STATE_CODES } from '@ccc/shared/profile';
 import { TERMS_VERSION } from '@ccc/shared/terms';
 import { useState } from 'react';
 
-import { Faq } from './Faq';
 import { TierCard } from './TierCard';
 import {
   buildCheckoutPayload,
+  checkoutRedirectUrl,
   computeExpectedTotalCents,
   isFulfillmentSupported,
   resolveCheckoutError,
@@ -57,9 +58,14 @@ type SubmitState =
 /**
  * O componente cliente que carrega seleção e checkout (Task 14). Orquestra
  * as seções 3 a 7 da página: cards de tier, recebimento (com o checkbox de
- * consentimento do adendo), FAQ e o botão de pagar. Mantém a lógica de
- * seleção em funções puras (./selection.ts) — este arquivo só segura estado
- * e efeitos de borda (fetch, redirect).
+ * consentimento do adendo) e o botão de pagar. Mantém a lógica de seleção em
+ * funções puras (./selection.ts) — este arquivo só segura estado e efeitos
+ * de borda (fetch, redirect).
+ *
+ * O FAQ (achado P1) saiu daqui: o comprador não pode mais ser interrompido
+ * por um bloco editorial entre o consentimento e o pagamento. Quem renderiza
+ * o FAQ agora é a página (app/casa-in-box/page.tsx), depois deste componente
+ * — ou seja, depois do botão de pagar.
  */
 export function CasaInBoxCheckout({ campaign, products }: Props) {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(
@@ -69,6 +75,9 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
     products[0]?.variants[0]?.id ?? null,
   );
   const [fulfillmentMethod, setFulfillmentMethod] = useState<PresaleFulfillmentMethod>('pickup');
+  // Cartão continua pré-selecionado: quem não mexe no seletor mantém o
+  // comportamento de hoje (CLAUDE.md "não mexer no caminho de cartão").
+  const [paymentMethod, setPaymentMethod] = useState<PresalePaymentMethod>('card');
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
@@ -129,6 +138,7 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
     const payload = buildCheckoutPayload({
       variantId: selectedVariant.id,
       fulfillmentMethod,
+      paymentMethod,
       expectedTotalCents,
       guest: {
         name: guestName.trim(),
@@ -154,7 +164,7 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
 
     startPresaleCheckout(payload)
       .then((res) => {
-        window.location.href = res.checkoutUrl;
+        window.location.href = checkoutRedirectUrl(res);
       })
       .catch((err: unknown) => {
         setSubmitState({ phase: 'error', copy: resolveCheckoutError(err) });
@@ -310,12 +320,18 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
           </div>
         </div>
 
-        <label className="flex items-start gap-3 text-sm text-fg-secondary">
+        {/* Achado P6: era o checkbox cru do navegador, pequeno e sem
+            estilo, no controle que carrega o peso legal da página e
+            destrava o botão de pagar. Estilo e área de clique maiores
+            (padding + borda do cartão); comportamento intocado — continua
+            desmarcado por padrão e continua sendo o único dono de
+            `consentAccepted`. */}
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface p-4 text-sm text-fg-secondary">
           <input
             type="checkbox"
             checked={consentAccepted}
             onChange={(e) => setConsentAccepted(e.target.checked)}
-            className="mt-1"
+            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-accent"
           />
           <span>
             {presaleCopy.consent.prefix}
@@ -330,7 +346,35 @@ export function CasaInBoxCheckout({ campaign, products }: Props) {
           </span>
         </label>
 
-        <Faq campaign={campaign} />
+        <div className="flex flex-col gap-4">
+          <h2 className="text-xl font-semibold text-fg">{presaleCopy.paymentMethod.title}</h2>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('card')}
+              aria-pressed={paymentMethod === 'card'}
+              className={`rounded-full border px-5 py-2 text-sm font-semibold ${
+                paymentMethod === 'card'
+                  ? 'border-accent bg-accent text-bg'
+                  : 'border-border text-fg-secondary'
+              }`}
+            >
+              {presaleCopy.paymentMethod.card}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('pix')}
+              aria-pressed={paymentMethod === 'pix'}
+              className={`rounded-full border px-5 py-2 text-sm font-semibold ${
+                paymentMethod === 'pix'
+                  ? 'border-accent bg-accent text-bg'
+                  : 'border-border text-fg-secondary'
+              }`}
+            >
+              {presaleCopy.paymentMethod.pix}
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-3">
           <p className="text-lg font-semibold text-fg">

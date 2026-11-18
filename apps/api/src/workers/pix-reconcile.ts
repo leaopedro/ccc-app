@@ -40,12 +40,29 @@
  *          checkout by that customer failed with CART_ALREADY_CHECKING_OUT,
  *          silently and forever.
  *        - standalone order -> `settlePaidOrder` and the per-order push.
- *   4. PAID + order already `expired` locally: order-expiry already RELEASED
- *      THE STOCK for this row. Settling now would oversell (same class of
- *      bug flagged in the Stripe cart path). Refunding is not possible —
- *      AbacatePayClient exposes no refund call. The only honest move is a
- *      loud, deduplicated Sentry alert for manual handling; the order is
- *      left `expired` and untouched.
+ *   4. PAID + order already `expired` locally: this is unsafe to settle
+ *      because the cart path reserves stock at checkout
+ *      (services/cart/checkout.ts increments `Variant.quantitySold` up
+ *      front) and order-expiry.ts RELEASES that reservation the moment it
+ *      flips the row to `expired`. Settling such a row late would resell
+ *      stock already returned to the shelf — same class of bug flagged in
+ *      the Stripe cart path. Refunding is not possible — AbacatePayClient
+ *      exposes no refund call — so the only honest move is a loud,
+ *      deduplicated Sentry alert for manual handling, leaving the order
+ *      `expired` and untouched.
+ *
+ *      This used to carry an exception for the pré-venda Casa In Box order
+ *      (`Order.origin === 'casa_in_box'`), which reserves nothing at
+ *      checkout and so could not be oversold by a late settle — this worker
+ *      reclaimed that one `origin` back to `pending` here and fell through
+ *      to settle it. That reclaim is gone: workers/order-expiry.ts now
+ *      excludes `origin: 'casa_in_box'` from its query entirely (see its
+ *      header), so that origin never becomes `expired` locally in the first
+ *      place — it just stays `pending` until a webhook or this sweep settles
+ *      it, same as every other row in the `pending` branch above. A pré-venda
+ *      guest has no account — no `userId`, so push is impossible — and gets
+ *      the confirmation email instead (sendPresaleConfirmationEmail), via
+ *      `notifyRecoveredOrder` below.
  *
  * A row error never crashes the tick.
  */
@@ -58,15 +75,18 @@ import cron from 'node-cron';
 import type { Env } from '../env.js';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacatePayClient } from '../services/abacatepay/index.js';
+import type { Mailer } from '../services/mailer/index.js';
 import { ORDER_EXPIRY_MS } from '../services/orders/expire.js';
 import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
 import { settlePaidOrder, type SettledOrderResult } from '../services/orders/settle.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import type { PushSender } from '../services/push/types.js';
 
 export type PixReconcileTickDeps = {
   abacatepay: AbacatePayClient;
   push: PushSender;
+  mailer: Mailer;
   env: Env;
   alertDepth: number;
   now?: Date;
@@ -84,6 +104,21 @@ const QUERY_LIMIT = 200;
  * constant, so the two stay proportional if the order TTL ever changes.
  */
 const GRACE_MS = ORDER_EXPIRY_MS / 5;
+
+/**
+ * `deps.log` is optional on this worker (kept that way for every existing
+ * caller/test), but `sendPresaleConfirmationEmail` calls `deps.log.error`/
+ * `.warn` directly with no optional chaining. Falls back to a silent logger
+ * rather than widening `log` to required across this whole file.
+ */
+const silentLog = {
+  error: () => undefined,
+  warn: () => undefined,
+  info: () => undefined,
+  debug: () => undefined,
+  trace: () => undefined,
+  fatal: () => undefined,
+} as unknown as FastifyBaseLogger;
 
 /**
  * Upper bound on how far back the sweep looks (fix round 2, CRITICAL).
@@ -208,13 +243,25 @@ const notifyRecoveredCart = async (
   }
 };
 
-/** Same `ticket.confirmed` push the webhook's single-order branch sends. */
+/**
+ * Same `ticket.confirmed` push the webhook's single-order branch sends — OR,
+ * for a recovered pré-venda Casa In Box order, the same confirmation email
+ * the webhook sends (sendPresaleConfirmationEmail). A pré-venda guest has no
+ * account: no `userId` exists, so a push is impossible by construction. Any
+ * other `kind`/`origin` combination gets neither — unchanged from before.
+ */
 const notifyRecoveredOrder = async (
   orderId: string,
   settled: SettledOrderResult,
   push: PushSender,
+  mailer: Mailer,
+  env: Env,
   log?: FastifyBaseLogger,
 ): Promise<void> => {
+  if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+    await sendPresaleConfirmationEmail(orderId, { mailer, env, log: log ?? silentLog });
+    return;
+  }
   if (settled.kind !== 'ticket' && settled.kind !== 'extras_only') return;
   try {
     await sendTransactionalPush(
@@ -270,7 +317,13 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
     },
     orderBy: { createdAt: 'asc' },
     take: QUERY_LIMIT,
-    select: { id: true, providerRef: true, cartId: true, status: true, amountCents: true },
+    select: {
+      id: true,
+      providerRef: true,
+      cartId: true,
+      status: true,
+      amountCents: true,
+    },
   });
 
   // Saturation alarm. `alertDepth` MUST stay strictly below QUERY_LIMIT
@@ -348,6 +401,19 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
       if (upstream.status !== 'PAID') continue;
 
       if (row.status === 'expired') {
+        // Settling an expired row is only dangerous for the REASON order-
+        // expiry.ts is dangerous to skip: it already released a stock
+        // reservation made at checkout, and settling now would resell it.
+        // The pré-venda Casa In Box order used to be the one exception —
+        // `origin === 'casa_in_box'` reserves nothing at checkout, so this
+        // branch used to reclaim it back to `pending` and fall through to
+        // settle. That reclaim is now dead: workers/order-expiry.ts excludes
+        // `origin: 'casa_in_box'` from its own query (C2 fix), so that origin
+        // can no longer reach this worker with `status: 'expired'` at all —
+        // it stays `pending` until settled, same as every other stale row
+        // below. Every row that DOES arrive here `expired` reserved stock via
+        // the cart and release already happened, so the only honest move is
+        // the alert.
         await flagExpiredButPaid(row, providerRef, log);
         continue;
       }
@@ -395,7 +461,7 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
         'pix-reconcile: settled a Pix the webhook never delivered',
       );
 
-      await notifyRecoveredOrder(row.id, settled, deps.push, log);
+      await notifyRecoveredOrder(row.id, settled, deps.push, deps.mailer, deps.env, log);
     } catch (err) {
       Sentry.captureException(err, {
         extra: { orderId: row.id, providerRef, worker: 'pix-reconcile' },
@@ -412,6 +478,7 @@ export const runPixReconcileTick = async (deps: PixReconcileTickDeps): Promise<v
 export const startPixReconcileWorker = (deps: {
   abacatepay: AbacatePayClient;
   push: PushSender;
+  mailer: Mailer;
   env: Env;
   log: FastifyBaseLogger;
 }): { stop: () => void } => {
@@ -423,6 +490,7 @@ export const startPixReconcileWorker = (deps: {
     void runPixReconcileTick({
       abacatepay: deps.abacatepay,
       push: deps.push,
+      mailer: deps.mailer,
       env: deps.env,
       alertDepth: deps.env.RECONCILE_ALERT_DEPTH,
       log: deps.log,

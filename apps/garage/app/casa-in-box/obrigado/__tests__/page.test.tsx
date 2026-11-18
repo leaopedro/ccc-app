@@ -8,6 +8,9 @@ import {
 } from '../../../../src/components/presale/OrderStatusView';
 
 import { presaleCopy } from '~/copy/presale';
+import { fmtTime } from '~/lib/format';
+
+const now = new Date();
 
 const shipOrder: PresaleOrderStatusResponse = {
   orderId: 'order_1',
@@ -26,6 +29,9 @@ const shipOrder: PresaleOrderStatusResponse = {
     stateCode: 'SP',
     postalCode: '01000-000',
   },
+  // Card order: both null (Task 6's shape — null for anything that isn't Pix).
+  brCode: null,
+  pixExpiresAt: null,
 };
 
 const pickupOrder: PresaleOrderStatusResponse = {
@@ -34,23 +40,37 @@ const pickupOrder: PresaleOrderStatusResponse = {
   delivery: null,
 };
 
+// Still pending, deadline is in the future relative to `now` — never a fixed
+// timestamp, so this fixture never ages out.
+const pixPendingOrder: PresaleOrderStatusResponse = {
+  ...shipOrder,
+  brCode: '00020126580014br.gov.bcb.pix0136abc-pix-code-5204000053039865802BR',
+  pixExpiresAt: new Date(now.getTime() + 5 * 60 * 1000).toISOString(),
+};
+
 describe('OrderStatusView', () => {
   it.each<OrderDisplayStatus>(['pending', 'paid', 'refunded', 'failed'])(
     'cobre o estado %s com a copy daquele estado',
     (status) => {
-      const html = renderToStaticMarkup(<OrderStatusView status={status} order={shipOrder} />);
+      const html = renderToStaticMarkup(
+        <OrderStatusView status={status} order={shipOrder} now={now} />,
+      );
       expect(html).toContain(presaleCopy.orderStatus[status].title);
       expect(html).not.toContain('undefined');
     },
   );
 
   it('pending avisa que a confirmação pode levar instantes', () => {
-    const html = renderToStaticMarkup(<OrderStatusView status="pending" order={shipOrder} />);
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="pending" order={shipOrder} now={now} />,
+    );
     expect(html).toContain(presaleCopy.orderStatus.pending.body);
   });
 
   it('paid mostra a composição do pedido e o endereço de entrega', () => {
-    const html = renderToStaticMarkup(<OrderStatusView status="paid" order={shipOrder} />);
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="paid" order={shipOrder} now={now} />,
+    );
     expect(html).toContain('Caixa Essencial');
     expect(html).toContain('Rua das Flores');
     expect(html).toContain('123');
@@ -62,6 +82,7 @@ describe('OrderStatusView', () => {
       <OrderStatusView
         status="paid"
         order={pickupOrder}
+        now={now}
         pickupAddress="Pocket CASA, Rua Augusta 500"
       />,
     );
@@ -71,19 +92,61 @@ describe('OrderStatusView', () => {
   });
 
   it('paid na retirada sem endereço de campanha ainda cai no fallback, nunca em branco', () => {
-    const html = renderToStaticMarkup(<OrderStatusView status="paid" order={pickupOrder} />);
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="paid" order={pickupOrder} now={now} />,
+    );
     expect(html).toContain(presaleCopy.orderStatus.paid.pickupFallback);
     expect(html).not.toContain('undefined');
   });
 
   it('refunded explica o estorno', () => {
-    const html = renderToStaticMarkup(<OrderStatusView status="refunded" order={shipOrder} />);
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="refunded" order={shipOrder} now={now} />,
+    );
     expect(html).toContain(presaleCopy.orderStatus.refunded.title);
     expect(html).toContain(presaleCopy.orderStatus.refunded.body);
   });
 
   it('failed oferece tentar de novo', () => {
-    const html = renderToStaticMarkup(<OrderStatusView status="failed" order={shipOrder} />);
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="failed" order={shipOrder} now={now} />,
+    );
     expect(html).toContain(presaleCopy.orderStatus.failed.retryCta);
+  });
+
+  it('pendente com brCode mostra o código e o prazo', () => {
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="pending" order={pixPendingOrder} now={now} />,
+    );
+    expect(html).toContain(pixPendingOrder.brCode as string);
+    expect(html).toContain(presaleCopy.orderStatus.pix.codeLabel);
+    expect(html).toContain(presaleCopy.orderStatus.pix.copyCta);
+    expect(html).toContain(
+      presaleCopy.orderStatus.pix.deadlineLabel(fmtTime(pixPendingOrder.pixExpiresAt as string)),
+    );
+    expect(html).not.toContain('undefined');
+  });
+
+  it('pendente com prazo vencido diz que o código expirou', () => {
+    // Deadline relative to `now`, in the past — not a fixed timestamp.
+    const expiredOrder: PresaleOrderStatusResponse = {
+      ...pixPendingOrder,
+      pixExpiresAt: new Date(now.getTime() - 5 * 60 * 1000).toISOString(),
+    };
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="pending" order={expiredOrder} now={now} />,
+    );
+    expect(html).toContain(presaleCopy.orderStatus.pix.expired.title);
+    expect(html).not.toContain(expiredOrder.brCode as string);
+    expect(html).not.toContain('undefined');
+  });
+
+  it('pendente de cartão continua com a copy de cartão, sem código', () => {
+    const html = renderToStaticMarkup(
+      <OrderStatusView status="pending" order={shipOrder} now={now} />,
+    );
+    expect(html).toContain(presaleCopy.orderStatus.pending.title);
+    expect(html).not.toContain(presaleCopy.orderStatus.pix.codeLabel);
+    expect(html).not.toContain('undefined');
   });
 });

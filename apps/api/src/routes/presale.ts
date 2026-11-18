@@ -127,13 +127,25 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (parsed.data.paymentMethod === 'pix' && !app.abacatepay) {
+        return reply
+          .status(503)
+          .send({ error: 'ServiceUnavailable', message: 'pix provider not configured' });
+      }
+
       const result = await createPresaleOrder(
         {
           ...parsed.data,
           ipAddress: request.ip,
           userAgent: request.headers['user-agent'] ?? null,
         },
-        { stripe: app.stripe, env: app.env, log: request.log },
+        {
+          stripe: app.stripe,
+          abacatepay: app.abacatepay,
+          mailer: app.mailer,
+          env: app.env,
+          log: request.log,
+        },
       );
 
       if (!result.ok) {
@@ -147,13 +159,27 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return reply.status(201).send(
-        presaleCheckoutResponseSchema.parse({
-          orderId: result.orderId,
-          checkoutUrl: result.checkoutUrl,
-          amountCents: result.amountCents,
-          shippingCents: result.shippingCents,
-          currency: result.currency,
-        }),
+        presaleCheckoutResponseSchema.parse(
+          result.paymentMethod === 'pix'
+            ? {
+                orderId: result.orderId,
+                paymentMethod: 'pix',
+                brCode: result.brCode,
+                pixExpiresAt: result.pixExpiresAt,
+                statusUrl: result.statusUrl,
+                amountCents: result.amountCents,
+                shippingCents: result.shippingCents,
+                currency: result.currency,
+              }
+            : {
+                orderId: result.orderId,
+                paymentMethod: 'card',
+                checkoutUrl: result.checkoutUrl,
+                amountCents: result.amountCents,
+                shippingCents: result.shippingCents,
+                currency: result.currency,
+              },
+        ),
       );
     });
   });
@@ -202,6 +228,8 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
         shippingCents: true,
         currency: true,
         fulfillmentMethod: true,
+        brCode: true,
+        expiresAt: true,
         presaleGuest: {
           select: {
             recipientName: true,
@@ -258,7 +286,13 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           }
         : null;
 
-    // Return order status
+    // Return order status. Status é devolvido CRU do banco — esta rota é de
+    // LEITURA e nunca reinterpreta `pending` como `expired` por `expiresAt`
+    // vencido: para a pré-venda isso nunca foi verdade no banco (order-
+    // expiry.ts exclui `origin: 'casa_in_box'` da própria query, C2) e
+    // fingir que era convidava quem já pagou a comprar de novo. `expiresAt`
+    // sai como `pixExpiresAt` abaixo; é o garage quem decide, a partir dele,
+    // se mostra o código ou a copy de "código venceu".
     return reply.status(200).send(
       presaleOrderStatusResponseSchema.parse({
         orderId: order.id,
@@ -274,6 +308,11 @@ export const presaleRoutes: FastifyPluginAsync = async (app) => {
           subtotalCents: item.subtotalCents,
         })),
         delivery,
+        // brCode so existe em pedido Pix (Order.brCode), null em cartao.
+        // pixExpiresAt deriva de Order.expiresAt — cartao fica NULO (ver
+        // services/presale/checkout.ts), entao nao precisa de outro check.
+        brCode: order.brCode,
+        pixExpiresAt: order.expiresAt ? order.expiresAt.toISOString() : null,
       }),
     );
   });

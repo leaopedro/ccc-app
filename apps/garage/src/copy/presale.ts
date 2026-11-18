@@ -57,8 +57,16 @@ export const presaleCopy = {
         requiresField: 'deliveryAreaLabel',
       },
       {
+        // Corrigido (achado P2): a resposta antiga só descrevia cartão. Desde
+        // que o Pix via AbacatePay entrou (Task 7), metade das compras não
+        // passa pela Stripe nenhuma. Confirmado em
+        // apps/api/src/services/presale/checkout.ts: cartão redireciona para
+        // uma sessão hospedada da Stripe (nenhum dado de cartão nosso
+        // backend vê); Pix gera um brCode no AbacatePay (nenhum dado de
+        // cartão existe nesse caminho). Nos dois, nenhum dado de pagamento
+        // passa pelos nossos servidores.
         question: 'Como funciona o pagamento?',
-        body: 'O pagamento é processado pela Stripe. Seus dados de cartão não passam pelos nossos servidores.',
+        body: 'No cartão, o pagamento é processado pela Stripe. No Pix, o código é gerado pelo AbacatePay. Nos dois casos, seus dados de pagamento não passam pelos nossos servidores.',
       },
     ],
   },
@@ -124,6 +132,15 @@ export const presaleCopy = {
     pickupHoursLabel: 'Horário de retirada',
     deliveryAreaLabel: (label: string) => `Entregamos em: ${label}`,
     shippingFeeLabel: (amount: string) => `Taxa de entrega: ${amount}`,
+  },
+
+  // Seletor de meio de pagamento (Task 7, emenda da pré-venda Pix). Cartão
+  // continua pré-selecionado para não mudar o comportamento de quem não mexe
+  // no seletor.
+  paymentMethod: {
+    title: 'Como você quer pagar?',
+    card: 'Cartão',
+    pix: 'Pix',
   },
 
   // Checkbox de consentimento, obrigatório antes de pagar (ADENDO do brief
@@ -203,10 +220,25 @@ export const presaleCopy = {
     },
     // Teto do polling (page.tsx) estourado ainda em `pending`: a liquidação
     // vem de webhook da Stripe, então parar de girar e oferecer checagem
-    // manual em vez de tentar para sempre.
+    // manual em vez de tentar para sempre. Só se aplica a cartão — Pix tem
+    // seu próprio teto (o prazo do código) e sua própria copy, em `pix`
+    // abaixo.
     pollingTimeout: {
       body: 'Isso está demorando mais que o esperado. Você pode verificar de novo a qualquer momento.',
       checkAgainCta: 'Verificar novamente',
+    },
+    // Pedido pendente de Pix (brCode/pixExpiresAt não nulos — Task 6). O
+    // polling (page.tsx) acompanha enquanto o código ainda vale; ao vencer,
+    // para e cai no bloco `expired` abaixo, que aponta o e-mail como caminho
+    // de volta, nunca um botão de "verificar novamente" (o código já morreu).
+    pix: {
+      codeLabel: 'Código Pix copia e cola',
+      copyCta: 'Copiar código',
+      deadlineLabel: (time: string) => `Válido até ${time}`,
+      expired: {
+        title: 'O código Pix expirou',
+        body: 'Esse código não vale mais. Se você já pagou, a confirmação chega por e-mail.',
+      },
     },
     // orderId/token ausentes na querystring da própria página — não é um dos
     // quatro estados do pedido, é a página nem conseguindo perguntar por ele.

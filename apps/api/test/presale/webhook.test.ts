@@ -74,6 +74,22 @@ describe('liquidação da pré-venda Casa In Box no webhook da Stripe', () => {
     data: { object: { id: SESSION_ID, metadata: { orderId } } },
   });
 
+  const chargeRefunded = (
+    piId: string,
+    opts: { amount?: number; amountRefunded?: number } = {},
+    eventId = `evt_charge_refunded_${++counter}`,
+  ) => ({
+    id: eventId,
+    type: 'charge.refunded',
+    data: {
+      object: {
+        payment_intent: piId,
+        amount: opts.amount ?? 19800,
+        amount_refunded: opts.amountRefunded ?? opts.amount ?? 19800,
+      },
+    },
+  });
+
   /** Cria o pedido pelo endpoint público, igual à pessoa comprando. */
   const seedPresaleOrder = async (
     opts: { quantity?: number; quantityTotal?: number; priceCents?: number } = {},
@@ -306,6 +322,42 @@ describe('liquidação da pré-venda Casa In Box no webhook da Stripe', () => {
     expect(await statusOf(order.id)).toBe('paid');
     // A loja reserva no carrinho; debitar de novo aqui seria contagem dobrada.
     expect(await soldOf(item.variantId!)).toBe(0);
+  });
+
+  // E (achado da revisão cruzada): debitPresaleStock debita quantitySold na
+  // liquidação e nunca existia o inverso — cada caixa estornada queimava uma
+  // unidade do lote pra sempre. creditPresaleStockOnRefund é o espelho
+  // exato: mesma seleção de itens, guardado contra dupla devolução pelo
+  // mesmo updateMany contado que guarda a liquidação.
+  it('charge.refunded devolve quantitySold ao valor anterior (E)', async () => {
+    const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
+
+    const settleRes = await postWebhook(checkoutSessionCompleted(orderId));
+    expect(settleRes.statusCode).toBe(200);
+    expect(await statusOf(orderId)).toBe('paid');
+    expect(await soldOf(variantId)).toBe(2);
+
+    const refundRes = await postWebhook(chargeRefunded(PI_ID));
+
+    expect(refundRes.statusCode).toBe(200);
+    expect(await statusOf(orderId)).toBe('refunded');
+    expect(await soldOf(variantId)).toBe(0);
+  });
+
+  it('estorno entregue duas vezes devolve o estoque uma vez só (E)', async () => {
+    const { orderId, variantId } = await seedPresaleOrder({ quantity: 2 });
+
+    await postWebhook(checkoutSessionCompleted(orderId));
+    expect(await soldOf(variantId)).toBe(2);
+
+    const event = chargeRefunded(PI_ID, {}, 'evt_charge_refunded_replay');
+    const first = await postWebhook(event);
+    const second = await postWebhook(event);
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(await statusOf(orderId)).toBe('refunded');
+    expect(await soldOf(variantId)).toBe(0);
   });
 
   describe('invariante: payment_intent.succeeded nunca estorna pré-venda', () => {

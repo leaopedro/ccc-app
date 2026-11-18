@@ -9,10 +9,11 @@ import type { FastifyPluginAsync } from 'fastify';
 import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import type { AbacateWebhookEvent } from '../services/abacatepay/index.js';
 import { releaseAllReservationsForOrders } from '../services/orders/expire.js';
+import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-email.js';
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
 import { flagManualRefund } from '../services/orders/manual-refund-flag.js';
 import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
-import { settlePaidOrder } from '../services/orders/settle.js';
+import { creditPresaleStockOnRefund, settlePaidOrder } from '../services/orders/settle.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
 import {
@@ -533,6 +534,17 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
         }
+        // Escopado por origin ANTES de tocar o pedido (achado I2): envio não
+        // escopado carimbava confirmationEmailSentAt em pedido comum da loja.
+        // Idempotência vem do dedupe por event id acima; o compare-and-set
+        // de sendPresaleConfirmationEmail cobre o replay do mesmo evento.
+        if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+          await sendPresaleConfirmationEmail(order.id, {
+            mailer: app.mailer,
+            env: app.env,
+            log: request.log,
+          });
+        }
         // M2: Don't leak internal state in response
         return reply.status(200).send({ ok: true });
       } catch (err) {
@@ -584,7 +596,7 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
         if (err instanceof OrderNotPendingError) {
           const staleOrder = await prisma.order.findUnique({
             where: { id: order.id },
-            select: { status: true, providerRef: true },
+            select: { status: true, providerRef: true, origin: true },
           });
           if (staleOrder?.status === 'paid') {
             // Dedupe first, then flag only on the first delivery of this event
@@ -619,6 +631,49 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
               'abacatepay webhook: order expired, manual refund flagged',
             );
             return reply.status(200).send({ ok: true });
+          }
+          // A (achado da revisão cruzada): pré-venda Casa In Box em `failed`
+          // via `transparent.lost` (pendente que não pagou dentro da janela),
+          // e o AbacatePay confirma o pagamento depois — o Pix foi capturado
+          // apesar do nosso `lost`. AbacatePayClient não expõe estorno, então
+          // o ramo genérico abaixo pediria algo impossível de cumprir.
+          // Espelho exato de `status === 'failed' && origin === 'casa_in_box'`
+          // em stripe-webhook.ts: liquida em vez de alertar. O `updateMany`
+          // contado serializa duas entregas simultâneas — só uma reabre, a
+          // outra cai no `throw` e o AbacatePay reentrega. Escopado a
+          // `casa_in_box`: ingresso, box e loja em `failed` seguem no ramo
+          // genérico logo abaixo.
+          if (staleOrder?.status === 'failed' && staleOrder.origin === 'casa_in_box') {
+            const reopened = await prisma.order.updateMany({
+              where: { id: order.id, status: 'failed' },
+              data: { status: 'pending', failedAt: null },
+            });
+            if (reopened.count === 1) {
+              const settled = await settlePaidOrder(
+                order.id,
+                billingId,
+                app.env,
+                undefined,
+                livemodeFromEvent(event),
+              );
+              const firstTime = await markProcessed(event.id, event);
+              request.log.warn(
+                { orderId: order.id, billingId, firstTime },
+                'abacatepay webhook: pré-venda estava failed e o Pix confirmou o pagamento; liquidada',
+              );
+              if (settled.kind === 'product' && settled.origin === 'casa_in_box') {
+                await sendPresaleConfirmationEmail(order.id, {
+                  mailer: app.mailer,
+                  env: app.env,
+                  log: request.log,
+                });
+              }
+              return reply
+                .status(200)
+                .send({ ok: true, deduped: !firstTime, reason: 'presale-recovered' });
+            }
+            // Sibling evento já recuperou: reentrega esperada.
+            throw err;
           }
           // H2: Handle cancelled + any other non-pending status — return 200 to stop retries
           flagManualRefund({
@@ -719,6 +774,17 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
           if (event.event === 'transparent.refunded' && paidOrderIds.length > 0) {
+            // E (achado da revisão cruzada): devolve ao lote o estoque que
+            // debitPresaleStock debitou na liquidação, SÓ para pedido
+            // `origin: 'casa_in_box'` ainda `paid` — creditPresaleStockOnRefund
+            // filtra por isso e flipa o status sozinha, com o mesmo
+            // `updateMany` contado que guarda contra dupla devolução. Roda
+            // ANTES do `updateMany` em massa abaixo: depois dele o pedido já
+            // está `refunded` e o `where: { status: 'paid' }` interno não
+            // casaria mais nada.
+            for (const oid of paidOrderIds) {
+              await creditPresaleStockOnRefund(tx, oid);
+            }
             await tx.order.updateMany({
               where: { id: { in: paidOrderIds }, status: 'paid' },
               data: { status: 'refunded', refundedAt: new Date() },

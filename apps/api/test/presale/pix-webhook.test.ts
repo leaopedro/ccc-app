@@ -84,6 +84,33 @@ const makeTransparentCompletedPayload = (
     },
   });
 
+// Mesma forma v2, para o evento de falha. O conteúdo de `status` dentro de
+// `transparent` não importa aqui: a branch de `transparent.lost` no webhook
+// não re-consulta o provedor, ao contrário de `transparent.completed`.
+const makeTransparentLostPayload = (
+  billingId: string,
+  eventId: string,
+  metadata: Record<string, string> = {},
+) =>
+  JSON.stringify({
+    id: eventId,
+    event: 'transparent.lost',
+    apiVersion: 2,
+    devMode: false,
+    data: {
+      transparent: {
+        id: billingId,
+        amount: 19800,
+        status: 'EXPIRED',
+        frequency: 'ONE_TIME',
+        methods: ['PIX'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      },
+    },
+  });
+
 describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)', () => {
   let app: FastifyInstance;
   let stripe: FakeStripe;
@@ -254,6 +281,51 @@ describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)'
 
     // Ponto central do teste: nenhum alerta de manual-refund (nem
     // 'order-expired', nem qualquer outro) saiu do caminho de liquidação.
+    const manualRefundCalls = Sentry.captureMessage.mock.calls.filter((call) =>
+      String(call[0]).includes('manual refund'),
+    );
+    expect(manualRefundCalls).toHaveLength(0);
+  });
+
+  // A (achado da revisão cruzada): existem DOIS caminhos pra um pedido sair
+  // de `pending`, e só o do cron de expiração (C2) tinha reabertura. Um Pix
+  // pode ser capturado pelo provedor DEPOIS do pedido já ter virado `failed`
+  // via `transparent.lost` — AbacatePayClient não tem método de estorno, então
+  // a instrução de estorno manual que o ramo genérico dispara nem dá pra
+  // cumprir. Espelha o ramo `presale-recovered` que stripe-webhook.ts já tem.
+  it('transparent.lost marca failed; transparent.completed depois para o mesmo billing recupera, sem manual-refund (A)', async () => {
+    const order = await seedPresalePixOrder();
+    const mailer = app.mailer as DevMailer;
+    mailer.clear();
+    Sentry.captureMessage.mockClear();
+
+    const lostRes = await postWebhook(
+      makeTransparentLostPayload(order.providerRef!, 'evt_pix_presale_lost_1', {
+        orderId: order.id,
+      }),
+    );
+    expect(lostRes.statusCode).toBe(200);
+
+    const afterLost = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(afterLost.status).toBe('failed');
+
+    const completedRes = await postWebhook(
+      makeTransparentCompletedPayload(order.providerRef!, 'evt_pix_presale_recovered_1', {
+        orderId: order.id,
+      }),
+    );
+
+    expect(completedRes.statusCode).toBe(200);
+    const afterRecovered = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(afterRecovered.status).toBe('paid');
+    expect(afterRecovered.confirmationEmailSentAt).not.toBeNull();
+
+    expect(mailer.captured).toHaveLength(1);
+    expect(mailer.captured[0]!.to).toBe('comprador@exemplo.com');
+
+    // Ponto central do teste: nenhum alerta de manual-refund saiu do caminho
+    // de recuperação — a Pix não tem API de estorno, então o alerta genérico
+    // pede algo impossível de cumprir.
     const manualRefundCalls = Sentry.captureMessage.mock.calls.filter((call) =>
       String(call[0]).includes('manual refund'),
     );

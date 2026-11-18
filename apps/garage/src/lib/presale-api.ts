@@ -84,23 +84,58 @@ export const fetchPresaleProducts = async (): Promise<PresaleProductListResponse
 
 /**
  * Everything the checkout endpoint needs except `clientRequestId`, which this
- * function generates fresh per send attempt — see below. Never pass a
+ * function derives from the payload itself — see below. Never pass a
  * `clientRequestId` in; there is nowhere to put one.
  */
 export type StartPresaleCheckoutInput = Omit<PresaleCheckoutRequest, 'clientRequestId'>;
 
+const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+    return `{${entries.map(([key, v]) => `${JSON.stringify(key)}:${stableStringify(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const toHex = (buffer: ArrayBuffer): string =>
+  Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+
 /**
- * POSTs the pre-sale checkout. `clientRequestId` is generated here, once per
- * call, and is never read from `payload` or persisted — it is the field that
- * gives the server its idempotency key, so a retried *attempt* must mint a
- * new one rather than resend a stale one (see services/presale/checkout.ts).
+ * Hashes the checkout selection (tier/size via `variantId`, fulfillment
+ * method, guest details, delivery address, payment method, etc.) into a
+ * stable 64-char hex id — SHA-256's full digest, which fits the schema's
+ * `clientRequestId` max(64) exactly. Same selection submitted twice (e.g.
+ * buyer picks Pix, lands on the status page, navigates back, resubmits)
+ * hashes to the same id, so it hits the server's `(origin, clientRequestId)`
+ * dedupe and returns the SAME order instead of minting a second one
+ * (Finding F). Changing any field of the selection changes the hash, because
+ * that genuinely is a different purchase and must get its own id.
+ */
+const computeClientRequestId = async (payload: StartPresaleCheckoutInput): Promise<string> => {
+  const canonical = stableStringify(payload);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return toHex(digest);
+};
+
+/**
+ * POSTs the pre-sale checkout. `clientRequestId` is derived here from
+ * `payload` — never randomly generated and never persisted — so the id is
+ * stable across repeated submissions of the same selection and only changes
+ * when the selection does.
  */
 export const startPresaleCheckout = async (
   payload: StartPresaleCheckoutInput,
 ): Promise<PresaleCheckoutResponse> => {
   const body: PresaleCheckoutRequest = {
     ...payload,
-    clientRequestId: crypto.randomUUID(),
+    clientRequestId: await computeClientRequestId(payload),
   };
 
   const res = await fetch(`${API_BASE}/presale/casa-in-box/checkout`, {

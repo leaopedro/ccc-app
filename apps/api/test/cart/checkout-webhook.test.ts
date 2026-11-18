@@ -673,6 +673,60 @@ describe('POST /stripe/webhook (cart checkout settlement)', () => {
     expect(tickets.every((t) => t.status === 'revoked')).toBe(true);
   });
 
+  // E (achado da revisão cruzada): creditPresaleStockOnRefund só devolve
+  // estoque para `origin: 'casa_in_box'`. Pedido de carrinho de loja (sem
+  // essa origin) não pode ganhar esse decremento — o comportamento de hoje,
+  // nenhuma devolução aqui porque o carrinho gerencia seu próprio estoque na
+  // reserva, tem de ficar intocado.
+  it('charge.refunded em pedido de carrinho não mexe em quantitySold', async () => {
+    const { user } = await createUser({ verified: true });
+    const { cart, orders, variant } = await seedProductCartWithOrders(user.id);
+    const before = await prisma.variant.findUniqueOrThrow({ where: { id: variant.id } });
+
+    stripe.nextEvent = {
+      id: 'evt_cart_product_refund_settle',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: 'pi_cart_product_refund',
+          metadata: {
+            cartId: cart.id,
+            userId: user.id,
+            orderIds: JSON.stringify(orders.map((o) => o.id)),
+          },
+        },
+      },
+    };
+    await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    const total = orders.reduce((sum, o) => sum + o.amountCents, 0);
+    stripe.nextEvent = {
+      id: 'evt_cart_product_refund',
+      type: 'charge.refunded',
+      data: {
+        object: { payment_intent: 'pi_cart_product_refund', amount: total, amount_refunded: total },
+      },
+    };
+    const res = await app.inject({
+      method: 'POST',
+      url: '/stripe/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': 't=1,v1=x' },
+      payload: rawJson(stripe.nextEvent),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const refundedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orders[0]!.id } });
+    expect(refundedOrder.status).toBe('refunded');
+
+    const after = await prisma.variant.findUniqueOrThrow({ where: { id: variant.id } });
+    expect(after.quantitySold).toBe(before.quantitySold);
+  });
+
   it('backfills providerRef when a redelivery finds the cart already paid', async () => {
     // Simulates a crash between settlement and the stamp: the orders are paid
     // but no order carries the PaymentIntent. Every retry lands on the

@@ -71,6 +71,66 @@ const debitPresaleStock = async (tx: Prisma.TransactionClient, orderId: string):
 };
 
 /**
+ * Devolução de estoque da pré-venda Casa In Box ao lote — o espelho exato de
+ * `debitPresaleStock` acima, mesma seleção de itens (`kind: 'product'`,
+ * `variantId` não nulo), decrementando em vez de incrementar.
+ *
+ * Guardado contra devolução negativa (`quantitySold: { gte: item.quantity }`)
+ * pelo mesmo motivo do decremento em `markRefundedAndReleaseReservation`
+ * (stripe-webhook.ts): sem o guard, uma segunda devolução por engano levaria
+ * `quantitySold` abaixo de zero em vez de ficar preso em 0.
+ */
+const creditPresaleStock = async (tx: Prisma.TransactionClient, orderId: string): Promise<void> => {
+  const items = await tx.orderItem.findMany({
+    where: { orderId, kind: 'product', variantId: { not: null } },
+    select: { variantId: true, quantity: true },
+    orderBy: { variantId: 'asc' },
+  });
+
+  for (const item of items) {
+    await tx.variant.updateMany({
+      where: { id: item.variantId!, quantitySold: { gte: item.quantity } },
+      data: { quantitySold: { decrement: item.quantity } },
+    });
+  }
+};
+
+/**
+ * Ponto de entrada chamado pelos webhooks (`charge.refunded` na Stripe,
+ * `transparent.refunded` no AbacatePay) quando um pedido PODE ser de
+ * pré-venda Casa In Box que acabou de ser estornado.
+ *
+ * Devolve a unidade ao lote SÓ se o pedido for `origin: 'casa_in_box'`,
+ * `kind: 'product'` e estiver de fato `paid` no momento — o mesmo
+ * `updateMany` contado que flipa o status para `refunded` é o que guarda
+ * contra dupla devolução, espelhando o early-return de `status === 'paid'`
+ * que guarda o débito único em `settlePaidOrder` acima. Uma segunda entrega
+ * do mesmo evento, ou um evento irmão para o mesmo estorno, encontra o
+ * pedido já `refunded` e o `updateMany` conta 0 — nada é devolvido de novo.
+ *
+ * Pedido de carrinho (sem `origin: 'casa_in_box'`, ou `kind` diferente de
+ * `product`) não casa o `where` e esta função não faz nada: o comportamento
+ * de hoje para carrinho fica intocado.
+ *
+ * Aceita tanto `prisma` quanto um `tx` de transação em curso — os dois
+ * caminhos de chamada precisam disto: a Stripe chama fora de qualquer
+ * transação (abre a própria, Serializable, como o débito), o AbacatePay já
+ * está dentro de uma quando este ponto é alcançado.
+ */
+export const creditPresaleStockOnRefund = async (
+  db: Prisma.TransactionClient,
+  orderId: string,
+): Promise<boolean> => {
+  const updated = await db.order.updateMany({
+    where: { id: orderId, status: 'paid', origin: 'casa_in_box', kind: 'product' },
+    data: { status: 'refunded', refundedAt: new Date() },
+  });
+  if (updated.count !== 1) return false;
+  await creditPresaleStock(db, orderId);
+  return true;
+};
+
+/**
  * @param livemode Provider mode this charge really happened in, when the
  * caller knows it. Stamped on `Order.livemode` here, in ONE place, because it
  * is the only column no other settlement writer touches and the branches below

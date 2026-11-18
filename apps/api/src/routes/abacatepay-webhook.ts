@@ -13,7 +13,7 @@ import { sendPresaleConfirmationEmail } from '../services/presale/confirmation-e
 import { revokeTicketsForRefundedOrder } from '../services/orders/revoke.js';
 import { flagManualRefund } from '../services/orders/manual-refund-flag.js';
 import { settleAbacatePayCart } from '../services/orders/settle-cart.js';
-import { settlePaidOrder } from '../services/orders/settle.js';
+import { creditPresaleStockOnRefund, settlePaidOrder } from '../services/orders/settle.js';
 import { sendTransactionalPush } from '../services/push/transactional.js';
 import { EventPickupAssignmentUnavailableError } from '../services/store/event-pickup.js';
 import {
@@ -774,6 +774,17 @@ export const abacatepayWebhookRoutes: FastifyPluginAsync = async (app) => {
             });
           }
           if (event.event === 'transparent.refunded' && paidOrderIds.length > 0) {
+            // E (achado da revisão cruzada): devolve ao lote o estoque que
+            // debitPresaleStock debitou na liquidação, SÓ para pedido
+            // `origin: 'casa_in_box'` ainda `paid` — creditPresaleStockOnRefund
+            // filtra por isso e flipa o status sozinha, com o mesmo
+            // `updateMany` contado que guarda contra dupla devolução. Roda
+            // ANTES do `updateMany` em massa abaixo: depois dele o pedido já
+            // está `refunded` e o `where: { status: 'paid' }` interno não
+            // casaria mais nada.
+            for (const oid of paidOrderIds) {
+              await creditPresaleStockOnRefund(tx, oid);
+            }
             await tx.order.updateMany({
               where: { id: { in: paidOrderIds }, status: 'paid' },
               data: { status: 'refunded', refundedAt: new Date() },

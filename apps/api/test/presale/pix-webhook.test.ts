@@ -111,6 +111,30 @@ const makeTransparentLostPayload = (
     },
   });
 
+const makeTransparentRefundedPayload = (
+  billingId: string,
+  eventId: string,
+  metadata: Record<string, string> = {},
+) =>
+  JSON.stringify({
+    id: eventId,
+    event: 'transparent.refunded',
+    apiVersion: 2,
+    devMode: false,
+    data: {
+      transparent: {
+        id: billingId,
+        amount: 19800,
+        status: 'REFUNDED',
+        frequency: 'ONE_TIME',
+        methods: ['PIX'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      },
+    },
+  });
+
 describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)', () => {
   let app: FastifyInstance;
   let stripe: FakeStripe;
@@ -330,5 +354,60 @@ describe('liquidação da pré-venda Casa In Box no webhook do AbacatePay (Pix)'
       String(call[0]).includes('manual refund'),
     );
     expect(manualRefundCalls).toHaveLength(0);
+  });
+
+  // E (achado da revisão cruzada): mesmo espelho de debitPresaleStock do
+  // lado Pix. transparent.refunded só mudava o status; a unidade nunca
+  // voltava ao lote.
+  it('transparent.refunded devolve quantitySold ao valor anterior (E)', async () => {
+    const order = await seedPresalePixOrder();
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    const variantId = item.variantId!;
+
+    const settleRes = await postWebhook(
+      makeTransparentCompletedPayload(order.providerRef!, 'evt_pix_presale_settle_e', {
+        orderId: order.id,
+      }),
+    );
+    expect(settleRes.statusCode).toBe(200);
+    const afterSettle = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
+    expect(afterSettle.quantitySold).toBe(2);
+
+    const refundRes = await postWebhook(
+      makeTransparentRefundedPayload(order.providerRef!, 'evt_pix_presale_refund_e', {
+        orderId: order.id,
+      }),
+    );
+
+    expect(refundRes.statusCode).toBe(200);
+    const afterRefund = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(afterRefund.status).toBe('refunded');
+    const afterRefundVariant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
+    expect(afterRefundVariant.quantitySold).toBe(0);
+  });
+
+  it('transparent.refunded entregue duas vezes devolve o estoque uma vez só (E)', async () => {
+    const order = await seedPresalePixOrder();
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    const variantId = item.variantId!;
+
+    await postWebhook(
+      makeTransparentCompletedPayload(order.providerRef!, 'evt_pix_presale_settle_e2', {
+        orderId: order.id,
+      }),
+    );
+
+    const payload = makeTransparentRefundedPayload(
+      order.providerRef!,
+      'evt_pix_presale_refund_replay',
+      { orderId: order.id },
+    );
+    const first = await postWebhook(payload);
+    const second = await postWebhook(payload);
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    const afterRefundVariant = await prisma.variant.findUniqueOrThrow({ where: { id: variantId } });
+    expect(afterRefundVariant.quantitySold).toBe(0);
   });
 });
